@@ -27,6 +27,7 @@ from app.database.models import Contract, ContractWarning, Organization, WorkIte
 from app.database.services import create_contract, create_organization
 from app.models.enums import WorkItemStatus
 from app.work_queue.service import (
+    get_work_item_dto,
     list_work_items_dto,
     reconcile_work_items,
     set_work_item_status,
@@ -265,3 +266,67 @@ def test_sibling_duplicates_collapse_active_items(db):
     assert db.execute(
         select(WorkItem).where(WorkItem.organization_id == org.id)
     ).scalars().all().__len__() == 2
+
+
+# ---------------------------------------------------------------------------
+# PR-6 Defect A – Status-Update (Open -> In Bearbeitung) schlug als generisches
+# "Status konnte nicht aktualisiert werden" fehl. Root-Cause-Klasse:
+# 1) Kommen alter JSONB-Typ-Anomalien (references als Liste) vor, sprengt die
+#    pydantic-Serialisierung WorkItemSummary.references: Optional[dict] die
+#    PATCH-Antwort mit einem nackten 500 (kein Detail).
+# 2) Der frühere Frontend-Client (apiPatch) verschluckte das echte `detail`
+#    und zeigte nur den generischen Maskentext.
+# Die Fix-Schichten: references-Ueberfuehrung auf dict-or-None (Write + DTO),
+# ehrliche 503-/Detail-Behandlung im PATCH-Route und detail-durchsichtigende
+# apiPatch. Diese Tests verankern alle drei Schichten.
+# ---------------------------------------------------------------------------
+
+
+def test_references_jsonb_legacy_list_never_breaks_dto(db):
+    """Legacy-Listen-`references` (opake JSONB-Herkunft) sprengen DTO nicht."""
+    org = _org(db)
+    contract = _contract(db, org)
+    wi = _single(db, org, contract, [_derived(contract, extra_fp="ref-fp")])
+    # Historischer Datenstand: references als Liste persistiert (Type-Shift).
+    wi.references = ["legacy", "ref"]
+    db.flush()
+    dto = list_work_items_dto(db, organization_id=org.id, active_only=False)
+    assert len(dto) == 1
+    assert dto[0]["references"] == {"legacy_refs": ["legacy", "ref"]}
+    from app.work_queue.models import WorkItemSummary
+
+    summary = WorkItemSummary(**dto[0])
+    assert summary.references == {"legacy_refs": ["legacy", "ref"]}
+
+
+def test_references_jsonb_legacy_list_survives_transition_persisted(db):
+    """Status-Update klappt trotz Legacy-Listen-`references`; nur das Item."""
+    org = _org(db)
+    contract = _contract(db, org)
+    wi = _single(db, org, contract, [_derived(contract, extra_fp="ref-fp2")])
+    wi.references = ["legacy"]
+    db.flush()
+    set_work_item_status(db, organization_id=org.id, work_item_id=wi.id,
+                         status=WorkItemStatus.ACKNOWLEDGED.value)
+    db.flush()
+    assert wi.status == WorkItemStatus.ACKNOWLEDGED.value
+    dto = get_work_item_dto(db, organization_id=org.id, work_item_id=wi.id)
+    assert dto is not None
+    assert dto["references"] == {"legacy_refs": ["legacy"]}
+
+
+def test_reconcile_normalizes_references_type(db):
+    """Reconcile persistiert references nur als dict-or-None (JSONB-Invariante)."""
+    org = _org(db)
+    contract = _contract(db, org)
+    derived = _derived(contract, extra_fp="ref-fp3")
+    derived["references"] = ["a", "b"]
+    reconcile_work_items(db, organization_id=org.id, contract_id=contract.id,
+                         derived=[derived])
+    db.flush()
+    wi = db.scalars(
+        select(WorkItem).where(
+            (WorkItem.organization_id == org.id) & (WorkItem.contract_id == contract.id)
+        )
+    ).one()
+    assert wi.references == {"legacy_refs": ["a", "b"]}

@@ -22,3 +22,20 @@ def region_image(path: Path, block) -> str:
         scale = min(2.5, 1800 / longest) if longest else 1.0
         pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip, alpha=False)
         return base64.b64encode(pixmap.tobytes("png")).decode("ascii")
+
+
+def page_image(path: Path, page_number: int, *, longest_side: int = 1600) -> str:
+    """Bounded full-page render for V3 page-batch visual compute (sections).
+
+    Section understanding is VISUAL COMPUTE only and stays provisional; the
+    global reasoning stage remains the authority. Long-side capping keeps
+    multimodal token/memory growth bounded across the whole batch.
+    """
+    if path.suffix.lower() != ".pdf":
+        raise ValueError("No trustworthy PDF page for page-batch rendering")
+    with fitz.open(path) as pdf:
+        page = pdf[page_number - 1]
+        longest = max(page.rect.width, page.rect.height)
+        scale = min(2.0, longest_side / longest) if longest else 1.0
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=page.rect, alpha=False)
+        return base64.b64encode(pixmap.tobytes("png")).decode("ascii")

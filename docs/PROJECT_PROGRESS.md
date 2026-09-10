@@ -3580,3 +3580,98 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ## Nächster Schritt
 - Manuelle UAT-Rückschau der Einstellungen (Anbieterauswahl, Speichern/Neustart-Überleben, Diagnose) und der unabhängigen Scroll-Bereiche im laufenden Frontend (:3000) / Backend (:8000). Danach (in Abstimmung) Schritt 16 – Benutzer/Login & Audit Minimalversion (kein neuer Hauptschritt vor Fortschrittsdatei-Abstimmung).
+
+---
+
+# PR-6 / Contract Intelligence V3 – PHASE 3 Implementation
+
+**Status:** IMPLEMENTIERT (Fortschritt bleibt 15/18 – kein neuer Hauptschritt; PR-6-Arbeit)
+
+**Datum:** 10.09.2026
+
+## Ausgangslage / freigegebene Entscheidungen
+- V3 wird NICHT sofort Produktionsdefault; `harness_engine="v2"` (v2.1) bleibt Default, V3 läuft hinter expliziter, konfigurierbarer Engineselektion. Nach bestandenen Real-Benchmarks (ABIOMED/Accutron) kann V3 Default werden.
+- Atomic-OCR/-Geometrie (RapidOCR) ist reiner Perception-/Evidence-Helfer, NIEMALS ein Pflicht-Semantik-Gateway; bei OCR-Fehler/low quality laufen Qwen-Vision und kanonische visuelle Evidenz weiter.
+- Qwen (nicht deterministischer Code) entscheidet semantische Anwendbarkeit: Selektion vs. Alternative, Tabellen-Spalten-Anwendbarkeit, Vertragsnummer vs. PO/Referenz, Dokument-/Anhang-/E-Mail-Authorität/Präzedenz, cross-page/cross-clause Bedeutung. Deterministischer Code validiert Evidence-Grounding, Schema/Integrität, schließt als alternative/superseded klassifizierte Fakten von Berechnung aus, rechnet/berechnet Fristen/Datum/Währung/Lebenszyklus.
+- Keine Guard-TOP/Accutron/ABIOMED-spezifischen Businessregeln (generalisiert); keine zweite konkurrierende Extractionsarchitektur (Evolution von `app/ai/harness`); SectionUnderstanding = provisorisches VISUAL COMPUTE, nur Global-Stage etabliert Vertrags-Verständnis; Reanalyse-Lebenszyklus unangetastet; keine destruktiven DB-/Git-Operationen.
+
+## Implementiertes (Backend)
+- `app/core/config.py`: `harness_engine` ("v2"|"v3", Default "v2"), `harness_vision_pages_per_batch` (4), `harness_vision_batch_scale` (1600), `harness_vision_min_pages_for_batch` (2), `document_intelligence_atomic_geometry` (False), `document_intelligence_atomic_geometry_dpi` (200).
+- `app/ai/harness/models.py`: V3-Datacontracts `SectionUnderstanding`, `GlobalContractUnderstanding`, `ApplicabilityDecision/Batch`, `SelectionRelation`, `NumberRole`, `PrecedenceRule`, `OptionCluster/OptionItem`, `VisualRegionReference`; `FactCandidate.applicability` + `authority_note`; `ContractMap` um selections/number_roles/precedence/unresolved_references erweitert.
+- `app/ai/harness/document.py`: `pages_blocks`, `visual_pages`, `is_image_heavy` (Routing, nie Bedeutung).
+- `app/ai/harness/vision.py`: `page_image()` – begrenztes Vollseiten-Rendering für Page-Batch-Visual-Compute.
+- `app/ai/harness/__init__.py`: `get_harness_class(settings)` – explizite Engineselektion (Default v2.1).
+- `app/ai/harness/v3_perception.py` (NEU): deterministische, provider-neutrale Perception (Option-/Preiscluster, Kontrollregionen, Selection-Hints) – nur Evidenzkarte für Qwen-Stages, wirft nie, entscheidet nie Semantik.
+- `app/ai/harness/v3.py` (NEU): `HarnessV3` – Stage-Orchestrierung Perception → Vision → Sections (Visual Compute) → Global Understanding (einzige Instanz) → ContractMap (Segment-Union + Synthese) → Cross-Clause/Applicability (Qwen) → Fact Resolution (applicability-gelabelte Kandidaten) → Evidence-Binding/Geometry → deterministischer Handoff; deterministische Ausschlussregeln (alternative/superseded nie ins Contract-Modell; Referenznummer nie als Vertragsnummer); nutzt wiederverwendete Helfer (ContextPlanner, Block, field_types, strict_value, _find_quote, _coalesce_batch). Pro-Stage-Diagnose (purpose, pages, provider, model, Token-Schätzung, Latenz, response_sha256, failure_reason).
+- `app/ai/harness/pipeline.py`: `HarnessV2.analyze` + optionaler `page_image_loader`-Parameter (Signatur-Parität, kein Verhaltenswechsel).
+- `app/documents/processing.py`: `get_harness_class`-Wiring (Default bleibt v2.1); `page_image`-Loader für v3; optionale, nie blockende RapidOCR-Geometrie-Augmentierung in `_build_canonical` (nur bei `document_intelligence_atomic_geometry=True`).
+
+## Implementiertes (Tests)
+- `tests/test_harness_v3.py` (NEU): 15 fokussierte Mock-Tests – Engineselektion; keine Business-Konstanten im Quelltext (Guard TOP/ABIOMED/Accutron/1650); Perception-Cluster + Kontrollregionen + Hints; `_merge_maps_v3`-Union; Vollpfad Native Verträge (Stages + Diagnose); Scan-Dokument → Section-Batches (Pages [[1,2],[3,4]], gerenderte Seitenliste); Bild-dominant ohne Vision degradiert ehrlich (requires_review, Vertrag bleibt); alternative/superseded-Kandidaten werden NICHT ins Contract-Modell geschrieben; Referenznummer nicht als Vertragsnummer; keine Grounded-Truth → contract=None + HarnessFailure; Call-Budget hart; Page-Rendering nur innerhalb Budget; deterministischer Turm (field_types/_coalesce_batch) wiederverwendet.
+
+## Tests / Ergebnis
+- Fokussiert: `test_harness_v3.py` 15 passed, `test_harness_v2.py` 15 passed in 1.77 s; Engine-Selektion (v2 Default / v3 explizit) verifiziert; `test_work_queue_state_machine.py` (Defect-A-Erweiterungen) grün bis auf vorbestehenden Test.
+- Gesamtlauf Backend: **626 passed, 28 failed**. Alle 28 Fehler sind VORBESTEHEND (im HEAD-Vergleich `a670f98` reproduziert): `contract_equipment.extraction_id NOT NULL` / `PersistenceError equipment requires an extraction run` (test_database_persistence, test_pr4_equipment_work_item), `ProgramingError` (test_contract_search), PDF-Produktions-Flow, test_fresh_install, work_queue `test_sibling_duplicates_collapse_active_items`, UAT `TestCostAvailability`-Wording – Schema-Drift in der Freund-Review-Snapshot-Basis, NICHT durch V3 verursacht. Keine Fixes an unabhängigen Stellen (Entscheidung 5).
+- Kein Git-Commit, kein Reset, keine Datenmutation an Produkt-DB; Tests laufen im isolierten Test-Schema.
+
+## Bekannte Grenzen / nächste Schritte
+- Modulare/gemockte Tests belegen ARCHITEKTUR und Kontrollfluss; KEINE ABIOMED/Accutron-Korrektheit (Entscheidung 10): Real-Benchmark gegen Ollama/qwen3:8b (unverändert) mit ABIOMED- und Accutron-PDF nötig; danach entscheiden, ob `harness_engine="v3"` zum Default wird.
+- Defect B (Settings-Navigation im Frontend) weiter offen; Defect-A-Route-Level-Tests (503-detail/200-legacy-references über TestClient) noch ausstehend.
+- `document_intelligence_atomic_geometry` ist in Default/`.env` False; Enable als Diagnose-/Benchmark-Schritt nach Real-Modell-Lauf.
+
+---
+
+# PR-6 / Contract Intelligence V3 – Real-Model Validation (Benchmark)
+
+**Status:** DURCHGEFÜHRT – V3 NICHT BESTANDEN (Fortschritt bleibt 15/18 – kein neuer Hauptschritt)
+
+**Datum:** 10.09.2026
+
+## Durchführung
+- Echte gescannte Verträge über den AKTUELLEN Produktions-Analysepfad (`DocumentProcessingService._build_canonical` + exakt dieselbe Harness-Invokation wie `_process_stored`), Modell `qwen3-vl:8b-instruct`, Engine `harness_engine=v3` (Default-Konfiguration), danach eine Budget-Sensitivitätsprobe (`HARNESS_CONTEXT_TOKENS=65536`, `HARNESS_MAX_CALLS=96`). **Read-only:** kein Persist/Accept, keine DB-Mutation, Schema unverändert, akzeptierte v2.1-Baseline (Datenbank) unangetastet.
+- Vergleich: erhaltene akzeptierte v2.1-Extraktionen (identisches Modell, `status=partial`, `requires_review=True`, 32 Calls, 746 s Accutron / 1.298 s ABIOMED).
+
+## Ergebnis (Default-Konfiguration)
+- **ABIOMED (9 Seiten, 123 Blöcke, Volltext ≈ 9.819 est. Tokens):** `status=partial`, `validation=unknown`, `requires_review=True`, **kein Vertrag / keine Grounded Truth** (HarnessFailure no_grounded_facts), 31 Calls, 940,8 s, 0 Evidence, 0 Selections/Applicability. Perception fand korrekt die Staffelung (1.Jahr 0 EUR, 2.Jahr 8.000 EUR …). Section-Verstehen nur für Seite 9; 8 Family-Resolver liefen, produzierten aber NUR leere/None-Werte.
+- **ACCUTRON (5 Seiten, 99 Blöcke, ≈ 7.270 est. Tokens):** `partial/unknown/review`, kein Vertrag, 19 Calls, 373,3 s, 81× ContextOverflow, 0 Evidence/Selections/Applicability. Perception fand korrekt die Guard-ALTERNATIVEN (350 € / 1.250 € / 1.075 €). Deterministischer Number-Role-Guard lief: „Bestellung 452664“ → `order_number`, `identity.contract_number` blieb None (Korrekt, aber ohne Semantik außen herum).
+- **Budget-Probe (65536/96):** Ollama-`/api/chat`-Server trennte mid-run (Provider crashte, `AIUnavailableError`). `ollama ps`: qwen3-vl:8b-instruct läuft mit **num_ctx=8192, 6,9 GB, CPU/GPU 20/80** (RTX 3070 8GB). Erzwungene Prompts (bis 14.555 est. Tokens) → stilles Ollama-Truncation an der Hardware-Context-Grenze → leere Kandidaten; danach Server-Outage.
+
+## Root-Cause-Klassifikation
+- **Klasse: call budget / context / performance (primär).** `ContextPlanner` (configured=8192, input_budget=5.880) lehnt ab: Default-Lauf 45 (ABIOMED) bzw. 79 (ACCUTRON) `abstain_overflow`-Entscheidungen. Ursache Konstruktion: Segment-/Recovery-Prompts injizieren VOLLDOKUMENT-Kontexte mehrfach (komplette ContractMap-Observations, gesamte `sections_context()` erneut je Segment, `cross_clause_context`, `clusters`), sodass kleine Blöcke trotz Segmentierung den Budget-Test überschreiten.
+- Zweitbefund: `10. Real-GPU`: num_ctx=8192 ist die HARDWARE-Grenze (8 GB VRAM); jeder Budget-Wechsel über die Hardware hinaus erzeugt stille Truncation/Absturz statt ehrlichem Fehler.
+- Drittbefund: Wenn Calls trotzdem liefen (ABIOMED), gaben Resolve-Stufen Kandidaten mit `None`-Werten zurück → 0 Grounding/Evidence → `no_grounded_facts`. Keine Applicability, keine Selections.
+- NICHT die Ursache: Perception (funktionierte korrekt), Schema/Modelle, DB/Persistenz, deterministische Berechnung (nie erreicht).
+
+## Konsequenz
+- V3 ist NICHT für Produktions-Default geeignet. Abgeschlossene Tasks: v2.1 bleibt Default (Entscheidung 1) – die erhaltene akzeptierte v2.1-Wahrheit ist noch schlechter (identity/costs/equipment leer), aber stabil und unersetzt.
+- Benchmark-Driver: `C:\Users\JAMAL\AppData\Local\Temp\opencode\v3_benchmark.py` (Temp), Ergebnisse `bench_{accutron,abiomed}_v3.json` (Temp).
+- Keine Code-Änderung am Produkt (kein Patch während Benchmark); empfohlener nächster Change in Abschnitt „G" des Berichts.
+
+## Nächster Schritt
+- Empfohlener Fix (NOCH NICHT implementiert): (1) Segment-/Recovery-Prompts auf NUR sektionalen Kontext begrenzen (keine Doppel-Injektion von Volltext/sections_context in jeden Call) und (2) Budget-Probe/Fehler ehrlich gegen die Hardware-num_ctx (8192) fahren – bei Überschreitung saubere Stage-Degradation statt stiller Ollama-Truncation. Danach Benchmark-Wiederholung. Defect B + Defect-A-Route-Tests bleiben vorgezogen.
+
+---
+
+# PR-6 / Contract Intelligence V3 – Approved Context-Plumbing Fix (implementiert, r6) + offizieller GitHub-Migration-Snapshot
+
+**Status:** FIX IMPLEMENTIERT – VALIDIERUNG NOCH OFFEN (Accutron r6: kein Vertrag, Budget ausgeschöpft; Fortschritt bleibt 15/18)
+
+**Datum:** 10.09.2026
+
+## Implementiertes (v3.py + context.py, Zustand r6)
+- Reserved `1024 * len(images)` in `call()`; dynamisches Section-Batch-Shrinking (halbieren → einzeln) bei Input-Overflow UND bei Output-Truncation (`provider.last_done_reason in {length, max_tokens}`).
+- Per-Segment lokaler Kontext: `sections_context_pages` + `assemble_bounded`; compacte `semantic_state`/`compact_sections`/`compact_items`; compacte Applicability; Recovery lokal + bounded.
+- `context.py`: `segments(..., extra_reserve)` und `pack_ranked(..., extra_reserve)`.
+- Crash behoben: `compact_sections` serialisierte pydantic `NumberRole` (TypeError) → `model_dump`.
+
+## Tests / Ergebnis
+- Fokussiert: `test_harness_v3.py` + `test_harness_v2.py` = **30 passed** (wiederholt grün).
+- Real-Benchmark Accutron (Default 8192/1800/32, `qwen3-vl:8b-instruct`, read-only): r2-Crash behoben, resolve/identity lief erstmals (9 Segmente/18 Calls, Seiten 1–4 versorgt), aber **ContractMap-Wholesale-Rejection** (ein ungültiger Source-Ref ⇒ ganze Map verworfen) + **Budget-Exhaustion nach 32 Calls** ⇒ weiterhin kein Vertrag. ABIOMED bewusst nicht erneut nach Accutron-Fehler.
+- Kompletter Engineering-Handoff inkl. Blocker-Klassifikation (A tolerante Map-Refs / B Familie-Reserve+Priorisierung / C Benchmark-Budget), Ground Truth, HW-Grenzen (§7): **`docs/HARNESS_V3_ENGINEERING_HANDOFF.md`**.
+
+## Konsequenz / Migration
+- Kein Git-Commit, keine DB-/Datenmutation während der Benchmarks; v2 bleibt Default; keine Schemaänderung.
+- Offizieller GitHub-Migration-Snapshot: **`MedFlux official repository baseline`** → `origin = https://github.com/jamallionjan-dev/medflux.git` (main no-force); Review-Remote als Backup-Remote umbenannt beibehalten. Lokaler Pfad `C:\Users\JAMAL\Desktop\Medflux` unverändert.
+
+## Nächster Schritt
+- Nach ausdrücklicher Freigabe: A (tolerante Invalid-Ref-Behandlung), B (Familie-Packing/Reserve-Tuning), C (nur Benchmark-Budget höher) in dieser Reihenfolge; danach Accutron erneut, dann ABIOMED. Blocker-Details und Ground-Truth in `docs/HARNESS_V3_ENGINEERING_HANDOFF.md`.

@@ -86,14 +86,17 @@ class ContextPlanner:
     def fits(self, text: str, *, extra_reserve: int = 0) -> bool:
         return estimate_tokens(text) <= self.input_budget - max(0, int(extra_reserve))
 
-    def segments(self, blocks: list[Block], overhead: str = "", *, purpose: str = "segmentation") -> list[list[Block]]:
+    def segments(self, blocks: list[Block], overhead: str = "", *, purpose: str = "segmentation",
+                 extra_reserve: int = 0) -> list[list[Block]]:
         """Pack complete structural blocks without silent truncation.
 
         Oversized structural units are rejected explicitly; splitting a table/section
         without source-address remapping would weaken evidence guarantees.  Upstream
         document intelligence should already expose finer structural units when needed.
+        `extra_reserve` carves out room for per-segment local context (visual and
+        section readings) so the assembled segment prompt still fits the budget.
         """
-        budget = self.input_budget - estimate_tokens(overhead)
+        budget = self.input_budget - estimate_tokens(overhead) - max(0, int(extra_reserve))
         if budget <= 0:
             raise ContextOverflow(f"Prompt overhead exceeds context budget for {purpose}")
 
@@ -130,12 +133,14 @@ class ContextPlanner:
         )
         return segments
 
-    def pack_ranked(self, blocks: list[Block], overhead: str = "", *, purpose: str) -> list[Block]:
+    def pack_ranked(self, blocks: list[Block], overhead: str = "", *, purpose: str,
+                    extra_reserve: int = 0) -> list[Block]:
         """Take ranked blocks until the current prompt budget is full.
 
         No block is cut.  The decision is recorded so retrieval is auditable.
+        `extra_reserve` carves out room for the surrounding local context.
         """
-        budget = self.input_budget - estimate_tokens(overhead)
+        budget = self.input_budget - estimate_tokens(overhead) - max(0, int(extra_reserve))
         if budget <= 0:
             raise ContextOverflow(f"Prompt overhead exceeds context budget for {purpose}")
         chosen: list[Block] = []

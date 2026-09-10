@@ -29,6 +29,21 @@ class Settings(BaseSettings):
     harness_context_tokens: int = 8192
     harness_output_tokens: int = 1800
     harness_max_calls: int = 32
+    # Engine selection is explicit: "v2" keeps v2.1 as the production default.
+    # "v3" is the next-generation harness behind the same verified provider
+    # abstraction. It will only become the default after real ABIOMED/Accutron
+    # benchmarks validate the new semantic stages.
+    harness_engine: str = "v2"
+    # V3 visual-compute batching for scanned/visual documents. Section output is
+    # provisional; only the global reasoning stage establishes contract meaning.
+    harness_vision_pages_per_batch: int = 4
+    harness_vision_batch_scale: int = 1600  # max pixels on the long page side
+    harness_vision_min_pages_for_batch: int = 2
+    # Atomic OCR/geometry (RapidOCR) is a perception/evidence helper only. It is
+    # NEVER a mandatory semantic gateway; failures fall back to canonical visual
+    # evidence without blocking analysis.
+    document_intelligence_atomic_geometry: bool = False
+    document_intelligence_atomic_geometry_dpi: int = 200
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:8b"
     # Weitere lokale Provider (Anbieter-unabhaengig). Leerer Wert = Endpunkt

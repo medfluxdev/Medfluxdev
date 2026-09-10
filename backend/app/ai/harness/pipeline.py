@@ -276,7 +276,7 @@ class HarnessV2:
         self.settings = settings
         self.ai = ai or AIService(settings)
 
-    async def analyze(self, canonical, image_loader: Callable | None = None):
+    async def analyze(self, canonical, image_loader: Callable | None = None, page_image_loader: Callable | None = None):
         from app.ai.contract_extractor import ContractAnalysisResult
 
         started = time.monotonic()

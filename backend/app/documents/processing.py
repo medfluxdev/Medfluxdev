@@ -638,10 +638,16 @@ class DocumentProcessingService:
             if self._analysis is not None:
                 analysis = asyncio.run(self._analysis.analyze(extraction))
             else:
-                from app.ai.harness.pipeline import HarnessV2
-                from app.ai.harness.vision import region_image
-                analysis = asyncio.run(HarnessV2(settings).analyze(
-                    canonical, image_loader=lambda block: region_image(path, block)))
+                from app.ai.harness import get_harness_class
+                from app.ai.harness.vision import page_image, region_image
+                harness_cls = get_harness_class(settings)
+                analysis = asyncio.run(harness_cls(settings).analyze(
+                    canonical,
+                    image_loader=lambda block: region_image(path, block),
+                    page_image_loader=lambda page: page_image(
+                        path, page, longest_side=settings.harness_vision_batch_scale
+                    ) if settings.harness_engine == "v3" else None,
+                ))
             if analysis.contract is None:
                 placeholder_id = self._persist_failed_analysis(
                     stored=stored,
@@ -902,6 +908,17 @@ class DocumentProcessingService:
         canonical = provider.process(path, intelligence_settings)
         if canonical.source_sha256 != stored.sha256:
             raise RuntimeError("canonical source hash mismatch")
+        # Atomic OCR/geometry (RapidOCR) is a perception/evidence helper only.
+        # It must never become a mandatory semantic gateway: failure falls back
+        # to canonical visual evidence without blocking analysis.
+        if settings.document_intelligence_atomic_geometry and canonical.pages:
+            try:
+                from app.documents.intelligence.atomic_ocr import augment_with_atomic_geometry
+                canonical, _ = augment_with_atomic_geometry(
+                    canonical, path, dpi=settings.document_intelligence_atomic_geometry_dpi
+                )
+            except Exception as exc:  # pragma: no cover - defensive perception fallback
+                logger.warning("atomic geometry perception failed: %s", type(exc).__name__)
         canonical = canonical.model_copy(
             update={
                 "document_id": stored.document_id,

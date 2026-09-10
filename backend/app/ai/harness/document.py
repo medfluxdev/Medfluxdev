@@ -141,3 +141,31 @@ class DocumentModel:
     @property
     def index(self) -> dict[str, Block]:
         return {block.id: block for block in self.blocks}
+
+    @property
+    def pages_blocks(self) -> dict[int, list[Block]]:
+        mapping: dict[int, list[Block]] = {}
+        for block in self.blocks:
+            if block.page is not None:
+                mapping.setdefault(block.page, []).append(block)
+        return mapping
+
+    @property
+    def visual_pages(self) -> list[int]:
+        return sorted(
+            {
+                page
+                for page, blocks in self.pages_blocks.items()
+                if any(block.needs_vision for block in blocks)
+                or not any((block.text or "").strip() for block in blocks)
+            }
+        )
+
+    @property
+    def is_image_heavy(self) -> bool:
+        """Routing signal only: visual compute is required for this document.
+
+        It never asserts meaning; the semantic stages decide that. A document is
+        image-heavy when at least one page needs vision or exposes no text.
+        """
+        return bool(self.visual_pages)
