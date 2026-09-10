@@ -1,0 +1,195 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medflux Contract 360</title><style>
+:root{
+  --bg:#12171d;--surface:#171e25;--surface2:#1b242c;--surface3:#202a33;
+  --border:#2b3741;--border-soft:#252f37;--text:#f4f7f8;--muted:#9aa8b1;
+  --muted2:#71818b;--accent:#6fd0c8;--accent-soft:#173a39;--success:#93cf8b;
+  --warning:#e6b96b;--danger:#e98282;--info:#7fa8e8;--violet:#a999dd;--money:#dec47d;
+  --shadow:0 14px 36px rgba(0,0,0,.18);--radius:18px
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+body{overflow-x:hidden}button,input,select{font:inherit}a{color:inherit}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.app{min-height:100vh;display:grid;grid-template-columns:240px 1fr}
+
+.sidebar{position:fixed;inset:0 auto 0 0;width:240px;background:linear-gradient(180deg,#10161c,#0f151a);border-right:1px solid #202a31;padding:22px 16px 16px;display:flex;flex-direction:column;z-index:50}
+.brand{display:flex;align-items:center;gap:12px;padding:0 8px 24px}.logo{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#6dd2cb,#32666b);position:relative}
+.logo:before,.logo:after{content:"";position:absolute;background:#0d1419;border-radius:999px}.logo:before{width:21px;height:6px;left:10px;top:18px}.logo:after{width:6px;height:21px;left:18px;top:10px}
+.brand strong{font-size:20px}.brand small{display:block;margin-top:4px;color:#778a94;font-size:9px;letter-spacing:.9px}
+.nav-label{padding:9px 11px 8px;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#5f717b}.nav{display:flex;flex-direction:column;gap:6px}
+.nav-item{min-height:46px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;text-decoration:none;color:#95a5ad;font-size:12.5px;position:relative}
+.nav-item:hover{background:#161f26;color:#d7e0e4}.nav-item.active{background:#18262d;color:#f5fffe}.nav-item.active:before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:6px;background:var(--accent)}
+.ico{width:20px;height:20px;display:grid;place-items:center}.ico svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.side-bottom{margin-top:auto;display:flex;flex-direction:column;gap:10px}
+.side-ai,.org-card{border-radius:15px;padding:14px;background:#141d23;border:1px solid #243039}
+.side-ai-top{display:flex;align-items:center;justify-content:space-between}.side-ai b,.org-card b{font-size:10.5px}
+.health{display:flex;align-items:center;gap:7px;color:#b8dcae;font-size:9.5px}.health-dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.side-ai p,.org-card p{margin:7px 0 0;color:#768992;font-size:8.8px;line-height:1.45}
+.org-card{display:flex;align-items:center;gap:10px}.org-avatar{width:36px;height:36px;border-radius:10px;background:#1f3037;display:grid;place-items:center;color:#9ed8d1;font-weight:800}
+.org-card small{display:block;color:#71858e;font-size:8px;margin-top:3px}
+
+.main{grid-column:2;min-width:0}
+.topbar{height:76px;background:rgba(18,23,29,.96);backdrop-filter:blur(16px);border-bottom:1px solid #232e36;display:grid;grid-template-columns:1fr auto;align-items:center;padding:0 28px;position:sticky;top:0;z-index:40}
+.page-title{display:flex;align-items:center;gap:14px}.page-title h1{font-size:19px;margin:0}.quality-pill{height:30px;padding:0 10px;border-radius:9px;background:#18252b;border:1px solid #2a3b43;color:#b7c6cc;font-size:9.5px;display:flex;align-items:center;gap:7px;cursor:pointer}.quality-pill b{color:#ccece6}
+.top-actions{display:flex;align-items:center;gap:10px}.search{width:430px;height:44px;border:1px solid #2b3740;border-radius:12px;background:#171f25;display:flex;align-items:center;gap:9px;padding:0 13px;color:#768993;font-size:11px;cursor:text}
+.search svg{width:18px;height:18px;stroke:#7d9098;fill:none;stroke-width:1.8}.search input{border:0;outline:0;background:transparent;color:#dfe8eb;width:100%;font-size:11px}
+.import-btn{height:44px;border:0;border-radius:12px;background:#245b5c;color:#efffff;padding:0 16px;font-weight:700;font-size:11px}.icon-btn{width:44px;height:44px;border-radius:12px;border:1px solid #2b3740;background:#171f25;display:grid;place-items:center;color:#9badb5;position:relative;cursor:pointer}
+.icon-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}.notif-count{position:absolute;right:-4px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#bf5d63;color:#fff;font-size:8px;display:grid;place-items:center;border:2px solid var(--bg)}
+.content{padding:24px 28px 36px;max-width:1700px;margin:0 auto}.section-caption{font-size:9px;color:#697b84;letter-spacing:1.45px;text-transform:uppercase;margin-bottom:9px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px}.panel-head h2{font-size:16px;margin:0}.panel-head p{margin:5px 0 0;font-size:10px;color:#71838c}.panel-link{font-size:9.5px;color:#77b9b7;text-decoration:none}
+.btn-secondary{height:36px;padding:0 12px;border-radius:9px;border:1px solid #30414a;background:#19242b;color:#c1cdd1;font-size:9.5px}.btn-primary{height:36px;padding:0 13px;border-radius:9px;border:1px solid #315c5e;background:#1b3b3e;color:#d7f7f2;font-size:9.5px}
+.btn-danger{height:36px;padding:0 13px;border-radius:9px;border:1px solid #5a3538;background:#331f22;color:#f1b1b1;font-size:9.5px}
+.breadcrumbs{display:flex;align-items:center;gap:7px;font-size:9.5px;color:#74858d;margin-bottom:14px}.breadcrumbs a{text-decoration:none;color:#8ca0a8}.breadcrumbs strong{color:#dbe4e7;font-weight:600}
+.kbd{padding:2px 5px;border-radius:5px;border:1px solid #37434a;background:#20282e;color:#9cacb2;font-size:8px}
+.tooltip{position:relative}.tooltip:hover:after{content:attr(data-tip);position:absolute;bottom:-34px;right:0;background:#0c1115;color:#dce6e8;border:1px solid #2a363d;padding:6px 8px;border-radius:7px;font-size:8px;white-space:nowrap;z-index:90}
+
+.popover{position:fixed;top:66px;right:28px;width:330px;background:#161f25;border:1px solid #314049;border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.34);padding:13px;z-index:100;display:none}
+.popover.open{display:block}.popover h3{font-size:11px;margin:0 0 9px}.pop-row{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #263138;font-size:9px}.pop-row:first-of-type{border-top:0}.pop-row span{color:#81939b}
+.search-panel{position:fixed;top:66px;right:170px;width:500px;max-height:520px;overflow:auto;background:#161f25;border:1px solid #314049;border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.34);padding:12px;z-index:100;display:none}
+.search-panel.open{display:block}.search-group{padding:9px 0;border-top:1px solid #263138}.search-group:first-child{border-top:0}.search-group h4{font-size:8px;letter-spacing:1.2px;text-transform:uppercase;color:#667982;margin:0 0 7px}
+.search-result{display:flex;justify-content:space-between;gap:12px;padding:8px;border-radius:8px}.search-result:hover{background:#1e2a31}.search-result b{font-size:9.5px}.search-result span{font-size:8px;color:#71858d}
+.quick-menu{position:fixed;top:66px;right:28px;width:210px;background:#161f25;border:1px solid #314049;border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.34);padding:7px;z-index:100;display:none}.quick-menu.open{display:block}.quick-menu a{display:block;text-decoration:none;padding:10px;border-radius:8px;font-size:9.5px;color:#b8c5c9}.quick-menu a:hover{background:#1e2a31}
+.toast{position:fixed;right:28px;bottom:26px;background:#18241f;border:1px solid #335343;color:#cde5d2;padding:11px 13px;border-radius:10px;font-size:9px;box-shadow:0 14px 40px rgba(0,0,0,.28);display:none;z-index:120}.toast.show{display:block}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(5,8,10,.66);display:none;place-items:center;z-index:110}.modal-backdrop.open{display:grid}.modal{width:min(520px,90vw);background:#171f25;border:1px solid #344149;border-radius:16px;padding:18px}.modal h3{font-size:13px;margin:0}.modal p{font-size:9.5px;color:#7b8c94;line-height:1.5}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}
+@media(max-width:1150px){.app{grid-template-columns:210px 1fr}.sidebar{width:210px}.search{width:300px}}
+
+.intelligence{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px}.intel{min-height:88px;background:linear-gradient(180deg,#182129,#171f26);border:1px solid #2a363f;border-radius:15px;padding:14px 15px;position:relative;overflow:hidden}.intel:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent-line)}
+.intel-top{display:flex;justify-content:space-between}.intel-label{font-size:10px;color:#95a4ac}.intel-state{font-size:8px;color:#677a83}.intel-value{font-size:25px;font-weight:800;margin-top:12px}.intel-sub{font-size:9px;color:#6f818a;margin-top:5px}
+.grid-main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(360px,1fr);gap:16px;margin-bottom:16px}.queue{display:flex;flex-direction:column;gap:10px}.queue-item{display:grid;grid-template-columns:8px 1fr auto;gap:12px;background:#1a232b;border:1px solid #28353e;border-radius:13px;padding:13px}.queue-bar{width:8px;border-radius:10px;background:var(--signal)}.q-title{font-size:12px;font-weight:750}.q-desc{font-size:9.5px;line-height:1.45;color:#83949c;margin-top:5px}.q-tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.tag{font-size:8.5px;padding:5px 7px;border-radius:7px;background:#202a32;color:#98a7ae}.tag.ev{background:#19312f;color:#81cfc6}.tag.human{background:#332d1e;color:#e9c77a}.tag.device{background:#27243b;color:#b5a8e6}.tag.money{background:#342d1f;color:#e4ca86}.q-due{font-size:8.5px;color:#81939a;white-space:nowrap}
+.risk-stack{display:flex;flex-direction:column;gap:11px}.risk-card{border:1px solid #2b3941;background:#192229;border-radius:13px;padding:13px}.risk-top{display:flex;justify-content:space-between;gap:10px}.risk-title{font-size:11.2px;font-weight:750}.badge{font-size:8px;padding:5px 7px;border-radius:7px}.badge.red{background:#372528;color:#efa0a0}.badge.amber{background:#372f21;color:#e8c37a}.risk-reason{font-size:9px;color:#81929a;margin-top:6px;line-height:1.45}.risk-meta{display:flex;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid #253039;font-size:8.2px;color:#6f8189}.risk-meta b{color:#b9c6cb}
+.analysis-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.analysis-card{border:1px solid #2b3941;background:#192229;border-radius:14px;padding:14px}.analysis-title{font-size:11px;font-weight:750}.analysis-meta{font-size:8.7px;color:#758991;margin-top:5px}.analysis-find{font-size:9.2px;color:#97a7ae;line-height:1.45;margin-top:9px;min-height:40px}.open360{margin-top:12px;height:34px;width:100%;border-radius:9px;border:1px solid #31565c;background:#1a3538;color:#c8f0ec;font-size:9px}
+.lower-grid{display:grid;grid-template-columns:1.1fr .95fr .95fr;gap:16px;margin:16px 0}.cost-list,.device-list,.review-list{display:flex;flex-direction:column;gap:12px}.cost-row{display:grid;grid-template-columns:1fr auto;gap:10px}.cost-row b,.cost-row span{font-size:10px}.bar{height:7px;background:#28353d;border-radius:999px;overflow:hidden;margin-top:6px}.bar span{display:block;height:100%;background:#cdb771}.device-overview{display:grid;grid-template-columns:90px 1fr;gap:14px;align-items:center}.ring{width:88px;height:88px;border-radius:50%;background:conic-gradient(var(--accent) 0 86%,#2a353c 86% 100%);position:relative}.ring:after{content:"";position:absolute;inset:14px;background:var(--surface);border-radius:50%}.ring-center{position:absolute;inset:0;display:grid;place-items:center;z-index:2;font-size:18px;font-weight:800}.device-copy b{font-size:11px}.device-copy p{font-size:9px;color:#758790}.device-item{display:flex;justify-content:space-between;font-size:9px;color:#87979e;padding-top:7px;border-top:1px solid #253039}.review-item b{font-size:10px}.review-item span{float:right;font-size:9px;color:#778a93}.review-item .bar span{float:none}.review-item.confirm .bar span{background:#8fca89}.review-item.open .bar span{background:#d6b466}.review-item.critical .bar span{background:#d97575}
+.audit-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.audit-item{border:1px solid #29363e;background:#192229;border-radius:12px;padding:12px;display:grid;grid-template-columns:11px 1fr;gap:9px}.audit-dot{width:9px;height:9px;border-radius:50%;background:var(--audit);margin-top:3px}.audit-item b{font-size:9.8px}.audit-item p{font-size:8.6px;color:#74878f;line-height:1.4;margin:4px 0}.audit-item time{font-size:7.8px;color:#5f727a}
+@media(max-width:1300px){.intelligence{grid-template-columns:repeat(3,1fr)}.analysis-grid{grid-template-columns:1fr 1fr}.lower-grid{grid-template-columns:1fr}.audit-grid{grid-template-columns:1fr 1fr}}
+
+.state-box{border:1px dashed #34434b;border-radius:16px;padding:28px;text-align:center;background:#151d23;min-height:220px;display:flex;flex-direction:column;justify-content:center}
+.state-box h3{font-size:14px;margin:0}.state-box p{font-size:9.5px;color:#778993;line-height:1.55;margin:8px auto 0;max-width:520px}
+.state-icon{width:50px;height:50px;border-radius:15px;margin:0 auto 14px;display:grid;place-items:center;background:#1e2a31;color:#8fbdb8;font-size:21px}
+.empty-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;margin-bottom:16px}
+.empty-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.notice{border-left:3px solid var(--warning);background:#1d1b17;border-radius:10px;padding:12px 14px;color:#9d9188;font-size:9px;line-height:1.5}
+@media(max-width:1100px){.empty-grid,.empty-row{grid-template-columns:1fr}}
+
+.contract-actionbar{position:sticky;top:76px;z-index:25;background:rgba(18,23,29,.96);border-bottom:1px solid #263039;padding:11px 28px;display:flex;justify-content:space-between;align-items:center}
+.action-left{display:flex;gap:8px}.contract-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+@media(max-width:1100px){.contract-grid{grid-template-columns:1fr}}
+</style></head><body>
+<div class="app"><aside class="sidebar">
+  <div class="brand"><div class="logo"></div><div><strong>Medflux</strong><small>CONTRACT INTELLIGENCE</small></div></div>
+  <div class="nav-label">Arbeitsbereich</div>
+  <nav class="nav">
+    <a class="nav-item active" href="index.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 12h5l3-7 3 14 2-7h3"/></svg></span>Übersicht</a>
+    <a class="nav-item " href="contract360.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>Verträge</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 13h5"/></svg></span>Arbeitsliste</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5z"/></svg></span>Geräte</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg></span>Import</a>
+  </nav>
+  <div class="nav-label">Kontrolle</div>
+  <nav class="nav">
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></span>Prüfungen</a>
+    <a class="nav-item " href="evidence-viewer.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg></span>Nachweise</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 20V4h14v16z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>Audit</a>
+    <a class="nav-item " href="archiv.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 8h16v12H4z"/><path d="M7 8V4h10v4"/><path d="M9 12h6"/></svg></span>Archiv</a>
+  </nav>
+  <div class="nav-label">System</div>
+  <nav class="nav">
+    <a class="nav-item " href="einstellungen.html"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></svg></span>Einstellungen</a>
+  </nav>
+  <div class="side-bottom">
+    <div class="side-ai"><div class="side-ai-top"><b>Lokale KI</b><div class="health"><span class="health-dot"></span>Gesund</div></div><p>Lokale Verarbeitung<br>Nachweisverfolgung aktiv<br>Keine externen Modellaufrufe</p></div>
+    <div class="org-card"><div class="org-avatar">—</div><div><b>Organisation nicht verbunden</b><small>Bereich nicht verfügbar</small></div></div>
+  </div>
+</aside>
+<main class="main">
+
+<header class="topbar">
+  <div class="page-title"><h1>Contract 360</h1><button class="quality-pill" id="qualityBtn">Datenqualität: <b>Nicht verfügbar</b></button></div>
+  <div class="top-actions">
+    <div class="search" id="globalSearchBox">
+      <svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg>
+      <input id="globalSearchInput" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät, Dateiname, Fakten, Nachweise ...">
+    </div>
+    <button class="import-btn" onclick="showToast('Import ist im Prototyp nicht mit einem Backend verbunden')">Vertrag importieren</button>
+    <button class="icon-btn tooltip" data-tip="Benachrichtigungen" id="notifBtn" aria-label="Benachrichtigungen">
+      <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M10 20h4"/></svg>
+    </button>
+    <button class="icon-btn tooltip" data-tip="Schnellaktionen" id="quickBtn" aria-label="Schnellaktionen">⋯</button>
+  </div>
+</header>
+<div class="contract-actionbar">
+  <div class="breadcrumbs"><a href="index.html">Verträge</a><span>›</span><strong>Kein Vertrag ausgewählt</strong></div>
+  <div class="action-left">
+    <button class="btn-secondary" disabled>Nachweis öffnen</button>
+    <button class="btn-primary" disabled>Prüfung starten</button>
+    <button class="btn-secondary" disabled>Bearbeiten / Korrigieren</button>
+    <button class="btn-danger" disabled>Archivieren</button>
+  </div>
+</div>
+<section class="content">
+  <section class="contract-grid">
+    
+<div class="state-box">
+  <div class="state-icon">∅</div>
+  <h3>Kein Vertrag geladen</h3>
+  <p>Wählen Sie einen echten Vertrag aus der Vertragsliste oder Suche. Contract 360 zeigt niemals Fixture-Daten.</p>
+  
+</div>
+    
+<div class="state-box">
+  <div class="state-icon">∅</div>
+  <h3>Vertragskontext nicht verfügbar</h3>
+  <p>Lieferant, Gerätebeziehungen, Fakten, Nachweise und Prüfstatus werden erst nach erfolgreichem API-Ladevorgang angezeigt.</p>
+  
+</div>
+  </section>
+</section>
+</main></div>
+<div class="popover" id="qualityPop">
+  <h3>Datenqualität</h3>
+  <div class="pop-row"><span>Status</span><b>Nicht verfügbar</b></div>
+  <div class="pop-row"><span>Hinweis</span><b>Keine Backend-Daten</b></div>
+</div>
+
+<div class="popover" id="notifPop">
+  <h3>Benachrichtigungen</h3>
+  <div style="padding:18px 6px;text-align:center;color:#74868f;font-size:9px">
+    Keine Benachrichtigungen verfügbar.
+  </div>
+</div>
+
+<div class="search-panel" id="searchPanel">
+  <div style="padding:22px 10px;text-align:center;color:#74868f;font-size:9px;line-height:1.5">
+    Keine Suchergebnisse.<br>
+    Die globale Suche wird erst mit echten API-Daten befüllt.
+  </div>
+</div>
+
+<div class="quick-menu" id="quickMenu">
+  <a href="#">Arbeitsliste öffnen</a>
+  <a href="archiv.html">Archiv öffnen</a>
+  <a href="einstellungen.html">Systemstatus</a>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+function closeAll(){document.querySelectorAll('.popover,.search-panel,.quick-menu').forEach(x=>x.classList.remove('open'))}
+function showToast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#qualityBtn')&&!e.target.closest('#qualityPop')) $('#qualityPop')?.classList.remove('open');
+  if(!e.target.closest('#notifBtn')&&!e.target.closest('#notifPop')) $('#notifPop')?.classList.remove('open');
+  if(!e.target.closest('#quickBtn')&&!e.target.closest('#quickMenu')) $('#quickMenu')?.classList.remove('open');
+  if(!e.target.closest('#globalSearchBox')&&!e.target.closest('#searchPanel')) $('#searchPanel')?.classList.remove('open');
+});
+$('#qualityBtn')?.addEventListener('click',()=>$('#qualityPop').classList.toggle('open'));
+$('#notifBtn')?.addEventListener('click',()=>$('#notifPop').classList.toggle('open'));
+$('#quickBtn')?.addEventListener('click',()=>$('#quickMenu').classList.toggle('open'));
+$('#globalSearchInput')?.addEventListener('focus',()=>$('#searchPanel').classList.add('open'));
+$('#globalSearchInput')?.addEventListener('input',()=>$('#searchPanel').classList.add('open'));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAll(); if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#globalSearchInput')?.focus();}})
+</script>
+
+</body></html>

@@ -171,16 +171,68 @@ class CostCategory(BaseModel):
     components: list[MoneyFieldResult] = Field(default_factory=list)
 
 
+class CostTaxBreakdown(BaseModel):
+    """Netto/Brutto-Aufteilung der wiederkehrenden Kosten (UAT Defect Batch A).
+
+    Wird ausschliesslich deterministisch abgeleitet, wenn eine verlaessliche
+    Steuer-Basis **UND** ein Steuersatz bekannt sind. `computed` ist False, sobald
+    Basis oder Satz fehlen – es wird NIEMALS eine 19%-Mehrwertsteuer angenommen
+    oder ein Brutto erfunden (`expanded_euros`/`netto` bleiben dann None).
+
+    `base_tax_basis` sagt, in welcher Basis das kanonische recurring-Ergebnis
+    vorliegt (net -> netto = Basis; gross -> brutto = Basis). Die Gegen-Basis
+    wird exakt (Decimal) ueber den Satz abgeleitet.
+    """
+
+    computed: bool = False
+    base_tax_basis: TaxBasis = TaxBasis.UNKNOWN
+    rate_percent: Optional[float] = None
+    currency: Optional[str] = None
+    monthly_net: Optional[Decimal] = None
+    monthly_gross: Optional[Decimal] = None
+    annual_net: Optional[Decimal] = None
+    annual_gross: Optional[Decimal] = None
+    # Umsatzsteuerbeträge (gross - net), nur bei computed=True gesetzt.
+    monthly_tax: Optional[Decimal] = None
+    annual_tax: Optional[Decimal] = None
+    explanation: str = ""
+
+
+class PriceDevelopmentItem(BaseModel):
+    """Preisentwicklung/Preisfixierung eines Vertrags (evidence-getragen).
+
+    Ein Fakten-String (z. B. „Festpreis über 8 Jahre") plus Provenienz zum
+    extrahierten Feld. Wird NIE neu interpretiert – nur extrahierte Angaben
+    werden angezeigt.
+    """
+
+    key: str
+    label: str
+    text: Optional[str] = None
+    evidence_field_ref: Optional[str] = None
+    status: CalculationStatus = CalculationStatus.NOT_CALCULABLE
+    # Deterministisch aus dem Fakten-Text geparste Fixpreis-Dauer (Jahre),
+    # z. B. „Festpreis über 8 Jahre" -> 8. Nur gesetzt, wenn belegbar.
+    period_years: Optional[int] = None
+
+
 class CalculateContractCosts(BaseModel):
     """Gesamtheit der berechneten Kostenfelder für EINEN Vertrag."""
 
     normalized_recurring: RecurringCostNormalized = Field(
         default_factory=RecurringCostNormalized
     )
+    # Repräsentierbarer Gesamtvertragswert. `total_contract_value_status` bleibt
+    # aus Rückwärtskompatibilität erhalten und spiegelt dessen Status.
+    total_contract_value: MoneyFieldResult = Field(default_factory=MoneyFieldResult)
     total_contract_value_status: CalculationStatus = CalculationStatus.NOT_CALCULABLE
     currency_conflict: bool = False
     tax_basis: TaxBasis = TaxBasis.UNKNOWN
+    tax_rate_percent: Optional[float] = None
     category_totals: list[CostCategory] = Field(default_factory=list)
+    # UAT Defect Batch A: Netto/Brutto-Aufteilung + Preisfixierung/-entwicklung.
+    tax_breakdown: CostTaxBreakdown = Field(default_factory=CostTaxBreakdown)
+    price_development: list[PriceDevelopmentItem] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
     @property
@@ -199,7 +251,7 @@ class ContractCalculationResult(BaseModel):
 
     contract_id: Optional[str] = None
     as_of_date: date
-    calculation_version: str = "step9-1.0"
+    calculation_version: str = "step9-1.1"
     dates: CalculatedDateField = Field(default_factory=CalculatedDateField)
     costs: CalculateContractCosts = Field(default_factory=CalculateContractCosts)
     overall_review_required: bool = False

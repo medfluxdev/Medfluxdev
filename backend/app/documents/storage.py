@@ -13,6 +13,8 @@ Der ursprüngliche Dateiname dient nur als Metadatum.
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import uuid
 from datetime import datetime, timezone
@@ -127,6 +129,129 @@ class DocumentStorage:
             if candidate.is_file():
                 return ext, candidate
         return None
+
+    # ------------------------------------------------------------------
+    # Kanonische Storage-Referenz (STEP 14)
+    #
+    # `storage_key` (Server-Referenz) ist IMMER ein relativer, kontrollierter
+    # Original- oder Artifact-Schluessel. Der Browser/API erfaehrt ihn NIE. Nur
+    # `DocumentStorage` uebersetzt eine kanonische Referenz in einen Pfad.
+    # ------------------------------------------------------------------
+
+    _ORIGINAL_REF_RE = re.compile(r"^[0-9a-f]{32}/original\.(pdf|docx)$")
+    _ARTIFACT_REF_RE = re.compile(
+        r"^[0-9a-f]{32}/artifacts/[0-9a-f]{32}/canonical\.json$"
+    )
+
+    @staticmethod
+    def validate_reference(reference: str) -> None:
+        """Prueft eine kanonische Storage-Referenz strikt.
+
+        Regeln: nur relativ, eine der explizit erlaubten Medflux-Strukturen,
+        kein '..', kein absoluter Pfad, kein Laufwerks-/UNC-Escape.
+        """
+        if not isinstance(reference, str) or not reference:
+            raise StorageError("ungueltige Storage-Referenz")
+        if reference.startswith(("/", "\\")):
+            raise StorageError("absoluter Pfad nicht erlaubt")
+        if re.search(r"[:]", reference):
+            raise StorageError("Laufwerks-/scheme-Anteil nicht erlaubt")
+        parts = reference.replace("\\", "/").split("/")
+        if ".." in parts or "." in parts:
+            raise StorageError("Pfad-Traversal nicht erlaubt")
+        if any(not p for p in parts):
+            raise StorageError("leere Pfadteile nicht erlaubt")
+        if not (
+            DocumentStorage._ORIGINAL_REF_RE.fullmatch(reference)
+            or DocumentStorage._ARTIFACT_REF_RE.fullmatch(reference)
+        ):
+            raise StorageError("unerwartete Storage-Referenz-Struktur")
+
+    def legacy_records(
+        self,
+        *,
+        document_ids: Optional[list[str]] = None,
+        limit: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
+        """Lists legacy-manifest records for explicit reconciliation only.
+
+        This read-only method does not rewrite the manifest or original files.
+        Callers must still resolve each opaque document_id through
+        ``resolve_document``; the historical ``storage_path`` value is never a
+        trusted input to the production orchestrator.
+        """
+
+        requested = set(document_ids or [])
+        if any(not self.is_valid_document_id(value) for value in requested):
+            raise StorageError("ungueltige Legacy-Dokument-ID")
+        records = [
+            dict(record)
+            for record in self._load_index().values()
+            if not requested or record.get("document_id") in requested
+        ]
+        records.sort(key=lambda record: str(record.get("imported_at") or ""))
+        if limit is not None:
+            if limit < 1:
+                raise StorageError("limit muss positiv sein")
+            records = records[:limit]
+        return records
+
+    def safe_path(self, reference: str) -> Path:
+        """Uebersetzt eine KANONISCHE REFERENZ in einen Pfad unter dem Root.
+
+        Einziger Uebersetzungspunkt Referenz -> Dateisystempfad. Validierung + 
+        Containment-Check; bei Verletzung wirft es StorageError (nie selbst-gebauter
+        Pfad aus Client-Input ohne Validierung).
+        """
+        DocumentStorage.validate_reference(reference)
+        # containment via resolve(): Ziel muss innerhalb des Roots bleiben.
+        root = self._base_dir.resolve()
+        target = (root / reference.replace("\\", "/")).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError:
+            raise StorageError("Referenz verlaesst den Storage-Root")
+        return target
+
+    def write_reference(self, reference: str, content: bytes) -> None:
+        """Schreibt Bytes ueber eine kanonische Referenz (Compatibility-Check)."""
+        target = self.safe_path(reference)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            target.write_bytes(content)
+        except OSError:
+            raise StorageError("Datei konnte nicht geschrieben werden")
+
+    def exists_reference(self, reference: str) -> bool:
+        try:
+            return self.safe_path(reference).is_file()
+        except StorageError:
+            return False
+
+    def read_reference(self, reference: str) -> bytes:
+        target = self.safe_path(reference)
+        if not target.is_file():
+            raise StorageError("Datei nicht gefunden")
+        try:
+            return target.read_bytes()
+        except OSError:
+            raise StorageError("Datei konnte nicht gelesen werden")
+
+    def delete_reference(self, reference: str) -> None:
+        """Entfernt eine referenzierte Datei (Kompensation nach DB-Fehler)."""
+        try:
+            target = self.safe_path(reference)
+        except StorageError:
+            return
+        if target.is_file():
+            try:
+                target.unlink()
+            except OSError:
+                pass
+            try:
+                target.parent.rmdir()
+            except OSError:
+                pass
 
     def save(
         self,

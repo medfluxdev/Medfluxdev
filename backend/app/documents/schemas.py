@@ -15,12 +15,13 @@ from pydantic import BaseModel, Field
 
 
 class ImportStatus(str, Enum):
-    """Status eines einzelnen importierten Dokuments."""
+    """Status eines einzelnen importierten Dokuments (Import + Verarbeitung)."""
 
-    IMPORTED = "imported"
-    REJECTED = "rejected"
-    FAILED = "failed"
-    DUPLICATE = "duplicate"
+    IMPORTED = "imported"          # Ablage + Vertrag erstellt (Analyse evtl. partial)
+    REJECTED = "rejected"          # Organisation/Datei abgelehnt
+    FAILED = "failed"              # Verarbeitung fehlgeschlagen
+    DUPLICATE = "duplicate"        # bereits vorhandene Bytes
+    ANALYSIS_FAILED = "analysis_failed"  # importiert, aber keine Analyse moeglich
 
 
 class DocumentFile(BaseModel):
@@ -44,11 +45,16 @@ class ImportFileResult(BaseModel):
     """Ergebnis für ein einzelnes Dokument innerhalb einer Import-Anfrage."""
 
     document_id: Optional[str] = None
+    document_version_id: Optional[str] = None
     original_filename: str
     status: ImportStatus
     size: int = Field(ge=0)
     sha256: Optional[str] = None
     duplicate_of_document_id: Optional[str] = None
+    # Verarbeitungs-/Vertrags-Ergebnis (nach der end-to-end-Pipeline)
+    analysis_status: Optional[str] = None  # success | partial | failed | None
+    requires_review: bool = False
+    contract_id: Optional[str] = None
     message: Optional[str] = None
 
 

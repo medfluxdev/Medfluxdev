@@ -45,12 +45,12 @@ data/pgdata/
 *.pgdata
 postgres-data/
 
-# Modell-Dateien / Gewichte
+# Modell-Dateien / Gewichte (db.models sind Quellcode, nur Datei-Extensions meiden)
 *.gguf
 *.onnx
 *.pt
 *.pth
-models/
+/models/
 
 # OCR-/Canonical-Caches & generierte Quell-Navigations-Render
 data/ocr_cache/
@@ -73,3 +73,5 @@ Thumbs.db
 logs/
 npm-debug.log*
 
+
+*.tsbuildinfo

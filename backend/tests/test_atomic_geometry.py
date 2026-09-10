@@ -1,7 +1,7 @@
 """Tests fuer die atomare OCR-Geometrie (STEP 8B-Korrektur).
 
 Abgedeckt (synthetisch, deterministisch – KEIN RapidOCR/PDF-Zwang):
-- Modell: AtomicUnit/GeometryPrecision JSON-Roundtrip, Schema 1.2.0
+- Modell: AtomicUnit/GeometryPrecision JSON-Roundtrip, Schema 1.3.0
 - Alignment: Zeilen (SequenceMatcher) + Woerter (casefold find) -> kanonische
   Offsets; nie erfundene Offsets
 - Aufloeser: EXACT_WORD / EXACT_LINE / VALIDATED_TABLE_CELL / COARSE_FALLBACK /
@@ -68,8 +68,8 @@ def _word(pid: str, text: str, off: int, lo: float, top: float, hi: float, botto
 
 
 class TestModel:
-    def test_schema_version_is_120(self):
-        assert CANONICAL_SCHEMA_VERSION == "1.2.0"
+    def test_schema_version_is_130(self):
+        assert CANONICAL_SCHEMA_VERSION == "1.3.0"
 
     def test_atomic_unit_json_roundtrip(self):
         u = AtomicUnit(

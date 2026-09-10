@@ -40,6 +40,8 @@ from app.models.contract import (
     Contract,
     ContractDates,
     Costs,
+    ScheduledPrice,
+    VariableCharge,
     Termination,
 )
 from app.models.enums import ContractStatus, TimeUnit
@@ -811,3 +813,180 @@ class TestEngineContract:
         r = calculate_contract(c, as_of_date=date(2024, 1, 1))
         assert r.overall_review_required is True
         assert any("unbekannt" in reason.lower() for reason in r.review_reasons)
+
+
+# ============================================================ PR-3 Financial
+
+class TestPR3FinancialIntelligence:
+    """PR-3: Financial Intelligence – deterministisch, konzeptgetrennt, ehrlich.
+
+    Kernregeln:
+    - Annualisierung zentral über `scaling_factor`, Bezugsperiode aus
+      `Money.period` (kein hartkodiertes x12 an separater Stelle).
+    - `maintenance_fee` ist eine EIGENSTÄNDIGE Charge: sie wird nur dann als
+      wiederkehrendes annualisiertes Jahr geführt, wenn sie die EINZIGE
+      wiederkehrende Quelle ist UND eine annualisierbare Periode besitzt.
+      Fehlt die Periode -> NOT_CALCULABLE (review, nie geraten). Sie wird
+      NIE blind zur Hauptgebühr addiert.
+    - quarterly/semi_annual werden (wie monthly/annual) als wiederkehrende
+      Hauptgebühr erkannt und annualisiert.
+    - Steuerbasis wird nur explizit übernommen (net/gross), nie erfunden.
+    """
+
+    def test_quarterly_cost_annualized(self):
+        c = make_contract(
+            costs=Costs(default_currency="EUR", quarterly_cost=Money(amount=100, currency="EUR"))
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        ann = r.costs.normalized_recurring.annual
+        assert ann.status == CS.CALCULATED
+        assert ann.value == Decimal("400")
+        assert r.costs.normalized_recurring.source_period == "quarterly"
+
+    def test_semi_annual_cost_annualized(self):
+        c = make_contract(
+            costs=Costs(default_currency="EUR", semi_annual_cost=Money(amount=100, currency="EUR"))
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        ann = r.costs.normalized_recurring.annual
+        assert ann.value == Decimal("200")
+        assert r.costs.normalized_recurring.source_period == "semi_annual"
+
+    def test_maintenance_fee_with_period_sole_source_annualized(self):
+        # Benchmark-ähnlich: Wartungsgebühr MIT vierteljährlicher Periode
+        c = make_contract(
+            costs=Costs(
+                default_currency="EUR",
+                maintenance_fee=Money(amount=100, currency="EUR", period="quarterly"),
+            )
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        ann = r.costs.normalized_recurring.annual
+        assert ann.status == CS.CALCULATED
+        assert ann.value == Decimal("400")
+        assert r.costs.normalized_recurring.source_period == "quarterly"
+
+    def test_maintenance_fee_no_period_stays_not_calculable(self):
+        c = make_contract(
+            costs=Costs(default_currency="EUR", maintenance_fee=Money(amount=35, currency="EUR"))
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        ann = r.costs.normalized_recurring.annual
+        assert ann.value is None
+        assert ann.status == CS.NOT_CALCULABLE
+        assert ann.review_required is True
+
+    def test_maintenance_fee_not_added_to_recurring(self):
+        # maintenance_fee und monthly_cost sind getrennte Charges -> NICHT addiert,
+        # NICHT als Konflikt erzeugt; monthly bleibt Quelle des normalized annual.
+        c = make_contract(
+            costs=Costs(
+                default_currency="EUR",
+                monthly_cost=Money(amount=100, currency="EUR"),
+                maintenance_fee=Money(amount=50, currency="EUR", period="monthly"),
+            )
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        ann = r.costs.normalized_recurring.annual
+        assert ann.value == Decimal("1200")   # nur monthly, maintenance separat
+        assert ann.status == CS.CALCULATED
+        assert not r.costs.recurring_cost_conflict
+
+    def test_tax_basis_explicit_net(self):
+        c = make_contract(costs=Costs(default_currency="EUR",
+                                      monthly_cost=Money(amount=100, currency="EUR"),
+                                      tax_basis="net"))
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        assert r.costs.tax_basis.value == "net"
+
+    def test_tax_basis_explicit_gross(self):
+        c = make_contract(costs=Costs(tax_basis="gross"))
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        assert r.costs.tax_basis.value == "gross"
+
+    def test_tax_basis_unknown_not_invented(self):
+        c = make_contract(costs=Costs(tax_basis="foo"))
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        assert r.costs.tax_basis.value == "unknown"
+
+    def test_setup_installation_cost_is_one_time_category(self):
+        c = make_contract(
+            costs=Costs(default_currency="EUR", setup_installation_cost=Money(amount=999, currency="EUR"))
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        assert r.costs.normalized_recurring.annual.value is None
+        keys = [cat.key for cat in r.costs.category_totals]
+        assert "setup_installation_cost" in keys
+
+    def test_monthly_rounding_is_currency_half_up(self):
+        # annual/12 wird an der Ausgabegrenze auf 2 Nachkommastellen gerundet.
+        c = make_contract(
+            costs=Costs(default_currency="EUR", annual_cost=Money(amount=100, currency="EUR"))
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 1, 1))
+        m = r.costs.normalized_recurring.monthly
+        assert m.value == Decimal("8.33")
+        assert m.status == CS.CALCULATED
+
+
+
+# ============================================================ Staged pricing / variable charges
+
+class TestStagedPricing:
+    def test_complete_four_year_schedule_calculates_total_without_fake_annual(self):
+        costs = Costs(
+            default_currency="EUR",
+            scheduled_prices=[
+                ScheduledPrice(period_index=1, period_label="1.Jahr", amount=Money(amount="0", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=2, period_label="2.Jahr", amount=Money(amount="8000", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=3, period_label="3.Jahr", amount=Money(amount="8000", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=4, period_label="4.Jahr", amount=Money(amount="8000", currency="EUR", period="annual")),
+            ],
+        )
+        c = make_contract(duration=(4, TimeUnit.YEARS), costs=costs)
+        r = calculate_contract(c, as_of_date=date(2026, 1, 1))
+        assert r.costs.total_contract_value.value == Decimal("24000.00")
+        assert r.costs.total_contract_value.currency == "EUR"
+        assert r.costs.total_contract_value.status == CS.CALCULATED
+        # Varying yearly prices are not misrepresented as one recurring annual price.
+        assert r.costs.normalized_recurring.annual.value is None
+
+    def test_variable_per_call_charge_is_visible_but_never_added_to_fixed_total(self):
+        costs = Costs(
+            default_currency="EUR",
+            scheduled_prices=[
+                ScheduledPrice(period_index=1, amount=Money(amount="0", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=2, amount=Money(amount="8000", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=3, amount=Money(amount="8000", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=4, amount=Money(amount="8000", currency="EUR", period="annual")),
+            ],
+            variable_charges=[
+                VariableCharge(
+                    label="Fixed per call",
+                    amount=Money(amount="2226", currency="EUR", period="once"),
+                    unit="per_call",
+                )
+            ],
+        )
+        c = make_contract(duration=(4, TimeUnit.YEARS), costs=costs)
+        r = calculate_contract(c, as_of_date=date(2026, 1, 1))
+        assert r.costs.total_contract_value.value == Decimal("24000.00")
+        variable = [x for x in r.costs.category_totals if x.key.startswith("variable_charges.")]
+        assert len(variable) == 1
+        assert variable[0].amount == Decimal("2226")
+        assert "nicht" in variable[0].explanation.lower()
+
+    def test_incomplete_schedule_never_becomes_total(self):
+        costs = Costs(
+            default_currency="EUR",
+            scheduled_prices=[
+                ScheduledPrice(period_index=1, amount=Money(amount="0", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=2, amount=Money(amount="8000", currency="EUR", period="annual")),
+                ScheduledPrice(period_index=4, amount=Money(amount="8000", currency="EUR", period="annual")),
+            ],
+        )
+        c = make_contract(duration=(4, TimeUnit.YEARS), costs=costs)
+        r = calculate_contract(c, as_of_date=date(2026, 1, 1))
+        assert r.costs.total_contract_value.value is None
+        assert r.costs.total_contract_value.status == CS.REVIEW_REQUIRED
+        assert r.overall_review_required is True

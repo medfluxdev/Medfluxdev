@@ -81,6 +81,10 @@ class ContractAnalysisResult(BaseModel):
     evidence_issues: int = 0
     verifier_issues: int = 0
     normalization_issues: int = 0
+    # Harness v2.1 diagnostics survive even when ``contract`` is None.
+    # The payload is deliberately structured and source-text free so failures can
+    # be diagnosed without persisting contract content or chain-of-thought.
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 def _unit_header(unit: ExtractionUnit) -> str:

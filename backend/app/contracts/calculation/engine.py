@@ -36,6 +36,8 @@ def calculate_contract(contract: Contract, as_of_date: date) -> ContractCalculat
         review_reasons.append("Widersprüchliche wiederkehrende Kostenbeträge.")
     if costs.currency_conflict:
         review_reasons.append("Mehrere Währungen; keine Aggregation.")
+    if costs.total_contract_value.review_required:
+        review_reasons.append(costs.total_contract_value.explanation)
     if costs.tax_basis.value == "unknown":
         review_reasons.append("Steuerbasis (netto/brutto) nicht modelliert – keine MwSt-Annahme.")
 

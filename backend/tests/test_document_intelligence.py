@@ -20,12 +20,16 @@ from app.documents.intelligence.canonical import (
     TextSpan,
     build_canonical_text,
 )
-from app.documents.intelligence.docling_provider import DoclingDocumentProvider
+from app.documents.intelligence.docling_provider import (
+    DoclingDocumentProvider,
+    _rapidocr_lang_code,
+)
 from app.documents.intelligence.provider import (
     DocumentIntelligenceSettings,
     available_providers,
     get_provider,
 )
+from app.documents.processing import _sanitized_error
 
 
 # ---------------------------------------------------------------- Helfer
@@ -312,3 +316,84 @@ def test_settings_defaults():
     assert s.ocr_lang == ["de", "en"]
     assert s.table_mode == "accurate"
     assert s.do_table_structure is True
+
+
+# ------------------------------------------------------------------ PR-1: OCR-Sprach-Normierung
+
+def test_rapidocr_lang_code_maps_tesseract_to_rapidocr():
+    # Settings.ocr_lang verwendet global "deu" (Tesseract/ISO-639-3). RapidOCR
+    # akzeptiert das NICHT (wirft ValueError). Die Normierung ist der Kern-Fix.
+    assert _rapidocr_lang_code("deu") == "de"
+    assert _rapidocr_lang_code("ger") == "de"
+    assert _rapidocr_lang_code("DEU") == "de"  # Grossschreibung ist egal
+    assert _rapidocr_lang_code("eng") == "en"
+    assert _rapidocr_lang_code("fra") == "fr"
+    assert _rapidocr_lang_code("ara") == "arabic"
+    # Unbekannte/unveraenderte Codes bleiben erhalten (kein stilles Verwerfen).
+    assert _rapidocr_lang_code("de") == "de"
+    assert _rapidocr_lang_code("xyz") == "xyz"
+    assert _rapidocr_lang_code("") == ""
+
+
+# ------------------------------------------- PR-1: sicherer persistierter Fehlertext
+
+def test_sanitized_error_strips_paths_and_newlines():
+    msg = _sanitized_error(
+        "Docling-Verarbeitung fehlgeschlagen: "
+        "Datei C:\\Users\\JAMAL\\Desktop\\Medflux\\backend\\data\\x.pdf "
+        "und /var/lib/medflux/cache/model.onnx\nzweite Zeile\tmit tab"
+    )
+    assert msg is not None
+    assert "C:\\Users" not in msg
+    assert "/var/lib" not in msg
+    assert "\n" not in msg
+    assert "\t" not in msg
+    # Der nutzbare Teil der Meldung bleibt erhalten.
+    assert "Docling-Verarbeitung fehlgeschlagen" in msg
+
+
+def test_sanitized_error_empty_is_none():
+    assert _sanitized_error(None) is None
+    assert _sanitized_error("") is None
+    assert _sanitized_error("   \n  ") is None
+
+
+def test_sanitized_error_caps_length():
+    long = "x" * 5000
+    msg = _sanitized_error(long)
+    assert msg is not None
+    assert len(msg) <= 500
+
+
+def test_sanitized_error_drops_traceback_frames():
+    # Nur die letzte Fehlerzeile bleibt; Frame-/Quellzeilen (mit absoluten UND
+    # relativen Pfaden + Zeilennummern) dürfen nie persistiert werden.
+    tb = (
+        "Traceback (most recent call last):\n"
+        '  File "C:\\Users\\JAMAL\\Desktop\\Medflux\\backend\\app\\x.py", line 12, in f\n'
+        '  File "app\\y.py", line 4, in g\n'
+        "    raise ValueError('boom')\n"
+        "ValueError: boom\n"
+    )
+    msg = _sanitized_error(tb)
+    assert msg == "ValueError: boom"
+    assert "x.py" not in msg
+    assert "y.py" not in msg
+    assert "line" not in msg
+
+
+def test_sanitized_error_redacts_secrets():
+    msg = _sanitized_error(
+        "psycopg2.OperationalError: connection refused to "
+        "postgresql://admin:SuperSecret33@192.168.1.5:5432/medflux"
+    )
+    assert "SuperSecret33" not in msg
+    assert _sanitized_error("RuntimeError: auth failed password=abc123").endswith(
+        "<secret>"
+    )
+    assert "BearerToken" not in _sanitized_error(
+        "HTTPError: 401 Authorization: Bearer BearerToken"
+    )
+    assert "AKIA1234567890ABCDEF" not in _sanitized_error(
+        "CredentialsError: invalid AWS_ACCESS_KEY_ID=AKIA1234567890ABCDEF"
+    )

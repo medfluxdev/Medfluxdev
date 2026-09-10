@@ -144,39 +144,60 @@ def test_mime_mismatch_rejected(service):
     assert result.message == MSG_UNSUPPORTED_TYPE
 
 
-def test_api_import_endpoint(tmp_path, monkeypatch):
-    test_base = tmp_path / "contracts"
-    test_base.mkdir()
-    test_storage = DocumentStorage(test_base)
-    test_service = DocumentImportService(storage=test_storage)
+def test_api_import_endpoint(monkeypatch):
+    from app.documents.processing import ProcessedDocument
 
-    monkeypatch.setattr(documents_module, "_service", test_service)
+    class StubProcessingService:
+        def process(self, **kwargs):
+            if kwargs["original_filename"].endswith(".exe"):
+                return ProcessedDocument(
+                    document_id="",
+                    document_version_id="",
+                    sha256="",
+                    original_filename=kwargs["original_filename"],
+                    status="rejected",
+                    message="Dokument wurde abgelehnt.",
+                )
+            return ProcessedDocument(
+                document_id="11111111-1111-1111-1111-111111111111",
+                document_version_id="22222222-2222-2222-2222-222222222222",
+                sha256="a" * 64,
+                original_filename=kwargs["original_filename"],
+                status="imported",
+                contract_id="33333333-3333-3333-3333-333333333333",
+                message="Dokument erfolgreich verarbeitet.",
+            )
 
+    monkeypatch.setattr(
+        documents_module, "_processing_service", StubProcessingService()
+    )
     client = TestClient(medflux_app)
-
     files = [
         ("files", ("ok.pdf", PDF_BYTES, "application/pdf")),
         ("files", ("bad.exe", b"MZ...", "application/x-msdownload")),
     ]
-    r = client.post("/api/documents/import", files=files)
-    assert r.status_code == 200
-    body = r.json()
+    response = client.post(
+        "/api/documents/import?organization_slug=krankenhaus", files=files
+    )
+    assert response.status_code == 200
+    body = response.json()
     assert body["total"] == 2
     assert body["successful"] == 1
     assert body["failed"] == 1
-    assert len(body["documents"]) == 2
-    # Erfolgreiche Datei hat document_id
-    imported = [d for d in body["documents"] if d["status"] == "imported"]
+    imported = [item for item in body["documents"] if item["status"] == "imported"]
     assert imported[0]["document_id"]
-    # Ablage existiert lokal
-    doc_id = imported[0]["document_id"]
-    assert (test_base / doc_id / "original.pdf").exists()
+    assert imported[0]["contract_id"]
 
 
-def test_api_import_empty_request(monkeypatch):
+def test_api_import_requires_organization_and_empty_batch_is_supported():
     client = TestClient(medflux_app)
-    r = client.post("/api/documents/import")
-    assert r.status_code == 200
-    body = r.json()
+    missing_org = client.post("/api/documents/import")
+    assert missing_org.status_code == 422
+
+    response = client.post(
+        "/api/documents/import?organization_slug=krankenhaus"
+    )
+    assert response.status_code == 200
+    body = response.json()
     assert body["total"] == 0
     assert body["documents"] == []

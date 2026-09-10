@@ -86,30 +86,30 @@ def _collect_sensitive_values(contract) -> list[SensitiveValue]:
     ident = contract.identity
     out.append(SensitiveValue(field="identity.contract_number",
                               value=getattr(ident, "contract_number", None),
-                              evidence=(ident.evidence.source_text[:120] if ident.evidence else None)))
+                              evidence=_ev(ident)))
 
     d = contract.dates
     for f in ("start_date", "end_date", "duration", "minimum_duration"):
         v = getattr(d, f, None)
         out.append(SensitiveValue(field=f"dates.{f}", value=_fmt(v),
-                                  evidence=(d.evidence.source_text[:120] if d.evidence else None)))
+                                  evidence=_ev(d)))
 
     t = contract.termination
     for f in ("cancellation_period", "automatic_renewal", "renewal_period"):
         v = getattr(t, f, None)
         out.append(SensitiveValue(field=f"termination.{f}", value=_fmt(v),
-                                  evidence=(t.evidence.source_text[:120] if t.evidence else None)))
+                                  evidence=_ev(t)))
 
     c = contract.costs
     for f in ("annual_cost", "monthly_cost", "total_contract_value"):
         v = getattr(c, f, None)
         out.append(SensitiveValue(field=f"costs.{f}", value=_fmt(v),
-                                  evidence=(c.evidence.source_text[:120] if c.evidence else None)))
+                                  evidence=_ev(c)))
 
     p = contract.payment
     out.append(SensitiveValue(field="payment.billing_interval",
                               value=getattr(p, "billing_interval", None),
-                              evidence=(p.evidence.source_text[:120] if p.evidence else None)))
+                              evidence=_ev(p)))
     return out
 
 

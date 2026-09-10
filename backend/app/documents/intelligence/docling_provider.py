@@ -47,6 +47,83 @@ from app.documents.intelligence.provider import (
 
 _PAGE_SEP = "\n"
 
+# Mapping aus Tesseract-/ISO-639-3-Sprachcodes (wie sie global in
+# Settings.ocr_lang bzw. app/core/config.py konfiguriert sind) auf den
+# Sprachcode, den Doclings RapidOCR-Backend erwartet. RapidOCR akzeptiert
+# kurze ISO-639-1-Codes (z. B. "de") bzw. eigene Aliase ("german"), aber NICHT
+# die ISO-639-3-Codes (z. B. "deu"), die Tesseract verwendet. Ohne Normierung
+# wirft `RapidOcrOptions(lang=["deu"])` einen ValueError und jeder PDF-Import
+# schlaegt fehl – auch bei nativen (nicht gescannten) PDFs.
+_RAPIDOCR_LANG_MAP = {
+    "deu": "de",
+    "ger": "de",
+    "deutsch": "de",
+    "german": "de",
+    "de": "de",
+    "eng": "en",
+    "en": "en",
+    "english": "en",
+    "fra": "fr",
+    "fre": "fr",
+    "french": "fr",
+    "fr": "fr",
+    "ara": "arabic",
+    "arabic": "arabic",
+    "spa": "es",
+    "es": "es",
+    "ita": "it",
+    "it": "it",
+    "nld": "nl",
+    "dut": "nl",
+    "nl": "nl",
+    "por": "pt",
+    "pt": "pt",
+    "pol": "pl",
+    "pl": "pl",
+    "ces": "cs",
+    "cze": "cs",
+    "cs": "cs",
+    "rus": "cyrillic",
+    "ru": "cyrillic",
+    "ukr": "cyrillic",
+    "uk": "cyrillic",
+    "tur": "tr",
+    "tr": "tr",
+    "ell": "el",
+    "gre": "el",
+    "el": "el",
+    "hin": "devanagari",
+    "hi": "devanagari",
+    "jpn": "japan",
+    "ja": "japan",
+    "kor": "korean",
+    "ko": "korean",
+    "chi_sim": "ch",
+    "chi_tra": "chinese_cht",
+    "ch": "ch",
+    "la": "latin",
+    "lat": "latin",
+    "swe": "sv",
+    "sv": "sv",
+    "dan": "da",
+    "da": "da",
+    "nor": "no",
+    "no": "no",
+    "fin": "fi",
+    "fi": "fi",
+}
+
+
+def _rapidocr_lang_code(lang: str) -> str:
+    """Normiert einen (global konfigurierten) Sprachcode auf RapidOCR-Syntax.
+
+    Unbekannte Codes werden unveraendert durchgereicht, damit neue/weitere
+    Sprachen nicht stillschweigend verworfen werden; RapidOCR validiert sie
+    anschliessend selbst und meldet es als verarbeitbaren Fehler.
+    """
+    key = (lang or "").strip().lower()
+    return _RAPIDOCR_LANG_MAP.get(key, lang)
+
 
 class DoclingDocumentProvider(DocumentIntelligenceProvider):
     """Provider fuer Docling (Layout, Tables, OCR)."""
@@ -180,7 +257,9 @@ class DoclingDocumentProvider(DocumentIntelligenceProvider):
         opts.do_ocr = bool(settings.do_ocr)
         opts.do_table_structure = bool(settings.do_table_structure)
         if settings.do_ocr:
-            opts.ocr_options = RapidOcrOptions(lang=list(settings.ocr_lang))
+            opts.ocr_options = RapidOcrOptions(
+                lang=[_rapidocr_lang_code(lang) for lang in settings.ocr_lang]
+            )
         if settings.do_table_structure:
             opts.table_structure_options = TableStructureOptions(
                 do_cell_matching=True,

@@ -9,14 +9,11 @@ import io
 import fitz
 import pytest
 from docx import Document
-from fastapi.testclient import TestClient
 
-from app.api.routes import documents as documents_module
 from app.documents.extraction.ocr import OCRProvider
 from app.documents.extraction.schemas import SourceType, UnitMethod
 from app.documents.extraction.service import TextExtractionService
 from app.documents.storage import DocumentStorage
-from app.main import app as medflux_app
 from app.models.enums import ExtractionStatus
 
 
@@ -236,30 +233,8 @@ def test_original_file_unchanged(extraction_env):
     assert path.read_bytes() == original
 
 
-def test_api_extract_endpoint(tmp_path, monkeypatch):
-    base = tmp_path / "contracts"
-    base.mkdir()
-    storage = DocumentStorage(base)
-    service = TextExtractionService(storage=storage, ocr=OCRProvider(enabled=False))
-
-    doc_id = save_document(
-        storage, "api.pdf",
-        make_pdf_bytes(["API-Text für die Extraktion über den Endpunkt des lokalen Dokumentdienstes."]),
-    )
-
-    monkeypatch.setattr(documents_module, "_extraction_service", service)
-
-    client = TestClient(medflux_app)
-    r = client.post(f"/api/documents/{doc_id}/extract")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["document_id"] == doc_id
-    assert body["text_available"] is True
-    assert body["file_type"] == "pdf"
-
-
-def test_api_extract_unknown_document_404(monkeypatch):
-    client = TestClient(medflux_app)
-    r = client.post("/api/documents/" + "f" * 32 + "/extract")
-    assert r.status_code == 404
-    assert "nicht gefunden" in r.json()["detail"]
+# Hinweis: Der fruehere Produktions-Endpunkt "/api/documents/{id}/extract" wurde
+# im Zuge der Integrations-Reparatur durch den Import-Endpunkt
+# "/api/documents/import" abgeloest (einziger Produktions-Einstiegspunkt).
+# Die zugehoerigen API-Tests wurden deshalb entfernt; die Textextraktion selbst
+# wird weiterhin ueber die Service- und Storage-Tests oben abgedeckt.

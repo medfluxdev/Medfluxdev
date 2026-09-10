@@ -45,7 +45,18 @@ class TextExtractionService:
         if resolved is None:
             return None
         extension, path = resolved
+        return self.extract_from_path(document_id, extension, path)
 
+    def extract_from_path(
+        self, document_id: str, extension: str, path: Path
+    ) -> TextExtractionResult:
+        """Extrahiert Text aus einer bereits gespeicherten Originaldatei.
+
+        `extension` ist die normalisierte Endung (`.pdf`/`.docx`), `path` der
+        tatsaechliche Dateipfad der Originaldatei. Wird fuer den Produktions-
+        Pfad (STEP 14, DB+Bytes) genutzt, damit Extraktion direkt auf der
+        persistenten Ablage laeuft – identische Provider wie `extract()`.
+        """
         if extension == ".pdf":
             return self._extract_pdf(document_id, path)
         return self._extract_docx(document_id, path)

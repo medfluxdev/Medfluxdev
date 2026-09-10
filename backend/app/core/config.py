@@ -16,15 +16,30 @@ class Settings(BaseSettings):
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
 
-    database_url: str = "sqlite:///./data/database/medflux.db"
+    # STEP 10: PostgreSQL ist die Ziel-DB. Credentials NIE hier hartkodieren –
+    # sie kommen ausschließlich aus .env / Umgebung (DATABASE_URL). Der Default
+    # ist ein lokaler, passwortloser WSL-PostgreSQL-Zugang ohne Secret.
+    database_url: str = "postgresql+psycopg://medflux@127.0.0.1:5432/medflux"
     cors_origins: str = "http://localhost:3000"
 
     max_upload_size_mb: int = 50
 
     # Lokale KI (Provider-Abstraktion, Standard: Ollama)
     ai_provider: str = "ollama"
+    harness_context_tokens: int = 8192
+    harness_output_tokens: int = 1800
+    harness_max_calls: int = 32
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen3:8b"
+    # Weitere lokale Provider (Anbieter-unabhaengig). Leerer Wert = Endpunkt
+    # nicht konfiguriert (Provider wird als "nicht konfiguriert" angezeigt und
+    # nicht angesprochen).
+    lmstudio_base_url: str = "http://127.0.0.1:1234"
+    llama_cpp_base_url: str = ""
+    generic_openai_base_url: str = ""
+    # Zeitlimit (Sekunden) fuer lokale Provider-/Modell-Erkennung. Kurz halten –
+    # Erkennung darf keinen Produktionspfad blockieren und scannt kein Netz.
+    ai_discovery_timeout_seconds: float = 2.0
     # STEP 8B: bei nativer strukturierter Ausgabe (format=JSON-Schema) kann eine
     # Generierung lokal deutlich länger dauern als der frühere 120s-Default.
     # 300s verhindert falsche Timeouts, ohne die Zuverlässigkeit auszubremsen.
@@ -60,10 +75,15 @@ class Settings(BaseSettings):
     # AI_RUN_SEMANTIC_VERIFICATION.
     ai_run_semantic_verification: bool = True
 
-    # OCR / Textextraktion
+    # OCR / Dokument-Intelligence
     ocr_enabled: bool = True
     tesseract_cmd: str = ""
     ocr_lang: str = "deu"
+    document_intelligence_provider: str = "docling"
+    document_intelligence_table_structure: bool = True
+    # A crashed worker must not leave a document permanently blocked as a
+    # completed duplicate. Fresh running claims are protected; stale ones resume.
+    document_processing_stale_minutes: int = 60
 
     data_dir: str = "./data"
     contracts_dir: str = "./data/contracts"

@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 from app.documents.geometry import PdfRect
 
 # Version des kanonischen Modells (Manifest/Reproduzierbarkeit).
-CANONICAL_SCHEMA_VERSION = "1.2.0"
+CANONICAL_SCHEMA_VERSION = "1.3.0"
 
 
 class GeometryPrecision(str, Enum):
@@ -72,6 +72,10 @@ class ElementType(str, Enum):
     FOOTNOTE = "footnote"
     FORMULA = "formula"
     OTHER = "other"
+    CHECKBOX = "checkbox"
+    FORM = "form"
+    SIGNATURE = "signature"
+    STAMP = "stamp"
 
 
 class BoundingRegion(BaseModel):
@@ -328,6 +332,21 @@ class ProcessingProvenance(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class LogicalUnit(BaseModel):
+    """Page-less source unit for formats such as DOCX.
+
+    DOCX has no authoritative physical page numbers.  Paragraph/table indexes
+    therefore remain first-class canonical addresses instead of being mapped to
+    invented pages.  Geometry is intentionally absent because python-docx does
+    not provide a trustworthy original-page coordinate system.
+    """
+
+    source_type: Literal["paragraph", "table"]
+    index: int = Field(ge=1)
+    text: str
+    method: Method = Method.NATIVE
+
+
 class DocumentIntelligenceResult(BaseModel):
     """Kanonisches Ergebnis eines Dokument-Intelligence-Providers."""
 
@@ -338,6 +357,7 @@ class DocumentIntelligenceResult(BaseModel):
     canonical_text: str = ""
     pages_text: list[str] = Field(default_factory=list)
     pages: list[Page] = Field(default_factory=list)
+    logical_units: list[LogicalUnit] = Field(default_factory=list)
     provenance: ProcessingProvenance
     warnings: list[str] = Field(default_factory=list)
     processing_time_s: float = Field(default=0.0, ge=0.0)

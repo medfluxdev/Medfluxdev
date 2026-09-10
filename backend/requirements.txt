@@ -4,9 +4,12 @@ uvicorn[standard]==0.30.*
 pydantic==2.13.*
 pydantic-settings==2.15.*
 
-# --- Datenbank ---
+# --- Datenbank (STEP 10) ---
+# SQLAlchemy 2.x (synchron) + PostgreSQL-Treiber (psycopg v3) + Alembic
 sqlalchemy==2.0.*
-aiosqlite==0.20.*
+psycopg[binary]==3.2.*
+alembic==1.13.*
+aiosqlite==0.20.*  # nur optionaler SQLite-Dev-/Isolationstest, nie Produktion
 
 # --- Dokumente ---
 pymupdf==1.24.*
@@ -21,8 +24,15 @@ Pillow==10.4.*
 # pydantic>=2.13 ist Voraussetzung (Pipeline-Cache-Serialisierung).
 docling[rapidocr]==2.123.*
 
+# numpy wird direkt in atomic_ocr.py genutzt (OCR/Imaging); zuvor nur transitiv
+# über docling/pandas. Bewusst explizit, damit die Laufzeit nicht von transitiven
+# Auflösungen abhängt.
+numpy>=1.24
+
 # --- API-Client für Ollama ---
-httpx==0.27.*
+# httpx 0.28 ist die verifizierte, laufende Version (STEP-6+); 0.27 war nur ein
+# älterer Pin. Bereich erlaubt die getestete 0.28.x und schließt 0.29 aus.
+httpx>=0.27,<0.29
 
 # --- Multipart-Datei-Upload ---
 python-multipart==0.0.9
