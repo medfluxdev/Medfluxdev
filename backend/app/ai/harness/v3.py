@@ -997,22 +997,18 @@ class HarnessV3:
             # calls on every visual block from that page. Region vision remains a
             # targeted fallback for pages that are not covered by page-batch reading.
             batch_eligible_pages = set(document.visual_pages)
+            deferred_region_candidates: list[Block] = []
             if (
                 descriptor.capabilities.vision is True
                 and page_image_loader is not None
                 and len(batch_eligible_pages) >= self.settings.harness_vision_min_pages_for_batch
             ):
-                deferred_to_page_batch = [
+                deferred_region_candidates = [
                     block for block in visual_candidates if block.page in batch_eligible_pages
                 ]
                 visual_candidates = [
                     block for block in visual_candidates if block.page not in batch_eligible_pages
                 ]
-                for block in deferred_to_page_batch:
-                    planner.decisions.append({
-                        "block": block.id,
-                        "vision": "deferred_to_page_batch",
-                    })
             for block in skipped_visuals:
                 planner.decisions.append({"block": block.id, "vision": "skipped_repeated_empty_decoration"})
             # Vision region calls are independently bounded (harness_vision_max_calls)
@@ -1117,13 +1113,37 @@ class HarnessV3:
                         })
                         return True
                     section_ordinal[0] += 1
+                    # SectionUnderstanding is provisional visual compute. Model-emitted
+                    # block refs are not trusted here because VLMs may abbreviate IDs.
+                    # Bind the section itself to the deterministic batch block_ids and
+                    # keep visual content as summaries only; later semantic stages must
+                    # cite canonical source blocks directly.
+                    safe_observations = [
+                        Observation(
+                            topic=obs.topic,
+                            summary=obs.summary,
+                            block_refs=[],
+                            related_refs=[],
+                            ambiguity=obs.ambiguity,
+                        )
+                        for obs in section.observations
+                    ]
+                    safe_numbers = [
+                        NumberRole(
+                            value=num.value,
+                            role=num.role,
+                            block_ids=[],
+                            reason=num.reason,
+                        )
+                        for num in section.numbers
+                    ]
                     section_understandings.append(
                         SectionUnderstanding(
                             section_index=section_ordinal[0] - 1,
                             pages=batch,
-                            observations=section.observations,
+                            observations=safe_observations,
                             option_clusters=section.option_clusters,
-                            numbers=section.numbers,
+                            numbers=safe_numbers,
                             unresolved=section.unresolved,
                             block_ids=block_ids,
                         )
@@ -1172,6 +1192,54 @@ class HarnessV3:
                 elif not descriptor.capabilities.vision:
                     issues.append("Bildbasierte Seiten ohne verfügbare Vision; manuelle Prüfung erforderlich")
 
+            # Page-first is valid only for pages whose SectionUnderstanding actually
+            # succeeded. Any uncovered visual page gets a bounded region fallback so
+            # a failed/skipped page batch can never silently erase visual evidence.
+            covered_section_pages = {
+                page
+                for section in section_understandings
+                for page in (section.pages or [])
+            }
+            for block in deferred_region_candidates:
+                if block.page in covered_section_pages:
+                    planner.decisions.append({
+                        "block": block.id,
+                        "vision": "deferred_to_page_batch",
+                    })
+                    continue
+                if budget_exhausted:
+                    break
+                if descriptor.capabilities.vision is True and image_loader is not None:
+                    try:
+                        image = image_loader(block)
+                        observation = await call(
+                            "vision_fallback:" + block.id,
+                            "Read this unresolved contract-relevant visual region because page-level vision did not "
+                            "produce a usable section reading. Distinguish visible text from inference, preserve "
+                            "uncertainty, and do not invent text. Native/OCR context: " + block.text,
+                            VisionObservation,
+                            [image],
+                            pages=[block.page] if block.page is not None else None,
+                            stage="vision",
+                        )
+                        visual_observations[block.id] = observation
+                        planner.decisions.append({
+                            "block": block.id,
+                            "vision": "region_fallback_after_missing_page_section",
+                        })
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
+                        break
+                    except (ValueError, RuntimeError, AIProviderError, ContextOverflow) as exc:
+                        issues.append("Visuelle Fallback-Quelle nicht auflösbar: " + block.id)
+                        planner.decisions.append({
+                            "block": block.id,
+                            "vision": "fallback_failed",
+                            "error_type": type(exc).__name__,
+                        })
+                else:
+                    issues.append("Visuelle Quelle ohne verfügbare Vision: " + block.id)
+
             # ---- GLOBAL understanding (the ONLY contract-global authority) ----
             section_summary = (
                 compact_sections(section_understandings, budget=900, log=planner.decisions)
@@ -1185,24 +1253,31 @@ class HarnessV3:
                 "may assert contract-global meaning. Abstain where the material is insufficient. Be concise.\n"
             )
             if not budget_exhausted:
-                if section_summary:
-                    gcu_material = section_summary
+                full = assemble(document.blocks)
+                gcu_prefix = (
+                    gcu_instruction
+                    + ("Provisional visual section summaries:\n" + section_summary + "\n" if section_summary else "")
+                )
+                gcu_overhead = (
+                    SYSTEM
+                    + "\nOutput schema: "
+                    + json.dumps(GlobalContractUnderstanding.model_json_schema(), separators=(",", ":"))
+                    + gcu_prefix
+                )
+                if planner.fits(gcu_overhead + full):
+                    gcu_material = full
                 else:
-                    full = assemble(document.blocks)
-                    if planner.fits(SYSTEM + gcu_instruction + json.dumps(GlobalContractUnderstanding.model_json_schema()) + full):
-                        gcu_material = full
-                    else:
-                        ranked_all = planner.pack_ranked(
-                            document.blocks,
-                            SYSTEM + gcu_instruction + json.dumps(GlobalContractUnderstanding.model_json_schema()),
-                            purpose="global_context",
-                        )
-                        gcu_material = assemble(ranked_all)
-                        issues.append("Globales Verständnis nutzt begrenzten Kontext; Vollständigkeit manuell prüfen")
+                    ranked_all = planner.pack_ranked(
+                        document.blocks,
+                        gcu_overhead,
+                        purpose="global_context",
+                    )
+                    gcu_material = assemble(ranked_all)
+                    issues.append("Globales Verständnis nutzt begrenzten Kontext; Vollständigkeit manuell prüfen")
                 try:
                     global_understanding = await call(
                         "global_understanding",
-                        gcu_instruction + vision_summary() + gcu_material,
+                        gcu_prefix + vision_summary() + gcu_material,
                         GlobalContractUnderstanding,
                         pages=all_pages or None,
                         stage="global",
@@ -1236,41 +1311,18 @@ class HarnessV3:
                 "termination, costs, payment, services or sla when applicable.\n"
                 "Keep each observation summary concise; one observation per materially distinct clause.\n"
             )
-            map_overhead = SYSTEM + understanding_instruction + vision_summary() + json.dumps(ContractMap.model_json_schema())
-            if section_summary:
-                try:
-                    planner.check(map_overhead + section_summary, "global_map")
-                    mapping = await call(
-                        "global_map",
-                        understanding_instruction + vision_summary() + section_summary,
-                        ContractMap,
-                        pages=all_pages or None,
-                        stage="global",
-                    )
-                    clean, dropped = sanitize_contract_map(document, mapping, stage="global_map")
-                    dropped_refs.extend(dropped)
-                    if dropped:
-                        issues.append("ContractMap: Einträge mit ungültigen Quellverweisen verworfen; manuelle Prüfung erforderlich")
-                        planner.decisions.append({
-                            "purpose": "global_map",
-                            "decision": "invalid_refs_quarantined",
-                            "dropped": len(dropped),
-                        })
-                    maps.append(clean)
-                except CallBudgetExhausted:
-                    budget_exhausted = True
-                    planner.decisions.append({
-                        "purpose": "global_map",
-                        "decision": "call_budget_exhausted",
-                    })
-                except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                    issues.append(f"ContractMap: {type(exc).__name__}; manuelle Prüfung erforderlich")
-                    planner.decisions.append({
-                        "purpose": "global_map",
-                        "decision": "map_failed_continue",
-                        "error_type": type(exc).__name__,
-                    })
-            else:
+            map_aux = (
+                ("Provisional visual section summaries:\n" + section_summary + "\n")
+                if section_summary else ""
+            )
+            map_overhead = (
+                SYSTEM
+                + "\nOutput schema: "
+                + json.dumps(ContractMap.model_json_schema(), separators=(",", ":"))
+                + understanding_instruction
+                + vision_summary()
+                + map_aux
+            )
                 try:
                     base_segments = planner.segments(document.blocks, map_overhead, purpose="global_understanding")
                 except ContextOverflow as exc:
@@ -1298,7 +1350,7 @@ class HarnessV3:
                     try:
                         mapping = await call(
                             "understanding:" + str(index),
-                            understanding_instruction + vision_summary() + assemble(segment),
+                            understanding_instruction + map_aux + vision_summary() + assemble(segment),
                             ContractMap,
                             pages=all_pages or None,
                             stage="global",
