@@ -655,7 +655,7 @@ async def test_b_resolve_uses_full_structural_blocks_never_tail_clipped():
     assert result.contract is not None
     resolve_texts = [
         text for (text, images, context) in provider.requests
-        if text.startswith("Resolve this related contract-field pack in ONE pass")
+        if text.startswith("Resolve these related contract fields together:")
     ]
     assert resolve_texts
     assert any(full_block in text for text in resolve_texts)
@@ -1067,6 +1067,26 @@ async def test_f_vision_budget_respects_independent_setting():
 # ----------------------------------------------------------------------
 # G - Qwen semantic authority on the number-role path
 # ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_number_role_conflict_keeps_existing_role_and_forces_review():
+    provider = FakeProvider(
+        cost_applicability="applicable",
+        number_decision="contract_number",
+        map_number_role="order_number",
+    )
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    assert result.contract is not None, result.diagnostics["issues"]
+    assert result.contract.identity.contract_number is None
+    roles = {n["role"] for n in result.diagnostics["number_roles"] if n["value"] == "452664"}
+    assert roles == {"order_number"}
+    assert any(
+        d.get("decision") == "number_role_conflict_quarantined"
+        and d.get("value") == "452664"
+        for d in result.diagnostics["context_decisions"]
+    )
+    assert any("Nummernrolle widersprüchlich" in issue for issue in result.diagnostics["issues"])
 
 
 @pytest.mark.asyncio
