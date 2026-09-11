@@ -1175,21 +1175,18 @@ class HarnessV3:
                             continue
                         planner.decisions.append({
                             "purpose": "section:" + str(index),
-                            "decision": "section_batch_shrink",
+                            "decision": "section_batch_failed_fallback_to_regions",
                             "pages": current,
                         })
-                        if len(current) <= 1:
-                            issues.append(
-                                f"Section {index}: ContextOverflow; manuelle Prüfung erforderlich"
-                            )
-                            planner.decisions.append({
-                                "purpose": "section:" + str(index),
-                                "decision": "section_failed_continue",
-                                "error_type": "ContextOverflow",
-                            })
-                            continue
-                        mid = max(1, len(current) // 2)
-                        pending[:0] = [current[:mid], current[mid:]]
+                        issues.append(
+                            f"Section {index}: keine nutzbare Seitenauswertung; "
+                            "gezielter visueller Fallback erforderlich"
+                        )
+                        # Do not recursively split failed visual batches. On the target
+                        # RTX 3070 that amplified a provider timeout into several more
+                        # 300s calls. Uncovered pages are handled once by the bounded
+                        # region fallback below.
+                        continue
             elif len(visual_pages) >= self.settings.harness_vision_min_pages_for_batch:
                 if not all_pages or page_image_loader is None:
                     issues.append("Bildbasierte Seiten ohne verfügbares Page-Rendering; manuelle Prüfung erforderlich")
@@ -1206,11 +1203,18 @@ class HarnessV3:
             }
             fallback_visual_budget = max(0, self.settings.harness_vision_max_calls)
             fallback_visual_used = 0
+            fallback_pages_seen: set[int] = set()
             for block in deferred_region_candidates:
                 if block.page in covered_section_pages:
                     planner.decisions.append({
                         "block": block.id,
                         "vision": "deferred_to_page_batch",
+                    })
+                    continue
+                if block.page is not None and block.page in fallback_pages_seen:
+                    planner.decisions.append({
+                        "block": block.id,
+                        "vision": "deferred_duplicate_page_fallback",
                     })
                     continue
                 if budget_exhausted:
@@ -1236,6 +1240,8 @@ class HarnessV3:
                         )
                         visual_observations[block.id] = observation
                         fallback_visual_used += 1
+                        if block.page is not None:
+                            fallback_pages_seen.add(block.page)
                         planner.decisions.append({
                             "block": block.id,
                             "vision": "region_fallback_after_missing_page_section",
@@ -1244,6 +1250,8 @@ class HarnessV3:
                         budget_exhausted = True
                         break
                     except (ValueError, RuntimeError, AIProviderError, ContextOverflow) as exc:
+                        if block.page is not None:
+                            fallback_pages_seen.add(block.page)
                         issues.append("Visuelle Fallback-Quelle nicht auflösbar: " + block.id)
                         planner.decisions.append({
                             "block": block.id,
@@ -1612,12 +1620,31 @@ class HarnessV3:
                     for decision in valid_decisions:
                         if decision.scope != "document" or decision.decision not in {"authoritative", "secondary"}:
                             continue
-                        if any(p.document_type == decision.target for p in precedence_rules):
+                        desired_rank = 1 if decision.decision == "authoritative" else 2
+                        existing = [
+                            p for p in precedence_rules
+                            if p.document_type == decision.target
+                        ]
+                        if existing:
+                            existing_ranks = {p.rank for p in existing}
+                            if desired_rank not in existing_ranks:
+                                planner.decisions.append({
+                                    "purpose": "applicability",
+                                    "decision": "precedence_conflict_quarantined",
+                                    "document_type": decision.target,
+                                    "existing_ranks": sorted(existing_ranks),
+                                    "conflicting_rank": desired_rank,
+                                })
+                                issues.append(
+                                    "Dokumentenrang widersprüchlich für "
+                                    + decision.target
+                                    + "; manuelle Prüfung erforderlich"
+                                )
                             continue
                         precedence_rules.append(
                             PrecedenceRule(
                                 document_type=decision.target,
-                                rank=1 if decision.decision == "authoritative" else 2,
+                                rank=desired_rank,
                                 block_ids=list(decision.block_ids),
                                 reason=decision.reason,
                             )
@@ -1653,7 +1680,7 @@ class HarnessV3:
             def compact_pack_semantic_state(
                 state: dict[str, dict],
                 *,
-                per_family_budget: int = 420,
+                per_family_budget: int = 180,
             ) -> str:
                 """Bound semantic-state payload without changing its meaning.
 
@@ -1798,7 +1825,7 @@ class HarnessV3:
                 # SYSTEM + CandidateBatch schema. This keeps fake-provider/runtime
                 # behaviour stable while avoiding the previous double-count bug.
                 pack_overhead = pack_static_overhead(prompt)
-                sections_bound = sections_bound_tokens() + 32 if section_understandings else 0
+                sections_bound = min(160, sections_bound_tokens() + 16) if section_understandings else 0
                 ordered_ids = {block.id for block in ranked_union}
                 ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
                 if not ordered_blocks:
@@ -1812,7 +1839,26 @@ class HarnessV3:
                         extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
                         per_block_cost=block_vision_cost,
                     )
-                except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
+                except ContextOverflow:
+                    ranked_pack = planner.pack_ranked(
+                        ranked_union or ordered_blocks,
+                        pack_overhead,
+                        purpose="resolve_pack_ranked_fallback:" + pack_name,
+                        extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                        per_block_cost=block_vision_cost,
+                    )
+                    pack_segments = [ranked_pack] if ranked_pack else []
+                    planner.decisions.append({
+                        "purpose": "resolve_pack_segments:" + pack_name,
+                        "decision": "ranked_fallback_after_segmentation_overflow",
+                        "blocks": [block.id for block in ranked_pack],
+                    })
+                    if not ranked_pack:
+                        issues.append(
+                            f"{pack_name}: kein Quellblock passt in das Kontextbudget; "
+                            "manuelle Prüfung erforderlich"
+                        )
+                except (ValueError, RuntimeError, AIProviderError) as exc:
                     issues.append(f"{pack_name}: {type(exc).__name__}; manuelle Prüfung erforderlich")
                     planner.decisions.append({
                         "purpose": "resolve_pack_segments:" + pack_name,
