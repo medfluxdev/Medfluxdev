@@ -1151,6 +1151,31 @@ def test_diagnostics_delivery_fields_present_on_successful_synthetic_path():
     assert {"supported_count", "excluded_count", "delivery_complete"} <= literals
 
 
+def test_final_prompt_refit_path_is_present():
+    import ast
+    from pathlib import Path
+    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    literals = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "segment_skipped_after_final_prompt_overflow" in literals
+    assert "resolve_pack_refit:" in source.read_text(encoding="utf-8")
+
+
+def test_precedence_conflict_quarantine_marker_is_present():
+    import ast
+    from pathlib import Path
+    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    literals = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "precedence_conflict_quarantined" in literals
+
+
 @pytest.mark.asyncio
 async def test_semantic_pack_recovery_skips_broad_missing_field_retry():
     provider = FakeProvider()
