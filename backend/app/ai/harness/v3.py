@@ -1237,17 +1237,30 @@ class HarnessV3:
             fallback_visual_budget = max(0, self.settings.harness_vision_max_calls)
             fallback_visual_used = 0
             fallback_pages_seen: set[int] = set()
-            for block in deferred_region_candidates:
+            page_representatives: list[Block] = []
+            representative_pages: set[int] = set()
+            for candidate in deferred_region_candidates:
+                if candidate.page is None or candidate.page in representative_pages:
+                    continue
+                page_candidates = [
+                    block for block in deferred_region_candidates
+                    if block.page == candidate.page
+                ]
+                representative = sorted(
+                    page_candidates,
+                    key=lambda block: (
+                        -visual_relevance_score(block),
+                        0 if block.kind in {"checkbox", "signature", "stamp", "form"} else 1,
+                        document.blocks.index(block),
+                    ),
+                )[0]
+                page_representatives.append(representative)
+                representative_pages.add(candidate.page)
+            for block in page_representatives:
                 if block.page in covered_section_pages:
                     planner.decisions.append({
                         "block": block.id,
                         "vision": "deferred_to_page_batch",
-                    })
-                    continue
-                if block.page is not None and block.page in fallback_pages_seen:
-                    planner.decisions.append({
-                        "block": block.id,
-                        "vision": "deferred_duplicate_page_fallback",
                     })
                     continue
                 if budget_exhausted:
@@ -1293,6 +1306,14 @@ class HarnessV3:
                         })
                 else:
                     issues.append("Visuelle Quelle ohne verfügbare Vision: " + block.id)
+
+            for block in deferred_region_candidates:
+                if block in page_representatives or block.page in covered_section_pages:
+                    continue
+                planner.decisions.append({
+                    "block": block.id,
+                    "vision": "deferred_duplicate_page_fallback",
+                })
 
             # ---- GLOBAL understanding (the ONLY contract-global authority) ----
             section_summary = (
@@ -1457,69 +1478,17 @@ class HarnessV3:
                         "error_type": type(exc).__name__,
                     })
 
-            if len(maps) > 1 and not budget_exhausted:
+            if len(maps) > 1:
                 union_map = _merge_maps_v3(maps)
                 maps.append(union_map)
-                synthesis = (
-                    "Reconcile the section maps into one global ContractMap. Preserve every material fact, "
-                    "conflict, dependency, selection and source reference; do not resolve ambiguity without "
-                    "authority. Be concise.\n"
-                    + union_map.model_dump_json()
-                )
-                try:
-                    synthesized = await call(
-                        "global_map",
-                        synthesis,
-                        ContractMap,
-                        pages=all_pages or None,
-                        stage="global",
-                    )
-                    clean, dropped = sanitize_contract_map(
-                        document,
-                        synthesized,
-                        stage="global_map",
-                    )
-                    dropped_refs.extend(dropped)
-                    if dropped:
-                        issues.append(
-                            "Synthesized ContractMap: Einträge mit ungültigen Quellverweisen verworfen; "
-                            "manuelle Prüfung erforderlich"
-                        )
-                    maps.append(clean)
-                except CallBudgetExhausted:
-                    budget_exhausted = True
-                    planner.decisions.append({
-                        "purpose": "global_map",
-                        "decision": "call_budget_exhausted",
-                    })
-                except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                    planner.decisions.append({
-                        "purpose": "global_map",
-                        "decision": "deterministic_global_map_retained",
-                        "error_type": type(exc).__name__,
-                    })
+                planner.decisions.append({
+                    "purpose": "global_map",
+                    "decision": "deterministic_lossless_union_no_extra_model_call",
+                    "segment_maps": len(maps) - 1,
+                    "observation_count": len(union_map.observations),
+                })
 
             final_map = maps[-1] if maps else ContractMap()
-            if len(maps) >= 2:
-                # Prefer the deterministic lossless union when the synthesized map
-                # would silently discard semantic items. Synthesis may clarify but
-                # must never reduce source-addressable truth.
-                union_candidate = next(
-                    (
-                        mapping for mapping in reversed(maps)
-                        if len(mapping.observations) >= max(
-                            (len(m.observations) for m in maps[:-1]),
-                            default=0,
-                        )
-                    ),
-                    final_map,
-                )
-                if len(union_candidate.observations) > len(final_map.observations):
-                    final_map = union_candidate
-                    planner.decisions.append({
-                        "purpose": "global_map",
-                        "decision": "lossless_union_preferred_over_reductive_synthesis",
-                    })
             selections = list(final_map.selections)
             number_roles = list(final_map.number_roles)
             precedence_rules = list(final_map.precedence)
@@ -1550,7 +1519,7 @@ class HarnessV3:
             applicability_map = (
                 json.dumps(
                     {
-                        "observations": compact_items(applicability_observations, budget=900),
+                        "observations": compact_items(applicability_observations, budget=420),
                         "selections": compact_items(selections, budget=280),
                         "number_roles": compact_items(number_roles, budget=220),
                         "precedence": compact_items(precedence_rules, budget=220),
@@ -1585,7 +1554,7 @@ class HarnessV3:
             ] or list(document.blocks)
             if not budget_exhausted:
                 clusters_json = json.dumps(
-                    compact_items(clusters, budget=600), ensure_ascii=False, separators=(",", ":")
+                    compact_items(clusters, budget=320), ensure_ascii=False, separators=(",", ":")
                 )
                 vision_json = vision_summary()
                 applicability_overhead = (
@@ -1869,25 +1838,16 @@ class HarnessV3:
                 }
 
                 prompt = (
-                    "Resolve this related contract-field pack in ONE pass: "
+                    "Resolve this contract-field pack: "
                     + ", ".join(pack_families)
-                    + ". Reuse the contract-global semantic state; do not reinterpret unrelated parts. "
-                    "Compare competing clauses, definitions, annexes and amendment authority. "
-                    "Classify applicability per candidate: applicable, alternative, superseded, or unknown. "
-                    "For prices, return only binding selected-plan values; never aggregate unselected add-ons. "
-                    "For identity.contract_number obey the supplied Qwen number-role/applicability state. "
-                    "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs "
-                    "copied from supplied source blocks. Do not compute derived dates or annual totals. "
-                    "Money={amount:number,currency:string,period:monthly|quarterly|semi_annual|annual|once}; "
-                    "Scheduled prices stay separate by explicit period; variable/event charges stay separate. "
-                    "Duration={value:integer,unit:days|weeks|months|years}; "
-                    "FlexibleDate={date:YYYY-MM-DD|null,condition:string|null}; "
-                    "TimeValue={value:number,unit:hours|days,original_text:string}; "
-                    "Equipment objects preserve device identity and included/excluded service scope. "
-                    "Candidate field types: "
+                    + ". Qwen owns contractual meaning, applicability, precedence and number roles. "
+                    "Use only requested fields. Supported facts require exact source block_id + exact quote. "
+                    "Do not derive arithmetic or dates. Keep selected fixed prices separate from alternatives, "
+                    "optional add-ons and variable/event charges. For identity.contract_number obey the supplied "
+                    "number-role state. Field catalog: "
                     + json.dumps(catalog, separators=(",", ":"))
-                    + "\nCompact semantic state by family: "
-                    + compact_pack_semantic_state(semantic_by_family)
+                    + "\nSemantic state: "
+                    + compact_pack_semantic_state(semantic_by_family, per_family_budget=120)
                     + "\n"
                 )
                 # Planner overhead must reflect exactly what call() will prepend:
@@ -2154,6 +2114,18 @@ class HarnessV3:
                         })
 
                 candidates.extend(batch.candidates)
+
+            if document.blocks and not any(
+                str(row.get("purpose", "")).startswith("resolve_pack:")
+                for row in calls
+            ):
+                issues.append(
+                    "Keine semantische Feldauflösung ausgeführt; manuelle Prüfung erforderlich"
+                )
+                planner.decisions.append({
+                    "purpose": "delivery",
+                    "decision": "no_resolve_pack_executed",
+                })
 
             issues.extend(reason for mapping in maps for reason in mapping.missing_material)
             supported_count = 0
