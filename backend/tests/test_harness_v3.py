@@ -675,7 +675,7 @@ async def test_b_family_packing_records_small_real_reserve_not_static_magic():
     decisions = result.diagnostics["context_decisions"]
     row = next(
         d for d in decisions
-        if d.get("purpose") == "resolve_segments:identity" and "segments" in d
+        if d.get("purpose") == "resolve_pack_segments:core" and "segments" in d
     )
     assert row["per_block_cost"] is True
     assert 0 <= row["extra_reserve"] < 500  # sections-bound + safety, NOT 1100/1300
@@ -683,6 +683,8 @@ async def test_b_family_packing_records_small_real_reserve_not_static_magic():
 
 def test_b_measured_output_retry_only_for_eligible_stages():
     assert measured_output_budget("resolve:identity:0", prompt_tokens=3000,
+                                  capacity=8192, base_output=1800) is not None
+    assert measured_output_budget("resolve_pack:core:0", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is not None
     assert measured_output_budget("vision:p1:a", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is None
@@ -989,7 +991,6 @@ async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_semantic_packs_reduce_resolve_stage_call_fanout():
     provider = FakeProvider()
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
@@ -1038,6 +1039,7 @@ async def test_f_page_batch_vision_suppresses_duplicate_region_calls():
     assert len(deferred) == 12
 
 
+@pytest.mark.asyncio
 async def test_f_vision_budget_respects_independent_setting():
     source = _visual_heavy_document(8, 4)
     provider = FakeProvider(block_ref="p1:v0")
