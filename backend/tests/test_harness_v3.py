@@ -1098,19 +1098,32 @@ async def test_f_region_fallback_is_limited_to_one_call_per_uncovered_page():
     )
 
 
-@pytest.mark.asyncio
-async def test_b_pack_segmentation_overflow_uses_ranked_fallback():
-    provider = FakeProvider(block_ref="p1:e0")
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(multi_block_document(18))
-    decisions = result.diagnostics["context_decisions"]
-    assert any(
-        d.get("decision") == "ranked_fallback_after_segmentation_overflow"
-        for d in decisions
+def test_b_ranked_pack_fallback_handles_oversized_structural_unit():
+    planner = ContextPlanner(configured=4096, advertised=4096, output_tokens=1200)
+    blocks = [
+        Block(id="p1:huge", text="x" * 12000, kind="text", page=1),
+        Block(id="p1:small", text="Service 1.650,00 EUR", kind="text", page=1),
+    ]
+    overhead = "resolve-pack-overhead"
+
+    with pytest.raises(ContextOverflow):
+        planner.segments(
+            blocks,
+            overhead,
+            purpose="resolve_pack_segments:test",
+        )
+
+    ranked = planner.pack_ranked(
+        blocks,
+        overhead,
+        purpose="resolve_pack_ranked_fallback:test",
     )
-    assert any(
-        str(c.get("purpose", "")).startswith("resolve_pack:")
-        for c in result.diagnostics["calls"]
+    assert [block.id for block in ranked] == ["p1:small"]
+    decision = next(
+        d for d in planner.decisions
+        if d.get("purpose") == "resolve_pack_ranked_fallback:test"
     )
+    assert decision["decision"] == "ranked_pack"
 
 
 @pytest.mark.asyncio
