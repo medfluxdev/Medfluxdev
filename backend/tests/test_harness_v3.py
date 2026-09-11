@@ -416,7 +416,8 @@ async def test_v3_scanned_document_batches_visual_compute_into_sections():
     assert rendered == [1, 2, 3, 4]
     assert len(diagnostics["section_understandings"]) == 2
     assert diagnostics["global_understanding"] is not None
-    assert "global_map" in {row.get("purpose") for row in diagnostics["calls"]}
+    purposes = {row.get("purpose") for row in diagnostics["calls"]}
+    assert any(str(p).startswith("understanding:") for p in purposes)
     vision_rows = [row for row in diagnostics["calls"] if row.get("stage") == "vision"]
     # Page-first vision owns these scanned pages, so duplicate region calls
     # are intentionally suppressed.
@@ -1045,7 +1046,11 @@ async def test_stage_diagnostics_expose_call_counts_and_latency():
 @pytest.mark.asyncio
 async def test_f_region_fallback_runs_when_page_section_is_unavailable():
     source = _visual_heavy_document(2, 3)
-    provider = FakeProvider(block_ref="p1:v0", truncated_titles={"SectionUnderstanding"})
+    provider = FakeProvider(
+        block_ref="p1:v0",
+        truncated_titles={"SectionUnderstanding"},
+        truncate_once=False,
+    )
     result = await HarnessV3(
         v3_settings(harness_max_calls=64, harness_vision_max_calls=2), ai(provider, vision=True)
     ).analyze(
