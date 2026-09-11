@@ -1127,12 +1127,13 @@ def test_b_ranked_pack_fallback_handles_oversized_structural_unit():
 
 
 @pytest.mark.asyncio
-async def test_visual_sensitive_candidate_with_unresolved_visual_is_not_delivered():
+async def test_delivery_diagnostics_preserve_successful_native_contract():
     source = native_document()
     provider = FakeProvider()
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(source)
-    # Baseline synthetic path still delivers grounded identity when no unresolved
-    # visual observation is attached to its evidence block.
+    # Baseline synthetic path must still deliver grounded truth; the unresolved
+    # visual quarantine is exercised only when a candidate actually depends on
+    # an unresolved visual observation.
     assert result.contract is not None
     assert result.diagnostics["delivery_complete"] is True
 
