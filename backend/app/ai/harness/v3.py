@@ -678,6 +678,13 @@ class HarnessV3:
                 if not canonicalize_evidence(candidate):
                     candidate.status = "unsupported"
                     continue
+                if candidate_is_visual_sensitive(candidate) and candidate_depends_on_uncertain_visual(candidate):
+                    candidate.status = "ambiguous"
+                    candidate.ambiguity = (
+                        candidate.ambiguity
+                        or "Unresolved visual reading; exact value requires manual confirmation"
+                    )
+                    continue
                 needs_semantic_verifier = bool(
                     candidate.ambiguity
                     or candidate.conflicts
@@ -974,6 +981,32 @@ class HarnessV3:
             key = str(value_text).strip()
             roles = {n.role for n in number_roles if str(n.value).strip() == key}
             return next(iter(roles)) if len(roles) == 1 else None
+
+
+        def candidate_depends_on_uncertain_visual(candidate: FactCandidate) -> bool:
+            """Prevent uncertain visual readings from becoming certain normalized facts.
+
+            VisionObservation remains auxiliary. If the only relevant visual reading
+            carries unresolved content or conflicting visible text, require manual
+            review unless the candidate's exact canonical quote independently grounds
+            the same value.
+            """
+            if not candidate.evidence_refs:
+                return False
+            for ref in candidate.evidence_refs:
+                observation = visual_observations.get(ref.block_id)
+                if observation is None:
+                    continue
+                if observation.unresolved:
+                    return True
+            return False
+
+        def candidate_is_visual_sensitive(candidate: FactCandidate) -> bool:
+            return (
+                candidate.field == "equipment"
+                or candidate.field.startswith("dates.")
+                or candidate.field.startswith("identity.")
+            )
 
         try:
             provider, descriptor = await self.ai.harness_runtime()
@@ -1467,9 +1500,45 @@ class HarnessV3:
                     })
 
             final_map = maps[-1] if maps else ContractMap()
+            if len(maps) >= 2:
+                # Prefer the deterministic lossless union when the synthesized map
+                # would silently discard semantic items. Synthesis may clarify but
+                # must never reduce source-addressable truth.
+                union_candidate = next(
+                    (
+                        mapping for mapping in reversed(maps)
+                        if len(mapping.observations) >= max(
+                            (len(m.observations) for m in maps[:-1]),
+                            default=0,
+                        )
+                    ),
+                    final_map,
+                )
+                if len(union_candidate.observations) > len(final_map.observations):
+                    final_map = union_candidate
+                    planner.decisions.append({
+                        "purpose": "global_map",
+                        "decision": "lossless_union_preferred_over_reductive_synthesis",
+                    })
             selections = list(final_map.selections)
             number_roles = list(final_map.number_roles)
             precedence_rules = list(final_map.precedence)
+            precedence_by_type: dict[str, set[int]] = {}
+            for rule in precedence_rules:
+                precedence_by_type.setdefault(rule.document_type, set()).add(rule.rank)
+            for document_type, ranks in precedence_by_type.items():
+                if len(ranks) > 1:
+                    planner.decisions.append({
+                        "purpose": "global_map",
+                        "decision": "precedence_conflict_quarantined",
+                        "document_type": document_type,
+                        "existing_ranks": sorted(ranks),
+                    })
+                    issues.append(
+                        "Dokumentenrang widersprüchlich für "
+                        + document_type
+                        + "; manuelle Prüfung erforderlich"
+                    )
             for reference in final_map.unresolved_references:
                 issues.append("Unaufgelöste Referenz: " + reference)
 
@@ -1482,9 +1551,9 @@ class HarnessV3:
                 json.dumps(
                     {
                         "observations": compact_items(applicability_observations, budget=900),
-                        "selections": [s.model_dump() for s in selections],
-                        "number_roles": [n.model_dump() for n in number_roles],
-                        "precedence": [p.model_dump() for p in precedence_rules],
+                        "selections": compact_items(selections, budget=280),
+                        "number_roles": compact_items(number_roles, budget=220),
+                        "precedence": compact_items(precedence_rules, budget=220),
                     },
                     ensure_ascii=False,
                     separators=(",", ":"),
@@ -1879,10 +1948,38 @@ class HarnessV3:
                         + "Relevant provisional section readings: "
                         + sections_context_pages(segment_pages) + "\n"
                     )
+                    final_text = local_prompt + context
+                    if not planner.fits(final_text):
+                        refit = planner.pack_ranked(
+                            segment,
+                            pack_static_overhead(local_prompt),
+                            purpose=f"resolve_pack_refit:{pack_name}:{segment_index}",
+                            per_block_cost=block_vision_cost,
+                        )
+                        if not refit:
+                            planner.decisions.append({
+                                "purpose": f"resolve_pack:{pack_name}:{segment_index}",
+                                "decision": "segment_skipped_after_final_prompt_overflow",
+                            })
+                            issues.append(
+                                f"{pack_name} segment {segment_index}: finaler Kontext zu groß; "
+                                "manuelle Prüfung erforderlich"
+                            )
+                            continue
+                        segment = refit
+                        context = assemble(segment)
+                        segment_pages = sorted({block.page for block in segment if block.page is not None})
+                        local_prompt = (
+                            prompt
+                            + "Visual observations for these blocks: " + vision_context(segment) + "\n"
+                            + "Relevant provisional section readings: "
+                            + sections_context_pages(segment_pages) + "\n"
+                        )
+                        final_text = local_prompt + context
                     try:
                         resolved = await call(
                             f"resolve_pack:{pack_name}:{segment_index}",
-                            local_prompt + context,
+                            final_text,
                             CandidateBatch,
                             pages=segment_pages or None,
                             stage="resolve",
@@ -2093,6 +2190,14 @@ class HarnessV3:
                             )
                             continue
                 try:
+                    if candidate_is_visual_sensitive(candidate) and candidate_depends_on_uncertain_visual(candidate):
+                        candidate.status = "ambiguous"
+                        candidate.ambiguity = (
+                            candidate.ambiguity
+                            or "Unresolved visual reading; exact value requires manual confirmation"
+                        )
+                        issues.append(candidate.field + ": ambiguous")
+                        continue
                     if not canonicalize_evidence(candidate) or candidate.field not in types:
                         raise ValueError("Ungrounded or unknown field")
                     value = strict_value(
@@ -2205,6 +2310,9 @@ class HarnessV3:
             },
             "candidates": [candidate.model_dump() for candidate in candidates],
             "evidence_count": len(evidence_rows),
+            "supported_count": int(locals().get("supported_count", 0)),
+            "excluded_count": int(locals().get("excluded_count", 0)),
+            "delivery_complete": bool(locals().get("supported_count", 0)),
             "calls": calls,
             "call_count": len(calls),
             "stage_call_counts": stage_call_counts,
