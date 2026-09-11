@@ -1216,6 +1216,12 @@ class HarnessV3:
                     continue
                 if budget_exhausted:
                     break
+                if fallback_visual_used >= fallback_visual_budget:
+                    planner.decisions.append({
+                        "block": block.id,
+                        "vision": "deferred_by_visual_call_budget",
+                    })
+                    continue
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
                         image = image_loader(block)
@@ -1340,14 +1346,14 @@ class HarnessV3:
             )
             try:
                 base_segments = planner.segments(document.blocks, map_overhead, purpose="global_understanding")
-                except ContextOverflow as exc:
-                    issues.append("ContractMap segmentation: ContextOverflow; manuelle Prüfung erforderlich")
-                    planner.decisions.append({
-                        "purpose": "global_understanding",
-                        "decision": "segmentation_failed_continue_with_lexical_recall",
-                        "error_type": type(exc).__name__,
-                    })
-                    base_segments = []
+            except ContextOverflow as exc:
+                issues.append("ContractMap segmentation: ContextOverflow; manuelle Prüfung erforderlich")
+                planner.decisions.append({
+                    "purpose": "global_understanding",
+                    "decision": "segmentation_failed_continue_with_lexical_recall",
+                    "error_type": type(exc).__name__,
+                })
+                base_segments = []
                 segments: list[list[Block]] = []
                 max_map_blocks = 28
                 for segment in base_segments:
