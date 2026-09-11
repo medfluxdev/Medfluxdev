@@ -38,7 +38,13 @@ import time
 from datetime import datetime, timezone
 
 from app.ai.exceptions import AIProviderError
-from app.ai.harness.context import ContextOverflow, ContextPlanner, assemble, estimate_tokens
+from app.ai.harness.context import (
+    CallBudgetExhausted,
+    ContextOverflow,
+    ContextPlanner,
+    assemble,
+    estimate_tokens,
+)
 from app.ai.harness.document import Block, DocumentModel
 from app.ai.harness.models import (
     ApplicabilityBatch,
@@ -75,6 +81,123 @@ from app.models.evidence import BoundingBox, SourceEvidence
 
 _ALTERNATIVE_LABELS = {"alternative", "superseded"}
 
+# Output-truncation retry is stage-local, measurable and bounded: only resolve,
+# ground and recovery stages may retry once with a modest, prompt-measured
+# output budget raise that still fits the runtime context window. It is never a
+# global 8192-output hack and never runs on 65536-token experiments (that
+# crashed Ollama on the target 8 GB hardware).
+_OUTPUT_RETRY_PREFIXES = ("resolve:", "ground:", "recover:", "recovery:")
+_OUTPUT_RETRY_MAX = 2800
+_OUTPUT_RETRY_MIN_GAIN = 128
+_OUTPUT_RETRY_RESERVE = 512
+
+# Bounded worst-case token cap of compact_sections(..., budget=300) used as
+# per-segment section-context allowance during family packing. It is the
+# guarantee of the compactor (missing rows are never fabricated), not a magic
+# reserve: the final assembled prompt is additionally validated before every
+# provider call.
+_SECTION_CONTEXT_BOUND = 400
+_PACK_SAFETY_MARGIN = 64
+
+
+class _OutputTruncated(Exception):
+    """Internal marker: the provider returned before the structured output was
+    complete (done_reason=length/max_tokens). The raw payload is never accepted."""
+
+
+def measured_output_budget(purpose: str, prompt_tokens: int, capacity: int,
+                           base_output: int) -> int | None:
+    """Return a single modest output raise for truncation retries, or None.
+
+    The raise is only granted when the measured prompt leaves margin inside the
+    runtime window AND the increase meaningfully exceeds the base output budget.
+    """
+    if not purpose.startswith(_OUTPUT_RETRY_PREFIXES):
+        return None
+    margin = int(capacity) - int(prompt_tokens) - _OUTPUT_RETRY_RESERVE
+    if margin <= 0:
+        return None
+    candidate = min(_OUTPUT_RETRY_MAX, margin)
+    if candidate <= int(base_output) + _OUTPUT_RETRY_MIN_GAIN:
+        return None
+    return candidate
+
+
+def _drop_entry(stage: str, item_type: str, invalid_refs: list[str]) -> dict:
+    """Diagnostic record for a quarantined semantic item. Never contains source
+    content, only the stage, the item type and the offending reference ids."""
+    return {
+        "stage": stage,
+        "item_type": item_type,
+        "invalid_refs": sorted({str(ref) for ref in invalid_refs}),
+        "action": "dropped",
+        "requires_review": True,
+    }
+
+
+def _tally_failure_categories(calls: list[dict], budget_exhausted: bool) -> dict:
+    counted: dict[str, int] = {}
+    for call_row in calls:
+        category = call_row.get("error_category") or "ok"
+        counted[category] = counted.get(category, 0) + 1
+    counted["call_budget_exhausted"] = counted.get("call_budget_exhausted", 0) + (
+        1 if budget_exhausted else 0
+    )
+    return counted
+
+
+def _refs_of(item) -> list[str]:
+    if isinstance(item, Observation):
+        return list(item.block_refs or []) + list(item.related_refs or [])
+    if isinstance(item, (SelectionRelation, NumberRole, PrecedenceRule, ApplicabilityDecision)):
+        return list(item.block_ids or [])
+    return []
+
+
+def sanitize_contract_map(document, mapping: ContractMap, *, stage: str = "map") -> tuple[ContractMap, list[dict]]:
+    """Drop (quarantine) only those semantic map items whose source refs do not
+    exist in ``document.index``; never remap, guess, fuzzy-match or repair.
+
+    Every valid observation and semantic item is preserved verbatim. Dropped
+    items are returned as diagnostics records (stage, item type, invalid refs)
+    so review can be required without exposing raw contract content.
+    """
+    dropped: list[dict] = []
+
+    def keep(items, item_type):
+        valid = []
+        for item in items:
+            bad = sorted({ref for ref in _refs_of(item) if ref not in document.index})
+            if bad:
+                dropped.append(_drop_entry(stage, item_type, bad))
+                continue
+            valid.append(item)
+        return valid
+
+    clean = ContractMap(
+        document_type=mapping.document_type,
+        purpose=mapping.purpose,
+        observations=keep(mapping.observations, "observation"),
+        missing_material=list(mapping.missing_material or []),
+        selections=keep(mapping.selections, "selection"),
+        number_roles=keep(mapping.number_roles, "number_role"),
+        precedence=keep(mapping.precedence, "precedence"),
+        unresolved_references=list(mapping.unresolved_references or []),
+    )
+    return clean, dropped
+
+
+def sanitize_applicability(decisions, document, *, stage: str) -> tuple[list, list[dict]]:
+    valid = []
+    dropped = []
+    for decision in decisions:
+        bad = sorted({ref for ref in (decision.block_ids or []) if ref not in document.index})
+        if bad:
+            dropped.append(_drop_entry(stage, "applicability_decision", bad))
+            continue
+        valid.append(decision)
+    return valid, dropped
+
 
 def _truncate_strings(value, limit: int):
     if isinstance(value, dict):
@@ -106,48 +229,82 @@ def compact_items(items, budget: int, str_limit: int = 180) -> list:
     return kept
 
 
-def compact_sections(sections, budget: int = 700, str_limit: int = 160) -> str:
-    """Compact provisional SectionUnderstanding rows to a bounded token budget.
+def _section_row(section, str_limit: int) -> dict:
+    return {
+        "section_index": section.section_index,
+        "pages": list(section.pages or []),
+        "observations": compact_items(section.observations, budget=200, str_limit=str_limit),
+        "option_clusters": compact_items(section.option_clusters, budget=200, str_limit=str_limit),
+        "numbers": [n.model_dump(mode="json") for n in (section.numbers or [])],
+        "unresolved": list(section.unresolved or []),
+    }
 
-    Deterministic and order-preserving; the first section row is always kept.
-    Returns a JSON array string (or "[]" when there are no sections).
+
+def _fit_row_to_tokens(row: dict, cap: int) -> str:
+    limit = 160  # matches the per-section str_limit used to build the row
+    while True:
+        trimmed = _truncate_strings(row, limit)
+        payload = json.dumps(trimmed, ensure_ascii=False, separators=(",", ":"))
+        est = estimate_tokens(payload)
+        if est <= cap or limit <= 8:
+            return payload
+        limit = max(8, int(limit * 0.7))
+
+
+def _fair_token_allocation(n: int, full_costs: list[int], budget: int) -> list[int]:
+    """Water-filling token caps: every section first gets an equal share of the
+    budget, then the remainder is cycled across ALL sections (round-robin, no
+    first-wins). Later sections are therefore represented whenever structurally
+    possible. Deterministic, no semantic interpretation added.
+    """
+    if n == 0:
+        return []
+    if budget <= n:
+        return [1] * n
+    share, remainder = divmod(budget, n)
+    caps = [share] * n
+    index = 0
+    while remainder > 0:
+        changed = False
+        for _ in range(n):
+            current = (index + _) % n
+            if caps[current] < full_costs[current]:
+                caps[current] += 1
+                remainder -= 1
+                changed = True
+                if remainder == 0:
+                    break
+        if not changed:
+            break
+        index += 1
+    return caps
+
+
+def compact_sections(sections, budget: int = 700, str_limit: int = 160) -> str:
+    """Compact ALL section readings fairly to a bounded token budget.
+
+    Order or reading position never dominates: every ignored page/annex must
+    stay representable. Per-section micro-summaries are produced by
+    deterministic string clipping only - never by semantic abstraction - and the
+    budget is split equally first, then water-filled round-robin across every
+    section. Pages/section identity are always preserved.
     """
     if not sections:
         return "[]"
-    kept: list[str] = []
-    used = 0
-    for section in sections:
-        row = {
-            "section_index": section.section_index,
-            "pages": section.pages,
-            "observations": compact_items(section.observations, budget=200, str_limit=str_limit),
-            "option_clusters": compact_items(section.option_clusters, budget=200, str_limit=str_limit),
-            "numbers": [n.model_dump(mode="json") for n in (section.numbers or [])],
-            "unresolved": list(section.unresolved or []),
-        }
-        text = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
-        est = estimate_tokens(text)
-        if used + est > budget and kept:
-            break
-        kept.append(text)
-        used += est
-    return "[" + ",".join(kept) + "]"
-
-
-def assemble_bounded(blocks, char_limit: int = 1800) -> str:
-    """Assemble block renders with each block bounded to `char_limit`.
-
-    The block id/kind/page header always stays (it is rendered first); long tail
-    text is clipped so dense segments fit inside the planner budget. Evidence
-    canonicalization still checks quotes against the FULL block text.
-    """
-    parts: list[str] = []
-    for block in blocks:
-        rendered = block.render()
-        if len(rendered) > char_limit:
-            rendered = rendered[:char_limit] + " …"
-        parts.append(rendered)
-    return "\n\n".join(parts)
+    rows = [_section_row(section, str_limit) for section in sections]
+    payloads = [
+        json.dumps(row, ensure_ascii=False, separators=(",", ":"))
+        for row in rows
+    ]
+    costs = [estimate_tokens(payload) for payload in payloads]
+    if sum(costs) <= budget:
+        return "[" + ",".join(payloads) + "]"
+    caps = _fair_token_allocation(len(sections), costs, budget)
+    fitted = [
+        _fit_row_to_tokens(row, caps[index])
+        for index, row in enumerate(rows)
+    ]
+    return "[" + ",".join(fitted) + "]"
 
 
 def _merge_maps_v3(maps: list[ContractMap]) -> ContractMap:
@@ -207,6 +364,8 @@ class HarnessV3:
         maps: list[ContractMap] = []
         candidates: list[FactCandidate] = []
         evidence_rows: list[dict] = []
+        dropped_refs: list[dict] = []
+        budget_exhausted = False
         contract = Contract()
         planner = ContextPlanner(
             self.settings.harness_context_tokens,
@@ -230,6 +389,8 @@ class HarnessV3:
             done_reason = getattr(provider, "last_done_reason", None)
             if done_reason in {"length", "max_tokens"}:
                 return "truncated_output"
+            if isinstance(exc, CallBudgetExhausted):
+                return "call_budget_exhausted"
             name = type(exc).__name__.lower()
             if "validation" in name or "json" in name:
                 return "schema_error"
@@ -243,11 +404,13 @@ class HarnessV3:
 
         async def call(purpose, text, schema_type, images=None, *, pages=None, stage=None):
             if len(calls) >= self.settings.harness_max_calls:
-                raise ContextOverflow("Model call budget exhausted")
+                raise CallBudgetExhausted(
+                    f"Model call budget exhausted (max={self.settings.harness_max_calls})"
+                )
             schema = schema_type.model_json_schema()
             instruction = SYSTEM + "\nOutput schema: " + json.dumps(schema, separators=(",", ":"))
-            extra_reserve = 1024 * len(images) if images else 0
-            tokens = planner.check(instruction + text, purpose, extra_reserve=extra_reserve)
+            image_reserve = 1024 * len(images) if images else 0
+            tokens = planner.check(instruction + text, purpose, extra_reserve=image_reserve)
             metric = {
                 "purpose": purpose,
                 "stage": stage,
@@ -262,37 +425,65 @@ class HarnessV3:
                 metric["pages"] = [int(page) for page in pages]
             calls.append(metric)
             begin = time.monotonic()
+            original_output = planner.output_tokens
             try:
-                raw = await provider.generate_request(
-                    text,
-                    instruction,
-                    schema,
-                    planner.output_tokens,
-                    planner.capacity,
-                    images,
-                )
-                metric["done_reason"] = getattr(provider, "last_done_reason", None)
-                metric["response_chars"] = len(raw)
-                metric["response_sha256"] = (
-                    getattr(provider, "last_response_sha256", None)
-                    or hashlib.sha256(raw.encode("utf-8")).hexdigest()
-                )
-                if metric["done_reason"] in {"length", "max_tokens"}:
-                    raise ValueError("Model output exceeded budget")
-                parsed = schema_type.model_validate_json(raw)
-                metric["succeeded"] = True
-                return parsed
-            except Exception as exc:
-                metric["failed"] = True
-                metric["succeeded"] = False
-                metric["error_type"] = type(exc).__name__
-                metric["error_category"] = failure_category(exc)
-                metric["done_reason"] = getattr(provider, "last_done_reason", None)
-                metric["error_summary"] = str(exc).splitlines()[0][:180]
-                raise
+                for _attempt in range(2):
+                    try:
+                        raw = await provider.generate_request(
+                            text,
+                            instruction,
+                            schema,
+                            planner.output_tokens,
+                            planner.capacity,
+                            images,
+                        )
+                        metric["done_reason"] = getattr(provider, "last_done_reason", None)
+                        metric["response_chars"] = len(raw)
+                        metric["response_sha256"] = (
+                            getattr(provider, "last_response_sha256", None)
+                            or hashlib.sha256(raw.encode("utf-8")).hexdigest()
+                        )
+                        if metric["done_reason"] in {"length", "max_tokens"}:
+                            raise _OutputTruncated()
+                        parsed = schema_type.model_validate_json(raw)
+                        metric["succeeded"] = True
+                        return parsed
+                    except _OutputTruncated:
+                        next_output = measured_output_budget(
+                            purpose, tokens, planner.capacity, original_output
+                        )
+                        if "retried_with_output_tokens" in metric or next_output is None:
+                            metric["truncated"] = True
+                            metric["failed"] = True
+                            metric["succeeded"] = False
+                            metric["error_type"] = "_OutputTruncated"
+                            metric["error_category"] = "truncated_output"
+                            metric["error_summary"] = "Model output exceeded budget"
+                            raise ValueError("Model output exceeded budget")
+                        planner.output_tokens = next_output
+                        metric["retried_with_output_tokens"] = next_output
+                        planner.decisions.append({
+                            "purpose": purpose,
+                            "stage": stage,
+                            "decision": "output_budget_stage_retry",
+                            "from_output_tokens": original_output,
+                            "to_output_tokens": next_output,
+                            "measured_prompt_tokens": tokens,
+                        })
+                        continue
+                    except Exception as exc:
+                        metric["failed"] = True
+                        metric["succeeded"] = False
+                        metric["error_type"] = type(exc).__name__
+                        metric["error_category"] = failure_category(exc)
+                        metric["done_reason"] = getattr(provider, "last_done_reason", None)
+                        metric["error_summary"] = str(exc).splitlines()[0][:180]
+                        raise
+                raise AssertionError("unreachable: output retry loop exhausted")
             finally:
                 metric["latency_seconds"] = round(time.monotonic() - begin, 3)
                 metric["usage"] = dict(getattr(provider, "last_usage", {}))
+                planner.output_tokens = original_output
 
         def canonicalize_evidence(candidate: FactCandidate) -> bool:
             if not candidate.evidence_refs:
@@ -315,7 +506,7 @@ class HarnessV3:
                 "Check whether the quoted sources ENTAIL every part of each candidate, including negation, "
                 "units, recurrence, roles, scope, exceptions, and cross-clause precedence. Keyword overlap is "
                 "insufficient. Reject unsupported normalized values. Return exactly one decision per candidate "
-                "index.\n" + batch.model_dump_json() + "\n" + context,
+                "index. Be concise.\n" + batch.model_dump_json() + "\n" + context,
                 GroundingBatch,
                 stage="ground",
             )
@@ -411,6 +602,28 @@ class HarnessV3:
                 if any(page in wanted for page in section.pages or [])
             ]
             return compact_sections(related, budget=300)
+
+        def sections_bound_tokens() -> int:
+            """Bounded token allowance for the per-segment provisional section
+            context, derived from the actual compactor guarantee instead of a
+            static magic reserve."""
+            if not section_understandings:
+                return 0
+            return estimate_tokens(compact_sections(section_understandings, budget=300))
+
+        def block_vision_cost(block: Block) -> int:
+            """Deterministic per-block context cost: the token size of this
+            block's visual observation row that will be assembled for its family
+            segment. Used by the planner so packing reflects the actual prompt."""
+            observation = visual_observations.get(block.id)
+            if observation is None:
+                return 0
+            row = json.dumps(
+                {"block_id": block.id, **observation.model_dump()},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            return estimate_tokens(row)
 
         def vision_summary() -> str:
             return (
@@ -567,8 +780,15 @@ class HarnessV3:
             visual_candidates, skipped_visuals = select_visual_blocks(visual_blocks)
             for block in skipped_visuals:
                 planner.decisions.append({"block": block.id, "vision": "skipped_repeated_empty_decoration"})
-            visual_budget = min(len(visual_candidates), max(0, self.settings.harness_max_calls // 5))
+            # Vision region calls are independently bounded (harness_vision_max_calls)
+            # and do NOT grow linearly when the semantic call budget is raised.
+            visual_budget = min(
+                len(visual_candidates),
+                max(0, self.settings.harness_vision_max_calls),
+            )
             for block in visual_candidates[:visual_budget]:
+                if budget_exhausted:
+                    break
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
                         image = image_loader(block)
@@ -576,25 +796,29 @@ class HarnessV3:
                             "vision:" + block.id,
                             "Describe only contract-relevant visual evidence in region " + block.id +
                             ". Distinguish visible text from inference, mark uncertainty, and do not invent text. "
-                            "Native/OCR context: " + block.text,
+                            "Be concise. Native/OCR context: " + block.text,
                             VisionObservation,
                             [image],
                             pages=[block.page] if block.page is not None else None,
                             stage="vision",
                         )
                         visual_observations[block.id] = observation
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
+                        break
                     except (ValueError, RuntimeError, AIProviderError, ContextOverflow) as exc:
                         issues.append("Visuelle Quelle nicht auflösbar: " + block.id)
                         planner.decisions.append({"block": block.id, "vision": "failed", "error_type": type(exc).__name__})
                 else:
                     issues.append("Visuelle Quelle ohne verfügbare Vision: " + block.id)
             for block in visual_candidates[visual_budget:]:
-                planner.decisions.append({"block": block.id, "vision": "deferred_by_call_budget"})
+                planner.decisions.append({"block": block.id, "vision": "deferred_by_visual_call_budget"})
 
             # ---- SECTION understanding (VISUAL COMPUTE only, provisional) ----
             visual_pages = document.visual_pages or [b.page for b in document.blocks if b.needs_vision]
             needs_batches = (
                 all_pages
+                and not budget_exhausted
                 and len(visual_pages) >= self.settings.harness_vision_min_pages_for_batch
                 and descriptor.capabilities.vision is True
                 and page_image_loader is not None
@@ -672,10 +896,23 @@ class HarnessV3:
                     return True
 
                 for index, batch in enumerate(page_batches):
+                    if budget_exhausted:
+                        break
                     pending = [batch]
                     while pending:
+                        if budget_exhausted:
+                            break
                         current = pending.pop(0)
-                        if await probe_section_batch(current, index):
+                        try:
+                            ok = await probe_section_batch(current, index)
+                        except CallBudgetExhausted:
+                            budget_exhausted = True
+                            planner.decisions.append({
+                                "purpose": "section:" + str(index),
+                                "decision": "call_budget_exhausted",
+                            })
+                            break
+                        if ok:
                             continue
                         planner.decisions.append({
                             "purpose": "section:" + str(index),
@@ -710,37 +947,44 @@ class HarnessV3:
                 "Establish the contract-global understanding of the WHOLE document: document type, purpose, "
                 "party roles, authority/precedence order of documents/attachments/emails, what is selected vs "
                 "unselected (plan/option selections with reason), and key clauses. You are the ONLY stage that "
-                "may assert contract-global meaning. Abstain where the material is insufficient.\n"
+                "may assert contract-global meaning. Abstain where the material is insufficient. Be concise.\n"
             )
-            if section_summary:
-                gcu_material = section_summary
-            else:
-                full = assemble(document.blocks)
-                if planner.fits(SYSTEM + gcu_instruction + json.dumps(GlobalContractUnderstanding.model_json_schema()) + full):
-                    gcu_material = full
+            if not budget_exhausted:
+                if section_summary:
+                    gcu_material = section_summary
                 else:
-                    ranked_all = planner.pack_ranked(
-                        document.blocks,
-                        SYSTEM + gcu_instruction + json.dumps(GlobalContractUnderstanding.model_json_schema()),
-                        purpose="global_context",
+                    full = assemble(document.blocks)
+                    if planner.fits(SYSTEM + gcu_instruction + json.dumps(GlobalContractUnderstanding.model_json_schema()) + full):
+                        gcu_material = full
+                    else:
+                        ranked_all = planner.pack_ranked(
+                            document.blocks,
+                            SYSTEM + gcu_instruction + json.dumps(GlobalContractUnderstanding.model_json_schema()),
+                            purpose="global_context",
+                        )
+                        gcu_material = assemble(ranked_all)
+                        issues.append("Globales Verständnis nutzt begrenzten Kontext; Vollständigkeit manuell prüfen")
+                try:
+                    global_understanding = await call(
+                        "global_understanding",
+                        gcu_instruction + vision_summary() + gcu_material,
+                        GlobalContractUnderstanding,
+                        pages=all_pages or None,
+                        stage="global",
                     )
-                    gcu_material = assemble(ranked_all)
-                    issues.append("Globales Verständnis nutzt begrenzten Kontext; Vollständigkeit manuell prüfen")
-            try:
-                global_understanding = await call(
-                    "global_understanding",
-                    gcu_instruction + vision_summary() + gcu_material,
-                    GlobalContractUnderstanding,
-                    pages=all_pages or None,
-                    stage="global",
-                )
-            except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                issues.append("Globales Verständnis: " + type(exc).__name__ + "; manuelle Prüfung erforderlich")
-                planner.decisions.append({
-                    "purpose": "global_understanding",
-                    "decision": "failed_continue",
-                    "error_type": type(exc).__name__,
-                })
+                except CallBudgetExhausted:
+                    budget_exhausted = True
+                    planner.decisions.append({
+                        "purpose": "global_understanding",
+                        "decision": "call_budget_exhausted",
+                    })
+                except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
+                    issues.append("Globales Verständnis: " + type(exc).__name__ + "; manuelle Prüfung erforderlich")
+                    planner.decisions.append({
+                        "purpose": "global_understanding",
+                        "decision": "failed_continue",
+                        "error_type": type(exc).__name__,
+                    })
 
             # ---- CONTRACT MAP (segment union + synthesis) ----
             understanding_instruction = (
@@ -768,15 +1012,22 @@ class HarnessV3:
                         pages=all_pages or None,
                         stage="global",
                     )
-                    unknown = [
-                        ref
-                        for observation in mapping.observations
-                        for ref in observation.block_refs + observation.related_refs
-                        if ref not in document.index
-                    ]
-                    if unknown:
-                        raise ValueError("ContractMap contains unknown source references")
-                    maps.append(mapping)
+                    clean, dropped = sanitize_contract_map(document, mapping, stage="global_map")
+                    dropped_refs.extend(dropped)
+                    if dropped:
+                        issues.append("ContractMap: Einträge mit ungültigen Quellverweisen verworfen; manuelle Prüfung erforderlich")
+                        planner.decisions.append({
+                            "purpose": "global_map",
+                            "decision": "invalid_refs_quarantined",
+                            "dropped": len(dropped),
+                        })
+                    maps.append(clean)
+                except CallBudgetExhausted:
+                    budget_exhausted = True
+                    planner.decisions.append({
+                        "purpose": "global_map",
+                        "decision": "call_budget_exhausted",
+                    })
                 except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                     issues.append(f"ContractMap: {type(exc).__name__}; manuelle Prüfung erforderlich")
                     planner.decisions.append({
@@ -807,6 +1058,8 @@ class HarnessV3:
                         "segment_sizes": [len(segment) for segment in segments],
                     })
                 for index, segment in enumerate(segments):
+                    if budget_exhausted:
+                        break
                     try:
                         mapping = await call(
                             "understanding:" + str(index),
@@ -815,15 +1068,25 @@ class HarnessV3:
                             pages=all_pages or None,
                             stage="global",
                         )
-                        unknown = [
-                            ref
-                            for observation in mapping.observations
-                            for ref in observation.block_refs + observation.related_refs
-                            if ref not in document.index
-                        ]
-                        if unknown:
-                            raise ValueError("ContractMap contains unknown source references")
-                        maps.append(mapping)
+                        clean, dropped = sanitize_contract_map(document, mapping, stage="understanding:" + str(index))
+                        dropped_refs.extend(dropped)
+                        if dropped:
+                            issues.append(
+                                f"ContractMap segment {index}: Einträge mit ungültigen Quellverweisen verworfen; "
+                                "manuelle Prüfung erforderlich"
+                            )
+                            planner.decisions.append({
+                                "purpose": "understanding:" + str(index),
+                                "decision": "invalid_refs_quarantined",
+                                "dropped": len(dropped),
+                            })
+                        maps.append(clean)
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
+                        planner.decisions.append({
+                            "purpose": "understanding:" + str(index),
+                            "decision": "call_budget_exhausted",
+                        })
                     except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                         issues.append(f"ContractMap segment {index}: {type(exc).__name__}; manuelle Prüfung erforderlich")
                         planner.decisions.append({
@@ -831,23 +1094,28 @@ class HarnessV3:
                             "decision": "segment_failed_continue",
                             "error_type": type(exc).__name__,
                         })
-                if len(maps) > 1:
+                if len(maps) > 1 and not budget_exhausted:
                     union_map = _merge_maps_v3(maps)
                     maps.append(union_map)
                     synthesis = (
                         "Reconcile the section maps into one global ContractMap. Preserve every material fact, "
                         "conflict, dependency, selection and source reference; do not resolve ambiguity without "
-                        "authority.\n" + union_map.model_dump_json()
+                        "authority. Be concise.\n" + union_map.model_dump_json()
                     )
                     try:
                         synthesized = await call("global_map", synthesis, ContractMap, pages=all_pages or None, stage="global")
-                        if any(
-                            ref not in document.index
-                            for observation in synthesized.observations
-                            for ref in observation.block_refs + observation.related_refs
-                        ):
-                            raise ValueError("Synthesized ContractMap contains unknown source references")
-                        maps.append(synthesized)
+                        clean, dropped = sanitize_contract_map(document, synthesized, stage="global_map")
+                        dropped_refs.extend(dropped)
+                        if dropped:
+                            issues.append("Synthesized ContractMap: Einträge mit ungültigen Quellverweisen verworfen; "
+                                          "manuelle Prüfung erforderlich")
+                        maps.append(clean)
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
+                        planner.decisions.append({
+                            "purpose": "global_map",
+                            "decision": "call_budget_exhausted",
+                        })
                     except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                         planner.decisions.append({
                             "purpose": "global_map",
@@ -903,95 +1171,128 @@ class HarnessV3:
                 block for block in document.blocks
                 if block.id in applicability_source_ids
             ] or list(document.blocks)
-            try:
-                applicability_pack = planner.pack_ranked(
-                    applicability_blocks,
+            if not budget_exhausted:
+                clusters_json = json.dumps(
+                    compact_items(clusters, budget=600), ensure_ascii=False, separators=(",", ":")
+                )
+                vision_json = vision_summary()
+                applicability_overhead = (
                     SYSTEM
                     + applicability_instruction
                     + json.dumps(ApplicabilityBatch.model_json_schema())
-                    + applicability_map,
-                    purpose="applicability_context",
-                    extra_reserve=1100,
+                    + applicability_map
+                    + clusters_json
+                    + vision_json
                 )
-                applicability_input = (
-                    applicability_instruction
-                    + "\nContractMap: " + applicability_map
-                    + "\nOption clusters (perception evidence): "
-                    + json.dumps(compact_items(clusters, budget=600), ensure_ascii=False, separators=(",", ":"))
-                    + vision_summary()
-                    + "\nSources:\n" + assemble(sorted(applicability_pack, key=lambda b: document.blocks.index(b)))
-                )
-                batch = await call(
-                    "applicability",
-                    applicability_input,
-                    ApplicabilityBatch,
-                    pages=all_pages or None,
-                    stage="applicability",
-                )
-                for decision in batch.decisions:
-                    if any(ref not in document.index for ref in decision.block_ids):
-                        issues.append("Applicabilitätsentscheidung ohne belegte Quelle: " + decision.target)
-                        continue
-                    applicability_entries.append(decision)
-                selections.extend(
-                    SelectionRelation(
-                        cluster=decision.scope,
-                        option=decision.target,
-                        selected=(decision.decision == "selected"),
-                        applicability={
-                            "selected": "applicable",
-                            "applicable": "applicable",
-                            "alternative": "alternative",
-                            "superseded": "superseded",
-                            "not_selected": "alternative",
-                            "secondary": "alternative",
-                        }.get(decision.decision, "unknown"),
-                        block_ids=list(decision.block_ids),
-                        reason=decision.reason,
+                try:
+                    applicability_pack = planner.pack_ranked(
+                        applicability_blocks,
+                        applicability_overhead,
+                        purpose="applicability_context",
+                        extra_reserve=_PACK_SAFETY_MARGIN,
+                        per_block_cost=block_vision_cost,
                     )
-                    for decision in applicability_entries
-                    if decision.scope in {"option", "price", "table_column"}
-                    and decision.decision in {"selected", "not_selected", "applicable", "alternative", "superseded", "secondary"}
-                )
-                for decision in applicability_entries:
-                    if decision.scope != "number" or decision.decision not in {
-                        "contract_number", "order_number", "reference", "customer_number", "other",
-                    }:
-                        continue
-                    if any(n.value == decision.target for n in number_roles):
-                        continue
-                    number_roles.append(
-                        NumberRole(
-                            value=decision.target,
-                            role=decision.decision,
+                    applicability_input = (
+                        applicability_instruction
+                        + "\nContractMap: " + applicability_map
+                        + "\nOption clusters (perception evidence): " + clusters_json
+                        + vision_json
+                        + "\nSources:\n" + assemble(sorted(applicability_pack, key=lambda b: document.blocks.index(b)))
+                    )
+                    batch = await call(
+                        "applicability",
+                        applicability_input,
+                        ApplicabilityBatch,
+                        pages=all_pages or None,
+                        stage="applicability",
+                    )
+                    valid_decisions, dropped = sanitize_applicability(
+                        batch.decisions, document, stage="applicability"
+                    )
+                    dropped_refs.extend(dropped)
+                    if dropped:
+                        issues.append(
+                            "Applicability: Entscheidungen mit ungültigen Quellverweisen verworfen; "
+                            "manuelle Prüfung erforderlich"
+                        )
+                        planner.decisions.append({
+                            "purpose": "applicability",
+                            "decision": "invalid_refs_quarantined",
+                            "dropped": len(dropped),
+                        })
+                    applicability_entries.extend(valid_decisions)
+                    selections.extend(
+                        SelectionRelation(
+                            cluster=decision.scope,
+                            option=decision.target,
+                            selected=(decision.decision == "selected"),
+                            applicability={
+                                "selected": "applicable",
+                                "applicable": "applicable",
+                                "alternative": "alternative",
+                                "superseded": "superseded",
+                                "not_selected": "alternative",
+                                "secondary": "alternative",
+                            }.get(decision.decision, "unknown"),
                             block_ids=list(decision.block_ids),
                             reason=decision.reason,
                         )
+                        for decision in valid_decisions
+                        if decision.scope in {"option", "price", "table_column"}
+                        and decision.decision in {"selected", "not_selected", "applicable", "alternative", "superseded", "secondary"}
                     )
-                for decision in applicability_entries:
-                    if decision.scope != "document" or decision.decision not in {"authoritative", "secondary"}:
-                        continue
-                    if any(p.document_type == decision.target for p in precedence_rules):
-                        continue
-                    precedence_rules.append(
-                        PrecedenceRule(
-                            document_type=decision.target,
-                            rank=1 if decision.decision == "authoritative" else 2,
-                            block_ids=list(decision.block_ids),
-                            reason=decision.reason,
+                    for decision in valid_decisions:
+                        if decision.scope != "number" or decision.decision not in {
+                            "contract_number", "order_number", "reference", "customer_number", "other",
+                        }:
+                            continue
+                        if any(n.value == decision.target for n in number_roles):
+                            continue
+                        number_roles.append(
+                            NumberRole(
+                                value=decision.target,
+                                role=decision.decision,
+                                block_ids=list(decision.block_ids),
+                                reason=decision.reason,
+                            )
                         )
-                    )
-            except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                issues.append("Applicability: " + type(exc).__name__ + "; manuelle Prüfung erforderlich")
-                planner.decisions.append({
-                    "purpose": "applicability",
-                    "decision": "failed_continue_with_map",
-                    "error_type": type(exc).__name__,
-                })
+                    for decision in valid_decisions:
+                        if decision.scope != "document" or decision.decision not in {"authoritative", "secondary"}:
+                            continue
+                        if any(p.document_type == decision.target for p in precedence_rules):
+                            continue
+                        precedence_rules.append(
+                            PrecedenceRule(
+                                document_type=decision.target,
+                                rank=1 if decision.decision == "authoritative" else 2,
+                                block_ids=list(decision.block_ids),
+                                reason=decision.reason,
+                            )
+                        )
+                except CallBudgetExhausted:
+                    budget_exhausted = True
+                    planner.decisions.append({
+                        "purpose": "applicability",
+                        "decision": "call_budget_exhausted",
+                    })
+                except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
+                    issues.append("Applicability: " + type(exc).__name__ + "; manuelle Prüfung erforderlich")
+                    planner.decisions.append({
+                        "purpose": "applicability",
+                        "decision": "failed_continue_with_map",
+                        "error_type": type(exc).__name__,
+                    })
 
             # ---- FACT RESOLUTION per family ----
             topic_names = list(TOPICS)
             for family_index, family in enumerate(topic_names):
+                if budget_exhausted:
+                    planner.decisions.append({
+                        "purpose": family,
+                        "decision": "family_skipped_call_budget_exhausted",
+                    })
+                    issues.append("Modell-Call-Budget erschöpft; Analyse abgebrochen – manuelle Prüfung erforderlich")
+                    break
                 family_types = {key: val for key, val in types.items() if key == family or key.startswith(family + ".")}
                 expected = set(family_types)
                 ranked, observations = ranked_blocks(family)
@@ -1053,6 +1354,7 @@ class HarnessV3:
                     "for this contract now; 'alternative' = an explicitly visible but NOT selected/gated option "
                     "(e.g. unselected plans or add-on options); 'superseded' = replaced by a later authoritative "
                     "clause/annex/email. Deterministic calculation EXCLUDES alternative and superseded facts. "
+                    "Be concise. "
                     "For cost/price fields resolve ONLY the applicable binding price of the selected option; never "
                     "aggregate gated options into annual totals. Do not use a number as the contract number if the "
                     "applicability context classifies it as order_number/reference/customer_number. Keep unresolved "
@@ -1080,6 +1382,15 @@ class HarnessV3:
                 )
 
                 family_overhead = SYSTEM + prompt + json.dumps(CandidateBatch.model_json_schema())
+                # Dynamic packing: the block budget is derived from the ACTUAL
+                # prompt components (instruction/schema overhead plus the bounded
+                # per-segment provisional-section context) plus per-block visual
+                # observation costs. No static magic reserve like 1100/1300.
+                sections_bound = (
+                    sections_bound_tokens() + 32
+                    if section_understandings
+                    else 0
+                )
                 full_document_prompt = family_overhead + assemble(document.blocks)
                 if planner.fits(full_document_prompt):
                     ordered_blocks = list(document.blocks)
@@ -1099,8 +1410,16 @@ class HarnessV3:
                         ordered_blocks,
                         family_overhead,
                         purpose="resolve_segments:" + family,
-                        extra_reserve=1300,
+                        extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                        per_block_cost=block_vision_cost,
                     )
+                except CallBudgetExhausted:
+                    budget_exhausted = True
+                    planner.decisions.append({
+                        "purpose": "resolve_segments:" + family,
+                        "decision": "call_budget_exhausted",
+                    })
+                    family_segments = []
                 except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                     issues.append(f"{family}: {type(exc).__name__}; manuelle Prüfung erforderlich")
                     planner.decisions.append({
@@ -1111,7 +1430,9 @@ class HarnessV3:
                     family_segments = []
 
                 for segment_index, segment in enumerate(family_segments):
-                    context = assemble_bounded(segment)
+                    if budget_exhausted:
+                        break
+                    context = assemble(segment)
                     visual = vision_context(segment)
                     segment_pages = sorted(
                         {block.page for block in segment if block.page is not None}
@@ -1132,6 +1453,13 @@ class HarnessV3:
                         )
                         resolved = await verify(resolved, context, f"ground:{family}:{segment_index}")
                         segment_batches.append(resolved)
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
+                        planner.decisions.append({
+                            "purpose": f"resolve:{family}:{segment_index}",
+                            "decision": "call_budget_exhausted",
+                        })
+                        break
                     except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                         issues.append(
                             f"{family} segment {segment_index}: {type(exc).__name__}; "
@@ -1224,14 +1552,15 @@ class HarnessV3:
                                 + recovery_prefix
                                 + json.dumps(CandidateBatch.model_json_schema()),
                                 purpose="recovery_context:" + family,
-                                extra_reserve=1100,
+                                extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                                per_block_cost=block_vision_cost,
                             )
                             if recovery_blocks:
                                 recovery_pages = sorted(
                                     {block.page for block in recovery_blocks if block.page is not None}
                                 )
                                 recovery_context = (
-                                    assemble_bounded(
+                                    assemble(
                                         sorted(
                                             recovery_blocks,
                                             key=lambda b: document.blocks.index(b),
@@ -1266,6 +1595,12 @@ class HarnessV3:
                                     "recovered_fields": sorted(recovered),
                                     "unresolved_fields": sorted(unresolved_fields - set(recovered)),
                                 })
+                        except CallBudgetExhausted:
+                            budget_exhausted = True
+                            planner.decisions.append({
+                                "purpose": "recovery:" + family,
+                                "decision": "call_budget_exhausted",
+                            })
                         except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                             issues.append(f"{family} recovery: {type(exc).__name__}; manuelle Prüfung erforderlich")
                             planner.decisions.append({
@@ -1291,6 +1626,11 @@ class HarnessV3:
                     })
                     continue
                 if candidate.field == "identity.contract_number":
+                    # G / Qwen-authority invariant: the number role below comes
+                    # ONLY from the Qwen number-role/applicability result. This
+                    # guard never infers a role from the string itself; it merely
+                    # prevents a Qwen-classified order/reference/customer number
+                    # from being written as the contract number.
                     raw = candidate.normalized_value if candidate.normalized_value is not None else candidate.value
                     if raw is not None:
                         key = str(raw).strip()
@@ -1355,6 +1695,14 @@ class HarnessV3:
             if supported_count == 0:
                 issues.append("Keine belastbar belegte Vertragsinformation extrahiert")
 
+        except CallBudgetExhausted as exc:
+            budget_exhausted = True
+            issues.append("Modell-Call-Budget erschöpft; Analyse abgebrochen – manuelle Prüfung erforderlich")
+            planner.decisions.append({
+                "purpose": "harness",
+                "decision": "call_budget_exhausted",
+                "error_type": type(exc).__name__,
+            })
         except Exception as exc:
             issues.append("Harness: " + type(exc).__name__ + "; manuelle Prüfung erforderlich")
             if "supported_count" not in locals():
@@ -1380,6 +1728,9 @@ class HarnessV3:
             "advertised_context": planner.advertised,
             "context_budget": planner.capacity,
             "context_decisions": planner.decisions,
+            "budget_exhausted": budget_exhausted,
+            "failure_categories": _tally_failure_categories(calls, budget_exhausted),
+            "dropped_refs": dropped_refs,
             "perception": {
                 "option_clusters": [c.model_dump() for c in clusters],
             },
@@ -1422,7 +1773,9 @@ class HarnessV3:
         last_failure = failed_calls[-1] if failed_calls else None
         technical_error = None
         if not has_grounded_truth:
-            if last_failure is not None:
+            if budget_exhausted:
+                technical_error = "HarnessFailure purpose=harness category=call_budget_exhausted"
+            elif last_failure is not None:
                 technical_error = (
                     "HarnessFailure"
                     f" purpose={last_failure.get('purpose')}"

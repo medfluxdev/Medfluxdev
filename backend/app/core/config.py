@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     harness_vision_pages_per_batch: int = 4
     harness_vision_batch_scale: int = 1600  # max pixels on the long page side
     harness_vision_min_pages_for_batch: int = 2
+    # Independent visual-region call bound (V3). Vision region analysis must be
+    # decoupled from the total semantic call budget: raising harness_max_calls for
+    # a benchmark must NOT grow the number of vision calls. This bound caps the
+    # number of per-region VisionObservation calls; page-batch section reads are
+    # governed by harness_vision_pages_per_batch and the semantic budget.
+    harness_vision_max_calls: int = 16
     # Atomic OCR/geometry (RapidOCR) is a perception/evidence helper only. It is
     # NEVER a mandatory semantic gateway; failures fall back to canonical visual
     # evidence without blocking analysis.

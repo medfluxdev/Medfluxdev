@@ -1,4 +1,4 @@
-"""PR-6 / Contract Intelligence V3 focused tests.
+﻿"""PR-6 / Contract Intelligence V3 focused tests.
 
 Mocked provider only. These tests validate ARCHITECTURE and CONTROL FLOW, not
 ABIOMED/Accutron correctness against the real model. A real-model benchmark is
@@ -11,10 +11,27 @@ from types import SimpleNamespace
 import pytest
 
 from app.ai.harness import get_harness_class
+from app.ai.harness.context import CallBudgetExhausted, ContextOverflow, ContextPlanner, estimate_tokens
 from app.ai.harness.document import Block, DocumentModel
-from app.ai.harness.models import ContractMap, NumberRole, SelectionRelation
+from app.ai.harness.models import (
+    ApplicabilityDecision,
+    ContractMap,
+    NumberRole,
+    Observation,
+    PrecedenceRule,
+    SectionUnderstanding,
+    SelectionRelation,
+)
 from app.ai.harness.pipeline import HarnessV2
-from app.ai.harness.v3 import HarnessV3, _merge_maps_v3
+from app.ai.harness.v3 import (
+    HarnessV3,
+    _fair_token_allocation,
+    _merge_maps_v3,
+    compact_sections,
+    measured_output_budget,
+    sanitize_applicability,
+    sanitize_contract_map,
+)
 from app.ai.harness.v3_perception import perceive_option_clusters
 from app.ai.schemas import ModelCapabilities, ModelDescriptor
 from app.core.config import Settings
@@ -98,17 +115,53 @@ def scan_document(pages: int):
     )
 
 
+def multi_block_document(blocks: int = 8, block_ref="p1:e0"):
+    """Text-based multi-block document whose full-document prompt does NOT fit,
+    forcing the family resolver to use planner.segments()/packing."""
+    elements = []
+    texts = []
+    for i in range(blocks):
+        text = f"Klausel {i}. " + ("Vertragsbedingungen und Leistungsumfang " * 22)
+        texts.append(text)
+        elements.append(
+            Element(
+                element_id=f"e{i}",
+                page=1,
+                reading_order=i,
+                text=text,
+                type="paragraph",
+                method="native",
+            )
+        )
+    return DocumentIntelligenceResult(
+        document_id="synthetic",
+        source_sha256="f" * 64,
+        canonical_text=" ".join(texts),
+        provenance=ProcessingProvenance(provider="native_pdf"),
+        pages=[Page(
+            page_number=1, width_pt=600, height_pt=800, text=" ".join(texts),
+            elements=elements,
+        )],
+    )
+
+
 class FakeProvider:
     supports_structured_output = True
     last_done_reason = None
     last_usage = {"prompt_tokens": 123, "completion_tokens": 42}
 
-    def __init__(self, unsupported=False, cost_applicability="applicable", number_decision=None, block_ref="p1:a"):
+    def __init__(self, unsupported=False, cost_applicability="applicable", number_decision=None,
+                 block_ref="p1:a", map_number_role="order_number",
+                 truncated_titles=None, truncate_once=True):
         self.requests = []
         self.unsupported = unsupported
         self.cost_applicability = cost_applicability
         self.number_decision = number_decision
         self.block_ref = block_ref
+        self.map_number_role = map_number_role
+        self.truncated_titles = set(truncated_titles or [])
+        self.truncate_once = truncate_once
+        self._truncated = False
 
     def _find_candidate_batch(self, text):
         idx = text.find('{"candidates"')
@@ -127,6 +180,12 @@ class FakeProvider:
         self.requests.append((text, images, context_tokens))
         title = schema["title"]
         ref = self.block_ref
+        truncated = title in self.truncated_titles and not (self.truncate_once and self._truncated)
+        if truncated:
+            self._truncated = True
+            self.last_done_reason = "length"
+        else:
+            self.last_done_reason = None
         if title == "VisionObservation":
             return json.dumps({"description": "Visual region with option table"})
         if title == "SectionUnderstanding":
@@ -141,7 +200,7 @@ class FakeProvider:
                 "unresolved": [],
             })
         if title == "ContractMap":
-            return json.dumps({
+            payload = {
                 "document_type": "service",
                 "observations": [{
                     "topic": "identity costs delivery",
@@ -154,11 +213,13 @@ class FakeProvider:
                     "applicability": "applicable", "block_ids": [ref],
                     "reason": "selection evidenced in clause",
                 }],
-                "number_roles": [{
-                    "value": "452664", "role": "order_number", "block_ids": [ref],
+            }
+            if self.map_number_role is not None:
+                payload["number_roles"] = [{
+                    "value": "452664", "role": self.map_number_role, "block_ids": [ref],
                     "reason": "appears as order reference",
-                }],
-            })
+                }]
+            return json.dumps(payload)
         if title == "ApplicabilityBatch":
             decisions = [{
                 "scope": "option", "decision": "selected", "target": "selected plan",
@@ -453,3 +514,418 @@ async def test_v3_existing_map_helpers_reused_for_evidence():
     from app.ai.harness.models import CandidateBatch, FactCandidate, EvidenceRef
     merged = _coalesce_batch(CandidateBatch(candidates=[FactCandidate(**batch["candidates"][0])]))
     assert merged.candidates[0].status == "supported"
+
+
+# ----------------------------------------------------------------------
+# A - ContractMap invalid source-ref tolerance (quarantine, never remap)
+# ----------------------------------------------------------------------
+
+
+def _nine_valid_one_invalid_map() -> ContractMap:
+    document_model = DocumentModel.build(native_document())
+    observations = [
+        Observation(topic=f"t{i}", summary=f"summary {i}", block_refs=["p1:a"])
+        for i in range(9)
+    ]
+    observations.append(
+        Observation(topic="ghost", summary="phantom clause", block_refs=["p1:ghost"])
+    )
+    return ContractMap(observations=observations), document_model
+
+
+def test_a_single_invalid_observation_does_not_discard_map():
+    mapping, document = _nine_valid_one_invalid_map()
+    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
+    assert len(clean.observations) == 9
+    assert len(dropped) == 1
+    assert dropped[0]["item_type"] == "observation"
+    assert dropped[0]["invalid_refs"] == ["p1:ghost"]
+    assert dropped[0]["action"] == "dropped"
+    assert dropped[0]["requires_review"] is True
+    assert all("p1:ghost" not in obs.block_refs for obs in clean.observations)
+
+
+def test_a_invalid_selection_rejected_observations_survive():
+    mapping, document = _nine_valid_one_invalid_map()
+    mapping.selections = [
+        SelectionRelation(cluster="plan", option="sel", selected=True,
+                          applicability="applicable", block_ids=["p1:bad"])
+    ]
+    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
+    assert clean.selections == []
+    assert len(clean.observations) == 9
+    assert any(d["item_type"] == "selection" for d in dropped)
+
+
+def test_a_invalid_number_role_rejected_unrelated_semantics_survive():
+    mapping, document = _nine_valid_one_invalid_map()
+    mapping.number_roles = [
+        NumberRole(value="452664", role="order_number", block_ids=["p1:bad"]),
+        NumberRole(value="Z-2", role="reference", block_ids=["p1:a"]),
+    ]
+    mapping.selections = [
+        SelectionRelation(cluster="plan", option="sel", selected=True,
+                          applicability="applicable", block_ids=["p1:a"])
+    ]
+    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
+    assert len(clean.number_roles) == 1
+    assert clean.number_roles[0].value == "Z-2"
+    assert len(clean.selections) == 1
+    assert any(d["item_type"] == "number_role" for d in dropped)
+
+
+def test_a_invalid_ref_never_remapped_to_another_block():
+    mapping, document = _nine_valid_one_invalid_map()
+    mapping.observations = [
+        Observation(topic="phantom", summary="s", block_refs=["p1:ghost"])
+    ]
+    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
+    assert clean.observations == []
+    assert all("p1:ghost" not in obs.block_refs for obs in clean.observations)
+    # Dropped, never silently rewritten to a real block id.
+    assert all("p1:a" not in obs.block_refs for obs in clean.observations)
+
+
+def test_a_sanitize_applicability_drops_only_invalid_decisions():
+    document = DocumentModel.build(native_document())
+    decisions = [
+        ApplicabilityDecision(scope="number", decision="order_number", target="x",
+                              block_ids=["p1:a"]),
+        ApplicabilityDecision(scope="option", decision="selected", target="y",
+                              block_ids=["p1:bad"]),
+    ]
+    valid, dropped = sanitize_applicability(decisions, document, stage="applicability")
+    assert len(valid) == 1 and valid[0].target == "x"
+    assert len(dropped) == 1 and dropped[0]["invalid_refs"] == ["p1:bad"]
+
+
+# ----------------------------------------------------------------------
+# B - Dynamic family prompt packing (no static magic reserves)
+# ----------------------------------------------------------------------
+
+
+def _blocks(n: int) -> list[Block]:
+    return [Block(id=f"p1:b{i}", text=" " + "x" * 600, kind="text", page=1) for i in range(n)]
+
+
+def test_b_segments_use_actual_context_and_per_block_costs():
+    planner = ContextPlanner(configured=8192, advertised=8192, output_tokens=1800)
+    overhead = "fixed instruction overhead " * 10
+    blocks = _blocks(8)
+    segments = planner.segments(blocks, overhead, purpose="resolve_segments:identity",
+                                extra_reserve=64, per_block_cost=lambda block: 0)
+    decision = next(
+        row for row in planner.decisions if row.get("purpose") == "resolve_segments:identity"
+        and "segments" in row
+    )
+    assert decision["extra_reserve"] == 64
+    assert decision["per_block_cost"] is True
+    assert decision["block_budget"] == (
+        planner.input_budget - estimate_tokens(overhead) - 64
+    )
+    assert segments  # structural blocks are packed whole
+
+
+def test_b_per_block_visual_cost_reduces_block_capacity():
+    planner = ContextPlanner(configured=4096, advertised=4096, output_tokens=1200)
+    overhead = "instruction overhead "
+    blocks = _blocks(3)
+    cheap = planner.segments(blocks, overhead, purpose="seg:identity",
+                             extra_reserve=0, per_block_cost=lambda block: 0)
+    expensive = planner.segments(blocks, overhead, purpose="seg:identity",
+                                 extra_reserve=0, per_block_cost=lambda block: 900)
+    # With per-block visual observation rows counted, the same blocks no longer
+    # all fit: packing must reflect ACTUAL prompt components, not a static reserve.
+    assert len(expensive) > len(cheap)
+
+
+@pytest.mark.asyncio
+async def test_b_resolve_uses_full_structural_blocks_never_tail_clipped():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    full_block = "Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"
+    assert result.contract is not None
+    resolve_texts = [text for (text, images, context) in provider.requests
+                     if text.startswith("Resolve identity ")]
+    assert resolve_texts
+    assert any(full_block in text for text in resolve_texts)
+
+
+@pytest.mark.asyncio
+async def test_b_every_executed_call_is_prevalidated_against_runtime_window():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    capacity = result.diagnostics["context_budget"]
+    for row in result.diagnostics["calls"]:
+        # planner.check() runs on the FINAL assembled prompt before the provider
+        # call; any overflow would have aborted the call, so every executed call
+        # fits inside the runtime window with the base reserve.
+        assert row["estimated_prompt_tokens"] <= capacity - 512
+    assert all(row.get("succeeded") for row in result.diagnostics["calls"])
+
+
+@pytest.mark.asyncio
+async def test_b_family_packing_records_small_real_reserve_not_static_magic():
+    provider = FakeProvider(block_ref="p1:e0")
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(multi_block_document(8))
+    decisions = result.diagnostics["context_decisions"]
+    row = next(
+        d for d in decisions
+        if d.get("purpose") == "resolve_segments:identity" and "segments" in d
+    )
+    assert row["per_block_cost"] is True
+    assert 0 <= row["extra_reserve"] < 500  # sections-bound + safety, NOT 1100/1300
+
+
+def test_b_measured_output_retry_only_for_eligible_stages():
+    assert measured_output_budget("resolve:identity:0", prompt_tokens=3000,
+                                  capacity=8192, base_output=1800) is not None
+    assert measured_output_budget("vision:p1:a", prompt_tokens=3000,
+                                  capacity=8192, base_output=1800) is None
+    assert measured_output_budget("resolve:identity:0", prompt_tokens=7000,
+                                  capacity=8192, base_output=1800) is None
+
+
+# ----------------------------------------------------------------------
+# C - Call-budget semantics (never mislabelled as context overflow)
+# ----------------------------------------------------------------------
+
+
+def test_c_call_budget_exhaustion_is_not_context_overflow_subclass():
+    assert not issubclass(CallBudgetExhausted, ContextOverflow)
+    assert not issubclass(CallBudgetExhausted, ValueError)
+
+
+@pytest.mark.asyncio
+async def test_c_hard_budget_exhaustion_classified_separately():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(harness_max_calls=3), ai(provider)).analyze(native_document())
+    assert provider.requests and len(provider.requests) == result.diagnostics["call_count"] == 3
+    assert result.diagnostics["budget_exhausted"] is True
+    categories = result.diagnostics["failure_categories"]
+    assert categories.get("call_budget_exhausted", 0) >= 1
+    assert categories.get("context_overflow", 0) == 0
+    assert any("Call-Budget erschöpft" in issue for issue in result.diagnostics["issues"])
+    assert result.contract is None
+    assert result.error and "call_budget_exhausted" in result.error
+
+
+@pytest.mark.asyncio
+async def test_c_no_hidden_retry_after_budget_exhaustion():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(harness_max_calls=3), ai(provider)).analyze(native_document())
+    calls_after_exhaustion = [
+        c for c in result.diagnostics["calls"] if c.get("failed")
+        and c.get("error_category") == "call_budget_exhausted"
+    ]
+    # The exhaustion event is not recorded as a redundant retried call; the
+    # analysis stopped cleanly with exactly one classified budget failure.
+    assert result.diagnostics["call_count"] == 3
+    assert result.diagnostics["failure_categories"]["call_budget_exhausted"] == 1
+
+
+# ----------------------------------------------------------------------
+# D - Global-section compaction fairness (no first-sections-win)
+# ----------------------------------------------------------------------
+
+
+def _many_sections(count: int) -> list[SectionUnderstanding]:
+    sections = []
+    for i in range(count):
+        sections.append(
+            SectionUnderstanding(
+                section_index=i,
+                pages=[i + 1],
+                observations=[
+                    Observation(
+                        topic="t",
+                        summary="very long summary " + ("clause " * 200),
+                        block_refs=["p1:a"],
+                    )
+                ],
+                unresolved=["unresolved detail " + ("text " * 100)],
+            )
+        )
+    return sections
+
+
+def test_d_compact_sections_keeps_first_and_last_with_small_budget():
+    payload = compact_sections(_many_sections(8), budget=260)
+    rows = json.loads(payload)
+    indices = {row["section_index"] for row in rows}
+    assert 0 in indices and 7 in indices
+    pages = {tuple(row["pages"]) for row in rows}
+    assert (1,) in pages and (8,) in pages
+
+
+def test_d_compact_sections_preserves_page_identity():
+    payload = compact_sections(_many_sections(5), budget=300)
+    rows = json.loads(payload)
+    for row in rows:
+        assert isinstance(row["pages"], list) and int(row["pages"][0]) == row["section_index"] + 1
+
+
+def test_d_fair_allocation_never_starves_a_section():
+    caps = _fair_token_allocation(8, [1000] * 8, 400)
+    assert len(caps) == 8
+    assert all(cap >= 1 for cap in caps)
+    assert sum(map(int, caps)) == 400
+
+
+# ----------------------------------------------------------------------
+# E - Output truncation handling
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_e_truncated_output_never_silently_accepted():
+    provider = FakeProvider(truncated_titles={"GlobalContractUnderstanding"})
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    truncated_calls = [
+        row for row in result.diagnostics["calls"]
+        if row.get("done_reason") == "length"
+    ]
+    assert truncated_calls
+    for row in truncated_calls:
+        assert row.get("failed") is True
+        assert row.get("error_category") == "truncated_output"
+    # The truncated global payload was never accepted as global meaning.
+    assert result.diagnostics["global_understanding"] is None
+
+
+@pytest.mark.asyncio
+async def test_e_resolve_stage_recovers_via_measured_retry():
+    provider = FakeProvider(truncated_titles={"CandidateBatch"})
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    # The FIRST CandidateBatch resolve call truncates and is retried once with a
+    # measured output budget; the retry succeeds and grounded facts survive.
+    retries = [
+        row for row in result.diagnostics["calls"]
+        if "retried_with_output_tokens" in row and row.get("succeeded")
+    ]
+    assert retries
+    assert any(
+        d.get("decision") == "output_budget_stage_retry"
+        for d in result.diagnostics["context_decisions"]
+    )
+    assert result.contract is not None
+    assert result.contract.identity.supplier == "MedTech GmbH"
+
+
+def test_e_retry_bounds_are_stage_local_and_never_global():
+    # resolve/ground eligible; vision never; oversized prompts never.
+    assert measured_output_budget("ground:identity:0", 2500, 8192, 1800) == 2800
+    assert measured_output_budget("recovery:identity", 2500, 8192, 1800) == 2800
+    assert measured_output_budget("vision:p1:a", 2500, 8192, 1800) is None
+    assert measured_output_budget("section:0", 2500, 8192, 1800) is None
+    # The raise is capped well below the 8192 runtime window (no global hack).
+    assert measured_output_budget("resolve:identity:0", 3000, 8192, 1800) <= 2800
+
+
+# ----------------------------------------------------------------------
+# F - Vision budget decoupled from total call budget
+# ----------------------------------------------------------------------
+
+
+def _visual_heavy_document(pages: int, blocks_per_page: int):
+    page_models = []
+    all_text = []
+    for page_number in range(1, pages + 1):
+        elements = []
+        for index in range(blocks_per_page):
+            text = f"Bildbereich {page_number}-{index}"
+            all_text.append(text)
+            elements.append(
+                Element(
+                    element_id=f"v{index}",
+                    page=page_number,
+                    reading_order=index,
+                    text=text,
+                    type="image",
+                    method="native",
+                    region=BoundingRegion(
+                        page=page_number, x0=10 + index, y0=10, x1=120 + index, y1=60
+                    ),
+                )
+            )
+        page_models.append(
+            Page(
+                page_number=page_number,
+                width_pt=600,
+                height_pt=800,
+                text=" ".join(all_text),
+                elements=elements,
+            )
+        )
+    return DocumentIntelligenceResult(
+        document_id="synthetic",
+        source_sha256="d" * 64,
+        canonical_text=" ".join(all_text),
+        provenance=ProcessingProvenance(provider="native_pdf"),
+        pages=page_models,
+    )
+
+
+@pytest.mark.asyncio
+async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
+    source = _visual_heavy_document(8, 4)  # 32 visual blocks
+    counts = []
+    for max_calls in (32, 64):
+        provider = FakeProvider(block_ref="p1:v0")
+        result = await HarnessV3(
+            v3_settings(harness_max_calls=max_calls), ai(provider, vision=True)
+        ).analyze(
+            source,
+            image_loader=lambda block: "img",
+            page_image_loader=lambda page: "img",
+        )
+        vision_calls = [row for row in result.diagnostics["calls"] if row.get("stage") == "vision"]
+        counts.append(len(vision_calls))
+    assert counts[0] == counts[1], f"vision calls must not scale with max_calls: {counts}"
+    assert counts[0] == min(32, 16)  # independent harness_vision_max_calls bound
+
+
+@pytest.mark.asyncio
+async def test_f_vision_budget_respects_independent_setting():
+    source = _visual_heavy_document(8, 4)
+    provider = FakeProvider(block_ref="p1:v0")
+    result = await HarnessV3(
+        v3_settings(harness_max_calls=64, harness_vision_max_calls=4), ai(provider, vision=True)
+    ).analyze(source, image_loader=lambda block: "img", page_image_loader=lambda page: "img")
+    vision_calls = [row for row in result.diagnostics["calls"] if row.get("stage") == "vision"]
+    assert len(vision_calls) == 4
+    deferred = [
+        d for d in result.diagnostics["context_decisions"]
+        if d.get("vision") == "deferred_by_visual_call_budget"
+    ]
+    assert len(deferred) == 28
+
+
+# ----------------------------------------------------------------------
+# G - Qwen semantic authority on the number-role path
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_g_contract_number_written_when_qwen_classifies_contract_number():
+    provider = FakeProvider(cost_applicability="applicable", number_decision="contract_number",
+                            map_number_role=None)
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    assert result.contract is not None, result.diagnostics["issues"]
+    assert result.contract.identity.contract_number == "452664"
+    roles = {n["value"]: n["role"] for n in result.diagnostics["number_roles"]}
+    assert roles.get("452664") == "contract_number"
+    assert not any(issue.startswith("identity.contract_number") for issue in result.diagnostics["issues"])
+
+
+@pytest.mark.asyncio
+async def test_g_reference_classification_blocks_contract_number_without_map_role():
+    provider = FakeProvider(cost_applicability="applicable", number_decision="order_number",
+                            map_number_role=None)
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    assert result.contract is not None, result.diagnostics["issues"]
+    # Deterministic code ENFORCES the Qwen classification; it never infers it.
+    assert result.contract.identity.contract_number is None
+    roles = {n["value"]: n["role"] for n in result.diagnostics["number_roles"]}
+    assert roles.get("452664") == "order_number"
+    assert any(issue.startswith("identity.contract_number") for issue in result.diagnostics["issues"])

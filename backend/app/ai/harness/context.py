@@ -18,6 +18,15 @@ class ContextOverflow(ValueError):
     pass
 
 
+class CallBudgetExhausted(Exception):
+    """The model call budget was consumed; no further provider calls are allowed.
+
+    Intentionally NOT a subclass of ContextOverflow or ValueError so that
+    budget exhaustion can never be mislabelled as a prompt-size problem and so
+    that call sites can handle it explicitly before generic error handlers.
+    """
+
+
 # A conservative fallback for unknown tokenizers.  For Latin-heavy legal text,
 # modern subword tokenizers are commonly around 3-4 characters/token.  UTF-8 byte
 # count is used only as a language-neutral size signal, then divided and padded by
@@ -87,7 +96,7 @@ class ContextPlanner:
         return estimate_tokens(text) <= self.input_budget - max(0, int(extra_reserve))
 
     def segments(self, blocks: list[Block], overhead: str = "", *, purpose: str = "segmentation",
-                 extra_reserve: int = 0) -> list[list[Block]]:
+                 extra_reserve: int = 0, per_block_cost=None) -> list[list[Block]]:
         """Pack complete structural blocks without silent truncation.
 
         Oversized structural units are rejected explicitly; splitting a table/section
@@ -95,6 +104,9 @@ class ContextPlanner:
         document intelligence should already expose finer structural units when needed.
         `extra_reserve` carves out room for per-segment local context (visual and
         section readings) so the assembled segment prompt still fits the budget.
+        `per_block_cost(block)` adds deterministic per-block variable context (e.g.
+        the token cost of that block's visual observation row) so packing reflects
+        the ACTUAL assembled prompt instead of a static magic reserve.
         """
         budget = self.input_budget - estimate_tokens(overhead) - max(0, int(extra_reserve))
         if budget <= 0:
@@ -105,6 +117,8 @@ class ContextPlanner:
         size = 0
         for block in blocks:
             required = estimate_tokens(block.render()) + 4
+            if per_block_cost is not None:
+                required += max(0, int(per_block_cost(block) or 0))
             if required > budget:
                 self.decisions.append(
                     {
@@ -129,16 +143,22 @@ class ContextPlanner:
                 "purpose": purpose,
                 "segments": [[b.id for b in segment] for segment in segments],
                 "decision": "full_document" if len(segments) <= 1 else "hierarchical",
+                "block_budget": budget,
+                "overhead_tokens": estimate_tokens(overhead),
+                "extra_reserve": int(extra_reserve or 0),
+                "per_block_cost": per_block_cost is not None,
             }
         )
         return segments
 
     def pack_ranked(self, blocks: list[Block], overhead: str = "", *, purpose: str,
-                    extra_reserve: int = 0) -> list[Block]:
+                    extra_reserve: int = 0, per_block_cost=None) -> list[Block]:
         """Take ranked blocks until the current prompt budget is full.
 
         No block is cut.  The decision is recorded so retrieval is auditable.
         `extra_reserve` carves out room for the surrounding local context.
+        `per_block_cost(block)` accounts for deterministic per-block variable
+        context so the pack reflects the actual assembled prompt.
         """
         budget = self.input_budget - estimate_tokens(overhead) - max(0, int(extra_reserve))
         if budget <= 0:
@@ -147,6 +167,8 @@ class ContextPlanner:
         used = 0
         for block in blocks:
             required = estimate_tokens(block.render()) + 4
+            if per_block_cost is not None:
+                required += max(0, int(per_block_cost(block) or 0))
             if required > budget:
                 continue
             if chosen and used + required > budget:
@@ -160,6 +182,9 @@ class ContextPlanner:
                 "estimated_tokens": used,
                 "budget": budget,
                 "decision": "ranked_pack",
+                "overhead_tokens": estimate_tokens(overhead),
+                "extra_reserve": int(extra_reserve or 0),
+                "per_block_cost": per_block_cost is not None,
             }
         )
         return chosen

@@ -3675,3 +3675,28 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ## Nächster Schritt
 - Nach ausdrücklicher Freigabe: A (tolerante Invalid-Ref-Behandlung), B (Familie-Packing/Reserve-Tuning), C (nur Benchmark-Budget höher) in dieser Reihenfolge; danach Accutron erneut, dann ABIOMED. Blocker-Details und Ground-Truth in `docs/HARNESS_V3_ENGINEERING_HANDOFF.md`.
+
+---
+
+# PR-7 / Harness V3 – Robustheit A–G (implementiert, fokussierte Tests grün, Review-PR)
+
+**Status:** IMPLEMENTIERT (Branch `v3-robustness-abc`) – Real-Benchmark-VALIDIERUNG NOCH OFFEN (Fortschritt bleibt 15/18 bis Accutron erneut bestanden)
+
+**Datum:** 11.09.2026
+
+## Implementiertes (A–G, gemäß Handoff-Blocker)
+- **A** Invalid-Ref-Toleranz: `sanitize_contract_map`/`sanitize_applicability` quarantänen NUR ungültige Einträge (Beobachtung/Selektion/Nummer-Rolle/Precedence/Applicability) statt Whole-Map-Rejection; niemals remappen/raten; Diagnose `dropped_refs` (stage/item_type/invalid_refs/action/requires_review) ohne Vertragsinhalt; Review-Issue + Planner-Decision pro Drop.
+- **B** Dynamisches Familien-Packing: `segments()`/`pack_ranked()` mit `per_block_cost(block)` (tatsächliche visuelle Observations-Zeilen); Budget aus echten Prompt-Komponenten abgeleitet (`sections_bound_tokens()` aus dem Compactor-Garantiewert + `_PACK_SAFETY_MARGIN=64`) statt statischer Magic-Reverse (1100/1300 entfernt); `planner.check()` validiert den final assemblierten Prompt vor jedem Call; `assemble_bounded` entfernt (ganze Blöcke, keine Tail-Clipping mehr).
+- **C** Call-Budget-Semantik: `CallBudgetExhausted` (kein `ContextOverflow`/`ValueError`-Subtyp) an ~11 Call-Sites + äußerer Handler; `failure_categories` inkl. `call_budget_exhausted` (nie als `context_overflow` gezählt); Produktions-Default `harness_max_calls=32` unverändert; Benchmark-Override 64 bleibt möglich.
+- **D** Section-Kompaktierung fair: `_fair_token_allocation` (Equal-Share + Round-Robin-Wasserfüllung), `compact_sections` erhält ALLE Sections (erste UND letzte überleben), Seiten-/Section-Identität bleibt; deterministisches Clipping nur.
+- **E** Output-Truncation: nie still akzeptiert (`done_reason in {length, max_tokens}`); ein einziger gemessener Retry (`measured_output_budget`, Stufen `resolve:`/`ground:`/`recover:`/`recovery:`, ≤2800, nur bei echter Marge) statt stiller Ollama-Truncation; keine 65536-Experimente.
+- **F** Vision entkoppelt: `harness_vision_max_calls=16` (neu) begrenzt Vision-Region-Calls unabhängig von `harness_max_calls` (32→64 verdoppelt keine Vision-Calls); `deferred_by_visual_call_budget`.
+- **G** Qwen-Semantik-Autorität: Kommentar + Test-Doppelbeweis, dass Nummern-Rollen NUR aus dem Qwen-Ergebnis stammen; deterministischer Code erzwingt nur (kein Keyword-Guard, keine Inferenz).
+
+## Tests / Ergebnis
+- Fokussiert: `test_harness_v3.py` + `test_harness_v2.py` = **54 passed** (30 Alt + 24 neue A–G).
+- Umgebungstests einmalig: `test_ai*`, `test_contract_extraction`, `test_document_intelligence` = **83 passed** (keine Regressionen).
+- Keine DB-/Datenmutation; v2 bleibt Default; Test-Schema-Isolation unverändert.
+
+## Nächster Schritt
+- Commit/Push `v3-robustness-abc` + Review-PR gegen `main` (kein Merge) mit Root-Cause/Änderungen/Testergebnissen/Risiken. Nach Freigabe: Accutron erneut (V3, `qwen3-vl:8b-instruct`, num_ctx 8192, Benchmark-only max_calls 64, read-only), bei allen Kern-Semantik-Steps grün → ABIOMED einmal; sonst STOPP + exakter Stage-Bericht.
