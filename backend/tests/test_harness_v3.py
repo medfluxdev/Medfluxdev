@@ -655,7 +655,7 @@ async def test_b_resolve_uses_full_structural_blocks_never_tail_clipped():
     assert result.contract is not None
     resolve_texts = [
         text for (text, images, context) in provider.requests
-        if text.startswith("Resolve these related contract fields together:")
+        if text.startswith("Resolve this related contract-field pack in ONE pass:")
     ]
     assert resolve_texts
     assert any(full_block in text for text in resolve_texts)
