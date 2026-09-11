@@ -384,8 +384,8 @@ async def test_v3_full_native_path_records_stages_and_contract():
     assert "global_understanding" in purposes
     assert any(p.startswith("understanding:") for p in purposes)
     assert "applicability" in purposes
-    assert any(p.startswith("resolve:identity:") for p in purposes)
-    assert any(p.startswith("resolve:costs:") for p in purposes)
+    assert any(p.startswith("resolve_pack:core:") for p in purposes)
+    assert any(p.startswith("resolve_pack:commercial:") for p in purposes)
 
     global_call = next(row for row in result.diagnostics["calls"] if row["purpose"] == "global_understanding")
     assert global_call["stage"] == "global"
@@ -418,8 +418,14 @@ async def test_v3_scanned_document_batches_visual_compute_into_sections():
     assert diagnostics["global_understanding"] is not None
     assert "global_map" in {row.get("purpose") for row in diagnostics["calls"]}
     vision_rows = [row for row in diagnostics["calls"] if row.get("stage") == "vision"]
-    assert len(vision_rows) == 4
-    assert all(row.get("pages") for row in vision_rows)
+    # Page-first vision owns these scanned pages, so duplicate region calls
+    # are intentionally suppressed.
+    assert vision_rows == []
+    deferred = [
+        d for d in diagnostics["context_decisions"]
+        if d.get("vision") == "deferred_to_page_batch"
+    ]
+    assert len(deferred) == 4
 
 
 @pytest.mark.asyncio
@@ -987,7 +993,8 @@ async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
         vision_calls = [row for row in result.diagnostics["calls"] if row.get("stage") == "vision"]
         counts.append(len(vision_calls))
     assert counts[0] == counts[1], f"vision calls must not scale with max_calls: {counts}"
-    assert counts[0] == min(32, 16)  # independent harness_vision_max_calls bound
+    # Full-page section vision covers these scanned pages in both cases.
+    assert counts[0] == 0
 
 
 @pytest.mark.asyncio
@@ -1047,12 +1054,14 @@ async def test_f_vision_budget_respects_independent_setting():
         v3_settings(harness_max_calls=64, harness_vision_max_calls=4), ai(provider, vision=True)
     ).analyze(source, image_loader=lambda block: "img", page_image_loader=lambda page: "img")
     vision_calls = [row for row in result.diagnostics["calls"] if row.get("stage") == "vision"]
-    assert len(vision_calls) == 4
+    # Because full-page SectionUnderstanding is available, the region budget is
+    # not consumed at all on this page-first fast path.
+    assert vision_calls == []
     deferred = [
         d for d in result.diagnostics["context_decisions"]
-        if d.get("vision") == "deferred_by_visual_call_budget"
+        if d.get("vision") == "deferred_to_page_batch"
     ]
-    assert len(deferred) == 28
+    assert len(deferred) == 32
 
 
 # ----------------------------------------------------------------------
