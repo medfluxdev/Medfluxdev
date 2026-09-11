@@ -86,7 +86,16 @@ _ALTERNATIVE_LABELS = {"alternative", "superseded"}
 # output budget raise that still fits the runtime context window. It is never a
 # global 8192-output hack and never runs on 65536-token experiments (that
 # crashed Ollama on the target 8 GB hardware).
-_OUTPUT_RETRY_PREFIXES = ("resolve:", "ground:", "recover:", "recovery:")
+_OUTPUT_RETRY_PREFIXES = (
+    "resolve:",
+    "ground:",
+    "recover:",
+    "recovery:",
+    "resolve_pack:",
+    "ground_pack:",
+    "recovery_pack:",
+    "recovery_ground_pack:",
+)
 _OUTPUT_RETRY_MAX = 2800
 _OUTPUT_RETRY_MIN_GAIN = 128
 _OUTPUT_RETRY_RESERVE = 512
