@@ -1345,7 +1345,11 @@ class HarnessV3:
                 + map_aux
             )
             try:
-                base_segments = planner.segments(document.blocks, map_overhead, purpose="global_understanding")
+                base_segments = planner.segments(
+                    document.blocks,
+                    map_overhead,
+                    purpose="global_understanding",
+                )
             except ContextOverflow as exc:
                 issues.append("ContractMap segmentation: ContextOverflow; manuelle Prüfung erforderlich")
                 planner.decisions.append({
@@ -1360,12 +1364,14 @@ class HarnessV3:
             for segment in base_segments:
                 for start_index in range(0, len(segment), max_map_blocks):
                     segments.append(segment[start_index:start_index + max_map_blocks])
+
             if len(segments) != len(base_segments):
                 planner.decisions.append({
                     "purpose": "global_understanding",
                     "decision": "output_aware_map_refinement",
                     "segment_sizes": [len(segment) for segment in segments],
                 })
+
             for index, segment in enumerate(segments):
                 if budget_exhausted:
                     break
@@ -1374,17 +1380,21 @@ class HarnessV3:
                         "understanding:" + str(index),
                         understanding_instruction + map_aux + vision_summary() + assemble(segment),
                         ContractMap,
-                        pages=all_pages or None,
+                        pages=sorted({b.page for b in segment if b.page is not None}) or None,
                         stage="global",
                     )
-                    clean, dropped = sanitize_contract_map(document, mapping, stage="understanding:" + str(index))
+                    clean, dropped = sanitize_contract_map(
+                        document,
+                        mapping,
+                        stage="understanding:" + str(index),
+                    )
                     dropped_refs.extend(dropped)
                     if dropped:
-                    issues.append(
+                        issues.append(
                             f"ContractMap segment {index}: Einträge mit ungültigen Quellverweisen verworfen; "
                             "manuelle Prüfung erforderlich"
                         )
-                    planner.decisions.append({
+                        planner.decisions.append({
                             "purpose": "understanding:" + str(index),
                             "decision": "invalid_refs_quarantined",
                             "dropped": len(dropped),
@@ -1393,44 +1403,61 @@ class HarnessV3:
                 except CallBudgetExhausted:
                     budget_exhausted = True
                     planner.decisions.append({
-                            "purpose": "understanding:" + str(index),
-                            "decision": "call_budget_exhausted",
-                        })
+                        "purpose": "understanding:" + str(index),
+                        "decision": "call_budget_exhausted",
+                    })
                 except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                    issues.append(f"ContractMap segment {index}: {type(exc).__name__}; manuelle Prüfung erforderlich")
+                    issues.append(
+                        f"ContractMap segment {index}: {type(exc).__name__}; "
+                        "manuelle Prüfung erforderlich"
+                    )
                     planner.decisions.append({
-                            "purpose": "understanding:" + str(index),
-                            "decision": "segment_failed_continue",
-                            "error_type": type(exc).__name__,
-                        })
+                        "purpose": "understanding:" + str(index),
+                        "decision": "segment_failed_continue",
+                        "error_type": type(exc).__name__,
+                    })
+
             if len(maps) > 1 and not budget_exhausted:
                 union_map = _merge_maps_v3(maps)
                 maps.append(union_map)
                 synthesis = (
                     "Reconcile the section maps into one global ContractMap. Preserve every material fact, "
                     "conflict, dependency, selection and source reference; do not resolve ambiguity without "
-                    "authority. Be concise.\n" + union_map.model_dump_json()
-                    )
+                    "authority. Be concise.\n"
+                    + union_map.model_dump_json()
+                )
                 try:
-                    synthesized = await call("global_map", synthesis, ContractMap, pages=all_pages or None, stage="global")
-                    clean, dropped = sanitize_contract_map(document, synthesized, stage="global_map")
+                    synthesized = await call(
+                        "global_map",
+                        synthesis,
+                        ContractMap,
+                        pages=all_pages or None,
+                        stage="global",
+                    )
+                    clean, dropped = sanitize_contract_map(
+                        document,
+                        synthesized,
+                        stage="global_map",
+                    )
                     dropped_refs.extend(dropped)
                     if dropped:
-                        issues.append("Synthesized ContractMap: Einträge mit ungültigen Quellverweisen verworfen; "
-                                          "manuelle Prüfung erforderlich")
+                        issues.append(
+                            "Synthesized ContractMap: Einträge mit ungültigen Quellverweisen verworfen; "
+                            "manuelle Prüfung erforderlich"
+                        )
                     maps.append(clean)
-                    except CallBudgetExhausted:
-                        budget_exhausted = True
-                        planner.decisions.append({
-                            "purpose": "global_map",
-                            "decision": "call_budget_exhausted",
-                        })
+                except CallBudgetExhausted:
+                    budget_exhausted = True
+                    planner.decisions.append({
+                        "purpose": "global_map",
+                        "decision": "call_budget_exhausted",
+                    })
                 except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                        planner.decisions.append({
-                            "purpose": "global_map",
-                            "decision": "deterministic_global_map_retained",
-                            "error_type": type(exc).__name__,
-                        })
+                    planner.decisions.append({
+                        "purpose": "global_map",
+                        "decision": "deterministic_global_map_retained",
+                        "error_type": type(exc).__name__,
+                    })
 
             final_map = maps[-1] if maps else ContractMap()
             selections = list(final_map.selections)
