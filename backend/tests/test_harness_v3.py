@@ -1012,6 +1012,26 @@ async def test_semantic_packs_reduce_resolve_stage_call_fanout():
     assert not any(str(p).startswith("resolve:identity:") for p in purposes)
 
 
+def test_source_has_parseable_contract_map_control_flow():
+    # Lightweight guard for accidental indentation damage in the async control flow.
+    import ast
+    from pathlib import Path
+    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
+    ast.parse(source.read_text(encoding="utf-8"))
+
+
+@pytest.mark.asyncio
+async def test_contract_map_segments_execute_after_successful_segmentation():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    map_calls = [
+        row for row in result.diagnostics["calls"]
+        if str(row.get("purpose", "")).startswith("understanding:")
+    ]
+    assert map_calls
+    assert result.diagnostics["number_roles"]
+
+
 @pytest.mark.asyncio
 async def test_stage_diagnostics_expose_call_counts_and_latency():
     provider = FakeProvider()
