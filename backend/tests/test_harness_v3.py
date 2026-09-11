@@ -987,6 +987,30 @@ async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_f_page_batch_vision_suppresses_duplicate_region_calls():
+    source = _visual_heavy_document(4, 3)
+    provider = FakeProvider(block_ref="p1:v0")
+    result = await HarnessV3(
+        v3_settings(harness_max_calls=64, harness_vision_max_calls=16), ai(provider, vision=True)
+    ).analyze(source, image_loader=lambda block: "region", page_image_loader=lambda page: "page")
+    region_calls = [
+        row for row in result.diagnostics["calls"]
+        if row.get("stage") == "vision"
+    ]
+    section_calls = [
+        row for row in result.diagnostics["calls"]
+        if row.get("stage") == "sections"
+    ]
+    assert region_calls == []
+    assert section_calls
+    deferred = [
+        d for d in result.diagnostics["context_decisions"]
+        if d.get("vision") == "deferred_to_page_batch"
+    ]
+    assert len(deferred) == 12
+
+
 async def test_f_vision_budget_respects_independent_setting():
     source = _visual_heavy_document(8, 4)
     provider = FakeProvider(block_ref="p1:v0")
