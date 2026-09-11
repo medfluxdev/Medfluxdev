@@ -1023,6 +1023,41 @@ async def test_stage_diagnostics_expose_call_counts_and_latency():
 
 
 @pytest.mark.asyncio
+async def test_f_region_fallback_runs_when_page_section_is_unavailable():
+    source = _visual_heavy_document(2, 3)
+    provider = FakeProvider(block_ref="p1:v0", truncated_titles={"SectionUnderstanding"})
+    result = await HarnessV3(
+        v3_settings(harness_max_calls=64, harness_vision_max_calls=2), ai(provider, vision=True)
+    ).analyze(
+        source,
+        image_loader=lambda block: "region",
+        page_image_loader=lambda page: "page",
+    )
+    fallback_calls = [
+        row for row in result.diagnostics["calls"]
+        if str(row.get("purpose", "")).startswith("vision_fallback:")
+    ]
+    assert len(fallback_calls) <= 2
+    assert fallback_calls
+    assert any(
+        d.get("vision") == "region_fallback_after_missing_page_section"
+        for d in result.diagnostics["context_decisions"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_semantic_pack_recovery_skips_broad_missing_field_retry():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    skipped = [
+        d for d in result.diagnostics["context_decisions"]
+        if d.get("decision") == "recovery_skipped_unsubstantiated_missing_fields"
+    ]
+    assert skipped
+    assert all(d.get("fields") for d in skipped)
+
+
+@pytest.mark.asyncio
 async def test_f_page_batch_vision_suppresses_duplicate_region_calls():
     source = _visual_heavy_document(4, 3)
     provider = FakeProvider(block_ref="p1:v0")
