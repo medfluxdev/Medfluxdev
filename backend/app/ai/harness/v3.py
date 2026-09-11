@@ -1536,6 +1536,20 @@ class HarnessV3:
                         "error_type": type(exc).__name__,
                     })
 
+            def pack_static_overhead(prompt_text: str) -> str:
+                """Return the exact non-source text added by call() for CandidateBatch.
+
+                ContextPlanner must reserve SYSTEM + JSON schema + pack prompt once.
+                Keeping this helper centralized prevents accidental double counting or
+                under-reserving when pack prompts evolve.
+                """
+                return (
+                    SYSTEM
+                    + "\nOutput schema: "
+                    + json.dumps(CandidateBatch.model_json_schema(), separators=(",", ":"))
+                    + prompt_text
+                )
+
             # ---- FACT RESOLUTION in semantic packs ----
             # Resolve related families together to avoid paying repeated prompt
             # setup + model prefill cost for nearly identical contract context.
@@ -1657,7 +1671,7 @@ class HarnessV3:
                 # Planner overhead must reflect exactly what call() will prepend:
                 # SYSTEM + CandidateBatch schema. This keeps fake-provider/runtime
                 # behaviour stable while avoiding the previous double-count bug.
-                pack_overhead = SYSTEM + prompt + json.dumps(CandidateBatch.model_json_schema())
+                pack_overhead = pack_static_overhead(prompt)
                 sections_bound = sections_bound_tokens() + 32 if section_understandings else 0
                 ordered_ids = {block.id for block in ranked_union}
                 ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
@@ -1792,7 +1806,7 @@ class HarnessV3:
                     try:
                         recovery_blocks = planner.pack_ranked(
                             recovery_ranked,
-                            SYSTEM + recovery_prefix + json.dumps(CandidateBatch.model_json_schema()),
+                            pack_static_overhead(recovery_prefix),
                             purpose="recovery_pack_context:" + pack_name,
                             extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
                             per_block_cost=block_vision_cost,
