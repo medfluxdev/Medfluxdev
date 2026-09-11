@@ -1323,8 +1323,8 @@ class HarnessV3:
                 + vision_summary()
                 + map_aux
             )
-                try:
-                    base_segments = planner.segments(document.blocks, map_overhead, purpose="global_understanding")
+            try:
+                base_segments = planner.segments(document.blocks, map_overhead, purpose="global_understanding")
                 except ContextOverflow as exc:
                     issues.append("ContractMap segmentation: ContextOverflow; manuelle Prüfung erforderlich")
                     planner.decisions.append({
