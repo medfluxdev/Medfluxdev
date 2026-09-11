@@ -1632,31 +1632,32 @@ class HarnessV3:
                     for key, value in family_types.items()
                 }
 
-                # Keep the static prompt lean. The previous version repeated a
-                # verbose mini-schema plus a large semantic dump in every pack,
-                # which exhausted an 8192 context window before any provider call.
-                semantic_state = json.dumps(
-                    semantic_by_family,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                )
                 prompt = (
-                    "Resolve these related contract fields together: "
+                    "Resolve this related contract-field pack in ONE pass: "
                     + ", ".join(pack_families)
-                    + ". Qwen decides contractual meaning, applicability, authority and number roles. "
-                    "Return only requested fields from this field catalog: "
+                    + ". Reuse the contract-global semantic state; do not reinterpret unrelated parts. "
+                    "Compare competing clauses, definitions, annexes and amendment authority. "
+                    "Classify applicability per candidate: applicable, alternative, superseded, or unknown. "
+                    "For prices, return only binding selected-plan values; never aggregate unselected add-ons. "
+                    "For identity.contract_number obey the supplied Qwen number-role/applicability state. "
+                    "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs "
+                    "copied from supplied source blocks. Do not compute derived dates or annual totals. "
+                    "Money={amount:number,currency:string,period:monthly|quarterly|semi_annual|annual|once}; "
+                    "Scheduled prices stay separate by explicit period; variable/event charges stay separate. "
+                    "Duration={value:integer,unit:days|weeks|months|years}; "
+                    "FlexibleDate={date:YYYY-MM-DD|null,condition:string|null}; "
+                    "TimeValue={value:number,unit:hours|days,original_text:string}; "
+                    "Equipment objects preserve device identity and included/excluded service scope. "
+                    "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
-                    + ". Every supported fact needs exact supplied block_id + exact quote. "
-                    "Do not derive arithmetic/dates. Keep selected fixed prices separate from "
-                    "alternatives, optional add-ons and variable/event charges.\n"
-                    "Semantic state:\n"
-                    + semantic_state
+                    + "\nCompact semantic state by family: "
+                    + json.dumps(semantic_by_family, ensure_ascii=False, separators=(",", ":"))
                     + "\n"
                 )
-                # Segmentation reserves only the material we actually append here.
-                # SYSTEM/schema are injected exactly once by call(); counting them
-                # again during planning caused false pre-call ContextOverflow.
-                pack_overhead = prompt
+                # Planner overhead must reflect exactly what call() will prepend:
+                # SYSTEM + CandidateBatch schema. This keeps fake-provider/runtime
+                # behaviour stable while avoiding the previous double-count bug.
+                pack_overhead = SYSTEM + prompt + json.dumps(CandidateBatch.model_json_schema())
                 sections_bound = sections_bound_tokens() + 32 if section_understandings else 0
                 ordered_ids = {block.id for block in ranked_union}
                 ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
@@ -1791,7 +1792,7 @@ class HarnessV3:
                     try:
                         recovery_blocks = planner.pack_ranked(
                             recovery_ranked,
-                            recovery_prefix,
+                            SYSTEM + recovery_prefix + json.dumps(CandidateBatch.model_json_schema()),
                             purpose="recovery_pack_context:" + pack_name,
                             extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
                             per_block_cost=block_vision_cost,
