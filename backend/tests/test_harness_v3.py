@@ -1176,6 +1176,32 @@ def test_precedence_conflict_quarantine_marker_is_present():
     assert "precedence_conflict_quarantined" in literals
 
 
+def test_global_map_uses_lossless_union_without_extra_model_call():
+    import ast
+    from pathlib import Path
+    source_path = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
+    source = source_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    literals = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "deterministic_lossless_union_no_extra_model_call" in literals
+    assert 'await call(\n                        "global_map"' not in source
+
+
+def test_delivery_gate_requires_resolve_pack_attempt():
+    import ast
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    literals = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "no_resolve_pack_executed" in literals
+
+
 @pytest.mark.asyncio
 async def test_semantic_pack_recovery_skips_broad_missing_field_retry():
     provider = FakeProvider()
