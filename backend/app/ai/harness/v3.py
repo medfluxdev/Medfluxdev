@@ -123,6 +123,38 @@ def measured_output_budget(purpose: str, prompt_tokens: int, capacity: int,
     return candidate
 
 
+def _retry_fits_context(prompt_tokens, output_tokens, capacity, prompt_reserve,
+                        image_reserve: int = 0) -> bool:
+    """Explicit runtime-window proof for a truncation retry schedule:
+
+    prompt tokens + raised output budget + prompt reserve + image reserve
+    must fit inside the runtime capacity (e.g. the observed 8192 window).
+    """
+    return (
+        int(prompt_tokens) + int(output_tokens) + int(prompt_reserve) + int(image_reserve)
+        <= int(capacity)
+    )
+
+
+def _retry_output_plan(purpose, prompt_tokens, capacity, base_output,
+                       image_reserve: int = 0) -> tuple[int | None, str]:
+    """Decide whether a truncation retry is granted.
+
+    Returns ``(output_tokens, decision)``. At most ONE stage-local retry; the
+    raised output budget must demonstrably fit the runtime window together with
+    the measured prompt and every reserve (prompt + image). A skipped retry
+    always carries a clear diagnostic decision. Never mutates any settings here.
+    """
+    candidate = measured_output_budget(purpose, prompt_tokens, capacity, base_output)
+    if candidate is None:
+        return None, "output_retry_not_performed"
+    if not _retry_fits_context(
+        prompt_tokens, candidate, capacity, _OUTPUT_RETRY_RESERVE, image_reserve
+    ):
+        return None, "output_retry_skipped_context_overflow"
+    return candidate, "output_budget_stage_retry"
+
+
 def _drop_entry(stage: str, item_type: str, invalid_refs: list[str]) -> dict:
     """Diagnostic record for a quarantined semantic item. Never contains source
     content, only the stage, the item type and the offending reference ids."""
@@ -251,23 +283,54 @@ def _fit_row_to_tokens(row: dict, cap: int) -> str:
         limit = max(8, int(limit * 0.7))
 
 
-def _fair_token_allocation(n: int, full_costs: list[int], budget: int) -> list[int]:
-    """Water-filling token caps: every section first gets an equal share of the
-    budget, then the remainder is cycled across ALL sections (round-robin, no
-    first-wins). Later sections are therefore represented whenever structurally
-    possible. Deterministic, no semantic interpretation added.
+def _fair_spread(n: int, k: int) -> list[int]:
+    """Evenly spread ``k`` distinct section indices across ``n`` reading positions.
+
+    Deterministic and order-equitable: when fewer sections than positions can be
+    represented the chosen indices are spread across the whole range (never a
+    fixed first-wins prefix). Both extreme positions are included whenever at
+    least two slots are available.
     """
-    if n == 0:
+    if k <= 0 or n <= 0:
         return []
-    if budget <= n:
-        return [1] * n
-    share, remainder = divmod(budget, n)
-    caps = [share] * n
+    if k >= n:
+        return list(range(n))
+    if k == 1:
+        return [n // 2]
+    chosen = sorted(
+        {min(n - 1, max(0, round(i * (n - 1) / (k - 1)))) for i in range(k)}
+    )
+    for idx in range(n):
+        if len(chosen) >= k:
+            break
+        if idx not in chosen:
+            chosen.append(idx)
+            chosen.sort()
+    return chosen[:k]
+
+
+def _fair_token_allocation(n: int, full_costs: list[int], budget: int) -> list[int]:
+    """Token caps per section with the hard invariant ``sum(caps) <= budget``.
+
+    Every represented section receives at least one unit; when the budget cannot
+    cover all sections only an evenly spread subset is attempted (never a
+    first-wins prefix). The caps are NOMINAL, not a promise: ``compact_sections``
+    additionally hard-verifies the actual fitted payload against the budget.
+    No semantic interpretation is added.
+    """
+    if n == 0 or budget <= 0:
+        return [0] * n
+    attempt = min(n, int(budget))
+    positions = _fair_spread(n, attempt)
+    share, remainder = divmod(int(budget), attempt)
+    caps = [0] * n
+    for position in positions:
+        caps[position] = share
     index = 0
     while remainder > 0:
         changed = False
-        for _ in range(n):
-            current = (index + _) % n
+        for offset in range(attempt):
+            current = positions[(index + offset) % attempt]
             if caps[current] < full_costs[current]:
                 caps[current] += 1
                 remainder -= 1
@@ -280,15 +343,46 @@ def _fair_token_allocation(n: int, full_costs: list[int], budget: int) -> list[i
     return caps
 
 
-def compact_sections(sections, budget: int = 700, str_limit: int = 160) -> str:
-    """Compact ALL section readings fairly to a bounded token budget.
-
-    Order or reading position never dominates: every ignored page/annex must
-    stay representable. Per-section micro-summaries are produced by
-    deterministic string clipping only - never by semantic abstraction - and the
-    budget is split equally first, then water-filled round-robin across every
-    section. Pages/section identity are always preserved.
+def _section_priority(n: int) -> list[int]:
+    """Deterministic representation priority: reading extremes first, then
+    stepping inward. Used ONLY for the final hard-bound drop decision; a
+    structural preference (first/last pages) with no semantic interpretation.
     """
+    order: list[int] = []
+    for step in range(n):
+        front, back = step, n - 1 - step
+        if front > back:
+            break
+        order.append(front)
+        if front != back:
+            order.append(back)
+    return order
+
+
+def compact_sections(sections, budget: int = 700, str_limit: int = 160,
+                     log: list | None = None) -> str:
+    """Compact ALL section readings to a HARD token bound.
+
+    The returned JSON array satisfies ``estimate_tokens(payload) <= budget`` for
+    every budget >= the empty-array floor. Per-section micro-summaries are
+    deterministic string clipping only - never semantic abstraction - and pages/
+    section identity are always preserved for every represented row. If the
+    budget structurally cannot represent every section, representations are
+    dropped (extremes longest) and the incompleteness is recorded in ``log``.
+    """
+    budget = int(budget)
+    if budget < 1:
+        if log is not None:
+            log.append({
+                "module": "compact_sections",
+                "budget": budget,
+                "sections": len(sections),
+                "represented": 0,
+                "incomplete": True,
+                "bounded": False,
+                "reason": "budget_below_minimum_token_floor",
+            })
+        return "[]"
     if not sections:
         return "[]"
     rows = [_section_row(section, str_limit) for section in sections]
@@ -300,11 +394,34 @@ def compact_sections(sections, budget: int = 700, str_limit: int = 160) -> str:
     if sum(costs) <= budget:
         return "[" + ",".join(payloads) + "]"
     caps = _fair_token_allocation(len(sections), costs, budget)
-    fitted = [
-        _fit_row_to_tokens(row, caps[index])
-        for index, row in enumerate(rows)
-    ]
-    return "[" + ",".join(fitted) + "]"
+    fitted: dict[int, tuple[str, int]] = {}
+    for index, row in enumerate(rows):
+        if caps[index] <= 0:
+            continue
+        payload = _fit_row_to_tokens(row, caps[index])
+        fitted[index] = (payload, estimate_tokens(payload))
+    estimate = sum(cost for _, cost in fitted.values())
+    drop_order = list(_section_priority(len(sections)))
+    while estimate > budget and drop_order:
+        dropped = drop_order.pop()
+        if dropped in fitted:
+            estimate -= fitted[dropped][1]
+            del fitted[dropped]
+    if log is not None:
+        log.append({
+            "module": "compact_sections",
+            "budget": budget,
+            "sections": len(sections),
+            "represented": len(fitted),
+            "represented_sections": sorted(fitted),
+            "dropped_sections": sorted(set(range(len(sections))) - set(fitted)),
+            "estimate_tokens": estimate if fitted else estimate_tokens("[]"),
+            "incomplete": len(fitted) < len(sections),
+            "bounded": (estimate if fitted else estimate_tokens("[]")) <= budget,
+        })
+    if not fitted:
+        return "[]"
+    return "[" + ",".join(fitted[i][0] for i in sorted(fitted)) + "]"
 
 
 def _merge_maps_v3(maps: list[ContractMap]) -> ContractMap:
@@ -449,8 +566,8 @@ class HarnessV3:
                         metric["succeeded"] = True
                         return parsed
                     except _OutputTruncated:
-                        next_output = measured_output_budget(
-                            purpose, tokens, planner.capacity, original_output
+                        next_output, retry_decision = _retry_output_plan(
+                            purpose, tokens, planner.capacity, original_output, image_reserve
                         )
                         if "retried_with_output_tokens" in metric or next_output is None:
                             metric["truncated"] = True
@@ -459,16 +576,30 @@ class HarnessV3:
                             metric["error_type"] = "_OutputTruncated"
                             metric["error_category"] = "truncated_output"
                             metric["error_summary"] = "Model output exceeded budget"
+                            if "retried_with_output_tokens" not in metric:
+                                planner.decisions.append({
+                                    "purpose": purpose,
+                                    "stage": stage,
+                                    "decision": retry_decision,
+                                    "measured_prompt_tokens": tokens,
+                                    "prompt_reserve": _OUTPUT_RETRY_RESERVE,
+                                    "image_reserve": image_reserve,
+                                    "runtime_capacity": planner.capacity,
+                                    "candidate_output_tokens": next_output,
+                                })
                             raise ValueError("Model output exceeded budget")
                         planner.output_tokens = next_output
                         metric["retried_with_output_tokens"] = next_output
                         planner.decisions.append({
                             "purpose": purpose,
                             "stage": stage,
-                            "decision": "output_budget_stage_retry",
+                            "decision": retry_decision,
                             "from_output_tokens": original_output,
                             "to_output_tokens": next_output,
                             "measured_prompt_tokens": tokens,
+                            "prompt_reserve": _OUTPUT_RETRY_RESERVE,
+                            "image_reserve": image_reserve,
+                            "runtime_capacity": planner.capacity,
                         })
                         continue
                     except Exception as exc:
@@ -601,7 +732,7 @@ class HarnessV3:
                 section for section in section_understandings
                 if any(page in wanted for page in section.pages or [])
             ]
-            return compact_sections(related, budget=300)
+            return compact_sections(related, budget=300, log=planner.decisions)
 
         def sections_bound_tokens() -> int:
             """Bounded token allowance for the per-segment provisional section
@@ -609,7 +740,7 @@ class HarnessV3:
             static magic reserve."""
             if not section_understandings:
                 return 0
-            return estimate_tokens(compact_sections(section_understandings, budget=300))
+            return estimate_tokens(compact_sections(section_understandings, budget=300, log=planner.decisions))
 
         def block_vision_cost(block: Block) -> int:
             """Deterministic per-block context cost: the token size of this
@@ -939,7 +1070,7 @@ class HarnessV3:
 
             # ---- GLOBAL understanding (the ONLY contract-global authority) ----
             section_summary = (
-                compact_sections(section_understandings, budget=900)
+                compact_sections(section_understandings, budget=900, log=planner.decisions)
                 if section_understandings
                 else ""
             )

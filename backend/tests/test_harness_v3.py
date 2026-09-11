@@ -27,6 +27,8 @@ from app.ai.harness.v3 import (
     HarnessV3,
     _fair_token_allocation,
     _merge_maps_v3,
+    _retry_fits_context,
+    _retry_output_plan,
     compact_sections,
     measured_output_budget,
     sanitize_applicability,
@@ -772,6 +774,52 @@ def test_d_fair_allocation_never_starves_a_section():
     assert sum(map(int, caps)) == 400
 
 
+def test_d_budget_below_section_count_is_bounded():
+    # Allocator nominal caps (sum) never exceed the requested budget.
+    for n_budget_spread in ((8, 1), (8, 2), (8, 3), (8, 5)):
+        n, budget = n_budget_spread
+        caps = _fair_token_allocation(n, [1000] * n, budget)
+        assert sum(map(int, caps)) <= budget, (n, budget, sum(caps))
+    # Actual payload estimate stays within the requested budget as well.
+    for budget in (1, 2, 3, 5):
+        payload = compact_sections(_many_sections(8), budget=budget)
+        assert estimate_tokens(payload) <= budget, budget
+
+
+def test_d_budget_equal_section_count_is_bounded():
+    payload = compact_sections(_many_sections(8), budget=8)
+    assert estimate_tokens(payload) <= 8
+    json.loads(payload)  # always valid JSON
+
+
+def test_d_very_small_budget_records_incompleteness():
+    log: list = []
+    payload = compact_sections(_many_sections(8), budget=1, log=log)
+    assert estimate_tokens(payload) <= 1
+    decision = log[-1]
+    assert decision["module"] == "compact_sections"
+    assert decision["incomplete"] is True
+    assert decision["represented"] < 8
+    assert decision["bounded"] is True
+
+
+def test_d_payload_estimate_never_exceeds_requested_budget():
+    # Whenever the compactor claims bounded output, the ACTUAL generated payload
+    # must fit inside the requested budget (mathematical hard bound).
+    for budget in (1, 2, 4, 8, 16, 32, 64, 128, 256, 300, 512, 700, 900):
+        log: list = []
+        payload = compact_sections(_many_sections(8), budget=budget, log=log)
+        est = estimate_tokens(payload)
+        assert est <= budget, (budget, est)
+        assert log[-1]["module"] == "compact_sections"
+        assert log[-1]["bounded"] is True
+    for budget in (1, 60, 150, 300, 700):
+        log: list = []
+        payload = compact_sections(_many_sections(3), budget=budget, log=log)
+        assert estimate_tokens(payload) <= budget, budget
+        assert log[-1]["bounded"] is True
+
+
 # ----------------------------------------------------------------------
 # E - Output truncation handling
 # ----------------------------------------------------------------------
@@ -820,6 +868,59 @@ def test_e_retry_bounds_are_stage_local_and_never_global():
     assert measured_output_budget("section:0", 2500, 8192, 1800) is None
     # The raise is capped well below the 8192 runtime window (no global hack).
     assert measured_output_budget("resolve:identity:0", 3000, 8192, 1800) <= 2800
+
+
+def test_e2_retry_context_fit_explicit_window_math():
+    # prompt + raised output + prompt reserve + image reserve <= runtime capacity
+    assert _retry_fits_context(3000, 2800, 8192, 512, 0) is True
+    assert _retry_fits_context(5000, 2800, 8192, 512, 0) is False  # 5000+2800+512 > 8192
+    assert _retry_fits_context(3000, 2800, 8192, 512, 1024) is True  # 6312+1024 <= 8192
+    assert _retry_fits_context(3000, 2800, 8192, 512, 2048) is False  # 6312+2048 > 8192
+
+
+def test_e2_retry_allowed_when_new_output_budget_safely_fits():
+    plan, decision = _retry_output_plan("resolve:identity:0", 3000, 8192, 1800, 0)
+    assert plan == 2800
+    assert decision == "output_budget_stage_retry"
+
+
+def test_e2_retry_rejected_when_new_output_budget_would_exceed_window():
+    # The raised output budget together with the image reserve would exceed the
+    # runtime window -> rejected before any provider call, with a clear reason.
+    plan, decision = _retry_output_plan("resolve:identity:0", 3000, 8192, 1800, 2048)
+    assert plan is None
+    assert decision == "output_retry_skipped_context_overflow"
+
+
+def test_e2_retry_includes_image_reserve():
+    # Image reserve small enough -> retry still allowed.
+    plan, decision = _retry_output_plan("resolve:identity:0", 2500, 8192, 1800, 512)
+    assert plan == 2800 and decision == "output_budget_stage_retry"
+    # Image reserve large enough to overflow the window -> rejected.
+    plan, decision = _retry_output_plan("resolve:identity:0", 2500, 8192, 1800, 2400)
+    assert plan is None and decision == "output_retry_skipped_context_overflow"
+    # Ground/recovery stages are eligible and follow the same gate.
+    plan, decision = _retry_output_plan("ground:identity:0", 2500, 8192, 1800, 1024)
+    assert plan == 2800 and decision == "output_budget_stage_retry"
+    # Non-eligible stages never retry.
+    plan, decision = _retry_output_plan("vision:p1:a", 3000, 8192, 1800, 0)
+    assert plan is None and decision == "output_retry_not_performed"
+
+
+@pytest.mark.asyncio
+async def test_e2_no_silent_provider_call_after_failed_retry_fit():
+    # The GlobalContractUnderstanding stage is NOT eligible for retry. Truncation
+    # there must be surfaced as a failure with EXACTLY ONE provider request and
+    # a recorded skip decision, never a speculative second call.
+    provider = FakeProvider(truncated_titles={"GlobalContractUnderstanding"})
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    global_calls = [c for c in result.diagnostics["calls"] if c["purpose"] == "global_understanding"]
+    assert len(global_calls) == 1
+    assert global_calls[0].get("retried_with_output_tokens") is None
+    decisions = result.diagnostics["context_decisions"]
+    skip = [d for d in decisions if d.get("decision", "").startswith("output_retry_")]
+    assert skip and skip[0]["decision"] == "output_retry_not_performed"
+    assert skip[0]["runtime_capacity"] == 8192
 
 
 # ----------------------------------------------------------------------
