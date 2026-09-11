@@ -33,6 +33,7 @@ Architecture notes (per audit and approved decisions):
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import time
 from datetime import datetime, timezone
@@ -90,6 +91,17 @@ _OUTPUT_RETRY_PREFIXES = ("resolve:", "ground:", "recover:", "recovery:")
 _OUTPUT_RETRY_MAX = 2800
 _OUTPUT_RETRY_MIN_GAIN = 128
 _OUTPUT_RETRY_RESERVE = 512
+
+# Families are resolved in semantic packs so Qwen can reuse the same local
+# contract state instead of re-reading nearly identical context eight times.
+# This is a latency optimization only; each candidate still keeps its canonical
+# field name and evidence refs, and sensitive semantics remain Qwen-owned.
+_FAMILY_PACKS = (
+    ("core", ("identity", "dates", "termination")),
+    ("commercial", ("costs", "payment")),
+    ("operations", ("equipment", "services", "sla")),
+)
+
 
 # Bounded worst-case token cap of compact_sections(..., budget=300) used as
 # per-segment section-context allowance during family packing. It is the
@@ -1493,19 +1505,93 @@ class HarnessV3:
                         "error_type": type(exc).__name__,
                     })
 
-            # ---- FACT RESOLUTION per family ----
-            topic_names = list(TOPICS)
-            for family_index, family in enumerate(topic_names):
+            # ---- FACT RESOLUTION in semantic packs ----
+            # Resolve related families together to avoid paying repeated prompt
+            # setup + model prefill cost for nearly identical contract context.
+            # Packing is bounded by the same ContextPlanner; no field is renamed
+            # and no semantic decision is moved into deterministic code.
+            family_pack_lookup = {
+                family: pack_name
+                for pack_name, families in _FAMILY_PACKS
+                for family in families
+            }
+            packed_family_order = [
+                (pack_name, [f for f in families if f in TOPICS])
+                for pack_name, families in _FAMILY_PACKS
+            ]
+
+            for pack_index, (pack_name, pack_families) in enumerate(packed_family_order):
                 if budget_exhausted:
                     planner.decisions.append({
-                        "purpose": family,
-                        "decision": "family_skipped_call_budget_exhausted",
+                        "purpose": pack_name,
+                        "decision": "pack_skipped_call_budget_exhausted",
                     })
                     issues.append("Modell-Call-Budget erschöpft; Analyse abgebrochen – manuelle Prüfung erforderlich")
                     break
-                family_types = {key: val for key, val in types.items() if key == family or key.startswith(family + ".")}
-                expected = set(family_types)
-                ranked, observations = ranked_blocks(family)
+
+                family_types: dict[str, object] = {}
+                ranked_union: list[Block] = []
+                ranked_seen: set[str] = set()
+                semantic_by_family: dict[str, dict] = {}
+                expected: set[str] = set()
+
+                for family in pack_families:
+                    current_types = {
+                        key: val
+                        for key, val in types.items()
+                        if key == family or key.startswith(family + ".")
+                    }
+                    family_types.update(current_types)
+                    expected.update(current_types)
+                    ranked, observations = ranked_blocks(family)
+                    for block in ranked:
+                        if block.id not in ranked_seen:
+                            ranked_seen.add(block.id)
+                            ranked_union.append(block)
+                    ranked_ids = {block.id for block in ranked}
+                    family_words = set(TOPICS[family].split()) | {family}
+
+                    def relevant_to_family(dumpable) -> bool:
+                        text = " ".join(
+                            str(getattr(dumpable, key, "") or "")
+                            for key in (
+                                "target", "scope", "cluster", "option", "value",
+                                "reason", "decision", "document_type",
+                            )
+                        ).lower()
+                        return (
+                            any(word in text for word in family_words)
+                            or any(
+                                block_id in ranked_ids
+                                for block_id in (getattr(dumpable, "block_ids", None) or [])
+                            )
+                        )
+
+                    option_clusters_here = (
+                        clusters
+                        if family == "costs"
+                        else [
+                            cluster for cluster in clusters
+                            if any(opt.block_id in ranked_ids for opt in cluster.options)
+                        ]
+                    )
+                    semantic_by_family[family] = {
+                        "observations": compact_items(observations, budget=300),
+                        "selections": [
+                            s.model_dump() for s in selections if relevant_to_family(s)
+                        ],
+                        "number_roles": [
+                            n.model_dump() for n in number_roles if relevant_to_family(n)
+                        ],
+                        "precedence": [
+                            p.model_dump() for p in precedence_rules if relevant_to_family(p)
+                        ],
+                        "applicability_decisions": [
+                            d.model_dump() for d in applicability_entries if relevant_to_family(d)
+                        ],
+                        "option_clusters": compact_items(option_clusters_here, budget=250),
+                    }
+
                 catalog = {
                     key: str(value)
                     .replace("typing.", "")
@@ -1514,169 +1600,93 @@ class HarnessV3:
                     .replace("app.models.enums.", "")
                     for key, value in family_types.items()
                 }
-                ranked_ids = {block.id for block in ranked}
-                family_words = set(TOPICS[family].split()) | {family}
 
-                def relevant_to_family(dumpable) -> bool:
-                    text = " ".join(
-                        str(getattr(dumpable, key, "") or "")
-                        for key in (
-                            "target", "scope", "cluster", "option", "value",
-                            "reason", "decision", "document_type",
-                        )
-                    ).lower()
-                    return (
-                        any(word in text for word in family_words)
-                        or any(
-                            block_id in ranked_ids
-                            for block_id in (getattr(dumpable, "block_ids", None) or [])
-                        )
-                    )
-
-                option_clusters_here = (
-                    clusters
-                    if family == "costs"
-                    else [
-                        c for c in clusters
-                        if any(opt.block_id in ranked_ids for opt in c.options)
-                    ]
-                )
-                semantic_state = {
-                    "observations": compact_items(observations, budget=500),
-                    "selections": [
-                        s.model_dump() for s in selections if relevant_to_family(s)
-                    ],
-                    "number_roles": [
-                        n.model_dump() for n in number_roles if relevant_to_family(n)
-                    ],
-                    "precedence": [
-                        p.model_dump() for p in precedence_rules if relevant_to_family(p)
-                    ],
-                    "applicability_decisions": [
-                        d.model_dump() for d in applicability_entries if relevant_to_family(d)
-                    ],
-                    "option_clusters": compact_items(option_clusters_here, budget=400),
-                }
                 prompt = (
-                    "Resolve " + family + " across the supplied sources, the ContractMap dependencies and the "
-                    "compact cross-clause applicability context. Compare competing clauses, definitions, annexes and "
-                    "amendment authority. Classify each returned candidate's applicability: 'applicable' = binding "
-                    "for this contract now; 'alternative' = an explicitly visible but NOT selected/gated option "
-                    "(e.g. unselected plans or add-on options); 'superseded' = replaced by a later authoritative "
-                    "clause/annex/email. Deterministic calculation EXCLUDES alternative and superseded facts. "
-                    "Be concise. "
-                    "For cost/price fields resolve ONLY the applicable binding price of the selected option; never "
-                    "aggregate gated options into annual totals. Do not use a number as the contract number if the "
-                    "applicability context classifies it as order_number/reference/customer_number. Keep unresolved "
-                    "alternatives as conflicting/ambiguous; abstain instead of guessing. Return candidates only for "
-                    "requested fields. evidence_refs must quote exact text from the referenced source block. Do not "
-                    "put generated evidence inside normalized values. Do not compute annualized costs or derived "
-                    "dates. Money={amount:number,currency:string,period:monthly|quarterly|semi_annual|annual|once}; "
-                    "For costs.scheduled_prices preserve every explicit staged price separately as "
-                    "{period_index:1-based integer,period_label:verbatim period label,amount:Money,condition:null|string}; "
-                    "use this for year-by-year/phase-by-phase fixed prices and include zero-price periods. "
-                    "For costs.variable_charges preserve usage/event prices separately as "
-                    "{label:string,amount:Money,unit:per_call|per_hour|per_device|verbatim unit,condition:null|string}; "
-                    "never fold variable charges into scheduled prices or a total. "
-                    "For identity roles: supplier/contractor is the external service provider/vendor and customer "
-                    "is the hospital/client; do not swap party roles. "
+                    "Resolve this related contract-field pack in ONE pass: "
+                    + ", ".join(pack_families)
+                    + ". Reuse the contract-global semantic state; do not reinterpret unrelated parts. "
+                    "Compare competing clauses, definitions, annexes and amendment authority. "
+                    "Classify applicability per candidate: applicable, alternative, superseded, or unknown. "
+                    "For prices, return only binding selected-plan values; never aggregate unselected add-ons. "
+                    "For identity.contract_number obey the supplied Qwen number-role/applicability state. "
+                    "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs "
+                    "copied from supplied source blocks. Do not compute derived dates or annual totals. "
+                    "Money={amount:number,currency:string,period:monthly|quarterly|semi_annual|annual|once}; "
+                    "Scheduled prices stay separate by explicit period; variable/event charges stay separate. "
                     "Duration={value:integer,unit:days|weeks|months|years}; "
                     "FlexibleDate={date:YYYY-MM-DD|null,condition:string|null}; "
                     "TimeValue={value:number,unit:hours|days,original_text:string}; "
-                    "Equipment objects: device_name,manufacturer,model,serial_number,inventory_number,system_name,"
-                    "service_scope,included_services:list,excluded_services:list. Candidate field types: "
+                    "Equipment objects preserve device identity and included/excluded service scope. "
+                    "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
-                    + "\nCompact semantic state: "
-                    + json.dumps(semantic_state, ensure_ascii=False, separators=(",", ":"))
+                    + "\nCompact semantic state by family: "
+                    + json.dumps(semantic_by_family, ensure_ascii=False, separators=(",", ":"))
                     + "\n"
                 )
-
-                family_overhead = SYSTEM + prompt + json.dumps(CandidateBatch.model_json_schema())
-                # Dynamic packing: the block budget is derived from the ACTUAL
-                # prompt components (instruction/schema overhead plus the bounded
-                # per-segment provisional-section context) plus per-block visual
-                # observation costs. No static magic reserve like 1100/1300.
-                sections_bound = (
-                    sections_bound_tokens() + 32
-                    if section_understandings
-                    else 0
-                )
-                full_document_prompt = family_overhead + assemble(document.blocks)
-                if planner.fits(full_document_prompt):
+                pack_overhead = SYSTEM + prompt + json.dumps(CandidateBatch.model_json_schema())
+                sections_bound = sections_bound_tokens() + 32 if section_understandings else 0
+                ordered_ids = {block.id for block in ranked_union}
+                ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
+                if not ordered_blocks:
                     ordered_blocks = list(document.blocks)
-                    planner.decisions.append({
-                        "purpose": family,
-                        "decision": "full_contract_family_context",
-                        "block_count": len(ordered_blocks),
-                    })
-                else:
-                    ordered_ids = {block.id for block in ranked}
-                    ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
-                    if not ordered_blocks:
-                        ordered_blocks = list(document.blocks)
-                segment_batches: list[CandidateBatch] = []
+
                 try:
-                    family_segments = planner.segments(
+                    pack_segments = planner.segments(
                         ordered_blocks,
-                        family_overhead,
-                        purpose="resolve_segments:" + family,
+                        pack_overhead,
+                        purpose="resolve_pack_segments:" + pack_name,
                         extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
                         per_block_cost=block_vision_cost,
                     )
-                except CallBudgetExhausted:
-                    budget_exhausted = True
-                    planner.decisions.append({
-                        "purpose": "resolve_segments:" + family,
-                        "decision": "call_budget_exhausted",
-                    })
-                    family_segments = []
                 except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                    issues.append(f"{family}: {type(exc).__name__}; manuelle Prüfung erforderlich")
+                    issues.append(f"{pack_name}: {type(exc).__name__}; manuelle Prüfung erforderlich")
                     planner.decisions.append({
-                        "purpose": "resolve_segments:" + family,
-                        "decision": "family_segmentation_failed",
+                        "purpose": "resolve_pack_segments:" + pack_name,
+                        "decision": "pack_segmentation_failed",
                         "error_type": type(exc).__name__,
                     })
-                    family_segments = []
+                    pack_segments = []
 
-                for segment_index, segment in enumerate(family_segments):
+                segment_batches: list[CandidateBatch] = []
+                for segment_index, segment in enumerate(pack_segments):
                     if budget_exhausted:
                         break
                     context = assemble(segment)
-                    visual = vision_context(segment)
-                    segment_pages = sorted(
-                        {block.page for block in segment if block.page is not None}
-                    )
+                    segment_pages = sorted({block.page for block in segment if block.page is not None})
                     local_prompt = (
                         prompt
-                        + "Visual observations for these blocks: " + visual + "\n"
-                        + "Relevant provisional section readings for these blocks: "
+                        + "Visual observations for these blocks: " + vision_context(segment) + "\n"
+                        + "Relevant provisional section readings: "
                         + sections_context_pages(segment_pages) + "\n"
                     )
                     try:
                         resolved = await call(
-                            f"resolve:{family}:{segment_index}",
+                            f"resolve_pack:{pack_name}:{segment_index}",
                             local_prompt + context,
                             CandidateBatch,
                             pages=segment_pages or None,
                             stage="resolve",
                         )
-                        resolved = await verify(resolved, context, f"ground:{family}:{segment_index}")
+                        resolved = await verify(
+                            resolved,
+                            context,
+                            f"ground_pack:{pack_name}:{segment_index}",
+                        )
                         segment_batches.append(resolved)
                     except CallBudgetExhausted:
                         budget_exhausted = True
                         planner.decisions.append({
-                            "purpose": f"resolve:{family}:{segment_index}",
+                            "purpose": f"resolve_pack:{pack_name}:{segment_index}",
                             "decision": "call_budget_exhausted",
                         })
                         break
                     except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
                         issues.append(
-                            f"{family} segment {segment_index}: {type(exc).__name__}; "
+                            f"{pack_name} segment {segment_index}: {type(exc).__name__}; "
                             "manuelle Prüfung erforderlich"
                         )
                         planner.decisions.append({
-                            "purpose": f"resolve:{family}:{segment_index}",
+                            "purpose": f"resolve_pack:{pack_name}:{segment_index}",
                             "decision": "segment_failed_continue",
                             "error_type": type(exc).__name__,
                         })
@@ -1714,6 +1724,8 @@ class HarnessV3:
                         except (ValueError, TypeError):
                             candidate.status = "unsupported"
 
+                # Recovery is pack-scoped: one targeted retry can recover multiple
+                # related fields, instead of one recovery + grounding pair per family.
                 failed = [
                     candidate
                     for candidate in batch.candidates
@@ -1722,102 +1734,83 @@ class HarnessV3:
                     or candidate.missing_dependencies
                     or candidate.ambiguity
                 ]
-                if failed:
-                    remaining_families = len(topic_names) - family_index - 1
-                    reserve_for_core = remaining_families * 2
-                    calls_left = self.settings.harness_max_calls - len(calls)
-                    if calls_left <= reserve_for_core + 2:
-                        planner.decisions.append({
-                            "purpose": family,
-                            "decision": "recovery_deferred_to_preserve_core_call_budget",
-                            "calls_left": calls_left,
-                            "reserved_core_calls": reserve_for_core,
-                        })
-                    else:
-                        unresolved_fields = {candidate.field for candidate in failed}
-                        evidence_ids = {
-                            ref.block_id
-                            for candidate in failed
-                            for ref in candidate.evidence_refs
-                            if ref.block_id in document.index
-                        }
-                        recovery_ranked = [
-                            document.index[block_id] for block_id in evidence_ids
-                        ]
-                        recovery_ranked.extend(
-                            block for block in ranked if block.id not in evidence_ids
+                remaining_packs = len(packed_family_order) - pack_index - 1
+                calls_left = self.settings.harness_max_calls - len(calls)
+                if failed and calls_left > remaining_packs + 2:
+                    unresolved_fields = {candidate.field for candidate in failed}
+                    evidence_ids = {
+                        ref.block_id
+                        for candidate in failed
+                        for ref in candidate.evidence_refs
+                        if ref.block_id in document.index
+                    }
+                    recovery_ranked = [document.index[bid] for bid in evidence_ids]
+                    recovery_ranked.extend(
+                        block for block in ranked_union if block.id not in evidence_ids
+                    )
+                    recovery_prefix = (
+                        prompt
+                        + "\nRecover ONLY these unresolved fields. Keep successful fields untouched. "
+                        "Re-evaluate precedence/applicability only where needed; abstain rather than guess.\n"
+                        + CandidateBatch(candidates=failed).model_dump_json()
+                        + "\n"
+                    )
+                    try:
+                        recovery_blocks = planner.pack_ranked(
+                            recovery_ranked,
+                            SYSTEM + recovery_prefix + json.dumps(CandidateBatch.model_json_schema()),
+                            purpose="recovery_pack_context:" + pack_name,
+                            extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                            per_block_cost=block_vision_cost,
                         )
-                        recovery_prefix = (
-                            prompt
-                            + "\nRecover ONLY these unresolved fields. Keep successful fields untouched. "
-                            "Re-evaluate precedence and applicability; abstain when the source does not "
-                            "establish a value.\n"
-                            + CandidateBatch(candidates=failed).model_dump_json()
-                            + "\n"
-                        )
-                        try:
-                            recovery_blocks = planner.pack_ranked(
-                                recovery_ranked,
-                                SYSTEM
-                                + recovery_prefix
-                                + json.dumps(CandidateBatch.model_json_schema()),
-                                purpose="recovery_context:" + family,
-                                extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
-                                per_block_cost=block_vision_cost,
+                        if recovery_blocks:
+                            recovery_pages = sorted(
+                                {block.page for block in recovery_blocks if block.page is not None}
                             )
-                            if recovery_blocks:
-                                recovery_pages = sorted(
-                                    {block.page for block in recovery_blocks if block.page is not None}
-                                )
-                                recovery_context = (
-                                    assemble(
-                                        sorted(
-                                            recovery_blocks,
-                                            key=lambda b: document.blocks.index(b),
-                                        )
-                                    )
-                                    + "\nVisual observations for recovery blocks: "
-                                    + vision_context(recovery_blocks)
-                                    + "\nRelevant provisional section readings for recovery blocks: "
-                                    + sections_context_pages(recovery_pages)
-                                )
-                                recovery = await call(
-                                    "recovery:" + family,
-                                    recovery_prefix + recovery_context,
-                                    CandidateBatch,
-                                    pages=recovery_pages or None,
-                                    stage="recover",
-                                )
-                                recovery = await verify(recovery, recovery_context, "recovery_ground:" + family)
-                                recovery = _coalesce_batch(recovery)
-                                recovered = {
-                                    candidate.field: candidate
-                                    for candidate in recovery.candidates
-                                    if candidate.field in unresolved_fields
-                                    and candidate.status == "supported"
-                                }
-                                batch.candidates = [
-                                    recovered.get(candidate.field, candidate)
-                                    for candidate in batch.candidates
-                                ]
-                                planner.decisions.append({
-                                    "purpose": family,
-                                    "recovered_fields": sorted(recovered),
-                                    "unresolved_fields": sorted(unresolved_fields - set(recovered)),
-                                })
-                        except CallBudgetExhausted:
-                            budget_exhausted = True
+                            recovery_context = (
+                                assemble(sorted(recovery_blocks, key=lambda b: document.blocks.index(b)))
+                                + "\nVisual observations: " + vision_context(recovery_blocks)
+                                + "\nRelevant provisional sections: "
+                                + sections_context_pages(recovery_pages)
+                            )
+                            recovery = await call(
+                                "recovery_pack:" + pack_name,
+                                recovery_prefix + recovery_context,
+                                CandidateBatch,
+                                pages=recovery_pages or None,
+                                stage="recover",
+                            )
+                            recovery = await verify(
+                                recovery,
+                                recovery_context,
+                                "recovery_ground_pack:" + pack_name,
+                            )
+                            recovery = _coalesce_batch(recovery)
+                            recovered = {
+                                candidate.field: candidate
+                                for candidate in recovery.candidates
+                                if candidate.field in unresolved_fields
+                                and candidate.status == "supported"
+                            }
+                            batch.candidates = [
+                                recovered.get(candidate.field, candidate)
+                                for candidate in batch.candidates
+                            ]
                             planner.decisions.append({
-                                "purpose": "recovery:" + family,
-                                "decision": "call_budget_exhausted",
+                                "purpose": pack_name,
+                                "decision": "pack_recovery",
+                                "recovered_fields": sorted(recovered),
+                                "unresolved_fields": sorted(unresolved_fields - set(recovered)),
                             })
-                        except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
-                            issues.append(f"{family} recovery: {type(exc).__name__}; manuelle Prüfung erforderlich")
-                            planner.decisions.append({
-                                "purpose": "recovery:" + family,
-                                "decision": "recovery_failed_keep_core",
-                                "error_type": type(exc).__name__,
-                            })
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
+                    except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
+                        issues.append(f"{pack_name} recovery: {type(exc).__name__}; manuelle Prüfung erforderlich")
+                        planner.decisions.append({
+                            "purpose": "recovery_pack:" + pack_name,
+                            "decision": "recovery_failed_keep_core",
+                            "error_type": type(exc).__name__,
+                        })
 
                 candidates.extend(batch.candidates)
 
@@ -2020,7 +2013,15 @@ class HarnessV3:
             ai_call_count=len(calls),
             groups_processed=sum(
                 1 for family in TOPICS
-                if any(call_row.get("purpose", "").startswith("resolve:" + family + ":") for call_row in calls)
+                if any(
+                    (
+                        call_row.get("purpose", "").startswith("resolve:" + family + ":")
+                        or call_row.get("purpose", "").startswith(
+                            "resolve_pack:" + family_pack_lookup.get(family, "") + ":"
+                        )
+                    )
+                    for call_row in calls
+                )
             ),
             processing_duration=time.monotonic() - started,
             message="Analyse benötigt manuelle Prüfung." if issues else "Analyse abgeschlossen.",
