@@ -1930,6 +1930,16 @@ class HarnessV3:
         contract.analysis.model_name = model_id
         contract.analysis.analysis_version = "harness-v3"
         contract.analysis.analysis_timestamp = datetime.now(timezone.utc).isoformat()
+        stage_latency_seconds: dict[str, float] = {}
+        stage_call_counts: dict[str, int] = {}
+        for row in calls:
+            stage_name = str(row.get("stage") or "unknown")
+            stage_latency_seconds[stage_name] = round(
+                stage_latency_seconds.get(stage_name, 0.0) + float(row.get("latency_seconds") or 0.0),
+                3,
+            )
+            stage_call_counts[stage_name] = stage_call_counts.get(stage_name, 0) + 1
+
         diagnostics = {
             "harness_version": "v3",
             "provider": provider_id,
@@ -1960,6 +1970,8 @@ class HarnessV3:
             "evidence_count": len(evidence_rows),
             "calls": calls,
             "call_count": len(calls),
+            "stage_call_counts": stage_call_counts,
+            "stage_latency_seconds": stage_latency_seconds,
             "failure_count": sum(bool(call_row.get("failed")) for call_row in calls),
             "recovery_count": sum(bool(call_row.get("recovery")) for call_row in calls),
             "issues": list(dict.fromkeys(issues)),
