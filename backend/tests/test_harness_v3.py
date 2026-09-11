@@ -1190,6 +1190,24 @@ def test_global_map_uses_lossless_union_without_extra_model_call():
     assert 'await call(\n                        "global_map"' not in source
 
 
+def test_performance_diagnostics_counters_are_present():
+    import ast
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    literals = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert {
+        "provider_timeout_count",
+        "vision_fallback_call_count",
+        "resolve_pack_call_count",
+        "ground_pack_call_count",
+        "uncertain_visual_candidate_quarantined",
+    } <= literals
+
+
 def test_delivery_gate_requires_resolve_pack_attempt():
     import ast
     from pathlib import Path
