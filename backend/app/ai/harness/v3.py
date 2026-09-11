@@ -1313,7 +1313,17 @@ class HarnessV3:
                     issues.append("Visuelle Quelle ohne verfügbare Vision: " + block.id)
 
             for block in deferred_region_candidates:
-                if block in page_representatives or block.page in covered_section_pages:
+                if block.page in covered_section_pages:
+                    if not any(
+                        d.get("block") == block.id and d.get("vision") == "deferred_to_page_batch"
+                        for d in planner.decisions
+                    ):
+                        planner.decisions.append({
+                            "block": block.id,
+                            "vision": "deferred_to_page_batch",
+                        })
+                    continue
+                if block in page_representatives:
                     continue
                 planner.decisions.append({
                     "block": block.id,
@@ -1843,15 +1853,16 @@ class HarnessV3:
                 }
 
                 prompt = (
-                    "Resolve this contract-field pack: "
+                    "Resolve this related contract-field pack in ONE pass: "
                     + ", ".join(pack_families)
                     + ". Qwen owns contractual meaning, applicability, precedence and number roles. "
-                    "Use only requested fields. Supported facts require exact source block_id + exact quote. "
-                    "Do not derive arithmetic or dates. Keep selected fixed prices separate from alternatives, "
-                    "optional add-ons and variable/event charges. For identity.contract_number obey the supplied "
-                    "number-role state. Field catalog: "
+                    "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs "
+                    "copied from supplied source blocks. Do not compute derived dates or annual totals. "
+                    "Keep selected fixed prices separate from alternatives, optional add-ons and variable/event charges. "
+                    "For identity.contract_number obey the supplied Qwen number-role/applicability state. "
+                    "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
-                    + "\nSemantic state: "
+                    + "\nCompact semantic state by family: "
                     + compact_pack_semantic_state(semantic_by_family, per_family_budget=120)
                     + "\n"
                 )
