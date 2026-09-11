@@ -1018,13 +1018,8 @@ class HarnessV3:
                 max(0, self.settings.harness_vision_max_calls),
             )
             for block in visual_candidates[:visual_budget]:
-                if budget_exhausted or fallback_visual_used >= fallback_visual_budget:
-                    if fallback_visual_used >= fallback_visual_budget:
-                        planner.decisions.append({
-                            "block": block.id,
-                            "vision": "deferred_by_visual_call_budget",
-                        })
-                    continue
+                if budget_exhausted:
+                    break
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
                         image = image_loader(block)
@@ -1039,12 +1034,16 @@ class HarnessV3:
                             stage="vision",
                         )
                         visual_observations[block.id] = observation
-                except CallBudgetExhausted:
-                    budget_exhausted = True
+                    except CallBudgetExhausted:
+                        budget_exhausted = True
                         break
                     except (ValueError, RuntimeError, AIProviderError, ContextOverflow) as exc:
                         issues.append("Visuelle Quelle nicht auflösbar: " + block.id)
-                        planner.decisions.append({"block": block.id, "vision": "failed", "error_type": type(exc).__name__})
+                        planner.decisions.append({
+                            "block": block.id,
+                            "vision": "failed",
+                            "error_type": type(exc).__name__,
+                        })
                 else:
                     issues.append("Visuelle Quelle ohne verfügbare Vision: " + block.id)
             for block in visual_candidates[visual_budget:]:
