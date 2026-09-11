@@ -966,6 +966,28 @@ class HarnessV3:
             # ---- VISION (selective, bounded regions) ----
             visual_blocks = [block for block in document.blocks if block.needs_vision]
             visual_candidates, skipped_visuals = select_visual_blocks(visual_blocks)
+
+            # Page-first vision policy: when a visual page is already scheduled for
+            # full-page SectionUnderstanding, do not also spend region-level model
+            # calls on every visual block from that page. Region vision remains a
+            # targeted fallback for pages that are not covered by page-batch reading.
+            batch_eligible_pages = set(document.visual_pages)
+            if (
+                descriptor.capabilities.vision is True
+                and page_image_loader is not None
+                and len(batch_eligible_pages) >= self.settings.harness_vision_min_pages_for_batch
+            ):
+                deferred_to_page_batch = [
+                    block for block in visual_candidates if block.page in batch_eligible_pages
+                ]
+                visual_candidates = [
+                    block for block in visual_candidates if block.page not in batch_eligible_pages
+                ]
+                for block in deferred_to_page_batch:
+                    planner.decisions.append({
+                        "block": block.id,
+                        "vision": "deferred_to_page_batch",
+                    })
             for block in skipped_visuals:
                 planner.decisions.append({"block": block.id, "vision": "skipped_repeated_empty_decoration"})
             # Vision region calls are independently bounded (harness_vision_max_calls)
