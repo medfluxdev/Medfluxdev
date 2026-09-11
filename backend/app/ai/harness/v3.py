@@ -630,23 +630,80 @@ class HarnessV3:
             return True
 
         async def verify(batch: CandidateBatch, context: str, purpose: str):
+            """Evidence-first verification with semantic escalation only when needed.
+
+            Exact canonical quote resolution is deterministic and authoritative for
+            source binding. A second Qwen grounding call is reserved for candidates
+            whose meaning cannot be safely accepted from exact evidence alone
+            (ambiguity/conflict/dependency/unknown applicability or semantic-role
+            sensitive fields). This avoids paying a model call for every already
+            well-grounded fact while preserving Qwen authority where interpretation
+            is actually required.
+            """
             if not batch.candidates:
                 return batch
+
+            semantic_sensitive_prefixes = (
+                "identity.contract_number",
+                "dates.",
+                "termination.",
+                "costs.",
+                "payment.",
+                "sla.",
+            )
+            escalate_indices: list[int] = []
+            for index, candidate in enumerate(batch.candidates):
+                if candidate.status != "supported":
+                    continue
+                if not canonicalize_evidence(candidate):
+                    candidate.status = "unsupported"
+                    continue
+                needs_semantic_verifier = bool(
+                    candidate.ambiguity
+                    or candidate.conflicts
+                    or candidate.missing_dependencies
+                    or candidate.applicability == "unknown"
+                    or candidate.field.startswith(semantic_sensitive_prefixes)
+                )
+                if needs_semantic_verifier:
+                    escalate_indices.append(index)
+
+            if not escalate_indices:
+                planner.decisions.append({
+                    "purpose": purpose,
+                    "decision": "deterministic_evidence_binding_sufficient",
+                    "candidate_count": len(batch.candidates),
+                })
+                return batch
+
+            semantic_candidates = [batch.candidates[index] for index in escalate_indices]
             decisions = await call(
                 purpose,
                 "Check whether the quoted sources ENTAIL every part of each candidate, including negation, "
                 "units, recurrence, roles, scope, exceptions, and cross-clause precedence. Keyword overlap is "
                 "insufficient. Reject unsupported normalized values. Return exactly one decision per candidate "
-                "index. Be concise.\n" + batch.model_dump_json() + "\n" + context,
+                "index in THIS SUBSET. Be concise.\n"
+                + CandidateBatch(candidates=semantic_candidates).model_dump_json()
+                + "\n"
+                + context,
                 GroundingBatch,
                 stage="ground",
             )
-            for index, candidate in enumerate(batch.candidates):
-                verdicts = [decision for decision in decisions.decisions if decision.candidate_index == index]
-                if candidate.status == "supported" and (
-                    len(verdicts) != 1 or not verdicts[0].supported or not canonicalize_evidence(candidate)
-                ):
+            for subset_index, original_index in enumerate(escalate_indices):
+                candidate = batch.candidates[original_index]
+                verdicts = [
+                    decision
+                    for decision in decisions.decisions
+                    if decision.candidate_index == subset_index
+                ]
+                if len(verdicts) != 1 or not verdicts[0].supported:
                     candidate.status = "unsupported"
+            planner.decisions.append({
+                "purpose": purpose,
+                "decision": "semantic_grounding_escalation",
+                "candidate_count": len(batch.candidates),
+                "escalated_count": len(escalate_indices),
+            })
             return batch
 
         def map_refs_for_family(family: str) -> tuple[set[str], list[dict]]:
