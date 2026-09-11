@@ -684,6 +684,11 @@ class HarnessV3:
                         candidate.ambiguity
                         or "Unresolved visual reading; exact value requires manual confirmation"
                     )
+                    planner.decisions.append({
+                        "purpose": purpose,
+                        "decision": "uncertain_visual_candidate_quarantined",
+                        "field": candidate.field,
+                    })
                     continue
                 needs_semantic_verifier = bool(
                     candidate.ambiguity
@@ -2289,6 +2294,22 @@ class HarnessV3:
             "call_count": len(calls),
             "stage_call_counts": stage_call_counts,
             "stage_latency_seconds": stage_latency_seconds,
+            "provider_timeout_count": sum(
+                1 for call_row in calls
+                if call_row.get("error_category") == "provider_timeout"
+            ),
+            "vision_fallback_call_count": sum(
+                1 for call_row in calls
+                if str(call_row.get("purpose", "")).startswith("vision_fallback:")
+            ),
+            "resolve_pack_call_count": sum(
+                1 for call_row in calls
+                if str(call_row.get("purpose", "")).startswith("resolve_pack:")
+            ),
+            "ground_pack_call_count": sum(
+                1 for call_row in calls
+                if str(call_row.get("purpose", "")).startswith("ground_pack:")
+            ),
             "failure_count": sum(bool(call_row.get("failed")) for call_row in calls),
             "recovery_count": sum(bool(call_row.get("recovery")) for call_row in calls),
             "issues": list(dict.fromkeys(issues)),
