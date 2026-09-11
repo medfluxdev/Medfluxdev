@@ -33,7 +33,6 @@ Architecture notes (per audit and approved decisions):
 from __future__ import annotations
 
 import hashlib
-import asyncio
 import json
 import time
 from datetime import datetime, timezone
