@@ -242,7 +242,7 @@ class FakeProvider:
                 } for i in range(len(batch["candidates"]))],
             })
         if title == "CandidateBatch":
-            if "Resolve costs " in text:
+            if "costs, payment" in text and "related contract-field pack" in text:
                 return json.dumps({"candidates": [{
                     "field": "costs.annual_cost",
                     "value": {"amount": 1650, "currency": "EUR", "period": "annual"},
@@ -250,7 +250,7 @@ class FakeProvider:
                     "applicability": self.cost_applicability,
                     "evidence_refs": [{"block_id": ref, "quote": "1.650,00 EUR"}],
                 }]})
-            if "Resolve identity " in text:
+            if "identity, dates, termination" in text and "related contract-field pack" in text:
                 facts = [{
                     "field": "identity.contract_number", "value": "452664",
                     "status": "supported",
@@ -647,8 +647,10 @@ async def test_b_resolve_uses_full_structural_blocks_never_tail_clipped():
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
     full_block = "Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"
     assert result.contract is not None
-    resolve_texts = [text for (text, images, context) in provider.requests
-                     if text.startswith("Resolve identity ")]
+    resolve_texts = [
+        text for (text, images, context) in provider.requests
+        if text.startswith("Resolve this related contract-field pack in ONE pass")
+    ]
     assert resolve_texts
     assert any(full_block in text for text in resolve_texts)
 
@@ -987,6 +989,31 @@ async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_semantic_packs_reduce_resolve_stage_call_fanout():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    resolve_calls = [
+        row for row in result.diagnostics["calls"]
+        if row.get("stage") == "resolve"
+    ]
+    purposes = {row.get("purpose") for row in resolve_calls}
+    assert any(str(p).startswith("resolve_pack:core:") for p in purposes)
+    assert any(str(p).startswith("resolve_pack:commercial:") for p in purposes)
+    assert any(str(p).startswith("resolve_pack:operations:") for p in purposes)
+    assert not any(str(p).startswith("resolve:identity:") for p in purposes)
+
+
+@pytest.mark.asyncio
+async def test_stage_diagnostics_expose_call_counts_and_latency():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    assert result.diagnostics["stage_call_counts"]
+    assert "resolve" in result.diagnostics["stage_call_counts"]
+    assert "resolve" in result.diagnostics["stage_latency_seconds"]
+    assert result.diagnostics["stage_latency_seconds"]["resolve"] >= 0
+
+
 @pytest.mark.asyncio
 async def test_f_page_batch_vision_suppresses_duplicate_region_calls():
     source = _visual_heavy_document(4, 3)
