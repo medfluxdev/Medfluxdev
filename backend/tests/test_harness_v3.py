@@ -1071,6 +1071,49 @@ async def test_f_region_fallback_runs_when_page_section_is_unavailable():
 
 
 @pytest.mark.asyncio
+async def test_f_region_fallback_is_limited_to_one_call_per_uncovered_page():
+    source = _visual_heavy_document(2, 3)
+    provider = FakeProvider(
+        block_ref="p1:v0",
+        truncated_titles={"SectionUnderstanding"},
+        truncate_once=False,
+    )
+    result = await HarnessV3(
+        v3_settings(harness_max_calls=64, harness_vision_max_calls=16), ai(provider, vision=True)
+    ).analyze(
+        source,
+        image_loader=lambda block: "region",
+        page_image_loader=lambda page: "page",
+    )
+    fallback_calls = [
+        row for row in result.diagnostics["calls"]
+        if str(row.get("purpose", "")).startswith("vision_fallback:")
+    ]
+    pages = [tuple(row.get("pages") or []) for row in fallback_calls]
+    assert len(pages) == len(set(pages))
+    assert len(fallback_calls) <= 2
+    assert any(
+        d.get("vision") == "deferred_duplicate_page_fallback"
+        for d in result.diagnostics["context_decisions"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_b_pack_segmentation_overflow_uses_ranked_fallback():
+    provider = FakeProvider(block_ref="p1:e0")
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(multi_block_document(18))
+    decisions = result.diagnostics["context_decisions"]
+    assert any(
+        d.get("decision") == "ranked_fallback_after_segmentation_overflow"
+        for d in decisions
+    )
+    assert any(
+        str(c.get("purpose", "")).startswith("resolve_pack:")
+        for c in result.diagnostics["calls"]
+    )
+
+
+@pytest.mark.asyncio
 async def test_semantic_pack_recovery_skips_broad_missing_field_retry():
     provider = FakeProvider()
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
