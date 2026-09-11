@@ -1018,8 +1018,13 @@ class HarnessV3:
                 max(0, self.settings.harness_vision_max_calls),
             )
             for block in visual_candidates[:visual_budget]:
-                if budget_exhausted:
-                    break
+                if budget_exhausted or fallback_visual_used >= fallback_visual_budget:
+                    if fallback_visual_used >= fallback_visual_budget:
+                        planner.decisions.append({
+                            "block": block.id,
+                            "vision": "deferred_by_visual_call_budget",
+                        })
+                    continue
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
                         image = image_loader(block)
@@ -1200,6 +1205,8 @@ class HarnessV3:
                 for section in section_understandings
                 for page in (section.pages or [])
             }
+            fallback_visual_budget = max(0, self.settings.harness_vision_max_calls)
+            fallback_visual_used = 0
             for block in deferred_region_candidates:
                 if block.page in covered_section_pages:
                     planner.decisions.append({
@@ -1223,6 +1230,7 @@ class HarnessV3:
                             stage="vision",
                         )
                         visual_observations[block.id] = observation
+                        fallback_visual_used += 1
                         planner.decisions.append({
                             "block": block.id,
                             "vision": "region_fallback_after_missing_page_section",
@@ -1272,7 +1280,14 @@ class HarnessV3:
                         gcu_overhead,
                         purpose="global_context",
                     )
-                    gcu_material = assemble(ranked_all)
+                    if not ranked_all:
+                        planner.decisions.append({
+                            "purpose": "global_context",
+                            "decision": "no_ranked_blocks_fit",
+                        })
+                        gcu_material = ""
+                    else:
+                        gcu_material = assemble(ranked_all)
                     issues.append("Globales Verständnis nutzt begrenzten Kontext; Vollständigkeit manuell prüfen")
                 try:
                     global_understanding = await call(
@@ -1602,6 +1617,32 @@ class HarnessV3:
                     + prompt_text
                 )
 
+            def compact_pack_semantic_state(
+                state: dict[str, dict],
+                *,
+                per_family_budget: int = 420,
+            ) -> str:
+                """Bound semantic-state payload without changing its meaning.
+
+                Preserve all families fairly and trim only long list payloads via the
+                existing compact_items helper. This prevents pack overhead from
+                starving source blocks in an 8192-token runtime window.
+                """
+                bounded: dict[str, dict] = {}
+                for family, payload in state.items():
+                    bounded[family] = {
+                        "observations": compact_items(payload.get("observations", []), budget=per_family_budget),
+                        "selections": compact_items(payload.get("selections", []), budget=per_family_budget),
+                        "number_roles": compact_items(payload.get("number_roles", []), budget=per_family_budget),
+                        "precedence": compact_items(payload.get("precedence", []), budget=per_family_budget),
+                        "applicability_decisions": compact_items(
+                            payload.get("applicability_decisions", []),
+                            budget=per_family_budget,
+                        ),
+                        "option_clusters": compact_items(payload.get("option_clusters", []), budget=per_family_budget),
+                    }
+                return json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+
             # ---- FACT RESOLUTION in semantic packs ----
             # Resolve related families together to avoid paying repeated prompt
             # setup + model prefill cost for nearly identical contract context.
@@ -1717,7 +1758,7 @@ class HarnessV3:
                     "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
                     + "\nCompact semantic state by family: "
-                    + json.dumps(semantic_by_family, ensure_ascii=False, separators=(",", ":"))
+                    + compact_pack_semantic_state(semantic_by_family)
                     + "\n"
                 )
                 # Planner overhead must reflect exactly what call() will prepend:
@@ -1829,11 +1870,35 @@ class HarnessV3:
                 failed = [
                     candidate
                     for candidate in batch.candidates
-                    if candidate.status != "supported"
-                    or candidate.conflicts
-                    or candidate.missing_dependencies
-                    or candidate.ambiguity
+                    if (
+                        candidate.status == "supported"
+                        and (candidate.conflicts or candidate.missing_dependencies or candidate.ambiguity)
+                    )
+                    or (
+                        candidate.status != "supported"
+                        and (
+                            candidate.evidence_refs
+                            or candidate.conflicts
+                            or candidate.missing_dependencies
+                            or candidate.ambiguity
+                        )
+                    )
                 ]
+                skipped_missing = [
+                    candidate.field
+                    for candidate in batch.candidates
+                    if candidate.status == "missing"
+                    and not candidate.evidence_refs
+                    and not candidate.conflicts
+                    and not candidate.missing_dependencies
+                    and not candidate.ambiguity
+                ]
+                if skipped_missing:
+                    planner.decisions.append({
+                        "purpose": pack_name,
+                        "decision": "recovery_skipped_unsubstantiated_missing_fields",
+                        "fields": skipped_missing,
+                    })
                 remaining_packs = len(packed_family_order) - pack_index - 1
                 calls_left = self.settings.harness_max_calls - len(calls)
                 if failed and calls_left > remaining_packs + 2:
