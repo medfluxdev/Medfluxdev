@@ -37,6 +37,9 @@ def _account_payload(account, memberships):
                 "organization_slug": org.slug,
                 "organization_name": org.name,
                 "role": membership.role,
+                "hospital_id": str(membership.hospital_id) if membership.hospital_id else None,
+                "department_id": str(membership.department_id) if membership.department_id else None,
+                "is_default": membership.is_default,
             }
             for membership, org in memberships
         ],
