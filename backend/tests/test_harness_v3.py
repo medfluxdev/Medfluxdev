@@ -1272,6 +1272,35 @@ def test_delivery_gate_requires_resolve_pack_attempt():
 
 
 @pytest.mark.asyncio
+async def test_semantic_pack_single_pass_bounds_resolve_calls():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    resolve_calls = [
+        row for row in result.diagnostics["calls"]
+        if row.get("stage") == "resolve"
+    ]
+    assert len(resolve_calls) <= 3
+
+
+def test_non_sensitive_unknown_applicability_does_not_force_grounding():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    start = source.index("needs_semantic_verifier = bool(")
+    end = source.index("if needs_semantic_verifier:", start)
+    verify_gate = source[start:end]
+    assert 'candidate.applicability == "unknown"' not in verify_gate
+
+
+def test_recovery_is_limited_to_supported_unresolved_candidates():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    start = source.index("failed = [")
+    end = source.index("skipped_missing = [", start)
+    recovery_slice = source[start:end]
+    assert 'candidate.status != "supported"' not in recovery_slice
+
+
+@pytest.mark.asyncio
 async def test_semantic_pack_recovery_skips_broad_missing_field_retry():
     provider = FakeProvider()
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
