@@ -27,6 +27,7 @@ from app.api.routes.contracts import (
     _set_archived,
     _workspace_denies,
 )
+from app.database.models.activity_log import ActivityLog
 from app.database.services import get_organization
 from app.database.session import create_session
 
@@ -49,6 +50,20 @@ def _cid(value: str) -> UUID:
         return UUID(value)
     except ValueError:
         raise _not_found()
+
+
+def _log(session, actor, event_name: str, contract_id: UUID, context_data: dict | None = None) -> None:
+    session.add(ActivityLog(
+        organization_id=actor.organization_id,
+        account_id=actor.account_id,
+        display_name_snapshot=actor.display_name,
+        role_snapshot=actor.role,
+        event_name=event_name,
+        object_type="contract",
+        object_id=contract_id,
+        context_data=context_data,
+    ))
+    session.flush()
 
 
 @router.post("/{contract_id}/fact-reviews", response_model=ContractDetailResponse)
@@ -82,6 +97,7 @@ def fact_review(request: Request, organization_slug: str, contract_id: str, payl
             row.reviewer_identity_type = "authenticated_account"
             row.authenticated_actor_id = actor.account_id
             row.actor_role_snapshot = actor.role
+            _log(session, actor, f"fact_review.{payload.action}", cid, {"fact_key": payload.fact_key})
             session.commit()
         except ReviewError as exc:
             session.rollback()
@@ -105,6 +121,7 @@ def review_start(request: Request, organization_slug: str, contract_id: str, pay
             row.reviewer_identity_type = "authenticated_account"
             row.authenticated_actor_id = actor.account_id
             row.actor_role_snapshot = actor.role
+            _log(session, actor, "contract_review.started", cid)
             session.commit()
         except ReviewError as exc:
             session.rollback()
@@ -142,6 +159,7 @@ def review_complete(request: Request, organization_slug: str, contract_id: str, 
             row.reviewer_identity_type = "authenticated_account"
             row.authenticated_actor_id = actor.account_id
             row.actor_role_snapshot = actor.role
+            _log(session, actor, "contract_review.completed", cid, {"acknowledge_unreviewed": bool(payload.acknowledge_unreviewed)})
             session.commit()
         except ReviewError as exc:
             session.rollback()
@@ -175,6 +193,7 @@ def override(request: Request, organization_slug: str, contract_id: str, payload
             row.actor_id = actor.account_id
             row.actor_type = "authenticated_account"
             row.is_development = False
+            _log(session, actor, f"override.{payload.action}", cid, {"key": payload.key, "fact_ref": payload.fact_ref})
             session.commit()
         except OverrideError as exc:
             session.rollback()
@@ -197,6 +216,7 @@ def archive(request: Request, organization_slug: str, contract_id: str):
         if org is None or org.id != actor.organization_id:
             raise _not_found()
         _set_archived(session, org.id, cid, True)
+        _log(session, actor, "contract.archived", cid)
         session.commit()
         return _augmented_detail_response(session, org.id, cid)
     finally:
@@ -213,6 +233,7 @@ def unarchive(request: Request, organization_slug: str, contract_id: str):
         if org is None or org.id != actor.organization_id:
             raise _not_found()
         _set_archived(session, org.id, cid, False)
+        _log(session, actor, "contract.unarchived", cid)
         session.commit()
         return _augmented_detail_response(session, org.id, cid)
     finally:
