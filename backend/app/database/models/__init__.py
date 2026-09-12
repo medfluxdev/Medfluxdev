@@ -1,6 +1,7 @@
 """Registriert alle ORM-Modelle (fuer Beziehungs-Aufloesung + Alembic-Autogenerate)."""
 
 from app.database.models.organization import Organization
+from app.database.models.account import Account, AccountMembership
 from app.database.models.application_setting import ApplicationSetting
 from app.database.models.document import DocumentFile, DocumentVersion
 from app.database.models.artifact import DocumentArtifact
@@ -22,6 +23,8 @@ from app.database.models.warning import ContractWarning, WarningEvaluationRun
 
 __all__ = [
     "Organization",
+    "Account",
+    "AccountMembership",
     "ApplicationSetting",
     "DocumentFile",
     "DocumentVersion",
