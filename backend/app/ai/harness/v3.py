@@ -282,12 +282,34 @@ def compact_items(items, budget: int, str_limit: int = 180) -> list:
 
 
 def _section_row(section, str_limit: int) -> dict:
+    safe_observations = [
+        {
+            "topic": obs.topic,
+            "summary": obs.summary,
+            "ambiguity": obs.ambiguity,
+        }
+        for obs in (section.observations or [])
+    ]
+    safe_clusters = []
+    for cluster in (section.option_clusters or []):
+        safe_clusters.append({
+            "cluster_label": cluster.cluster_label,
+            "options": [
+                {
+                    "label": option.label,
+                    "price_text": option.price_text,
+                    "nearby_text": list(option.nearby_text or []),
+                    "selection_hint": option.selection_hint,
+                }
+                for option in (cluster.options or [])
+            ],
+        })
     return {
         "section_index": section.section_index,
         "pages": list(section.pages or []),
-        "observations": compact_items(section.observations, budget=200, str_limit=str_limit),
-        "option_clusters": compact_items(section.option_clusters, budget=200, str_limit=str_limit),
-        "numbers": [n.model_dump(mode="json") for n in (section.numbers or [])],
+        "observations": compact_items(safe_observations, budget=180, str_limit=str_limit),
+        "option_clusters": compact_items(safe_clusters, budget=180, str_limit=str_limit),
+        "numbers": [{"value": n.value} for n in (section.numbers or [])],
         "unresolved": list(section.unresolved or []),
     }
 
@@ -1051,16 +1073,19 @@ class HarnessV3:
                 planner.decisions.append({"block": block.id, "vision": "skipped_repeated_empty_decoration"})
             # Vision region calls are independently bounded (harness_vision_max_calls)
             # and do NOT grow linearly when the semantic call budget is raised.
-            visual_budget = min(
-                len(visual_candidates),
-                max(0, self.settings.harness_vision_max_calls),
-            )
+            region_visual_budget = max(0, self.settings.harness_vision_max_calls)
+            region_visual_attempts = 0
+            visual_budget = min(len(visual_candidates), region_visual_budget)
             for block in visual_candidates[:visual_budget]:
                 if budget_exhausted:
                     break
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
                         image = image_loader(block)
+                        if region_visual_attempts >= region_visual_budget:
+                            planner.decisions.append({"block": block.id, "vision": "deferred_by_visual_call_budget"})
+                            continue
+                        region_visual_attempts += 1
                         observation = await call(
                             "vision:" + block.id,
                             "Describe only contract-relevant visual evidence in region " + block.id +
@@ -1239,8 +1264,7 @@ class HarnessV3:
                 for section in section_understandings
                 for page in (section.pages or [])
             }
-            fallback_visual_budget = max(0, self.settings.harness_vision_max_calls)
-            fallback_visual_used = 0
+            fallback_visual_budget = region_visual_budget
             fallback_pages_seen: set[int] = set()
             page_representatives: list[Block] = []
             representative_pages: set[int] = set()
@@ -1270,7 +1294,7 @@ class HarnessV3:
                     continue
                 if budget_exhausted:
                     break
-                if fallback_visual_used >= fallback_visual_budget:
+                if region_visual_attempts >= fallback_visual_budget:
                     planner.decisions.append({
                         "block": block.id,
                         "vision": "deferred_by_visual_call_budget",
@@ -1279,6 +1303,7 @@ class HarnessV3:
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
                         image = image_loader(block)
+                        region_visual_attempts += 1
                         observation = await call(
                             "vision_fallback:" + block.id,
                             "Read this unresolved contract-relevant visual region because page-level vision did not "
@@ -1290,7 +1315,6 @@ class HarnessV3:
                             stage="vision",
                         )
                         visual_observations[block.id] = observation
-                        fallback_visual_used += 1
                         if block.page is not None:
                             fallback_pages_seen.add(block.page)
                         planner.decisions.append({
@@ -1354,6 +1378,7 @@ class HarnessV3:
                     + json.dumps(GlobalContractUnderstanding.model_json_schema(), separators=(",", ":"))
                     + gcu_prefix
                 )
+                gcu_call_prefix = gcu_prefix + vision_summary()
                 if planner.fits(gcu_overhead + full):
                     gcu_material = full
                 else:
@@ -1363,18 +1388,39 @@ class HarnessV3:
                         purpose="global_context",
                     )
                     if not ranked_all:
+                        lean_prefix = gcu_instruction
+                        lean_overhead = (
+                            SYSTEM
+                            + "\nOutput schema: "
+                            + json.dumps(GlobalContractUnderstanding.model_json_schema(), separators=(",", ":"))
+                            + lean_prefix
+                        )
+                        ranked_all = planner.pack_ranked(
+                            document.blocks,
+                            lean_overhead,
+                            purpose="global_context_source_first",
+                        )
+                        if ranked_all:
+                            gcu_call_prefix = lean_prefix
+                            planner.decisions.append({
+                                "purpose": "global_context",
+                                "decision": "source_first_lean_global_context",
+                            })
+                    if not ranked_all:
                         planner.decisions.append({
                             "purpose": "global_context",
-                            "decision": "no_ranked_blocks_fit",
+                            "decision": "global_understanding_skipped_no_source",
                         })
                         gcu_material = ""
                     else:
                         gcu_material = assemble(ranked_all)
                     issues.append("Globales Verständnis nutzt begrenzten Kontext; Vollständigkeit manuell prüfen")
                 try:
+                    if not gcu_material:
+                        raise ContextOverflow("No canonical source fits GlobalContractUnderstanding")
                     global_understanding = await call(
                         "global_understanding",
-                        gcu_prefix + vision_summary() + gcu_material,
+                        gcu_call_prefix + gcu_material,
                         GlobalContractUnderstanding,
                         pages=all_pages or None,
                         stage="global",
@@ -1420,20 +1466,39 @@ class HarnessV3:
                 + vision_summary()
                 + map_aux
             )
+            map_call_prefix = understanding_instruction + map_aux + vision_summary()
             try:
                 base_segments = planner.segments(
                     document.blocks,
                     map_overhead,
                     purpose="global_understanding",
                 )
-            except ContextOverflow as exc:
-                issues.append("ContractMap segmentation: ContextOverflow; manuelle Prüfung erforderlich")
-                planner.decisions.append({
-                    "purpose": "global_understanding",
-                    "decision": "segmentation_failed_continue_with_lexical_recall",
-                    "error_type": type(exc).__name__,
-                })
-                base_segments = []
+            except ContextOverflow:
+                lean_map_overhead = (
+                    SYSTEM
+                    + "\nOutput schema: "
+                    + json.dumps(ContractMap.model_json_schema(), separators=(",", ":"))
+                    + understanding_instruction
+                )
+                try:
+                    base_segments = planner.segments(
+                        document.blocks,
+                        lean_map_overhead,
+                        purpose="global_understanding_source_first",
+                    )
+                    map_call_prefix = understanding_instruction
+                    planner.decisions.append({
+                        "purpose": "global_understanding",
+                        "decision": "source_first_lean_map_segmentation",
+                    })
+                except ContextOverflow as exc:
+                    issues.append("ContractMap segmentation: ContextOverflow; manuelle Prüfung erforderlich")
+                    planner.decisions.append({
+                        "purpose": "global_understanding",
+                        "decision": "segmentation_failed_continue_with_lexical_recall",
+                        "error_type": type(exc).__name__,
+                    })
+                    base_segments = []
 
             segments: list[list[Block]] = []
             max_map_blocks = 28
@@ -1454,7 +1519,7 @@ class HarnessV3:
                 try:
                     mapping = await call(
                         "understanding:" + str(index),
-                        understanding_instruction + map_aux + vision_summary() + assemble(segment),
+                        map_call_prefix + assemble(segment),
                         ContractMap,
                         pages=sorted({b.page for b in segment if b.page is not None}) or None,
                         stage="global",
@@ -1733,28 +1798,46 @@ class HarnessV3:
             def compact_pack_semantic_state(
                 state: dict[str, dict],
                 *,
-                per_family_budget: int = 180,
+                total_budget: int = 960,
             ) -> str:
-                """Bound semantic-state payload without changing its meaning.
+                """Hard TOTAL token budget for auxiliary semantic state.
 
-                Preserve all families fairly and trim only long list payloads via the
-                existing compact_items helper. This prevents pack overhead from
-                starving source blocks in an 8192-token runtime window.
+                Canonical source blocks remain authoritative. Auxiliary map/applicability
+                state is fairly bounded across families/categories and may never consume
+                the whole 8192-token window by multiplying a per-category allowance.
                 """
+                families = list(state)
+                if not families or total_budget <= 0:
+                    return "{}"
+                category_names = (
+                    "observations",
+                    "selections",
+                    "number_roles",
+                    "precedence",
+                    "applicability_decisions",
+                    "option_clusters",
+                )
+                slots = max(1, len(families) * len(category_names))
+                per_slot = max(12, int(total_budget) // slots)
                 bounded: dict[str, dict] = {}
-                for family, payload in state.items():
+                for family in families:
+                    payload = state[family]
                     bounded[family] = {
-                        "observations": compact_items(payload.get("observations", []), budget=per_family_budget),
-                        "selections": compact_items(payload.get("selections", []), budget=per_family_budget),
-                        "number_roles": compact_items(payload.get("number_roles", []), budget=per_family_budget),
-                        "precedence": compact_items(payload.get("precedence", []), budget=per_family_budget),
-                        "applicability_decisions": compact_items(
-                            payload.get("applicability_decisions", []),
-                            budget=per_family_budget,
-                        ),
-                        "option_clusters": compact_items(payload.get("option_clusters", []), budget=per_family_budget),
+                        name: compact_items(payload.get(name, []), budget=per_slot)
+                        for name in category_names
                     }
-                return json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+                text = json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+                while estimate_tokens(text) > int(total_budget) and per_slot > 4:
+                    per_slot = max(4, int(per_slot * 0.75))
+                    bounded = {}
+                    for family in families:
+                        payload = state[family]
+                        bounded[family] = {
+                            name: compact_items(payload.get(name, []), budget=per_slot)
+                            for name in category_names
+                        }
+                    text = json.dumps(bounded, ensure_ascii=False, separators=(",", ":"))
+                return text if estimate_tokens(text) <= int(total_budget) else "{}"
 
             # ---- FACT RESOLUTION in semantic packs ----
             # Resolve related families together to avoid paying repeated prompt
@@ -1866,7 +1949,7 @@ class HarnessV3:
                     "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
                     + "\nCompact semantic state by family: "
-                    + compact_pack_semantic_state(semantic_by_family, per_family_budget=120)
+                    + compact_pack_semantic_state(semantic_by_family, total_budget=720)
                     + "\n"
                 )
                 # Planner overhead must reflect exactly what call() will prepend:
@@ -2381,6 +2464,8 @@ class HarnessV3:
                 1 for call_row in calls
                 if str(call_row.get("purpose", "")).startswith("vision_fallback:")
             ),
+            "region_visual_attempts": int(locals().get("region_visual_attempts", 0)),
+            "region_visual_budget": int(locals().get("region_visual_budget", 0)),
             "resolve_pack_call_count": sum(
                 1 for call_row in calls
                 if str(call_row.get("purpose", "")).startswith("resolve_pack:")
