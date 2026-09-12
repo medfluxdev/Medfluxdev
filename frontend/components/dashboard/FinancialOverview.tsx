@@ -13,9 +13,7 @@ function MoneyList({ title, totals }: { title: string; totals: { currency: strin
       <ul className="money-list">
         {totals.map((t) => (
           <li key={t.currency} className="money-row">
-            <span className="money-amount">
-              {formatCurrency(t.amount, t.currency)}
-            </span>
+            <span className="money-amount">{formatCurrency(t.amount, t.currency)}</span>
             <span className="money-currency">{t.currency}</span>
             <span className="money-count">
               {t.contract_count} {t.contract_count === 1 ? "Vertrag" : "Verträge"}
@@ -36,9 +34,11 @@ export default function FinancialOverview({ financial }: Props) {
 
   if (!hasCosts && !hasTotal) {
     return (
-      <p className="empty-state">
-        Keine verlässlichen Kosten verfügbar.
-      </p>
+      <div className="financial-empty-card">
+        <div className="financial-empty-icon" aria-hidden="true">▤</div>
+        <strong>Keine verlässlichen Kosten verfügbar.</strong>
+        <p>Sobald Kosten mit ausreichender Qualität vorliegen, werden sie hier angezeigt.</p>
+      </div>
     );
   }
 
@@ -55,8 +55,7 @@ export default function FinancialOverview({ financial }: Props) {
       </div>
       {excluded > 0 && (
         <p className="notice">
-          {excluded} {excluded === 1 ? "Vertrag" : "Verträge"} ohne verlässliche
-          Kosten-/Wertangabe (nicht als 0 gezählt).
+          {excluded} {excluded === 1 ? "Vertrag" : "Verträge"} ohne verlässliche Kosten-/Wertangabe (nicht als 0 gezählt).
         </p>
       )}
     </div>
