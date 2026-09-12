@@ -1,27 +1,17 @@
-"""Demo-/UAT-Arbeitsbereich – Service (Enable/Disable/Track/Include).
-
-Kleinster Mechanismus für eine saubere Kunden-Demo:
-- Aktiv ⇒ Vertragsliste/Dashboard/Detail zeigen NUR während der Demo
-  hochgeladene Verträge (`workspace_contract_ids`).
-- Deaktivieren stellt das normale Portfolio wieder her; es wird nichts
-  gelöscht oder verändert.
-- `track_contract` registriert während der Demo hochgeladene Verträge
-  ausschließlich im aktiven Modus.
-
-Der Workspace ist reine Dev-/UAT-Ebene: Die Produktionsabfragen erhalten
-lediglich einen optionalen `workspace_contract_ids`-Predicate.
-"""
+"""Demo-/UAT-Arbeitsbereich und request scope filtering."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import Contract, DemoWorkspace, DemoWorkspaceEntry
+from app.core.scope_context import current_scope_context
+from app.database.models import DemoWorkspace, DemoWorkspaceEntry, Organization
 from app.database.models.demo import DEMO_WORKSPACE_ID
+from app.database.scope_queries import intersect_ids, scoped_contract_ids
 
 
 def workspace_enabled(session: Session) -> bool:
@@ -40,11 +30,18 @@ def set_workspace_enabled(session: Session, *, enabled: bool) -> None:
 
 
 def workspace_contract_ids(session: Session) -> Optional[set]:
-    """Aktive Workspace-Verträge; None = Workspace aus (kein Filter)."""
-    if not workspace_enabled(session):
-        return None
-    rows = session.scalars(select(DemoWorkspaceEntry.contract_id)).all()
-    return set(rows)
+    demo_ids: Optional[set] = None
+    if workspace_enabled(session):
+        demo_ids = set(session.scalars(select(DemoWorkspaceEntry.contract_id)).all())
+
+    scope = current_scope_context()
+    if not scope.organization_slug:
+        return demo_ids
+    organization = session.scalar(select(Organization).where(Organization.slug == scope.organization_slug))
+    if organization is None:
+        return demo_ids
+    scope_ids = scoped_contract_ids(session, organization.id, scope.hospital_id, scope.department_id)
+    return intersect_ids(demo_ids, scope_ids)
 
 
 def track_contract(
@@ -53,22 +50,15 @@ def track_contract(
     contract_id: uuid.UUID,
     document_version_id: Optional[uuid.UUID] = None,
 ) -> bool:
-    """Registriert den Vertrag IM aktiven Modus (idempotent)."""
     if not workspace_enabled(session):
         return False
-    existing = session.scalars(
-        select(DemoWorkspaceEntry).where(
-            DemoWorkspaceEntry.contract_id == contract_id
-        )
-    ).first()
+    existing = session.scalars(select(DemoWorkspaceEntry).where(DemoWorkspaceEntry.contract_id == contract_id)).first()
     if existing is None:
-        session.add(
-            DemoWorkspaceEntry(
-                workspace_id=DEMO_WORKSPACE_ID,
-                contract_id=contract_id,
-                document_version_id=document_version_id,
-            )
-        )
+        session.add(DemoWorkspaceEntry(
+            workspace_id=DEMO_WORKSPACE_ID,
+            contract_id=contract_id,
+            document_version_id=document_version_id,
+        ))
         session.flush()
     return True
 
