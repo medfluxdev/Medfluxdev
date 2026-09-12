@@ -107,11 +107,13 @@ export default function DashboardPage() {
           </section>
 
           <section className="intel-strip" aria-label="Kennzahlen">
-            {Object.values(data.kpis).map((k) => (
-              <div className="intel" key={k.label_de}>
-                <KpiCard card={k} />
-              </div>
-            ))}
+            {Object.values(data.kpis)
+              .filter((k) => k.label_de !== "Gesamtvertragswert")
+              .map((k) => (
+                <div className="intel" key={k.label_de}>
+                  <KpiCard card={k} />
+                </div>
+              ))}
           </section>
 
           <section className="section-caption dashboard-data-state" style={{ marginTop: 4 }}>
