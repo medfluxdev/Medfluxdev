@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
+from app.core.scope_context import current_scope_context
 from app.database.models import Equipment
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -22,8 +23,6 @@ def equipment_list(
     organization_slug: str,
     q: Optional[str] = Query(default=None, max_length=200),
     limit: int = Query(default=200, ge=1, le=1000),
-    hospital_id: Optional[UUID] = None,
-    department_id: Optional[UUID] = None,
 ) -> list[EquipmentSummary]:
     session = create_session()
     try:
@@ -31,36 +30,31 @@ def equipment_list(
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
         items = list_equipment(session, organization_id=org.id, search=q, limit=limit)
-        if hospital_id is None and department_id is None:
+        scope = current_scope_context()
+        if scope.hospital_id is None and scope.department_id is None:
             return items
-        ids = set(session.scalars(select(Equipment.id).where(
-            Equipment.organization_id == org.id,
-            Equipment.department_id == department_id if department_id else Equipment.hospital_id == hospital_id,
-        )).all())
+        predicate = Equipment.department_id == scope.department_id if scope.department_id else Equipment.hospital_id == scope.hospital_id
+        ids = set(session.scalars(select(Equipment.id).where(Equipment.organization_id == org.id, predicate)).all())
         return [item for item in items if UUID(item.id) in ids]
     finally:
         session.close()
 
 
 @router.get("/{equipment_id}", response_model=EquipmentDetail)
-def equipment_detail(
-    organization_slug: str,
-    equipment_id: UUID,
-    hospital_id: Optional[UUID] = None,
-    department_id: Optional[UUID] = None,
-) -> EquipmentDetail:
+def equipment_detail(organization_slug: str, equipment_id: UUID) -> EquipmentDetail:
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
-        if hospital_id is not None or department_id is not None:
+        scope = current_scope_context()
+        if scope.hospital_id is not None or scope.department_id is not None:
             row = session.get(Equipment, equipment_id)
             if row is None or row.organization_id != org.id:
                 raise HTTPException(status_code=404, detail="Gerät nicht gefunden.")
-            if department_id is not None and row.department_id != department_id:
+            if scope.department_id is not None and row.department_id != scope.department_id:
                 raise HTTPException(status_code=404, detail="Gerät nicht gefunden.")
-            if department_id is None and hospital_id is not None and row.hospital_id != hospital_id:
+            if scope.department_id is None and scope.hospital_id is not None and row.hospital_id != scope.hospital_id:
                 raise HTTPException(status_code=404, detail="Gerät nicht gefunden.")
         detail = get_equipment_detail(session, organization_id=org.id, equipment_id=equipment_id)
         if detail is None:
