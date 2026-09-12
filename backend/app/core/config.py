@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "medflux_session"
     auth_cookie_secure: bool = False  # local HTTP; set true behind HTTPS
     auth_session_days: int = 14
+    # Local development convenience: short PIN-style passwords are accepted only
+    # while this flag is enabled. Production deployments should set it to false.
+    development_auth_mode: bool = True
 
     @property
     def cors_origins_list(self) -> list[str]:
