@@ -4,11 +4,12 @@ const DEFAULT_TIMEOUT_MS = 20000;
 function scopedPath(path: string): string {
   if (typeof window === "undefined" || !path.startsWith("/api/")) return path;
   if (!path.includes("organization_slug=")) return path;
+  const selectedOrganization = window.localStorage.getItem("medflux.organization_slug");
   const hospitalId = window.localStorage.getItem("medflux.hospitalId");
   const departmentId = window.localStorage.getItem("medflux.departmentId");
-  if (!hospitalId && !departmentId) return path;
   const [base, query = ""] = path.split("?", 2);
   const params = new URLSearchParams(query);
+  if (selectedOrganization) params.set("organization_slug", selectedOrganization);
   if (hospitalId && !params.has("hospital_id")) params.set("hospital_id", hospitalId);
   if (departmentId && !params.has("department_id")) params.set("department_id", departmentId);
   return `${base}?${params.toString()}`;
@@ -21,10 +22,7 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Pr
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const outer = init.signal;
   const onOuterAbort = () => controller.abort();
-  if (outer) {
-    if (outer.aborted) controller.abort();
-    else outer.addEventListener("abort", onOuterAbort, { once: true });
-  }
+  if (outer) { if (outer.aborted) controller.abort(); else outer.addEventListener("abort", onOuterAbort, { once: true }); }
   const cleanup = () => { clearTimeout(timer); if (outer) outer.removeEventListener("abort", onOuterAbort); };
   return fetch(url, { ...withCredentials, signal: controller.signal }).then((res) => { cleanup(); return res; }, (err) => { cleanup(); throw err; });
 }
@@ -43,22 +41,20 @@ async function errorMessage(res: Response): Promise<string> {
 
 export async function apiPost<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
-  if (!res.ok) throw new Error(await errorMessage(res));
-  return (await res.json()) as T;
+  if (!res.ok) throw new Error(await errorMessage(res)); return (await res.json()) as T;
 }
 export async function apiPut<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
-  if (!res.ok) throw new Error(await errorMessage(res));
-  return (await res.json()) as T;
+  if (!res.ok) throw new Error(await errorMessage(res)); return (await res.json()) as T;
 }
 export async function apiPatch<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
-  if (!res.ok) throw new Error(await errorMessage(res));
-  return (await res.json()) as T;
+  if (!res.ok) throw new Error(await errorMessage(res)); return (await res.json()) as T;
 }
 
 export function contentUrl(contractId: string, documentVersionId: string, orgSlug: string): string {
-  const q = new URLSearchParams({ organization_slug: orgSlug });
+  const selected = typeof window !== "undefined" ? window.localStorage.getItem("medflux.organization_slug") : null;
+  const q = new URLSearchParams({ organization_slug: selected || orgSlug });
   const h = typeof window !== "undefined" ? window.localStorage.getItem("medflux.hospitalId") : null;
   const d = typeof window !== "undefined" ? window.localStorage.getItem("medflux.departmentId") : null;
   if (h) q.set("hospital_id", h); if (d) q.set("department_id", d);
@@ -67,7 +63,9 @@ export function contentUrl(contractId: string, documentVersionId: string, orgSlu
 
 export async function apiUpload<T>(path: string, files: File[], slug?: string): Promise<T> {
   const form = new FormData(); for (const file of files) form.append("files", file);
-  const q = new URLSearchParams(); if (slug) q.set("organization_slug", slug);
+  const selected = typeof window !== "undefined" ? localStorage.getItem("medflux.organization_slug") : null;
+  const effectiveSlug = selected || slug;
+  const q = new URLSearchParams(); if (effectiveSlug) q.set("organization_slug", effectiveSlug);
   const h = typeof window !== "undefined" ? localStorage.getItem("medflux.hospitalId") : null;
   const d = typeof window !== "undefined" ? localStorage.getItem("medflux.departmentId") : null;
   if (h) q.set("hospital_id", h); if (d) q.set("department_id", d);
@@ -75,22 +73,16 @@ export async function apiUpload<T>(path: string, files: File[], slug?: string): 
   const res = await fetch(`${API_BASE}${path}${query}`, { method: "POST", body: form, credentials: "include" });
   if (!res.ok) throw new Error(`Request failed: ${res.status} ${res.statusText}`);
   const data = (await res.json()) as T;
-
-  if (path === "/api/documents/import" && slug && (h || d)) {
+  if (path === "/api/documents/import" && effectiveSlug && (h || d)) {
     const documents = (data as { documents?: Array<{ contract_id?: string | null }> }).documents ?? [];
-    await Promise.all(documents.filter((item) => item.contract_id).map((item) =>
-      apiPatch(`/api/ownership/contracts/${encodeURIComponent(item.contract_id as string)}?organization_slug=${encodeURIComponent(slug)}`, {
-        hospital_id: h,
-        department_ids: d ? [d] : [],
-        cost_center_id: null,
-      })
-    ));
+    await Promise.all(documents.filter((item) => item.contract_id).map((item) => apiPatch(`/api/ownership/contracts/${encodeURIComponent(item.contract_id as string)}?organization_slug=${encodeURIComponent(effectiveSlug)}`, { hospital_id: h, department_ids: d ? [d] : [], cost_center_id: null })));
   }
   return data;
 }
 
 export function sourceRegionUrl(documentVersionId: string, orgSlug: string, snippet: string, page: number | null): string {
-  const q = new URLSearchParams({ organization_slug: orgSlug }); q.set("snippet", snippet); if (page != null) q.set("page", String(page));
+  const selected = typeof window !== "undefined" ? localStorage.getItem("medflux.organization_slug") : null;
+  const q = new URLSearchParams({ organization_slug: selected || orgSlug }); q.set("snippet", snippet); if (page != null) q.set("page", String(page));
   if (typeof window !== "undefined") { const h=localStorage.getItem("medflux.hospitalId"); const d=localStorage.getItem("medflux.departmentId"); if(h)q.set("hospital_id",h); if(d)q.set("department_id",d); }
   return `${API_BASE}/api/documents/${encodeURIComponent(documentVersionId)}/source-region?${q.toString()}`;
 }
