@@ -11,10 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.credential_store import derive_password, verify_password
+from app.core.config import settings
 from app.database.models import Account, AccountMembership, LoginSession, Organization
 from app.database.models.account import ACCOUNT_ROLES
-
-SESSION_TTL_DAYS = 14
 
 
 @dataclass(frozen=True)
@@ -57,12 +56,14 @@ def create_account(
     )
     session.add(account)
     session.flush()
-    session.add(AccountMembership(
-        organization_id=organization_id,
-        account_id=account.id,
-        role=role,
-        is_active=True,
-    ))
+    session.add(
+        AccountMembership(
+            organization_id=organization_id,
+            account_id=account.id,
+            role=role,
+            is_active=True,
+        )
+    )
     session.flush()
     return account
 
@@ -85,7 +86,7 @@ def create_login_session(session: Session, account_id: UUID) -> tuple[str, Login
     row = LoginSession(
         account_id=account_id,
         selector_digest=digest,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.auth_session_days),
     )
     session.add(row)
     session.flush()
