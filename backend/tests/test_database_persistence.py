@@ -14,6 +14,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
+from tests.helpers_persistence import attach_minimal_accepted_extraction
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
@@ -424,6 +425,7 @@ def test_project_contract_writes_projection(db):
         status="active",
         risk_level="medium",
     )
+    attach_minimal_accepted_extraction(session, contract=contract, document_version_id=ver.id)
     db.flush()
     assert contract.contract_number == "W-4711"
     assert contract.start_date == date(2026, 1, 1)
