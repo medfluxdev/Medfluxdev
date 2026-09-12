@@ -78,7 +78,7 @@ export default function DashboardPage() {
 
   return (
     <div className="page dashboard-page">
-      <PageHeader title="Übersicht" description="Willkommen im Wartungsvertrag-Management" />
+      <PageHeader title="Übersicht" description="Willkommen im intelligenten Vertragsmanagement" />
 
       {error && (
         <InlineAlert
@@ -100,7 +100,7 @@ export default function DashboardPage() {
         <div className="dashboard dashboard-reference-layout">
           <section className="welcome-hero" aria-labelledby="welcome-heading">
             <div>
-              <h2 id="welcome-heading">Willkommen im Wartungsvertrag-Management</h2>
+              <h2 id="welcome-heading">Willkommen im intelligenten Vertragsmanagement</h2>
               <p>Verwalten Sie alle Wartungsverträge Ihres Krankenhauses an einem Ort</p>
               <Link href="/import" className="hero-action">
                 <span aria-hidden="true">+</span>
