@@ -16,18 +16,10 @@ class ActivityLog(Base):
     __tablename__ = "activity_log"
 
     id: Mapped[uuid.UUID] = uuid_pk()
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("organization.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
-    )
-    account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("account.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("organization.id", ondelete="RESTRICT"), nullable=False, index=True)
+    hospital_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("hospital.id", ondelete="SET NULL"), nullable=True, index=True)
+    department_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("department.id", ondelete="SET NULL"), nullable=True, index=True)
+    account_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True, index=True)
     display_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     role_snapshot: Mapped[str] = mapped_column(String(32), nullable=False)
     event_name: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
@@ -38,5 +30,6 @@ class ActivityLog(Base):
 
     __table_args__ = (
         Index("ix_activity_log_org_created", "organization_id", "created_at"),
+        Index("ix_activity_log_scope_created", "organization_id", "hospital_id", "department_id", "created_at"),
         Index("ix_activity_log_object_created", "object_type", "object_id", "created_at"),
     )
