@@ -2,7 +2,7 @@
 
 Stand: 2026-09-12
 Branch: `JAMAL`
-Status: **Implementiert; Unit-/Import-Gates bestanden; isolierter PostgreSQL Backup/Restore-Gate ausstehend**
+Status: **Implementiert; echter PostgreSQL Backup/Verify/Restore-Gate bestanden; CSV-DB-Fixture noch offen**
 
 ## Implementiert
 
@@ -53,18 +53,31 @@ Status: **Implementiert; Unit-/Import-Gates bestanden; isolierter PostgreSQL Bac
 
 ## Laufzeitnachweis vom 2026-09-12
 
-Bounded Gate auf Branch `JAMAL`, Commit `cb2029645efa9b4c7c2606dfadf0d3853e090cc5`, sauberer Worktree:
+### Sicherheits-/Import-Gates
+
+Auf Commit `cb2029645efa9b4c7c2606dfadf0d3853e090cc5`:
 
 - `backend/tests/test_step17_backup_security.py`: **6 passed in 0.19s**
 - `/api/operations/contracts.csv` ist im importierten FastAPI-Routing registriert
-- Backup-/Verify-/Restore-Skripte wurden mit `py_compile` erfolgreich geprüft
+- Backup-/Verify-/Restore-Skripte mit `py_compile`: **bestanden**
 
-Dieser Nachweis prueft die Sicherheitslogik der Skripte, ersetzt aber **keinen echten `pg_dump`/`pg_restore`-Durchlauf**.
+### Echter isolierter PostgreSQL-Gate
 
-## Noch zu beweisen (isolierter PostgreSQL Runtime Gate)
+Auf Commit `93c5677207cae96445fb8fc3179ebfd93ecbadc7`, ausschließlich gegen disposable PostgreSQL-Datenbanken:
 
-- `pg_dump`/`pg_restore` gegen eine eindeutig disposable temporaere Test-Datenbank
-- Backup → Verify → Restore → Datenabgleich in isoliertem Ziel
-- CSV-Export mit echter organisationsgebundener DB-Fixture
+- temporäre Source-DB erstellt: **bestanden**
+- Alembic bis `head d7e1f2a5b3c6`: **bestanden**
+- `backup_medflux.py` mit realem `pg_dump`: **bestanden**
+- `verify_backup.py`: **bestanden**
+- zweite temporäre Restore-DB erstellt
+- `restore_backup.py` mit realem `pg_restore`: **bestanden**
+- Schema-/Alembic-Vergleich nach Restore: **bestanden**
+- Source- und Restore-Testdatenbanken danach vollständig entfernt
 
-Diese Runtime-Gates duerfen keine Produktdatenbank ueberschreiben oder loeschen.
+Damit sind die Backup-/Verify-/Restore-Kriterien auf realem PostgreSQL erfüllt.
+
+## Noch zu beweisen
+
+- CSV-Export mit echter organisationsgebundener PostgreSQL-Fixture und aktivierter Authentifizierung
+
+Diese letzte Export-Prüfung muss weiterhin ausschließlich in einer isolierten Testumgebung erfolgen.
