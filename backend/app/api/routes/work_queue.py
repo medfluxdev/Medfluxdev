@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.scope_context import current_scope_context
 from app.database.models import WorkItem
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import PersistenceError, get_organization
@@ -29,8 +29,6 @@ def work_queue_list(
     severity: list[str] = Query(default=[]),
     item_type: list[str] = Query(default=[]),
     limit: int = Query(default=200, ge=1, le=1000),
-    hospital_id: Optional[UUID] = None,
-    department_id: Optional[UUID] = None,
 ) -> WorkItemList:
     for v in status:
         if v not in WORK_ITEM_STATUS_ALLOWED: raise HTTPException(status_code=422, detail=f"Ungueltiger status: {v!r}")
@@ -48,7 +46,8 @@ def work_queue_list(
             statuses=status or None, severities=severity or None,
             item_types=item_type or None, limit=limit,
         )
-        allowed = scoped_contract_ids(session, org.id, hospital_id, department_id)
+        scope = current_scope_context()
+        allowed = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
         if allowed is not None:
             raw = [item for item in raw if UUID(str(item.get("contract_id"))) in allowed]
         return WorkItemList(items=[WorkItemSummary(**r) for r in raw], total=len(raw))
@@ -61,14 +60,13 @@ def work_item_status_update(
     organization_slug: str,
     work_item_id: UUID,
     body: WorkItemStatusUpdate,
-    hospital_id: Optional[UUID] = None,
-    department_id: Optional[UUID] = None,
 ) -> WorkItemSummary:
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
         if org is None: raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
-        allowed = scoped_contract_ids(session, org.id, hospital_id, department_id)
+        scope = current_scope_context()
+        allowed = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
         if allowed is not None:
             row = session.get(WorkItem, work_item_id)
             if row is None or row.organization_id != org.id or row.contract_id not in allowed:
