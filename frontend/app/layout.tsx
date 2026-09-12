@@ -3,6 +3,7 @@ import ClientNav from "@/components/ClientNav";
 import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 import "./reference-theme.css";
+import "./desktop-shell-fix.css";
 
 export const metadata: Metadata = {
   title: {
