@@ -25,6 +25,7 @@ from app.api.routes import (
 )
 from app.auth.middleware import AuthenticationMiddleware as SessionGuardMiddleware
 from app.core.config import settings
+from app.core.scope_context import ScopeContextMiddleware
 
 app = FastAPI(
     title=settings.app_name,
@@ -42,6 +43,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
+app.add_middleware(ScopeContextMiddleware)
 app.add_middleware(SessionGuardMiddleware)
 
 app.include_router(health.router)
