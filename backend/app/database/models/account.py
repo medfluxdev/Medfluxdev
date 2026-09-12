@@ -24,7 +24,7 @@ class Account(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Systemweite Rolle. Developer ist absichtlich KEINE Organization-Membership-Rolle:
     # er kann alle Organisationen administrieren und als Admin in deren Kontext arbeiten.
-    is_developer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    is_developer: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     profile_photo_data_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
