@@ -37,6 +37,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             request.state.account_id = account.id
             request.state.account_display_name = account.display_name
             request.state.account_login_name = account.login_name
+            request.state.is_developer = bool(account.is_developer)
 
             organization_slug = request.query_params.get("organization_slug")
             actor = None
