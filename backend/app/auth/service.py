@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.auth.credential_store import derive_password, verify_password
@@ -127,7 +127,11 @@ def memberships_for_account(session: Session, account_id: UUID) -> list[tuple[Ac
     rows = session.execute(
         select(AccountMembership, Organization)
         .join(Organization, Organization.id == AccountMembership.organization_id)
-        .where((AccountMembership.account_id == account_id) & (AccountMembership.is_active.is_(True)))
+        .where(
+            (AccountMembership.account_id == account_id)
+            & (AccountMembership.is_active.is_(True))
+            & text("organization.is_active = true")
+        )
         .order_by(Organization.name.asc())
     ).all()
     return list(rows)
@@ -135,7 +139,12 @@ def memberships_for_account(session: Session, account_id: UUID) -> list[tuple[Ac
 
 def actor_for_account(session: Session, account: Account, organization_slug: str) -> Optional[Actor]:
     if account.is_developer:
-        organization = session.scalar(select(Organization).where(Organization.slug == organization_slug))
+        organization = session.scalar(
+            select(Organization).where(
+                (Organization.slug == organization_slug)
+                & text("organization.is_active = true")
+            )
+        )
         if organization is None:
             return None
         return Actor(
@@ -155,6 +164,7 @@ def actor_for_account(session: Session, account: Account, organization_slug: str
             (AccountMembership.account_id == account.id)
             & (AccountMembership.is_active.is_(True))
             & (Organization.slug == organization_slug)
+            & text("organization.is_active = true")
         )
     ).first()
     if row is None:
