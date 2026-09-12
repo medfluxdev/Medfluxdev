@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import ContractDetail from "@/components/contracts/detail/ContractDetail";
+import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
 import { apiGet } from "@/lib/api";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 
@@ -49,9 +49,7 @@ export default function ContractDetailPage() {
         </div>
       )}
 
-      {/* Daten bleiben waehrend des Neuladens gemountet, damit die
-          Seitenposition (u. a. beim Fakt-Pruefen) erhalten bleibt. */}
-      {data && <ContractDetail data={data} orgSlug={ORG_SLUG} onReload={load} />}
+      {data && <ContractWorkspace data={data} orgSlug={ORG_SLUG} onReload={load} />}
     </div>
   );
 }
