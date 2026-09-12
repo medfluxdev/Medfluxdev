@@ -15,6 +15,7 @@ from app.api.routes import (
     equipment,
     health,
     organization_structure,
+    ownership,
     profile,
     user_scopes,
     users,
@@ -47,6 +48,7 @@ app.include_router(profile.router)
 app.include_router(users.router)
 app.include_router(user_scopes.router)
 app.include_router(organization_structure.router)
+app.include_router(ownership.router)
 app.include_router(activity.router)
 app.include_router(ai.router)
 app.include_router(documents.router)
