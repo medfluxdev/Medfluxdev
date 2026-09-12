@@ -2,7 +2,7 @@
 
 The backup is written to a new target directory and contains:
 - a PostgreSQL custom-format dump created with pg_dump (no shell=True),
-- organization-owned immutable source documents,
+- all organization-owned canonical storage objects referenced by the DB,
 - a JSON manifest with SHA-256 for every backup artifact.
 
 The script never deletes or overwrites an existing backup directory.
@@ -27,7 +27,12 @@ sys.path.insert(0, str(ROOT / "backend"))
 from sqlalchemy import select  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
-from app.database.models import DocumentFile, Organization  # noqa: E402
+from app.database.models import (  # noqa: E402
+    DocumentArtifact,
+    DocumentFile,
+    DocumentVersion,
+    Organization,
+)
 from app.database.session import create_session  # noqa: E402
 from app.documents.storage import DocumentStorage, StorageError  # noqa: E402
 
@@ -73,25 +78,57 @@ def _organization(session, slug: str) -> Organization:
     return org
 
 
+def _remember_object(
+    objects: dict[str, dict],
+    *,
+    storage_key: str,
+    sha256: str,
+    size_bytes: int | None,
+    source_type: str,
+    source_id: str,
+) -> None:
+    DocumentStorage.validate_reference(storage_key)
+    existing = objects.get(storage_key)
+    if existing is not None:
+        if existing["sha256"] != sha256:
+            raise RuntimeError(f"Widerspruechliche SHA-256 fuer Storage-Referenz {storage_key}.")
+        existing["sources"].append({"type": source_type, "id": source_id})
+        return
+    objects[storage_key] = {
+        "storage_key": storage_key,
+        "sha256": sha256,
+        "size_bytes": size_bytes,
+        "sources": [{"type": source_type, "id": source_id}],
+    }
+
+
 def create_backup(*, organization_slug: str, target: Path, pg_dump_bin: str = "pg_dump") -> Path:
     if target.exists():
-        raise RuntimeError("Backup-Ziel existiert bereits; es wird nichts überschrieben.")
+        raise RuntimeError("Backup-Ziel existiert bereits; es wird nichts ueberschrieben.")
     target.mkdir(parents=True, exist_ok=False)
-    documents_dir = target / "documents"
-    documents_dir.mkdir()
+    storage_backup_dir = target / "storage"
+    storage_backup_dir.mkdir()
 
     manifest: dict = {
         "format": "medflux-backup-v1",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "organization_slug": organization_slug,
         "database": {},
-        "documents": [],
+        "storage_objects": [],
     }
 
     dump_path = target / "database.dump"
     try:
         conn_args, env = _postgres_connection(settings.database_url)
-        cmd = [pg_dump_bin, *conn_args, "--format=custom", "--no-owner", "--no-acl", "--file", str(dump_path)]
+        cmd = [
+            pg_dump_bin,
+            *conn_args,
+            "--format=custom",
+            "--no-owner",
+            "--no-acl",
+            "--file",
+            str(dump_path),
+        ]
         result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             message = (result.stderr or "pg_dump fehlgeschlagen").strip()
@@ -110,38 +147,80 @@ def create_backup(*, organization_slug: str, target: Path, pg_dump_bin: str = "p
         session = create_session()
         try:
             org = _organization(session, organization_slug)
-            docs = session.scalars(
-                select(DocumentFile)
-                .where(DocumentFile.organization_id == org.id)
-                .order_by(DocumentFile.imported_at, DocumentFile.id)
+            objects: dict[str, dict] = {}
+
+            files = session.scalars(
+                select(DocumentFile).where(DocumentFile.organization_id == org.id)
             ).all()
-            for doc in docs:
+            for row in files:
+                _remember_object(
+                    objects,
+                    storage_key=row.storage_key,
+                    sha256=row.sha256,
+                    size_bytes=row.file_size_bytes,
+                    source_type="document_file",
+                    source_id=str(row.id),
+                )
+
+            versions = session.scalars(
+                select(DocumentVersion).where(DocumentVersion.organization_id == org.id)
+            ).all()
+            for row in versions:
+                _remember_object(
+                    objects,
+                    storage_key=row.storage_key,
+                    sha256=row.sha256,
+                    size_bytes=None,
+                    source_type="document_version",
+                    source_id=str(row.id),
+                )
+
+            artifacts = session.scalars(
+                select(DocumentArtifact).where(
+                    (DocumentArtifact.organization_id == org.id)
+                    & (DocumentArtifact.lifecycle_state != "deleted")
+                )
+            ).all()
+            for row in artifacts:
+                _remember_object(
+                    objects,
+                    storage_key=row.storage_key,
+                    sha256=row.sha256,
+                    size_bytes=row.size_bytes,
+                    source_type="document_artifact",
+                    source_id=str(row.id),
+                )
+
+            for storage_key in sorted(objects):
+                item = objects[storage_key]
                 try:
-                    content = storage.read_reference(doc.storage_key)
+                    content = storage.read_reference(storage_key)
                 except StorageError as exc:
-                    raise RuntimeError(f"Dokument {doc.id} kann nicht gelesen werden: {exc}") from exc
+                    raise RuntimeError(f"Storage-Objekt kann nicht gelesen werden: {storage_key}: {exc}") from exc
                 actual_sha = _sha256_bytes(content)
-                if actual_sha != doc.sha256:
-                    raise RuntimeError(f"SHA-256-Abweichung beim Quelldokument {doc.id}.")
-                ext = doc.file_extension.lower()
-                backup_name = f"{doc.id}{ext}"
-                destination = documents_dir / backup_name
+                if actual_sha != item["sha256"]:
+                    raise RuntimeError(f"SHA-256-Abweichung beim Storage-Objekt {storage_key}.")
+                if item["size_bytes"] is not None and len(content) != int(item["size_bytes"]):
+                    raise RuntimeError(f"Groessenabweichung beim Storage-Objekt {storage_key}.")
+
+                backup_rel = Path("storage") / Path(storage_key)
+                destination = target / backup_rel
+                destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes(content)
-                manifest["documents"].append(
+                manifest["storage_objects"].append(
                     {
-                        "document_file_id": str(doc.id),
-                        "original_filename": doc.original_filename,
-                        "backup_path": f"documents/{backup_name}",
-                        "sha256": actual_sha,
+                        **item,
                         "size_bytes": len(content),
-                        "mime_type": doc.mime_type,
+                        "backup_path": backup_rel.as_posix(),
                     }
                 )
         finally:
             session.close()
 
         manifest_path = target / "manifest.json"
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         return manifest_path
     except Exception:
         shutil.rmtree(target, ignore_errors=True)
@@ -149,7 +228,7 @@ def create_backup(*, organization_slug: str, target: Path, pg_dump_bin: str = "p
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="MedFlux PostgreSQL + Dokument-Backup erstellen")
+    parser = argparse.ArgumentParser(description="MedFlux PostgreSQL + Storage-Backup erstellen")
     parser.add_argument("--organization", required=True, help="Organisations-Slug")
     parser.add_argument("--target", required=True, type=Path, help="Neues Backup-Verzeichnis")
     parser.add_argument("--pg-dump", default="pg_dump", help="Pfad zu pg_dump")
