@@ -1,11 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type {
   ContractDetailResponse,
   EvidenceRef,
   MoneyValue,
   SourceNavigationTarget,
+} from "@/lib/contract-detail-types";
+import {
+  RISK_LABEL_DETAIL,
+  SEVERITY_LABEL,
+  STATUS_LABEL_DETAIL,
 } from "@/lib/contract-detail-types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import PdfViewer from "./PdfViewer";
@@ -38,6 +44,19 @@ const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
   { key: "history", label: "Historie" },
 ];
 
+const SCOPE_FIELDS = [
+  ["maintenance", "Wartung", "maintenance"],
+  ["inspection", "Inspektion", "inspection"],
+  ["repair", "Reparatur", "repair"],
+  ["calibration", "Kalibrierung", "calibration"],
+  ["software_updates", "Software-Updates", "software_updates"],
+  ["remote_support", "Remote-Support", "remote_support"],
+  ["technical_support", "Technischer Support", "technical_support"],
+  ["spare_parts_included", "Ersatzteile", "spare_parts_included"],
+  ["consumables_included", "Verbrauchsmaterial", "consumables_included"],
+  ["emergency_service", "Notdienst", "emergency_service"],
+] as const;
+
 function money(value: MoneyValue): string {
   if (value.amount == null || !value.currency) return "Nicht verfügbar";
   return formatCurrency(String(value.amount), value.currency);
@@ -46,6 +65,20 @@ function money(value: MoneyValue): string {
 function yesNo(value: boolean | null): string {
   if (value == null) return "Unbekannt";
   return value ? "Ja" : "Nein";
+}
+
+function statusLabel(value: string | null): string {
+  if (!value) return "Unbekannt";
+  return STATUS_LABEL_DETAIL[value] ?? value;
+}
+
+function riskLabel(value: string | null): string {
+  if (!value) return "Unbekannt";
+  return RISK_LABEL_DETAIL[value] ?? value;
+}
+
+function severityLabel(value: string): string {
+  return SEVERITY_LABEL[value] ?? value;
 }
 
 function evidenceTarget(ref: EvidenceRef): SourceNavigationTarget {
@@ -85,9 +118,22 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
+function isTab(value: string | null): value is TabKey {
+  return TABS.some((tab) => tab.key === value);
+}
+
+function isDocumentTab(value: string | null): value is DocumentTab {
+  return DOCUMENT_TABS.some((tab) => tab.key === value);
+}
+
 export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
-  const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [documentTab, setDocumentTab] = useState<DocumentTab>("document");
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTab = isTab(searchParams.get("tab")) ? searchParams.get("tab") as TabKey : "overview";
+  const initialSubtab = isDocumentTab(searchParams.get("subtab")) ? searchParams.get("subtab") as DocumentTab : "document";
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  const [documentTab, setDocumentTab] = useState<DocumentTab>(initialSubtab);
   const [documentVersionId, setDocumentVersionId] = useState<string | null>(data.documents[0]?.document_version_id ?? null);
   const [navTarget, setNavTarget] = useState<SourceNavigationTarget | null>(null);
   const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
@@ -96,32 +142,48 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   const openTasks = useMemo(() => data.work_items.filter((item) => item.status !== "resolved"), [data.work_items]);
   const actionableWarnings = useMemo(() => data.warnings.filter((warning) => warning.requires_action || warning.requires_review), [data.warnings]);
 
-  const scopeEntries = [
-    ["Wartung", data.scope.maintenance],
-    ["Inspektion", data.scope.inspection],
-    ["Reparatur", data.scope.repair],
-    ["Kalibrierung", data.scope.calibration],
-    ["Software-Updates", data.scope.software_updates],
-    ["Remote-Support", data.scope.remote_support],
-    ["Technischer Support", data.scope.technical_support],
-    ["Ersatzteile", data.scope.spare_parts_included],
-    ["Verbrauchsmaterial", data.scope.consumables_included],
-    ["Notdienst", data.scope.emergency_service],
-  ] as const;
+  function setRoute(tab: TabKey, subtab?: DocumentTab) {
+    setActiveTab(tab);
+    if (subtab) setDocumentTab(subtab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === "overview") params.delete("tab");
+    else params.set("tab", tab);
+    if (tab === "documents") {
+      params.set("subtab", subtab ?? documentTab);
+    } else {
+      params.delete("subtab");
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
-  function findEvidence(...prefixes: string[]): EvidenceRef | null {
-    return data.evidence.find((ref) => {
-      const field = ref.field_ref ?? "";
-      return prefixes.some((prefix) => field === prefix || field.startsWith(`${prefix}.`));
-    }) ?? null;
+  function evidenceById(id: string | null | undefined): EvidenceRef | null {
+    if (!id) return null;
+    return data.evidence.find((ref) => ref.evidence_id === id || ref.field_ref === id) ?? null;
+  }
+
+  function findExactEvidence(...fields: (string | null | undefined)[]): EvidenceRef | null {
+    const wanted = fields.filter(Boolean) as string[];
+    for (const field of wanted) {
+      const exact = data.evidence.find((ref) => ref.field_ref === field);
+      if (exact) return exact;
+    }
+    for (const field of wanted) {
+      const recovered = data.evidence.find((ref) => (ref.evidence_id ?? "").startsWith("recovered:") && ref.field_ref?.startsWith(`${field}.`));
+      if (recovered) return recovered;
+    }
+    for (const field of wanted) {
+      const prefixed = data.evidence.find((ref) => ref.field_ref?.startsWith(`${field}.`));
+      if (prefixed) return prefixed;
+    }
+    return null;
   }
 
   function openEvidence(ref: EvidenceRef, targetTab: DocumentTab = "document") {
     setActiveEvidenceId(ref.evidence_id);
     setNavTarget(evidenceTarget(ref));
     if (ref.document_version_id) setDocumentVersionId(ref.document_version_id);
-    setActiveTab("documents");
-    setDocumentTab(targetTab);
+    setRoute("documents", targetTab);
   }
 
   function SourceButton({ evidence }: { evidence: EvidenceRef | null }) {
@@ -133,10 +195,31 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     );
   }
 
-  const startEvidence = findEvidence("dates.start_date", "dates", "termination");
-  const endEvidence = findEvidence("dates.documented_end_date", "dates.calculated_end_date", "termination");
-  const costEvidence = findEvidence("costs", "payment");
-  const servicesEvidence = findEvidence("services", "scope");
+  const startEvidence = evidenceById(data.dates.start_date_evidence) ?? findExactEvidence("dates.start_date", "start_date");
+  const endEvidence = evidenceById(data.dates.documented_end_evidence) ?? findExactEvidence("dates.documented_end_date", "dates.calculated_end_date", "termination.end_date");
+  const durationEvidence = evidenceById(data.dates.duration_evidence) ?? findExactEvidence("dates.duration_years", "duration");
+  const renewalEvidence = evidenceById(data.dates.auto_renewal_evidence) ?? findExactEvidence("dates.automatic_renewal", "termination.automatic_renewal");
+  const paymentStartEvidence = evidenceById(data.dates.payment_start_evidence) ?? findExactEvidence("dates.payment_start_rule", "payment.start");
+  const minimumDurationEvidence = evidenceById(data.dates.minimum_duration_evidence) ?? findExactEvidence("dates.minimum_duration_months", "duration.minimum");
+  const cancellationEvidence = findExactEvidence("dates.latest_cancellation_date", "termination.latest_cancellation_date", "termination.notice_period");
+  const annualCostEvidence = findExactEvidence("costs.annual_recurring", "cost.annual_recurring", "payment.annual_cost", "annual_cost");
+  const monthlyCostEvidence = findExactEvidence("costs.monthly_recurring", "cost.monthly_recurring", "payment.monthly_cost", "monthly_cost");
+  const taxRateEvidence = evidenceById(data.costs.tax_breakdown?.evidence_field_refs?.vat_rate) ?? findExactEvidence("costs.tax_rate_percent", "cost.tax_rate_percent", "vat_rate");
+  const taxBasisEvidence = findExactEvidence("costs.tax_basis", "cost.tax_basis");
+
+  function scopeState(key: string, legacy: boolean | null) {
+    const state = data.scope.scope_status?.[key];
+    if (state) {
+      if (state.status === "included") return { label: "Enthalten", tone: "yes", evidence: evidenceById(state.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`) };
+      if (state.status === "excluded") return { label: "Ausgeschlossen", tone: "no", evidence: evidenceById(state.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`) };
+      return { label: "Zu prüfen", tone: "unknown", evidence: evidenceById(state.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`) };
+    }
+    return {
+      label: legacy === true ? "Enthalten" : legacy === false ? "Ausgeschlossen" : "Zu prüfen",
+      tone: legacy === true ? "yes" : legacy === false ? "no" : "unknown",
+      evidence: findExactEvidence(`services.${key}`, `scope.${key}`),
+    };
+  }
 
   return (
     <div className="contract-workspace">
@@ -147,15 +230,15 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           <p>{[data.contract_number ? `Nr. ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p>
         </div>
         <div className="cw-header-badges">
-          <span className="cw-badge cw-badge-green">{data.status ?? "Unbekannt"}</span>
-          <span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>{data.risk_level ? `Risiko: ${data.risk_level}` : "Risiko unbekannt"}</span>
-          {data.review.requires_manual_review ? <span className="cw-badge cw-badge-amber">Manuelle Prüfung</span> : null}
+          <span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span>
+          <span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>
+          {data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}
         </div>
       </header>
 
       <nav className="cw-tabs" aria-label="Vertragsbereiche">
         {TABS.map((tab) => (
-          <button key={tab.key} type="button" className={activeTab === tab.key ? "active" : ""} onClick={() => setActiveTab(tab.key)}>
+          <button key={tab.key} type="button" className={activeTab === tab.key ? "active" : ""} onClick={() => setRoute(tab.key)}>
             {tab.label}
           </button>
         ))}
@@ -165,29 +248,29 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "overview" && (
           <>
             <div className="cw-kpi-grid">
-              <InfoCard label="Status" value={data.status ?? "Unbekannt"} />
+              <InfoCard label="Status" value={statusLabel(data.status)} />
               <InfoCard label="Vertragsende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} hint={<SourceButton evidence={endEvidence} />} />
-              <InfoCard label="Jährliche Kosten" value={money(data.costs.annual_recurring)} hint={<SourceButton evidence={costEvidence} />} />
-              <InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} />
-              <InfoCard label="Risiko" value={data.risk_level ?? "Unbekannt"} />
+              <InfoCard label="Jährliche Kosten" value={money(data.costs.annual_recurring)} hint={<SourceButton evidence={annualCostEvidence} />} />
+              <InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} hint={<SourceButton evidence={cancellationEvidence} />} />
+              <InfoCard label="Risiko" value={riskLabel(data.risk_level)} />
             </div>
 
             {(openTasks.length > 0 || actionableWarnings.length > 0) && (
               <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen">
                 <div className="cw-task-list">
                   {openTasks.slice(0, 6).map((item) => (
-                    <div className="cw-task" key={item.work_item_id}>
-                      <span className={`cw-priority cw-priority-${item.severity}`}>{item.severity}</span>
+                    <button type="button" className="cw-task cw-task-button" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}>
+                      <span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span>
                       <div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div>
-                      <span>{item.target_date ? formatDate(item.target_date) : "Keine Frist"}</span>
-                    </div>
+                      <span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span>
+                    </button>
                   ))}
                   {actionableWarnings.slice(0, 4).map((warning, index) => (
-                    <div className="cw-task" key={`${warning.warning_type}-${index}`}>
-                      <span className={`cw-priority cw-priority-${warning.severity}`}>{warning.severity}</span>
+                    <button type="button" className="cw-task cw-task-button" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("term")}>
+                      <span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span>
                       <div><strong>{warning.title_de}</strong></div>
                       <span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </Section>
@@ -196,15 +279,15 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
             <div className="cw-two-col">
               <Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang">
                 <div className="cw-chip-list">
-                  {scopeEntries.filter(([, value]) => value === true).slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}
-                  {scopeEntries.every(([, value]) => value !== true) ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}
+                  {SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}
+                  {SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}
                 </div>
               </Section>
               <Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit">
                 <div className="cw-mini-stats">
-                  <button type="button" onClick={() => { setActiveTab("documents"); setDocumentTab("evidence"); }}><strong>{data.evidence.length}</strong><span>Nachweise</span></button>
-                  <button type="button" onClick={() => { setActiveTab("documents"); setDocumentTab("document"); }}><strong>{data.documents.length}</strong><span>Dokumente</span></button>
-                  <button type="button" onClick={() => { setActiveTab("documents"); setDocumentTab("review"); }}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button>
+                  <button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button>
+                  <button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button>
+                  <button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button>
                 </div>
               </Section>
             </div>
@@ -221,12 +304,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
             </div>
             <Section title="Kündigung & Verlängerung">
               <dl className="cw-definition-grid">
-                <div><dt>Spätester Kündigungstermin</dt><dd>{data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"}</dd></div>
-                <div><dt>Automatische Verlängerung</dt><dd>{yesNo(data.dates.automatic_renewal)}</dd></div>
+                <div><dt>Spätester Kündigungstermin <SourceButton evidence={cancellationEvidence} /></dt><dd>{data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"}</dd></div>
+                <div><dt>Automatische Verlängerung <SourceButton evidence={renewalEvidence} /></dt><dd>{yesNo(data.dates.automatic_renewal)}</dd></div>
                 <div><dt>Nächste Verlängerung</dt><dd>{data.dates.next_renewal_date ? formatDate(data.dates.next_renewal_date) : "Nicht verfügbar"}</dd></div>
-                <div><dt>Mindestlaufzeit</dt><dd>{data.dates.minimum_duration_months != null ? `${data.dates.minimum_duration_months} Monate` : "Nicht verfügbar"}</dd></div>
-                <div><dt>Zahlungsbeginn</dt><dd>{data.dates.payment_start_rule ?? "Nicht verfügbar"}</dd></div>
-                <div><dt>Aktueller Status</dt><dd>{data.dates.current_status ?? "Unbekannt"}</dd></div>
+                <div><dt>Mindestlaufzeit <SourceButton evidence={minimumDurationEvidence ?? durationEvidence} /></dt><dd>{data.dates.minimum_duration_months != null ? `${data.dates.minimum_duration_months} Monate` : "Nicht verfügbar"}</dd></div>
+                <div><dt>Zahlungsbeginn <SourceButton evidence={paymentStartEvidence} /></dt><dd>{data.dates.payment_start_rule ?? "Nicht verfügbar"}</dd></div>
+                <div><dt>Aktueller Status</dt><dd>{statusLabel(data.dates.current_status)}</dd></div>
               </dl>
             </Section>
             {(data.dates.calculated_end_basis?.explanation || data.dates.latest_cancellation_basis?.explanation) && (
@@ -243,24 +326,39 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "finance" && (
           <>
             <div className="cw-kpi-grid cw-kpi-grid-four">
-              <InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} hint={<SourceButton evidence={costEvidence} />} />
-              <InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} hint={<SourceButton evidence={costEvidence} />} />
-              <InfoCard label="Steuersatz" value={data.costs.tax_rate_percent != null ? `${data.costs.tax_rate_percent} %` : "Nicht verfügbar"} />
+              <InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} hint={<SourceButton evidence={annualCostEvidence} />} />
+              <InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} hint={<SourceButton evidence={monthlyCostEvidence} />} />
+              <InfoCard label="Steuersatz" value={data.costs.tax_rate_percent != null ? `${data.costs.tax_rate_percent} %` : "Nicht verfügbar"} hint={<SourceButton evidence={taxRateEvidence} />} />
               <InfoCard label="Bezugsperiode" value={data.costs.source_period ?? "Nicht verfügbar"} />
             </div>
+
+            {data.costs.availability && (data.costs.annual_recurring.amount == null || data.costs.availability.manual_input_required) ? (
+              <Section title="Warum Kosten noch nicht vollständig berechnet sind" description={data.costs.availability.summary_de}>
+                <div className="cw-finance-availability">
+                  {data.costs.availability.explanation_de ? <p>{data.costs.availability.explanation_de}</p> : null}
+                  {data.costs.availability.found_facts.length > 0 ? <div><strong>Gefundene Angaben</strong><ul>{data.costs.availability.found_facts.map((fact) => <li key={fact.key}>{fact.label_de}: {fact.value}{fact.period_hint ? ` · ${fact.period_hint}` : ""}</li>)}</ul></div> : null}
+                  {data.costs.availability.missing_inputs.length > 0 ? <div><strong>Noch benötigt</strong><ul>{data.costs.availability.missing_inputs.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}
+                  {data.costs.availability.manual_input_required ? <span className="cw-review-notice">Manuelle Eingabe erforderlich</span> : null}
+                </div>
+              </Section>
+            ) : null}
+
             <div className="cw-two-col">
               <Section title="Kostenstruktur">
                 {data.costs.category_totals.length > 0 ? <div className="cw-list-rows">{data.costs.category_totals.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.amount != null && item.currency ? formatCurrency(String(item.amount), item.currency) : "Nicht verfügbar"}</strong></div>)}</div> : <p className="cw-muted">Keine verlässlichen Kostenkategorien verfügbar.</p>}
               </Section>
               <Section title="Steuer & Brutto/Netto">
                 <dl className="cw-definition-grid cw-definition-single">
-                  <div><dt>Steuerbasis</dt><dd>{data.costs.tax_basis ?? "Nicht verfügbar"}</dd></div>
+                  <div><dt>Steuerbasis <SourceButton evidence={taxBasisEvidence} /></dt><dd>{data.costs.tax_basis ?? "Nicht verfügbar"}</dd></div>
                   <div><dt>Monatlich netto</dt><dd>{data.costs.tax_breakdown?.monthly_net && data.costs.tax_breakdown.currency ? formatCurrency(data.costs.tax_breakdown.monthly_net, data.costs.tax_breakdown.currency) : "Nicht verfügbar"}</dd></div>
                   <div><dt>Monatlich brutto</dt><dd>{data.costs.tax_breakdown?.monthly_gross && data.costs.tax_breakdown.currency ? formatCurrency(data.costs.tax_breakdown.monthly_gross, data.costs.tax_breakdown.currency) : "Nicht verfügbar"}</dd></div>
+                  <div><dt>Jährlich netto</dt><dd>{data.costs.tax_breakdown?.annual_net && data.costs.tax_breakdown.currency ? formatCurrency(data.costs.tax_breakdown.annual_net, data.costs.tax_breakdown.currency) : "Nicht verfügbar"}</dd></div>
                   <div><dt>Jährlich brutto</dt><dd>{data.costs.tax_breakdown?.annual_gross && data.costs.tax_breakdown.currency ? formatCurrency(data.costs.tax_breakdown.annual_gross, data.costs.tax_breakdown.currency) : "Nicht verfügbar"}</dd></div>
+                  <div><dt>Jährliche Steuer</dt><dd>{data.costs.tax_breakdown?.annual_tax && data.costs.tax_breakdown.currency ? formatCurrency(data.costs.tax_breakdown.annual_tax, data.costs.tax_breakdown.currency) : "Nicht verfügbar"}</dd></div>
                 </dl>
               </Section>
             </div>
+            {data.costs.notes.length > 0 ? <Section title="Hinweise zu den Kosten"><ul className="cw-bullet-list">{data.costs.notes.map((note, index) => <li key={`${note}-${index}`}>{note}</li>)}</ul></Section> : null}
             <Section title="Preisentwicklung">
               {data.costs.price_development.length > 0 ? <div className="cw-list-rows">{data.costs.price_development.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.text ?? "Nicht verfügbar"}</strong></div>)}</div> : <p className="cw-muted">Keine Preisentwicklung dokumentiert.</p>}
             </Section>
@@ -269,11 +367,13 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
 
         {activeTab === "services" && (
           <>
-            <Section title="Leistungsumfang" description="Was ist im Vertrag enthalten?">
+            <Section title="Leistungsumfang" description="Vertraglich enthalten, ausgeschlossen oder noch zu prüfen">
               <div className="cw-service-grid">
-                {scopeEntries.map(([label, value]) => <div className="cw-service-item" key={label}><span>{label}</span><strong className={value === true ? "yes" : value === false ? "no" : "unknown"}>{yesNo(value)}</strong></div>)}
+                {SCOPE_FIELDS.map(([key, label, prop]) => {
+                  const state = scopeState(key, data.scope[prop]);
+                  return <div className="cw-service-item" key={key}><span>{label}</span><span className="cw-service-state"><strong className={state.tone}>{state.label}</strong><SourceButton evidence={state.evidence} /></span></div>;
+                })}
               </div>
-              {servicesEvidence ? <div className="cw-inline-source"><SourceButton evidence={servicesEvidence} /></div> : null}
               {data.scope.note_de ? <p className="cw-note">{data.scope.note_de}</p> : null}
             </Section>
             <div className="cw-two-col">
@@ -282,11 +382,11 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
             </div>
             <Section title="Service-Level (SLA)">
               <dl className="cw-definition-grid">
-                <div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? "Nicht verfügbar"}</dd></div>
-                <div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? "Nicht verfügbar"}</dd></div>
-                <div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? "Nicht verfügbar"}</dd></div>
-                <div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? "Nicht verfügbar"}</dd></div>
-                <div><dt>24/7 verfügbar</dt><dd>{yesNo(data.sla.availability_24_7)}</dd></div>
+                <div><dt>Reaktionszeit <SourceButton evidence={findExactEvidence("sla.response_time")} /></dt><dd>{data.sla.response_time ?? "Nicht verfügbar"}</dd></div>
+                <div><dt>Lösungszeit <SourceButton evidence={findExactEvidence("sla.resolution_time")} /></dt><dd>{data.sla.resolution_time ?? "Nicht verfügbar"}</dd></div>
+                <div><dt>Servicezeiten <SourceButton evidence={findExactEvidence("sla.service_hours")} /></dt><dd>{data.sla.service_hours ?? "Nicht verfügbar"}</dd></div>
+                <div><dt>Notfallverfügbarkeit <SourceButton evidence={findExactEvidence("sla.emergency_availability")} /></dt><dd>{data.sla.emergency_availability ?? "Nicht verfügbar"}</dd></div>
+                <div><dt>24/7 verfügbar <SourceButton evidence={findExactEvidence("sla.availability_24_7")} /></dt><dd>{yesNo(data.sla.availability_24_7)}</dd></div>
                 <div><dt>Hinweise</dt><dd>{data.sla.sla_notes ?? "Keine Hinweise"}</dd></div>
               </dl>
             </Section>
@@ -295,7 +395,27 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
 
         {activeTab === "equipment" && (
           <Section title="Verknüpfte Geräte" description={`${data.equipment.length} ${data.equipment.length === 1 ? "Gerät" : "Geräte"} diesem Vertrag zugeordnet`}>
-            {data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-grid">{data.equipment.map((item) => <article className="cw-equipment-card" key={item.id}><h3>{item.device_name ?? item.system_name ?? "Gerät"}</h3><p>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Keine Modellangabe"}</p><dl><div><dt>Seriennummer</dt><dd>{item.serial_number ?? "–"}</dd></div><div><dt>Inventarnummer</dt><dd>{item.inventory_number ?? "–"}</dd></div><div><dt>Standort</dt><dd>{item.location ?? "–"}</dd></div><div><dt>Abteilung</dt><dd>{item.department ?? "–"}</dd></div><div><dt>Abdeckung</dt><dd>{[item.coverage_start ? formatDate(item.coverage_start) : null, item.coverage_end ? formatDate(item.coverage_end) : null].filter(Boolean).join(" – ") || "–"}</dd></div></dl></article>)}</div>}
+            {data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-grid">{data.equipment.map((item) => (
+              <article className="cw-equipment-card" key={item.id}>
+                <div className="cw-equipment-head"><div><h3>{item.device_name ?? item.system_name ?? "Gerät"}</h3><p>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Keine Modellangabe"}</p></div>{item.requires_review ? <button type="button" className="cw-review-notice" onClick={() => setRoute("documents", "review")}>Zu prüfen</button> : null}</div>
+                <dl>
+                  <div><dt>Seriennummer</dt><dd>{item.serial_number ?? "–"}</dd></div>
+                  <div><dt>Inventarnummer</dt><dd>{item.inventory_number ?? "–"}</dd></div>
+                  <div><dt>Standort</dt><dd>{item.location ?? "–"}</dd></div>
+                  <div><dt>Abteilung</dt><dd>{item.department ?? "–"}</dd></div>
+                  <div><dt>Gerätetyp</dt><dd>{item.equipment_type ?? item.equipment_category ?? "–"}</dd></div>
+                  <div><dt>Abdeckung</dt><dd>{[item.coverage_start ? formatDate(item.coverage_start) : null, item.coverage_end ? formatDate(item.coverage_end) : null].filter(Boolean).join(" – ") || "–"}</dd></div>
+                  <div><dt>Leistungsumfang</dt><dd>{item.service_scope ?? "–"}</dd></div>
+                  <div><dt>Identifikation</dt><dd>{item.identification_quality ?? "–"}</dd></div>
+                  <div><dt>Vertragszuordnung</dt><dd>{item.relationship_quality ?? "–"}</dd></div>
+                </dl>
+                {item.included_services.length > 0 ? <div className="cw-equipment-services"><strong>Enthalten</strong><div className="cw-chip-list">{item.included_services.map((service, index) => <span className="cw-chip" key={`${service}-${index}`}>{service}</span>)}</div></div> : null}
+                {item.excluded_services.length > 0 ? <div className="cw-equipment-services"><strong>Ausgeschlossen</strong><ul className="cw-bullet-list">{item.excluded_services.map((service, index) => <li key={`${service}-${index}`}>{service}</li>)}</ul></div> : null}
+                {item.sla_notes ? <p className="cw-note">SLA: {item.sla_notes}</p> : null}
+                {item.review_reasons.length > 0 ? <div className="cw-review-reasons"><strong>Prüfgründe</strong><ul>{item.review_reasons.map((reason, index) => <li key={`${reason}-${index}`}>{reason}</li>)}</ul></div> : null}
+                {item.field_ref ? <SourceButton evidence={findExactEvidence(item.field_ref)} /> : null}
+              </article>
+            ))}</div>}
           </Section>
         )}
 
@@ -309,7 +429,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
             </div>
 
             <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">
-              {DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setDocumentTab(tab.key)}>{tab.label}</button>)}
+              {DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}
             </nav>
 
             {documentTab === "document" && (
@@ -317,11 +437,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
                 <aside className="cw-document-sidebar">
                   <h3>Quelldokumente</h3>
                   {data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}
-                  <button type="button" className="cw-evidence-shortcut" onClick={() => setDocumentTab("evidence")}>{data.evidence.length} Nachweise anzeigen</button>
+                  <button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button>
                 </aside>
-                <div className="cw-pdf-shell">
-                  <PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} />
-                </div>
+                <div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div>
               </div>
             )}
 
@@ -329,24 +447,13 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
               <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">
                 <div className="cw-evidence-layout">
                   <div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "document")} /></div>
-                  <div className="cw-evidence-preview">
-                    <PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} />
-                  </div>
+                  <div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div>
                 </div>
               </Section>
             )}
 
-            {documentTab === "review" && (
-              <div className="cw-integrated-panel">
-                <FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} />
-              </div>
-            )}
-
-            {documentTab === "history" && (
-              <div className="cw-integrated-panel">
-                <OverridePanel data={data} orgSlug={orgSlug} onReload={reload} />
-              </div>
-            )}
+            {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /></div>}
+            {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
           </>
         )}
       </div>
