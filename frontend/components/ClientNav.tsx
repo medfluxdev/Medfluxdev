@@ -125,7 +125,7 @@ function Sidebar() {
         <span className="logo" aria-hidden="true" />
         <span>
           <strong>Medflux</strong>
-          <small>Wartungsverträge intelligent verwalten</small>
+          <small>Intelligentes Vertragsmanagement</small>
         </span>
       </Link>
       <nav className="side-nav-root" aria-label="Hauptnavigation">
