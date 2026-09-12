@@ -1209,6 +1209,22 @@ def test_performance_diagnostics_counters_are_present():
     } <= literals
 
 
+def test_resolve_source_first_fallback_markers_present():
+    import ast
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    literals = {
+        node.value for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert {
+        "source_first_lean_prompt_fallback",
+        "final_prompt_lean_refit",
+        "unhandled_context_overflow",
+    } <= literals
+
+
 def test_delivery_gate_requires_resolve_pack_attempt():
     import ast
     from pathlib import Path
