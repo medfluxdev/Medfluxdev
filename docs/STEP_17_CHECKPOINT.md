@@ -2,7 +2,7 @@
 
 Stand: 2026-09-12
 Branch: `JAMAL`
-Status: **Implementiert; echter PostgreSQL Backup/Verify/Restore-Gate bestanden; CSV-DB-Fixture noch offen**
+Status: **ABGESCHLOSSEN; CSV-Export sowie echter PostgreSQL Backup/Verify/Restore-Gate bestanden**
 
 ## Implementiert
 
@@ -61,7 +61,7 @@ Auf Commit `cb2029645efa9b4c7c2606dfadf0d3853e090cc5`:
 - `/api/operations/contracts.csv` ist im importierten FastAPI-Routing registriert
 - Backup-/Verify-/Restore-Skripte mit `py_compile`: **bestanden**
 
-### Echter isolierter PostgreSQL-Gate
+### Echter isolierter PostgreSQL Backup/Restore-Gate
 
 Auf Commit `93c5677207cae96445fb8fc3179ebfd93ecbadc7`, ausschließlich gegen disposable PostgreSQL-Datenbanken:
 
@@ -74,10 +74,19 @@ Auf Commit `93c5677207cae96445fb8fc3179ebfd93ecbadc7`, ausschließlich gegen dis
 - Schema-/Alembic-Vergleich nach Restore: **bestanden**
 - Source- und Restore-Testdatenbanken danach vollständig entfernt
 
-Damit sind die Backup-/Verify-/Restore-Kriterien auf realem PostgreSQL erfüllt.
+### Echter organisationsgebundener CSV-E2E-Gate
 
-## Noch zu beweisen
+Auf Commit `e536927216c0d62e5205953064a261745a269aee`, ausschließlich gegen eine disposable PostgreSQL-Datenbank:
 
-- CSV-Export mit echter organisationsgebundener PostgreSQL-Fixture und aktivierter Authentifizierung
+- `backend/tests/test_step17_csv_e2e.py`: **3 passed in 1.92s**
+- authentifizierter CSV-Export: **bestanden**
+- Organisations-Isolation: **bestanden**
+- Cross-Org-Abfrage verborgen/404: **bestanden**
+- archivierte Verträge standardmäßig enthalten: **bestanden**
+- `include_archived=false` filtert archivierte Verträge: **bestanden**
+- UTF-8 BOM: **bestanden**
+- Semikolon-CSV: **bestanden**
+- `Cache-Control: private, no-store` / `X-Content-Type-Options: nosniff`: **bestanden**
+- disposable Testdatenbank danach entfernt
 
-Diese letzte Export-Prüfung muss weiterhin ausschließlich in einer isolierten Testumgebung erfolgen.
+Damit sind die fachlichen Runtime-Kriterien von STEP 17 erfüllt.
