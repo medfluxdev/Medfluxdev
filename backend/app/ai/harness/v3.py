@@ -509,7 +509,7 @@ def _merge_maps_v3(maps: list[ContractMap]) -> ContractMap:
     for mapping in maps:
         merge_distinct(merged.selections, mapping.selections, lambda s: (s.cluster, s.option, s.applicability))
         merge_distinct(merged.number_roles, mapping.number_roles, lambda n: (n.value, n.role))
-        merge_distinct(merged.precedence, mapping.precedence, lambda p: (p.document_type,))
+        merge_distinct(merged.precedence, mapping.precedence, lambda p: (p.document_type, p.rank))
     merged.document_type = next((m.document_type for m in maps if m.document_type), None)
     merged.purpose = next((m.purpose for m in maps if m.purpose), None)
     merged.observations = observations
@@ -553,6 +553,7 @@ class HarnessV3:
         global_understanding: GlobalContractUnderstanding | None = None
         clusters: list[OptionCluster] = []
         provider = None
+        recovery_call_used = False
 
         def failure_category(exc: Exception) -> str:
             done_reason = getattr(provider, "last_done_reason", None)
@@ -2047,13 +2048,39 @@ class HarnessV3:
 
                 if len(pack_segments) > 1:
                     original_segment_count = len(pack_segments)
-                    merged_segment = planner.pack_ranked(
-                        ranked_union or ordered_blocks,
-                        pack_overhead,
-                        purpose="resolve_pack_single_pass:" + pack_name,
-                        extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
-                        per_block_cost=block_vision_cost,
-                    )
+                    try:
+                        merged_segment = planner.pack_ranked(
+                            ranked_union or ordered_blocks,
+                            pack_overhead,
+                            purpose="resolve_pack_single_pass:" + pack_name,
+                            extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                            per_block_cost=block_vision_cost,
+                        )
+                    except ContextOverflow:
+                        lean_prompt = (
+                            "Resolve this related contract-field pack in ONE pass: "
+                            + ", ".join(pack_families)
+                            + ". Qwen owns contractual meaning. Return only requested fields with exact evidence_refs. "
+                            "Keep alternatives, optional values and variable charges separate from binding facts. "
+                            "Candidate field types: "
+                            + json.dumps(catalog, separators=(",", ":"))
+                            + "\n"
+                        )
+                        lean_overhead = pack_static_overhead(lean_prompt)
+                        merged_segment = planner.pack_ranked(
+                            ranked_union or ordered_blocks,
+                            lean_overhead,
+                            purpose="resolve_pack_single_pass_lean:" + pack_name,
+                            extra_reserve=_PACK_SAFETY_MARGIN,
+                            per_block_cost=block_vision_cost,
+                        )
+                        prompt = lean_prompt
+                        pack_overhead = lean_overhead
+                        sections_bound = 0
+                        planner.decisions.append({
+                            "purpose": "resolve_pack_segments:" + pack_name,
+                            "decision": "single_pass_lean_fallback",
+                        })
                     pack_segments = [merged_segment] if merged_segment else []
                     planner.decisions.append({
                         "purpose": "resolve_pack_segments:" + pack_name,
@@ -2215,7 +2242,7 @@ class HarnessV3:
                     })
                 remaining_packs = len(packed_family_order) - pack_index - 1
                 calls_left = self.settings.harness_max_calls - len(calls)
-                if failed and calls_left > remaining_packs + 2:
+                if failed and not recovery_call_used and calls_left > remaining_packs + 2:
                     unresolved_fields = {candidate.field for candidate in failed}
                     evidence_ids = {
                         ref.block_id
@@ -2252,6 +2279,7 @@ class HarnessV3:
                                 + "\nRelevant provisional sections: "
                                 + sections_context_pages(recovery_pages)
                             )
+                            recovery_call_used = True
                             recovery = await call(
                                 "recovery_pack:" + pack_name,
                                 recovery_prefix + recovery_context,
@@ -2499,6 +2527,11 @@ class HarnessV3:
                 1 for call_row in calls
                 if str(call_row.get("purpose", "")).startswith("ground_pack:")
             ),
+            "recovery_pack_call_count": sum(
+                1 for call_row in calls
+                if str(call_row.get("purpose", "")).startswith("recovery_pack:")
+            ),
+            "recovery_call_used": bool(locals().get("recovery_call_used", False)),
             "failure_count": sum(bool(call_row.get("failed")) for call_row in calls),
             "recovery_count": sum(bool(call_row.get("recovery")) for call_row in calls),
             "issues": list(dict.fromkeys(issues)),
