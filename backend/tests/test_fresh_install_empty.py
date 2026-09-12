@@ -8,8 +8,14 @@ Sichert die Daten-/Umgebungs-Trennung ab (UAT-Batch 1):
   0 Berechnungen/Warnungen/Reviews. Es wird nichts geseedet.
 """
 
-from sqlalchemy import text
+import uuid
+from urllib.parse import quote
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.database.base import Base
 from app.database.session import create_session
 
 PRODUCT_DOMAINS = [
@@ -55,6 +61,22 @@ def test_isolated_schema_is_active() -> None:
 
 
 def test_fresh_environment_contains_no_product_records() -> None:
-    with create_session() as session:
-        for table in PRODUCT_DOMAINS:
-            _assert_empty_table(session, table)
+    schema = "fresh_empty_" + uuid.uuid4().hex
+    base_url = settings.database_url.split("?")[0]
+    admin = create_engine(base_url, isolation_level="AUTOCOMMIT")
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+        url = f"{base_url}?options={quote('-csearch_path=' + schema + ',public')}"
+        engine = create_engine(url)
+        try:
+            Base.metadata.create_all(engine)
+            with Session(engine) as session:
+                for table in PRODUCT_DOMAINS:
+                    _assert_empty_table(session, table)
+        finally:
+            engine.dispose()
+    finally:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        admin.dispose()
