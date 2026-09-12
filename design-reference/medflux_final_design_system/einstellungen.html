@@ -1,0 +1,158 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Medflux Einstellungen</title><style>
+:root{
+  --bg:#12171d;--surface:#171e25;--surface2:#1b242c;--surface3:#202a33;
+  --border:#2b3741;--border-soft:#252f37;--text:#f4f7f8;--muted:#9aa8b1;
+  --muted2:#71818b;--accent:#6fd0c8;--accent-soft:#173a39;--success:#93cf8b;
+  --warning:#e6b96b;--danger:#e98282;--info:#7fa8e8;--violet:#a999dd;--money:#dec47d;
+  --shadow:0 14px 36px rgba(0,0,0,.18);--radius:18px
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+body{overflow-x:hidden}button,input,select{font:inherit}a{color:inherit}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.app{min-height:100vh;display:grid;grid-template-columns:240px 1fr}
+
+.sidebar{position:fixed;inset:0 auto 0 0;width:240px;background:linear-gradient(180deg,#10161c,#0f151a);border-right:1px solid #202a31;padding:22px 16px 16px;display:flex;flex-direction:column;z-index:50}
+.brand{display:flex;align-items:center;gap:12px;padding:0 8px 24px}.logo{width:42px;height:42px;border-radius:13px;background:linear-gradient(145deg,#6dd2cb,#32666b);position:relative}
+.logo:before,.logo:after{content:"";position:absolute;background:#0d1419;border-radius:999px}.logo:before{width:21px;height:6px;left:10px;top:18px}.logo:after{width:6px;height:21px;left:18px;top:10px}
+.brand strong{font-size:20px}.brand small{display:block;margin-top:4px;color:#778a94;font-size:9px;letter-spacing:.9px}
+.nav-label{padding:9px 11px 8px;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#5f717b}.nav{display:flex;flex-direction:column;gap:6px}
+.nav-item{min-height:46px;border-radius:12px;padding:0 12px;display:flex;align-items:center;gap:12px;text-decoration:none;color:#95a5ad;font-size:12.5px;position:relative}
+.nav-item:hover{background:#161f26;color:#d7e0e4}.nav-item.active{background:#18262d;color:#f5fffe}.nav-item.active:before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:6px;background:var(--accent)}
+.ico{width:20px;height:20px;display:grid;place-items:center}.ico svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.side-bottom{margin-top:auto;display:flex;flex-direction:column;gap:10px}
+.side-ai,.org-card{border-radius:15px;padding:14px;background:#141d23;border:1px solid #243039}
+.side-ai-top{display:flex;align-items:center;justify-content:space-between}.side-ai b,.org-card b{font-size:10.5px}
+.health{display:flex;align-items:center;gap:7px;color:#b8dcae;font-size:9.5px}.health-dot{width:8px;height:8px;border-radius:50%;background:var(--success)}
+.side-ai p,.org-card p{margin:7px 0 0;color:#768992;font-size:8.8px;line-height:1.45}
+.org-card{display:flex;align-items:center;gap:10px}.org-avatar{width:36px;height:36px;border-radius:10px;background:#1f3037;display:grid;place-items:center;color:#9ed8d1;font-weight:800}
+.org-card small{display:block;color:#71858e;font-size:8px;margin-top:3px}
+
+.main{grid-column:2;min-width:0}
+.topbar{height:76px;background:rgba(18,23,29,.96);backdrop-filter:blur(16px);border-bottom:1px solid #232e36;display:grid;grid-template-columns:1fr auto;align-items:center;padding:0 28px;position:sticky;top:0;z-index:40}
+.page-title{display:flex;align-items:center;gap:14px}.page-title h1{font-size:19px;margin:0}.quality-pill{height:30px;padding:0 10px;border-radius:9px;background:#18252b;border:1px solid #2a3b43;color:#b7c6cc;font-size:9.5px;display:flex;align-items:center;gap:7px;cursor:pointer}.quality-pill b{color:#ccece6}
+.top-actions{display:flex;align-items:center;gap:10px}.search{width:430px;height:44px;border:1px solid #2b3740;border-radius:12px;background:#171f25;display:flex;align-items:center;gap:9px;padding:0 13px;color:#768993;font-size:11px;cursor:text}
+.search svg{width:18px;height:18px;stroke:#7d9098;fill:none;stroke-width:1.8}.search input{border:0;outline:0;background:transparent;color:#dfe8eb;width:100%;font-size:11px}
+.import-btn{height:44px;border:0;border-radius:12px;background:#245b5c;color:#efffff;padding:0 16px;font-weight:700;font-size:11px}.icon-btn{width:44px;height:44px;border-radius:12px;border:1px solid #2b3740;background:#171f25;display:grid;place-items:center;color:#9badb5;position:relative;cursor:pointer}
+.icon-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}.notif-count{position:absolute;right:-4px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#bf5d63;color:#fff;font-size:8px;display:grid;place-items:center;border:2px solid var(--bg)}
+.content{padding:24px 28px 36px;max-width:1700px;margin:0 auto}.section-caption{font-size:9px;color:#697b84;letter-spacing:1.45px;text-transform:uppercase;margin-bottom:9px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px}.panel-head h2{font-size:16px;margin:0}.panel-head p{margin:5px 0 0;font-size:10px;color:#71838c}.panel-link{font-size:9.5px;color:#77b9b7;text-decoration:none}
+.btn-secondary{height:36px;padding:0 12px;border-radius:9px;border:1px solid #30414a;background:#19242b;color:#c1cdd1;font-size:9.5px}.btn-primary{height:36px;padding:0 13px;border-radius:9px;border:1px solid #315c5e;background:#1b3b3e;color:#d7f7f2;font-size:9.5px}
+.btn-danger{height:36px;padding:0 13px;border-radius:9px;border:1px solid #5a3538;background:#331f22;color:#f1b1b1;font-size:9.5px}
+.breadcrumbs{display:flex;align-items:center;gap:7px;font-size:9.5px;color:#74858d;margin-bottom:14px}.breadcrumbs a{text-decoration:none;color:#8ca0a8}.breadcrumbs strong{color:#dbe4e7;font-weight:600}
+.kbd{padding:2px 5px;border-radius:5px;border:1px solid #37434a;background:#20282e;color:#9cacb2;font-size:8px}
+.tooltip{position:relative}.tooltip:hover:after{content:attr(data-tip);position:absolute;bottom:-34px;right:0;background:#0c1115;color:#dce6e8;border:1px solid #2a363d;padding:6px 8px;border-radius:7px;font-size:8px;white-space:nowrap;z-index:90}
+
+.popover{position:fixed;top:66px;right:28px;width:330px;background:#161f25;border:1px solid #314049;border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.34);padding:13px;z-index:100;display:none}
+.popover.open{display:block}.popover h3{font-size:11px;margin:0 0 9px}.pop-row{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #263138;font-size:9px}.pop-row:first-of-type{border-top:0}.pop-row span{color:#81939b}
+.search-panel{position:fixed;top:66px;right:170px;width:500px;max-height:520px;overflow:auto;background:#161f25;border:1px solid #314049;border-radius:14px;box-shadow:0 22px 60px rgba(0,0,0,.34);padding:12px;z-index:100;display:none}
+.search-panel.open{display:block}.search-group{padding:9px 0;border-top:1px solid #263138}.search-group:first-child{border-top:0}.search-group h4{font-size:8px;letter-spacing:1.2px;text-transform:uppercase;color:#667982;margin:0 0 7px}
+.search-result{display:flex;justify-content:space-between;gap:12px;padding:8px;border-radius:8px}.search-result:hover{background:#1e2a31}.search-result b{font-size:9.5px}.search-result span{font-size:8px;color:#71858d}
+.quick-menu{position:fixed;top:66px;right:28px;width:210px;background:#161f25;border:1px solid #314049;border-radius:12px;box-shadow:0 22px 60px rgba(0,0,0,.34);padding:7px;z-index:100;display:none}.quick-menu.open{display:block}.quick-menu a{display:block;text-decoration:none;padding:10px;border-radius:8px;font-size:9.5px;color:#b8c5c9}.quick-menu a:hover{background:#1e2a31}
+.toast{position:fixed;right:28px;bottom:26px;background:#18241f;border:1px solid #335343;color:#cde5d2;padding:11px 13px;border-radius:10px;font-size:9px;box-shadow:0 14px 40px rgba(0,0,0,.28);display:none;z-index:120}.toast.show{display:block}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(5,8,10,.66);display:none;place-items:center;z-index:110}.modal-backdrop.open{display:grid}.modal{width:min(520px,90vw);background:#171f25;border:1px solid #344149;border-radius:16px;padding:18px}.modal h3{font-size:13px;margin:0}.modal p{font-size:9.5px;color:#7b8c94;line-height:1.5}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}
+@media(max-width:1150px){.app{grid-template-columns:210px 1fr}.sidebar{width:210px}.search{width:300px}}
+
+.settings-layout{display:grid;grid-template-columns:250px 1fr;gap:18px}.settings-menu{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px;height:max-content}.settings-tab{height:43px;border-radius:10px;padding:0 11px;display:flex;align-items:center;color:#91a1a9;font-size:10.8px}.settings-tab.active{background:#1d2b32;color:#f0f7f8}
+.settings-main{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px}.settings-main h2{font-size:17px;margin:0}.settings-main>p{font-size:10px;color:#71838c;line-height:1.5}.form-section{padding:18px 0;border-top:1px solid var(--border-soft)}.form-section:first-of-type{margin-top:18px}.form-section h3{font-size:12px;margin:0 0 4px}.form-section p{font-size:9px;color:#73858e;margin:0 0 13px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field label{display:block;font-size:9px;color:#8fa0a8;margin-bottom:6px}.field input,.field select{width:100%;height:40px;border-radius:10px;border:1px solid #30404a;background:#151e24;color:#dce6e9;padding:0 11px;font-size:10px}.toggle-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #252f37}.toggle-row b{font-size:10px}.toggle-row span{font-size:8.5px;color:#71838c}.toggle{width:38px;height:21px;border-radius:99px;background:#31595a;position:relative}.toggle:after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;right:2px;top:2px;background:#dff9f5}.backup-card{border:1px solid #2e3b43;background:#192229;border-radius:12px;padding:13px;margin-top:10px}.backup-card b{font-size:10px}.backup-card p{font-size:8.5px;color:#758891}
+</style></head><body><div class="app">
+<aside class="sidebar">
+  <div class="brand"><div class="logo"></div><div><strong>Medflux</strong><small>CONTRACT INTELLIGENCE</small></div></div>
+  <div class="nav-label">Arbeitsbereich</div>
+  <nav class="nav">
+    <a class="nav-item " href="index.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 12h5l3-7 3 14 2-7h3"/></svg></span>Übersicht</a>
+    <a class="nav-item " href="contract360.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg></span>Verträge</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 13h5"/></svg></span>Arbeitsliste</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5z"/></svg></span>Geräte</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg></span>Import</a>
+  </nav>
+  <div class="nav-label">Kontrolle</div>
+  <nav class="nav">
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></span>Prüfungen</a>
+    <a class="nav-item " href="evidence-viewer.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg></span>Nachweise</a>
+    <a class="nav-item" href="#"><span class="ico"><svg viewBox="0 0 24 24"><path d="M5 20V4h14v16z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>Audit</a>
+    <a class="nav-item " href="archiv.html"><span class="ico"><svg viewBox="0 0 24 24"><path d="M4 8h16v12H4z"/><path d="M7 8V4h10v4"/><path d="M9 12h6"/></svg></span>Archiv</a>
+  </nav>
+  <div class="nav-label">System</div>
+  <nav class="nav">
+    <a class="nav-item active" href="einstellungen.html"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></svg></span>Einstellungen</a>
+  </nav>
+  <div class="side-bottom">
+    <div class="side-ai"><div class="side-ai-top"><b>Lokale KI</b><div class="health"><span class="health-dot"></span>Gesund</div></div><p>Lokale Verarbeitung<br>Nachweisverfolgung aktiv<br>Keine externen Modellaufrufe</p></div>
+    <div class="org-card"><div class="org-avatar">—</div><div><b>Organisation nicht verbunden</b><small>Bereich nicht verfügbar</small></div></div>
+  </div>
+</aside>
+<main class="main">
+<header class="topbar">
+  <div class="page-title"><h1>Einstellungen</h1></div>
+  <div class="top-actions">
+    <div class="search" id="globalSearchBox"><svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="globalSearchInput" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät, Dateiname, Fakten, Nachweise ..."></div>
+    <button class="import-btn" onclick="showToast('Import wird geöffnet')">Vertrag importieren</button>
+    <button class="icon-btn tooltip" data-tip="Benachrichtigungen" id="notifBtn" aria-label="Benachrichtigungen"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M10 20h4"/></svg></button>
+    <button class="icon-btn tooltip" data-tip="Schnellaktionen" id="quickBtn" aria-label="Schnellaktionen">⋯</button>
+  </div>
+</header>
+
+<section class="content">
+<div class="settings-layout">
+  <aside class="settings-menu"><div class="settings-tab">Allgemein</div><div class="settings-tab active">Lokale KI</div><div class="settings-tab">OCR & Verarbeitung</div><div class="settings-tab">Daten & Speicher</div><div class="settings-tab">Backup & Wiederherstellung</div><div class="settings-tab">Demo-UAT</div><div class="settings-tab">Sicherheit</div></aside>
+  <section class="settings-main">
+    <h2>Lokale KI</h2><p>Zusammenhängende Konfiguration statt vieler isolierter Karten. Nicht verfügbare Funktionen werden vor STEP16 klar als deaktiviert gekennzeichnet.</p>
+    <div class="form-section"><h3>Modell & Laufzeit</h3><div class="form-grid"><div class="field"><label>Modellanbieter</label><select><option>Nicht konfiguriert</option></select></div><div class="field"><label>Modell</label><select><option>Nicht konfiguriert</option></select></div><div class="field"><label>Basis-URL</label><input value="" placeholder="Nicht konfiguriert"></div><div class="field"><label>Kontextfenster</label><input value="" placeholder="Nicht konfiguriert"></div></div></div>
+    <div class="form-section"><h3>Nachweisbasierte Analyse</h3><div class="toggle-row"><div><b>Nachweiszwang aktivieren</b><span>Fakten ohne Quelle werden als unbestätigt markiert.</span></div><div class="toggle"></div></div><div class="toggle-row"><div><b>Menschliche Bestätigung für kritische Fakten</b><span>Kritische Findings können nicht automatisch geschlossen werden.</span></div><div class="toggle"></div></div></div>
+    <div class="form-section"><h3>Backup & Wiederherstellung</h3><p>Produktfunktion — getrennt vom Entwicklungs-Checkpoint von OpenCode.</p>
+      <div class="backup-card"><b>Letzte erfolgreiche Sicherung</b><p>Keine Sicherung verfügbar</p><button class="btn-secondary" onclick="showToast('Backup-Funktion ist im Prototyp nicht mit dem Backend verbunden')">Neue Sicherung erstellen</button></div>
+      <div class="backup-card"><b>Wiederherstellung</b><p>Erfordert Integritätsprüfung, Warnung und explizite Bestätigung. Vor STEP16 bleibt diese Aktion deaktiviert.</p><button class="btn-danger" disabled>Aus Sicherung wiederherstellen</button></div>
+    </div>
+  </section>
+</div>
+</section>
+</main></div>
+<div class="popover" id="qualityPop">
+  <h3>Datenqualität</h3>
+  <div class="pop-row"><span>Status</span><b>Nicht verfügbar</b></div>
+  <div class="pop-row"><span>Backend</span><b>Nicht verbunden</b></div>
+  <div class="pop-row"><span>Berechnung</span><b>Nicht verfügbar</b></div>
+  <div class="pop-row"><span>Quelle</span><b>Nicht verfügbar</b></div>
+</div>
+
+<div class="popover" id="notifPop">
+  <h3>Benachrichtigungen</h3>
+  <div class="pop-row"><span>Keine echten Benachrichtigungen</span><b>18h</b></div>
+  <div class="pop-row"><span>Keine echten Benachrichtigungen</span><b>Jetzt</b></div>
+  <div class="pop-row"><span>Keine echten Benachrichtigungen</span><b>Heute</b></div>
+  <div class="pop-row"><span>Gerät ohne Abdeckung · IP-040</span><b>Offen</b></div>
+</div>
+
+<div class="search-panel" id="searchPanel">
+  <div class="search-group"><h4>Verträge</h4><div class="search-result"><b>Keine Vertragsdaten</b><span>Vertrag</span></div><div class="search-result"><b>Keine Vertragsdaten</b><span>Vertrag</span></div></div>
+  <div class="search-group"><h4>Geräte</h4><div class="search-result"><b>Keine Gerätedaten</b><span>Gerät</span></div><div class="search-result"><b>Keine Gerätedaten</b><span>Gerät</span></div></div>
+  <div class="search-group"><h4>Nachweise</h4><div class="search-result"><b>Keine Nachweisdaten</b><span>Nachweis</span></div><div class="search-result"><b>Keine Nachweisdaten</b><span>Nachweis</span></div></div>
+</div>
+
+<div class="quick-menu" id="quickMenu">
+  <a href="#">Arbeitsliste öffnen</a><a href="archiv.html">Archiv öffnen</a><a href="einstellungen.html">Systemstatus</a>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+function closeAll(){document.querySelectorAll('.popover,.search-panel,.quick-menu').forEach(x=>x.classList.remove('open'))}
+function showToast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('#qualityBtn')&&!e.target.closest('#qualityPop')) $('#qualityPop')?.classList.remove('open');
+  if(!e.target.closest('#notifBtn')&&!e.target.closest('#notifPop')) $('#notifPop')?.classList.remove('open');
+  if(!e.target.closest('#quickBtn')&&!e.target.closest('#quickMenu')) $('#quickMenu')?.classList.remove('open');
+  if(!e.target.closest('#globalSearchBox')&&!e.target.closest('#searchPanel')) $('#searchPanel')?.classList.remove('open');
+});
+$('#qualityBtn')?.addEventListener('click',()=>$('#qualityPop').classList.toggle('open'));
+$('#notifBtn')?.addEventListener('click',()=>$('#notifPop').classList.toggle('open'));
+$('#quickBtn')?.addEventListener('click',()=>$('#quickMenu').classList.toggle('open'));
+$('#globalSearchInput')?.addEventListener('focus',()=>$('#searchPanel').classList.add('open'));
+$('#globalSearchInput')?.addEventListener('input',()=>$('#searchPanel').classList.add('open'));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAll(); if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#globalSearchInput')?.focus();}})
+</script>
+</body></html>
