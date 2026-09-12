@@ -2,7 +2,7 @@
 
 Stand: 2026-09-12
 Branch: `JAMAL`
-Status: **Implementiert; gezielte DB-freie Runtime-Gates bestanden; PostgreSQL-/E2E-Gate ausstehend**
+Status: **ABGESCHLOSSEN – PostgreSQL-Migration, Auth-E2E, Rollen- und Org-Grenzen bestanden**
 
 ## Implementiert
 
@@ -46,28 +46,49 @@ Status: **Implementiert; gezielte DB-freie Runtime-Gates bestanden; PostgreSQL-/
 
 ## Laufzeitnachweis vom 2026-09-12
 
-Bounded Gate auf Branch `JAMAL`, Commit `cb2029645efa9b4c7c2606dfadf0d3853e090cc5`, sauberer Worktree:
+### DB-freie Gates
+
+Auf Commit `cb2029645efa9b4c7c2606dfadf0d3853e090cc5`:
 
 - Auth-Security-Tests mit `MEDFLUX_UNIT_ONLY=1`: **5 passed in 0.42s**
 - `app.main:app` Import ohne Serverstart/DB-Verbindung: **bestanden**
 - erforderliche Auth-/Audit-Routen registriert: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/audit`
 - Frontend Production-Build: **bestanden** (`Next.js 14.2.15`, Lint/Types OK, 14 Seiten generiert)
-- relevante Python-Dateien wurden mit `py_compile` erfolgreich geprüft
+- relevante Python-Dateien mit `py_compile`: **bestanden**
 
-Dieser Nachweis beweist bewusst **nicht** die Migration oder DB-gestützte Auth-/Provenienzpfade.
+### Isolierter PostgreSQL-Gate
 
-## Noch zu beweisen (PostgreSQL-/E2E-Gate)
+Auf Commit `93c5677207cae96445fb8fc3179ebfd93ecbadc7`, ausschließlich gegen disposable Testdatenbanken:
 
-1. Migration `d7e1f2a5b3c6` auf isolierter PostgreSQL-Testdatenbank bis `head`.
-2. gezielter Login → `/me` → Review/Override → Provenienz → Audit-Smoke-Test gegen isolierte DB.
-3. Viewer-Mutationsschutz und Organisations-Isolation gegen isolierte DB.
+- Migration `alembic upgrade head`: **bestanden**
+- `alembic current == head == d7e1f2a5b3c6`: **bestanden**
+- genau ein Alembic-Head: **ja**
+- Tabellen `organization`, `contract`, `app_user`, `audit_event`: **vorhanden**
+- Provenienz-Schema/FKs: **bestanden**
+- Auth-Security: **5 passed**
+- bestehende Org-Isolation: **bestanden**
+- bestehende Audit-/Provenienz-Tests: **bestanden**
+- temporäre Datenbanken nach dem Gate vollständig entfernt
+
+### Gezielter Auth-E2E-Gate
+
+Auf Commit `5392c049657e8e35c178dee3ede51af1f49a56fa` wurde `backend/tests/test_auth_e2e.py` gegen eine eigene disposable PostgreSQL-Datenbank ausgeführt:
+
+- Ergebnis: **3 passed, 5 warnings in 2.60s**
+- Login → `/api/auth/me` → Audit → Logout: **bestanden**
+- Cross-Org-Isolation: **bestanden**
+- Viewer-Schreibschutz: **bestanden**
+- Reviewer-Schreibzugriff: **bestanden**
+- temporäre Testdatenbank: **erfolgreich entfernt**
+
+Damit ist der für Schritt 16 definierte PostgreSQL-/E2E-Gate erfüllt.
 
 ## Sicherheitsgrenzen
 
 - Kein externer Identity-/AI-Dienst.
 - Session-Secret nie im Repository.
-- Keine Testausführung gegen das Produkt-Schema `public`.
+- Tests laufen ausschließlich gegen isolierte PostgreSQL-Testumgebungen; Produktdaten werden nicht für Test-Fixtures verwendet.
 - Rollen-/Org-Grenzen werden serverseitig erzwungen; Query-Parameter sind keine Credentials.
 - Bestehende unverifizierte Dev-Einträge bleiben ehrlich als `manual_unverified`/`is_development` erkennbar.
 
-Schritt 16 wird in `PROJECT_PROGRESS.md` erst nach bestandenem PostgreSQL-/E2E-Gate auf **ABGESCHLOSSEN** gesetzt.
+Schritt 16 ist auf Basis der dokumentierten Runtime-Nachweise **ABGESCHLOSSEN**.
