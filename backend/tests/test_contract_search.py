@@ -251,7 +251,10 @@ def test_equipment_search(db):
     org = _org(db)
     c, _, _ = _mk_contract(db, org, contract_number="CN-A", title="Wartung")
     eq = ContractEquipment(
-        organization_id=org.id, contract_id=c.id, device_name="Ventilator",
+        organization_id=org.id,
+        contract_id=c.id,
+        extraction_id=c.accepted_extraction_id,
+        device_name="Ventilator",
         manufacturer="Draeger",
     )
     db.add(eq)
