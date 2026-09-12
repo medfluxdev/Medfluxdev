@@ -46,4 +46,17 @@ __all__ = [
     "DemoWorkspaceEntry",
     "WarningEvaluationRun",
     "ContractWarning",
+    "ContractRelationRecord",
+    "ContractObligationRecord",
+    "PolicyDecisionRecord",
+    "IntelligenceEvent",
+    "ActionProposalRecord",
 ]
+
+from app.database.models.intelligence import (
+    ContractRelationRecord,
+    ContractObligationRecord,
+    PolicyDecisionRecord,
+    IntelligenceEvent,
+    ActionProposalRecord,
+)
