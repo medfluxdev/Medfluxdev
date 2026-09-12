@@ -16,7 +16,7 @@ depends_on = None
 def upgrade() -> None:
     op.execute("""
         WITH single_hospital AS (
-            SELECT organization_id, min(id) AS hospital_id
+            SELECT organization_id, (array_agg(id))[1] AS hospital_id
             FROM hospital
             WHERE is_active = true
             GROUP BY organization_id
@@ -31,7 +31,7 @@ def upgrade() -> None:
     """)
     op.execute("""
         WITH single_hospital AS (
-            SELECT organization_id, min(id) AS hospital_id
+            SELECT organization_id, (array_agg(id))[1] AS hospital_id
             FROM hospital
             WHERE is_active = true
             GROUP BY organization_id
@@ -45,7 +45,7 @@ def upgrade() -> None:
     """)
     op.execute("""
         WITH single_department AS (
-            SELECT hospital_id, min(id) AS department_id
+            SELECT hospital_id, (array_agg(id))[1] AS department_id
             FROM department
             WHERE is_active = true
             GROUP BY hospital_id
@@ -59,7 +59,7 @@ def upgrade() -> None:
     """)
     op.execute("""
         WITH single_department AS (
-            SELECT hospital_id, min(id) AS department_id
+            SELECT hospital_id, (array_agg(id))[1] AS department_id
             FROM department
             WHERE is_active = true
             GROUP BY hospital_id
