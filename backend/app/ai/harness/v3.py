@@ -1859,6 +1859,9 @@ class HarnessV3:
                     "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs "
                     "copied from supplied source blocks. Do not compute derived dates or annual totals. "
                     "Keep selected fixed prices separate from alternatives, optional add-ons and variable/event charges. "
+                    "For visually uncertain handwritten/scan values (serials, installation dates, identifiers), use ambiguous "
+                    "status and state the uncertainty instead of asserting a normalized value. Attribute SLA/service facts only "
+                    "to the selected applicable plan when source evidence supports that scope. "
                     "For identity.contract_number obey the supplied Qwen number-role/applicability state. "
                     "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
@@ -1869,12 +1872,23 @@ class HarnessV3:
                 # Planner overhead must reflect exactly what call() will prepend:
                 # SYSTEM + CandidateBatch schema. This keeps fake-provider/runtime
                 # behaviour stable while avoiding the previous double-count bug.
-                pack_overhead = pack_static_overhead(prompt)
-                sections_bound = min(160, sections_bound_tokens() + 16) if section_understandings else 0
-                ordered_ids = {block.id for block in ranked_union}
-                ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
-                if not ordered_blocks:
-                    ordered_blocks = list(document.blocks)
+                try:
+                    pack_overhead = pack_static_overhead(prompt)
+                    sections_bound = min(160, sections_bound_tokens() + 16) if section_understandings else 0
+                    ordered_ids = {block.id for block in ranked_union}
+                    ordered_blocks = [block for block in document.blocks if block.id in ordered_ids]
+                    if not ordered_blocks:
+                        ordered_blocks = list(document.blocks)
+                except ContextOverflow as exc:
+                    issues.append(
+                        f"{pack_name}: Kontextvorbereitung zu groß; manuelle Prüfung erforderlich"
+                    )
+                    planner.decisions.append({
+                        "purpose": "resolve_pack_prepare:" + pack_name,
+                        "decision": "prepare_context_overflow",
+                        "error_type": type(exc).__name__,
+                    })
+                    continue
 
                 try:
                     pack_segments = planner.segments(
@@ -1885,13 +1899,40 @@ class HarnessV3:
                         per_block_cost=block_vision_cost,
                     )
                 except ContextOverflow:
-                    ranked_pack = planner.pack_ranked(
-                        ranked_union or ordered_blocks,
-                        pack_overhead,
-                        purpose="resolve_pack_ranked_fallback:" + pack_name,
-                        extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
-                        per_block_cost=block_vision_cost,
-                    )
+                    try:
+                        ranked_pack = planner.pack_ranked(
+                            ranked_union or ordered_blocks,
+                            pack_overhead,
+                            purpose="resolve_pack_ranked_fallback:" + pack_name,
+                            extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                            per_block_cost=block_vision_cost,
+                        )
+                    except ContextOverflow:
+                        lean_prompt = (
+                            "Resolve this related contract-field pack in ONE pass: "
+                            + ", ".join(pack_families)
+                            + ". Qwen owns contractual meaning. Return only requested fields. "
+                            "Every supported candidate needs exact evidence_refs from supplied source blocks. "
+                            "Keep alternatives/optional/variable charges separate from binding values. "
+                            "Candidate field types: "
+                            + json.dumps(catalog, separators=(",", ":"))
+                            + "\n"
+                        )
+                        lean_overhead = pack_static_overhead(lean_prompt)
+                        ranked_pack = planner.pack_ranked(
+                            ranked_union or ordered_blocks,
+                            lean_overhead,
+                            purpose="resolve_pack_source_first_fallback:" + pack_name,
+                            extra_reserve=_PACK_SAFETY_MARGIN,
+                            per_block_cost=block_vision_cost,
+                        )
+                        prompt = lean_prompt
+                        pack_overhead = lean_overhead
+                        sections_bound = 0
+                        planner.decisions.append({
+                            "purpose": "resolve_pack_segments:" + pack_name,
+                            "decision": "source_first_lean_prompt_fallback",
+                        })
                     pack_segments = [ranked_pack] if ranked_pack else []
                     planner.decisions.append({
                         "purpose": "resolve_pack_segments:" + pack_name,
@@ -1926,12 +1967,33 @@ class HarnessV3:
                     )
                     final_text = local_prompt + context
                     if not planner.fits(final_text):
-                        refit = planner.pack_ranked(
-                            segment,
-                            pack_static_overhead(local_prompt),
-                            purpose=f"resolve_pack_refit:{pack_name}:{segment_index}",
-                            per_block_cost=block_vision_cost,
-                        )
+                        try:
+                            refit = planner.pack_ranked(
+                                segment,
+                                pack_static_overhead(local_prompt),
+                                purpose=f"resolve_pack_refit:{pack_name}:{segment_index}",
+                                per_block_cost=block_vision_cost,
+                            )
+                        except ContextOverflow:
+                            lean_local_prompt = (
+                                "Resolve this related contract-field pack in ONE pass: "
+                                + ", ".join(pack_families)
+                                + ". Return only requested fields with exact evidence_refs. "
+                                "Candidate field types: "
+                                + json.dumps(catalog, separators=(",", ":"))
+                                + "\n"
+                            )
+                            refit = planner.pack_ranked(
+                                segment,
+                                pack_static_overhead(lean_local_prompt),
+                                purpose=f"resolve_pack_refit_lean:{pack_name}:{segment_index}",
+                                per_block_cost=block_vision_cost,
+                            )
+                            local_prompt = lean_local_prompt
+                            planner.decisions.append({
+                                "purpose": f"resolve_pack:{pack_name}:{segment_index}",
+                                "decision": "final_prompt_lean_refit",
+                            })
                         if not refit:
                             planner.decisions.append({
                                 "purpose": f"resolve_pack:{pack_name}:{segment_index}",
@@ -2245,6 +2307,12 @@ class HarnessV3:
             })
         except Exception as exc:
             issues.append("Harness: " + type(exc).__name__ + "; manuelle Prüfung erforderlich")
+            if isinstance(exc, ContextOverflow):
+                planner.decisions.append({
+                    "purpose": "harness",
+                    "decision": "unhandled_context_overflow",
+                    "error_summary": str(exc)[:240],
+                })
             if "supported_count" not in locals():
                 supported_count = 0
             planner.decisions.append({
