@@ -3,29 +3,31 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
+import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { apiGet } from "@/lib/api";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
-
-const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 
 export default function ContractDetailPage() {
   const params = useParams<{ "contract-id": string }>();
   const contractId = params?.["contract-id"] ?? "";
+  const { organizationSlug } = useAuth();
 
   const [data, setData] = useState<ContractDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const load = useCallback(() => {
+    if (!contractId || !organizationSlug) return;
     setLoading(true);
     setError(false);
     apiGet<ContractDetailResponse>(
-      `/api/contracts/${encodeURIComponent(contractId)}?organization_slug=${encodeURIComponent(ORG_SLUG)}`
+      `/api/contracts/${encodeURIComponent(contractId)}?organization_slug=${encodeURIComponent(organizationSlug)}`
     )
       .then((res) => setData(res))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [contractId]);
+  }, [contractId, organizationSlug]);
 
   useEffect(load, [load]);
 
@@ -44,12 +46,16 @@ export default function ContractDetailPage() {
 
       {data && error && (
         <div className="alert" role="status">
-          Aktualisierung fehlgeschlagen – die Anzeige zeigt den zuletzt geladenen
-          Stand.
+          Aktualisierung fehlgeschlagen – die Anzeige zeigt den zuletzt geladenen Stand.
         </div>
       )}
 
-      {data && <ContractWorkspace data={data} orgSlug={ORG_SLUG} onReload={load} />}
+      {data && organizationSlug ? (
+        <>
+          <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />
+          <ContractWorkspace data={data} orgSlug={organizationSlug} onReload={load} />
+        </>
+      ) : null}
     </div>
   );
 }
