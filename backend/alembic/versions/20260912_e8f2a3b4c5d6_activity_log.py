@@ -28,6 +28,8 @@ def upgrade() -> None:
         sa.Column("object_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("context_data", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organization.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["account_id"], ["account.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_activity_log")),
     )
     op.create_index(op.f("ix_activity_log_organization_id"), "activity_log", ["organization_id"], unique=False)
