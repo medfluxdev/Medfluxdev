@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    activity,
     ai,
     auth,
     contract_actions_secure,
@@ -40,6 +41,7 @@ app.add_middleware(SessionGuardMiddleware)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(activity.router)
 app.include_router(ai.router)
 app.include_router(documents.router)
 app.include_router(dashboard.router)
