@@ -10,6 +10,14 @@ from app.database.session import create_session
 
 
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
+_MUTATION_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _reviewer_mutation_allowed(path: str) -> bool:
+    return (
+        (path.startswith("/api/contracts/") and ("/fact-reviews" in path or "/review/" in path))
+        or path.startswith("/api/work-queue/")
+    )
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
@@ -31,11 +39,19 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             request.state.account_login_name = account.login_name
 
             organization_slug = request.query_params.get("organization_slug")
+            actor = None
             if organization_slug:
                 actor = actor_for_account(session, account, organization_slug)
                 if actor is None:
                     return JSONResponse({"detail": "Kein Zugriff auf diese Organisation."}, status_code=403)
                 request.state.actor = actor
+
+            if request.method in _MUTATION_METHODS and actor is not None:
+                if actor.role == "viewer":
+                    return JSONResponse({"detail": "Nur-Lese-Zugriff: Änderung nicht erlaubt."}, status_code=403)
+                if actor.role == "reviewer" and not _reviewer_mutation_allowed(path):
+                    return JSONResponse({"detail": "Für diese Änderung fehlt die Berechtigung."}, status_code=403)
+
             return await call_next(request)
         finally:
             session.close()
