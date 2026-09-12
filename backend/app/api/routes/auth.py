@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.auth.service import authenticate, create_login_session, memberships_for_account, revoke_login_session
 from app.core.config import settings
@@ -113,7 +113,11 @@ def me(request: Request):
         memberships = memberships_for_account(session, account.id)
         organizations = []
         if account.is_developer:
-            organizations = session.scalars(select(Organization).order_by(Organization.name.asc())).all()
+            organizations = session.scalars(
+                select(Organization)
+                .where(text("organization.is_active = true"))
+                .order_by(Organization.name.asc())
+            ).all()
         return _account_payload(account, memberships, organizations)
     finally:
         session.close()
