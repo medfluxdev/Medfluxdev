@@ -1167,6 +1167,20 @@ def test_final_prompt_refit_path_is_present():
     assert "resolve_pack_refit:" in source.read_text(encoding="utf-8")
 
 
+def test_lossless_map_union_preserves_precedence_rank_conflicts():
+    left = ContractMap(precedence=[PrecedenceRule(document_type="email", rank=1, block_ids=["p1:a"])])
+    right = ContractMap(precedence=[PrecedenceRule(document_type="email", rank=2, block_ids=["p2:b"])])
+    merged = _merge_maps_v3([left, right])
+    assert {(item.document_type, item.rank) for item in merged.precedence} == {("email", 1), ("email", 2)}
+
+
+def test_single_pass_resolve_has_lean_context_fallback_marker():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    assert "single_pass_lean_fallback" in source
+    assert "resolve_pack_single_pass_lean:" in source
+
+
 def test_precedence_conflict_quarantine_marker_is_present():
     import ast
     from pathlib import Path
@@ -1289,6 +1303,14 @@ def test_non_sensitive_unknown_applicability_does_not_force_grounding():
     end = source.index("if needs_semantic_verifier:", start)
     verify_gate = source[start:end]
     assert 'candidate.applicability == "unknown"' not in verify_gate
+
+
+def test_recovery_pack_is_globally_capped_to_one_call():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    assert "recovery_call_used = False" in source
+    assert "failed and not recovery_call_used" in source
+    assert '"recovery_pack_call_count"' in source
 
 
 def test_recovery_is_limited_to_supported_unresolved_candidates():
