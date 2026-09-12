@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import DeleteOrganizationButton from "@/components/developer/DeleteOrganizationButton";
 
 type OrganizationItem = { id: string; name: string; slug: string };
 
@@ -47,7 +48,7 @@ export default function DeveloperDashboard() {
 
   return <div className="page org-settings-page">
     <div className="org-settings-head"><div><span>Systemverwaltung</span><h1>Developer Dashboard</h1><p>Zentrale Verwaltung aller Organisationen und systemweiten Funktionen.</p></div></div>
-    {message ? <div className={`user-admin-message${message.error ? " error" : ""}`} role="status">{message.text}</div> : null}
+    {message?.text ? <div className={`user-admin-message${message.error ? " error" : ""}`} role="status">{message.text}</div> : null}
 
     <div className="org-settings-forms">
       <form className="org-settings-card" onSubmit={createOrganization}>
@@ -56,7 +57,7 @@ export default function DeveloperDashboard() {
         <label>Slug<input value={slug} onChange={(event) => setSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} placeholder="klinikgruppe-heidelberg" required /></label>
         <button type="submit" disabled={busy}>{busy ? "Wird angelegt…" : "Organisation anlegen"}</button>
       </form>
-      <section className="org-settings-card"><h2>Developer-Zugriff</h2><p className="cw-muted">Systemweiter Vollzugriff auf alle Medflux-Organisationen. Nur der Developer kann neue Organisationen anlegen.</p><strong>{account.display_name}</strong><small>{account.email}</small></section>
+      <section className="org-settings-card"><h2>Developer-Zugriff</h2><p className="cw-muted">Systemweiter Vollzugriff auf alle Medflux-Organisationen. Nur der Developer kann Organisationen anlegen oder löschen.</p><strong>{account.display_name}</strong><small>{account.email}</small></section>
     </div>
 
     <section className="org-settings-list">
@@ -67,6 +68,7 @@ export default function DeveloperDashboard() {
           <button type="button" onClick={() => { selectOrganization(item.slug); window.location.href = "/"; }}>Öffnen</button>
           <button type="button" onClick={() => { selectOrganization(item.slug); window.location.href = "/settings/organization"; }}>Struktur verwalten</button>
           <button type="button" onClick={() => { selectOrganization(item.slug); window.location.href = "/settings/users"; }}>Benutzer verwalten</button>
+          <DeleteOrganizationButton organizationId={item.id} organizationName={item.name} onDeleted={async () => { await refresh(); await load(); }} onMessage={setMessage} />
         </div>
       </article>)}
     </section>
