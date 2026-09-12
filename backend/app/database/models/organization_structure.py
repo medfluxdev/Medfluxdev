@@ -52,6 +52,31 @@ class Department(Base):
     )
 
 
+class CostCenter(Base):
+    __tablename__ = "cost_center"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    hospital_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("hospital.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    department_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("department.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "code", name="uq_cost_center_org_code"),
+        Index("ix_cost_center_hospital_active", "hospital_id", "is_active"),
+        Index("ix_cost_center_department_active", "department_id", "is_active"),
+    )
+
+
 class ContractDepartment(Base):
     __tablename__ = "contract_department"
 
