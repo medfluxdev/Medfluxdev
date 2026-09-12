@@ -10,8 +10,9 @@ from sqlalchemy import select
 from app.auth.credential_store import derive_password
 from app.auth.dependencies import current_actor
 from app.auth.service import create_account, require_role
-from app.database.models import Account, AccountMembership, Organization
+from app.database.models import Account, AccountMembership
 from app.database.models.account import ACCOUNT_ROLES
+from app.database.models.activity_log import ActivityLog
 from app.database.session import create_session
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -52,6 +53,20 @@ def _serialize(account: Account, membership: AccountMembership) -> dict:
     }
 
 
+def _log(session, actor, event_name: str, target_id: UUID, context_data: dict | None = None) -> None:
+    session.add(ActivityLog(
+        organization_id=actor.organization_id,
+        account_id=actor.account_id,
+        display_name_snapshot=actor.display_name,
+        role_snapshot=actor.role,
+        event_name=event_name,
+        object_type="account",
+        object_id=target_id,
+        context_data=context_data,
+    ))
+    session.flush()
+
+
 @router.get("")
 def list_users(request: Request, organization_slug: str):
     actor = _admin_actor(request, organization_slug)
@@ -86,6 +101,7 @@ def add_user(request: Request, organization_slug: str, payload: UserCreateReques
                 (AccountMembership.account_id == account.id)
                 & (AccountMembership.organization_id == actor.organization_id)
             ))
+            _log(session, actor, "account.created", account.id, {"role": payload.role, "email": account.login_name})
             session.commit()
             return _serialize(account, membership)
         except ValueError as exc:
@@ -107,29 +123,36 @@ def update_user(request: Request, organization_slug: str, account_id: str, paylo
         row = session.execute(
             select(Account, AccountMembership)
             .join(AccountMembership, AccountMembership.account_id == Account.id)
-            .where(
-                (Account.id == account_uuid)
-                & (AccountMembership.organization_id == actor.organization_id)
-            )
+            .where((Account.id == account_uuid) & (AccountMembership.organization_id == actor.organization_id))
         ).first()
         if row is None:
             raise HTTPException(status_code=404, detail="Benutzer nicht gefunden.")
         account, membership = row
+        changes: dict[str, object] = {}
         if payload.display_name is not None:
-            account.display_name = payload.display_name.strip() or account.display_name
+            new_name = payload.display_name.strip() or account.display_name
+            if new_name != account.display_name:
+                changes["display_name"] = new_name
+                account.display_name = new_name
         if payload.role is not None:
             if payload.role not in ACCOUNT_ROLES:
                 raise HTTPException(status_code=422, detail="Unbekannte Rolle.")
-            membership.role = payload.role
+            if payload.role != membership.role:
+                changes["role"] = payload.role
+                membership.role = payload.role
         if payload.is_active is not None:
             if account.id == actor.account_id and payload.is_active is False:
                 raise HTTPException(status_code=422, detail="Der eigene Benutzer kann nicht deaktiviert werden.")
+            changes["is_active"] = payload.is_active
             membership.is_active = payload.is_active
             account.is_active = payload.is_active
         if payload.password is not None:
             if len(payload.password) < 10:
                 raise HTTPException(status_code=422, detail="Das Passwort muss mindestens 10 Zeichen lang sein.")
             account.credential_digest = derive_password(payload.password)
+            changes["password_reset"] = True
+        if changes:
+            _log(session, actor, "account.updated", account.id, changes)
         session.commit()
         return _serialize(account, membership)
     finally:
