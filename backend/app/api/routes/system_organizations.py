@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, text
 
 from app.auth.service import account_from_selector
 from app.core.config import settings
@@ -17,7 +16,6 @@ class OrganizationCreate(BaseModel):
 
 
 def _require_developer(request: Request, session):
-    """Resolve the authenticated account exactly like /api/me."""
     selector = request.cookies.get(settings.auth_cookie_name, "")
     account = account_from_selector(session, selector)
     if account is None:
@@ -32,7 +30,11 @@ def list_organizations(request: Request):
     session = create_session()
     try:
         _require_developer(request, session)
-        rows = session.scalars(select(Organization).order_by(Organization.name.asc())).all()
+        rows = session.scalars(
+            select(Organization)
+            .where(text("organization.is_active = true"))
+            .order_by(Organization.name.asc())
+        ).all()
         return {"items": [{"id": str(row.id), "name": row.name, "slug": row.slug} for row in rows]}
     finally:
         session.close()
@@ -51,6 +53,11 @@ def create_organization(payload: OrganizationCreate, request: Request):
             raise HTTPException(status_code=409, detail="Organisation existiert bereits.")
         row = Organization(name=name, slug=slug)
         session.add(row)
+        session.flush()
+        session.execute(
+            text("UPDATE organization SET is_active = true WHERE id = :organization_id"),
+            {"organization_id": row.id},
+        )
         session.commit()
         session.refresh(row)
         return {"id": str(row.id), "name": row.name, "slug": row.slug}
@@ -67,15 +74,11 @@ def delete_organization(organization_id: str, request: Request):
         if organization is None:
             raise HTTPException(status_code=404, detail="Organisation wurde nicht gefunden.")
         name = organization.name
-        session.delete(organization)
-        try:
-            session.commit()
-        except IntegrityError:
-            session.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="Organisation kann nicht gelöscht werden, solange noch zugehörige Daten vorhanden sind.",
-            )
+        session.execute(
+            text("UPDATE organization SET is_active = false WHERE id = :organization_id"),
+            {"organization_id": organization.id},
+        )
+        session.commit()
         return {"ok": True, "name": name}
     finally:
         session.close()
