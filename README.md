@@ -87,3 +87,5 @@ Siehe [docs/PROJECT_PROGRESS.md](docs/PROJECT_PROGRESS.md) – Abschnitt "Defini
 ## Lizenz
 
 Proprietär / intern – keine externe Veröffentlichung vorgesehen.
+
+خو ياااس
