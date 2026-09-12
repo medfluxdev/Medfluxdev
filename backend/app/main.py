@@ -15,6 +15,7 @@ from app.api.routes import (
     intelligence,
     work_queue,
 )
+from app.auth.middleware import LocalAuthMiddleware
 from app.core.config import settings
 
 app = FastAPI(
@@ -25,6 +26,11 @@ app = FastAPI(
         "von Wartungs- und Serviceverträgen."
     ),
 )
+
+# STEP 16: bei aktivierter lokaler Anmeldung schuetzt die zentrale Middleware
+# alle nicht-oeffentlichen API-Routen und bindet organization_slug an die
+# authentifizierte Organisation.
+app.add_middleware(LocalAuthMiddleware)
 
 # Lokale Entwicklung: erlaube die konfigurierten Frontend-Origins (Standard:
 # http://localhost:3000). Der Origin-Set wird über settings.cors_origins
