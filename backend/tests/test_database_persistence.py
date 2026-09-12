@@ -425,7 +425,7 @@ def test_project_contract_writes_projection(db):
         status="active",
         risk_level="medium",
     )
-    attach_minimal_accepted_extraction(session, contract=contract, document_version_id=ver.id)
+    attach_minimal_accepted_extraction(db, contract=contract, document_version_id=ver.id)
     db.flush()
     assert contract.contract_number == "W-4711"
     assert contract.start_date == date(2026, 1, 1)
@@ -493,6 +493,8 @@ def test_link_document_invalid_role_rejected(db):
 def test_add_equipment(db):
     org, ver, ext = _extraction(db)
     contract = create_contract(db, organization_id=org.id)
+    contract.accepted_extraction_id = ext.id
+    db.flush()
     eq = add_equipment(
         db,
         contract_id=contract.id,
