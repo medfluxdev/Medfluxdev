@@ -44,6 +44,8 @@ def list_activity(request: Request, organization_slug: str, object_id: str | Non
                 {
                     "id": str(row.id),
                     "account_id": str(row.account_id) if row.account_id else None,
+                    "hospital_id": str(row.hospital_id) if row.hospital_id else None,
+                    "department_id": str(row.department_id) if row.department_id else None,
                     "display_name": row.display_name_snapshot,
                     "role": row.role_snapshot,
                     "event_name": row.event_name,
