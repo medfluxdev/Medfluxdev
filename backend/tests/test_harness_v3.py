@@ -1306,7 +1306,7 @@ def test_applicability_receives_visual_section_context():
     from pathlib import Path
     source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
     assert "Provisional visual section summaries" in source
-    assert "primary signed agreement material" in source
+    assert "primary signed agreement/appendix material" in source
 
 
 def test_non_sensitive_unknown_applicability_does_not_force_grounding():
