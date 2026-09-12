@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.database.models import (
     Contract,
     ContractEquipment,
+    ContractExtraction,
     ContractWarning,
     DocumentFile,
     DocumentVersion,
@@ -429,6 +430,7 @@ def _cleanup_org(engine, org_id):
         s.execute(sa_delete(ContractEquipment).where(ContractEquipment.organization_id == org_id))
         s.execute(sa_delete(Equipment).where(Equipment.organization_id == org_id))
         s.execute(sa_delete(ContractWarning).where(ContractWarning.organization_id == org_id))
+        s.execute(sa_delete(ContractExtraction).where(ContractExtraction.organization_id == org_id))
         s.execute(sa_delete(DocumentVersion).where(DocumentVersion.organization_id == org_id))
         s.execute(sa_delete(DocumentFile).where(DocumentFile.organization_id == org_id))
         s.execute(sa_delete(Contract).where(Contract.organization_id == org_id))
