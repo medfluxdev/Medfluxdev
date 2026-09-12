@@ -5,12 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     ai,
+    auth,
     contracts,
     dashboard,
     demo,
     documents,
     equipment,
     health,
+    users,
     work_queue,
 )
 from app.core.config import settings
@@ -24,19 +26,17 @@ app = FastAPI(
     ),
 )
 
-# Lokale Entwicklung: erlaube die konfigurierten Frontend-Origins (Standard:
-# http://localhost:3000). Der Origin-Set wird über settings.cors_origins
-# gesteuert (Umgebung/.env). Erlaubt nur die vom Frontend benötigten Methoden
-# und Header – kein Wildcard, keine freigegebenen Credentials.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=settings.auth_enabled,
-    allow_methods=["GET", "POST", "PUT", "PATCH"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(users.router)
 app.include_router(ai.router)
 app.include_router(documents.router)
 app.include_router(dashboard.router)
