@@ -3,6 +3,7 @@
 from app.database.models.organization import Organization
 from app.database.models.account import Account, AccountMembership
 from app.database.models.login_session import LoginSession
+from app.database.models.activity_log import ActivityLog
 from app.database.models.application_setting import ApplicationSetting
 from app.database.models.document import DocumentFile, DocumentVersion
 from app.database.models.artifact import DocumentArtifact
@@ -27,6 +28,7 @@ __all__ = [
     "Account",
     "AccountMembership",
     "LoginSession",
+    "ActivityLog",
     "ApplicationSetting",
     "DocumentFile",
     "DocumentVersion",
