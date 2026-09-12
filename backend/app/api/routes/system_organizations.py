@@ -14,6 +14,10 @@ class OrganizationCreate(BaseModel):
 
 
 def _require_developer(request: Request, session):
+    if getattr(request.state, "is_developer", False):
+        account_id = getattr(request.state, "account_id", None)
+        return session.get(Account, account_id) if account_id else None
+
     account_id = getattr(request.state, "account_id", None)
     account = session.get(Account, account_id) if account_id else None
     if account is None or not account.is_developer:
