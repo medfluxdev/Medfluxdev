@@ -192,16 +192,15 @@ def override(request: Request, organization_slug: str, contract_id: str, payload
             )
             row.actor_id = actor.account_id
             row.actor_type = "authenticated_account"
+            row.actor_display_name_snapshot = actor.display_name
+            row.actor_role_snapshot = actor.role
             row.is_development = False
             _log(session, actor, f"override.{payload.action}", cid, {"key": payload.key, "fact_ref": payload.fact_ref})
             session.commit()
         except OverrideError as exc:
             session.rollback()
             raise HTTPException(status_code=422, detail=exc.detail_de)
-        data = build_contract_detail(session, organization_id=org.id, contract_id=cid)
-        if data is None:
-            raise _not_found()
-        return ContractDetailResponse.model_validate(data)
+        return _augmented_detail_response(session, org.id, cid)
     finally:
         session.close()
 
