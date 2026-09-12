@@ -14,6 +14,7 @@ from app.api.routes import (
     documents,
     equipment,
     health,
+    profile,
     users,
     work_queue,
 )
@@ -40,6 +41,7 @@ app.add_middleware(SessionGuardMiddleware)
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(profile.router)
 app.include_router(users.router)
 app.include_router(activity.router)
 app.include_router(ai.router)
