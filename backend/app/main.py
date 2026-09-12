@@ -15,6 +15,7 @@ from app.api.routes import (
     users,
     work_queue,
 )
+from app.auth.middleware import AuthenticationMiddleware as SessionGuardMiddleware
 from app.core.config import settings
 
 app = FastAPI(
@@ -33,6 +34,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
+app.add_middleware(SessionGuardMiddleware)
 
 app.include_router(health.router)
 app.include_router(auth.router)
