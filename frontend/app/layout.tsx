@@ -7,6 +7,7 @@ import "./reference-theme.css";
 import "./desktop-shell-fix.css";
 import "./dashboard-reference.css";
 import "./contract-workspace.css";
+import "./auth.css";
 
 export const metadata: Metadata = {
   title: {
