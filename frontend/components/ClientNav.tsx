@@ -66,6 +66,7 @@ function titleForPath(pathname: string): string {
   if (pathname === "/archiv") return "Archiv";
   if (pathname === "/admin") return "Admin Dashboard";
   if (pathname === "/profile") return "Mein Profil";
+  if (pathname === "/system/organizations") return "Organisationen";
   if (pathname.startsWith("/settings/organization")) return "Organisation";
   if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname === "/settings") return "Einstellungen";
@@ -105,6 +106,7 @@ function Sidebar() {
                 const active = isActive(pathname, item.href);
                 return <Link key={item.href} href={item.href} className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}><span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{ic[item.icon]}</svg></span>{item.label}</Link>;
               })}
+              {group.label === "System" && account?.is_developer ? <Link href="/system/organizations" className={`nav-item${isActive(pathname, "/system/organizations") ? " active" : ""}`}><span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{ic.admin}</svg></span>Organisationen</Link> : null}
             </div>
           </div>
         ))}
@@ -115,17 +117,18 @@ function Sidebar() {
           <p>Lokale Verarbeitung<br />Keine externen Modellaufrufe</p>
         </div>
         <div className="org-card">
-          <span className="org-avatar" aria-hidden="true">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "K"}</span>
-          <div><b>{membership?.organization_name ?? "Krankenhaus"}</b><small>Arbeitsbereich {ORG_SLUG}</small></div>
+          <span className="org-avatar" aria-hidden="true">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "M"}</span>
+          <div><b>{membership?.organization_name ?? (account?.is_developer ? "Systemverwaltung" : "Krankenhaus")}</b><small>{membership ? `Arbeitsbereich ${membership.organization_slug}` : account?.is_developer ? "Developer" : `Arbeitsbereich ${ORG_SLUG}`}</small></div>
         </div>
         {account && role ? <div className="account-card account-card-prominent">
           <span className="account-card-label">Angemeldet als</span>
           <strong>{account.display_name}</strong>
-          <small>{ROLE_LABELS[role]}</small>
+          <small>{account.is_developer ? "Developer · Systemzugriff" : ROLE_LABELS[role]}</small>
           <small>{account.email}</small>
           <div className="account-card-actions">
-            {role === "admin" ? <Link href="/admin">Admin Dashboard</Link> : null}
-            {role === "admin" ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
+            {account.is_developer ? <Link href="/system/organizations">Organisationen verwalten</Link> : null}
+            {role === "admin" && membership ? <Link href="/admin">Admin Dashboard</Link> : null}
+            {role === "admin" && membership ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
             <button type="button" onClick={() => void logout()}>Abmelden</button>
           </div>
         </div> : <Link className="sidebar-login-btn" href="/login">Anmelden</Link>}
@@ -137,18 +140,18 @@ function Sidebar() {
 function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { account, role, logout } = useAuth();
+  const { account, membership, role, logout } = useAuth();
   const [q, setQ] = useState("");
   const showSectionTitle = pathname !== "/";
-  const showImportButton = pathname !== "/" && role != null && EDITORS.includes(role);
+  const showImportButton = pathname !== "/" && role != null && EDITORS.includes(role) && Boolean(membership);
   function onSubmit(e: FormEvent) { e.preventDefault(); const term = q.trim(); router.push(term ? `/contracts?q=${encodeURIComponent(term)}` : "/contracts"); }
-  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions"><OrganizationScopePicker /><form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}{account && role ? <div className="top-user"><Link href="/profile" className="top-user-profile" aria-label="Mein Profil öffnen"><span className="top-user-avatar" aria-hidden="true">{account.display_name.slice(0,1).toUpperCase()}</span><span className="top-user-copy"><strong>{account.display_name}</strong><small>{ROLE_LABELS[role]}</small></span></Link><button type="button" className="top-logout-btn" onClick={() => void logout()}>Abmelden</button></div> : <Link className="top-login-btn" href="/login">Anmelden</Link>}</div></header>;
+  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions">{membership ? <OrganizationScopePicker /> : null}<form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}{account && role ? <div className="top-user"><Link href="/profile" className="top-user-profile" aria-label="Mein Profil öffnen"><span className="top-user-avatar" aria-hidden="true">{account.display_name.slice(0,1).toUpperCase()}</span><span className="top-user-copy"><strong>{account.display_name}</strong><small>{account.is_developer ? "Developer" : ROLE_LABELS[role]}</small></span></Link><button type="button" className="top-logout-btn" onClick={() => void logout()}>Abmelden</button></div> : <Link className="top-login-btn" href="/login">Anmelden</Link>}</div></header>;
 }
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { account, loading } = useAuth();
-  if (pathname === "/login") return <>{children}</>;
+  if (pathname === "/login" || pathname === "/select-organization") return <>{children}</>;
   if (loading) return <div className="auth-loading">Medflux wird geladen…</div>;
   if (!account) return <div className="auth-login-required"><p>Sie sind nicht angemeldet.</p><Link href="/login">Anmelden</Link></div>;
   return <div className="app"><Sidebar /><main className="main" id="main-content"><Topbar />{children}</main></div>;
