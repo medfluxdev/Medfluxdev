@@ -32,11 +32,6 @@ app = FastAPI(
     ),
 )
 
-# Globale Sicherheitsheader zuerst registrieren; Starlette fuehrt Middleware in
-# umgekehrter Registrierungsreihenfolge aus und setzt die Header so auch auf
-# Auth-/Fehlerantworten.
-app.add_middleware(SecurityHeadersMiddleware)
-
 # STEP 16: bei aktivierter lokaler Anmeldung schuetzt die zentrale Middleware
 # alle nicht-oeffentlichen API-Routen und bindet organization_slug an die
 # authentifizierte Organisation.
@@ -53,6 +48,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH"],
     allow_headers=["Content-Type"],
 )
+
+# Starlette macht die zuletzt registrierte Middleware zur aeusseren Schicht.
+# Deshalb steht diese Registrierung zuletzt und versieht auch Auth-/CORS-
+# Antworten mit den grundlegenden Sicherheitsheadern.
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(health.router)
 app.include_router(auth.router)
