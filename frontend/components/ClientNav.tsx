@@ -3,11 +3,19 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 
 export const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 
 type Icon = React.ReactNode;
+type AuthIdentity = {
+  user_id: string;
+  organization_id: string;
+  organization_slug: string;
+  username: string;
+  display_name: string;
+  role: "admin" | "reviewer" | "viewer" | string;
+};
 
 const ic: Record<string, Icon> = {
   dashboard: <path d="M4 12h5l3-7 3 14 2-7h3" />,
@@ -58,32 +66,31 @@ const ic: Record<string, Icon> = {
   ),
 };
 
-const GROUPS: { label: string; items: { label: string; href: string; icon: keyof typeof ic }[] }[] =
-  [
-    {
-      label: "Arbeitsbereich",
-      items: [
-        { label: "Übersicht", href: "/", icon: "dashboard" },
-        { label: "Verträge", href: "/contracts", icon: "contracts" },
-        { label: "Arbeitsliste", href: "/work-queue", icon: "workQueue" },
-        { label: "Geräte", href: "/equipment", icon: "equipment" },
-        { label: "Import", href: "/import", icon: "import" },
-      ],
-    },
-    {
-      label: "Kontrolle",
-      items: [
-        { label: "Prüfungen", href: "/review", icon: "review" },
-        { label: "Nachweise", href: "/nachweise", icon: "evidence" },
-        { label: "Audit", href: "/audit", icon: "audit" },
-        { label: "Archiv", href: "/archiv", icon: "archive" },
-      ],
-    },
-    {
-      label: "System",
-      items: [{ label: "Einstellungen", href: "/settings", icon: "settings" }],
-    },
-  ];
+const GROUPS: { label: string; items: { label: string; href: string; icon: keyof typeof ic }[] }[] = [
+  {
+    label: "Arbeitsbereich",
+    items: [
+      { label: "Übersicht", href: "/", icon: "dashboard" },
+      { label: "Verträge", href: "/contracts", icon: "contracts" },
+      { label: "Arbeitsliste", href: "/work-queue", icon: "workQueue" },
+      { label: "Geräte", href: "/equipment", icon: "equipment" },
+      { label: "Import", href: "/import", icon: "import" },
+    ],
+  },
+  {
+    label: "Kontrolle",
+    items: [
+      { label: "Prüfungen", href: "/review", icon: "review" },
+      { label: "Nachweise", href: "/nachweise", icon: "evidence" },
+      { label: "Audit", href: "/audit", icon: "audit" },
+      { label: "Archiv", href: "/archiv", icon: "archive" },
+    ],
+  },
+  {
+    label: "System",
+    items: [{ label: "Einstellungen", href: "/settings", icon: "settings" }],
+  },
+];
 
 export const NAV_ITEMS: { label: string; href: string; icon: keyof typeof ic }[] = [
   { label: "Übersicht", href: "/", icon: "dashboard" },
@@ -114,18 +121,43 @@ function titleForPath(pathname: string): string {
   return "Medflux";
 }
 
+function roleLabel(role: string): string {
+  if (role === "admin") return "Administration";
+  if (role === "reviewer") return "Menschliche Prüfung";
+  if (role === "viewer") return "Lesender Zugriff";
+  return role;
+}
+
 function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [healthy, setHealthy] = useState<boolean | null>(null);
+  const [identity, setIdentity] = useState<AuthIdentity | null>(null);
+
   useEffect(() => {
     let mounted = true;
     apiGet<{ status: string }>("/health")
       .then((h) => mounted && setHealthy(h.status === "ok"))
       .catch(() => mounted && setHealthy(false));
+    apiGet<AuthIdentity>("/api/auth/me")
+      .then((me) => mounted && setIdentity(me))
+      .catch(() => mounted && setIdentity(null));
     return () => {
       mounted = false;
     };
   }, []);
+
+  async function logout() {
+    try {
+      await apiPost<void>("/api/auth/logout", {});
+    } finally {
+      setIdentity(null);
+      router.replace("/login");
+      router.refresh();
+    }
+  }
+
+  const initials = identity?.display_name?.trim().slice(0, 1).toUpperCase() || "K";
 
   return (
     <aside className="sidebar">
@@ -179,13 +211,20 @@ function Sidebar() {
           </p>
         </div>
         <div className="org-card">
-          <span className="org-avatar" aria-hidden="true">
-            K
-          </span>
+          <span className="org-avatar" aria-hidden="true">{initials}</span>
           <div>
-            <b>Krankenhaus</b>
-            <small>Arbeitsbereich {ORG_SLUG}</small>
+            <b>{identity?.display_name ?? "Krankenhaus"}</b>
+            <small>
+              {identity
+                ? `${roleLabel(identity.role)} · ${identity.organization_slug}`
+                : `Arbeitsbereich ${ORG_SLUG}`}
+            </small>
           </div>
+          {identity && (
+            <button type="button" className="btn btn-sm" onClick={() => void logout()}>
+              Abmelden
+            </button>
+          )}
         </div>
       </div>
     </aside>
@@ -231,6 +270,10 @@ function Topbar() {
 }
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  if (pathname === "/login") {
+    return <main id="main-content">{children}</main>;
+  }
   return (
     <div className="app">
       <Sidebar />
