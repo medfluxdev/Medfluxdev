@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import SystemAudit from "@/components/SystemAudit";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
 import { apiGet } from "@/lib/api";
@@ -131,6 +132,8 @@ export default function AuditPage() {
     <div className="page">
       <div className="section-caption">Append-only · Nichts wird gelöscht</div>
 
+      <SystemAudit />
+
       {error && (
         <InlineAlert
           tone="critical"
@@ -159,7 +162,7 @@ export default function AuditPage() {
         <section className="panel" aria-labelledby="audit-heading">
           <div className="panel-head">
             <div>
-              <h2 id="audit-heading">Audit-Trail</h2>
+              <h2 id="audit-heading">Vertrags-Audit</h2>
               <p>Bestätigungen, Korrekturen und Overrides eines Vertrags</p>
             </div>
             <label className="field" style={{ minWidth: 280 }}>
