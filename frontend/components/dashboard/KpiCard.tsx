@@ -4,10 +4,32 @@ interface Props {
   card: KpiCardType;
 }
 
+function iconForLabel(label: string): string {
+  const lower = label.toLowerCase();
+  if (lower.includes("aktiv")) return "✓";
+  if (lower.includes("ablauf") || lower.includes("bald")) return "△";
+  if (lower.includes("wert") || lower.includes("kosten")) return "€";
+  return "▤";
+}
+
+function toneForLabel(label: string): string {
+  const lower = label.toLowerCase();
+  if (lower.includes("aktiv")) return "success";
+  if (lower.includes("ablauf") || lower.includes("bald")) return "warning";
+  if (lower.includes("wert") || lower.includes("kosten")) return "money";
+  return "info";
+}
+
 export default function KpiCard({ card }: Props) {
+  const tone = toneForLabel(card.label_de);
   return (
-    <article className="kpi-card">
-      <p className="kpi-label">{card.label_de}</p>
+    <article className={`kpi-card kpi-card-polished kpi-${tone}`}>
+      <div className="kpi-card-top">
+        <p className="kpi-label">{card.label_de}</p>
+        <span className={`kpi-icon kpi-icon-${tone}`} aria-hidden="true">
+          {iconForLabel(card.label_de)}
+        </span>
+      </div>
       <p className="kpi-value" aria-label={`${card.label_de}: ${card.value}`}>
         {card.value}
       </p>
