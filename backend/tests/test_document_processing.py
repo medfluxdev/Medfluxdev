@@ -486,7 +486,7 @@ def test_failed_analysis_can_resume_same_version_and_reuses_canonical_artifact(
         as_of_date=date(2026, 1, 1),
     )
     assert first.status == "analysis_failed"
-    assert first.contract_id is None
+    assert first.contract_id is not None
 
     resumed = service.resume_document(
         organization_slug=slug,
