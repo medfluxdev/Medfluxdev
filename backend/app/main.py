@@ -16,6 +16,7 @@ from app.api.routes import (
     health,
     organization_structure,
     profile,
+    user_scopes,
     users,
     work_queue,
 )
@@ -44,6 +45,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(users.router)
+app.include_router(user_scopes.router)
 app.include_router(organization_structure.router)
 app.include_router(activity.router)
 app.include_router(ai.router)
