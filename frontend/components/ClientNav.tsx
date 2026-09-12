@@ -2,85 +2,52 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { ROLE_LABELS, type AccountRole } from "@/lib/auth-types";
 
 export const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 
 type Icon = React.ReactNode;
-type NavItem = { label: string; href: string; icon: keyof typeof ic };
+type NavItem = { label: string; href: string; icon: keyof typeof ic; roles?: AccountRole[] };
 
 const ic: Record<string, Icon> = {
   dashboard: <path d="M4 12h5l3-7 3 14 2-7h3" />,
-  contracts: (
-    <>
-      <path d="M6 3h8l4 4v14H6z" />
-      <path d="M14 3v5h5" />
-    </>
-  ),
-  workQueue: (
-    <>
-      <path d="M5 5h14v14H5z" />
-      <path d="M8 9h8M8 13h5" />
-    </>
-  ),
-  equipment: <path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5z" />,
+  contracts: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h5" /></>,
+  workQueue: <><path d="M5 5h14v14H5z" /><path d="M8 9h8M8 13h5" /></>,
   import: <path d="M12 3v18M3 12h18" />,
-  review: (
-    <>
-      <circle cx="10" cy="10" r="6" />
-      <path d="m15 15 5 5" />
-    </>
-  ),
-  evidence: (
-    <>
-      <path d="M4 5h16v14H4z" />
-      <path d="M8 9h8M8 13h5" />
-    </>
-  ),
-  audit: (
-    <>
-      <path d="M5 20V4h14v16z" />
-      <path d="M8 8h8M8 12h8M8 16h5" />
-    </>
-  ),
-  archive: (
-    <>
-      <path d="M4 8h16v12H4z" />
-      <path d="M7 8V4h10v4" />
-      <path d="M9 12h6" />
-    </>
-  ),
-  settings: (
-    <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z" />
-    </>
-  ),
+  review: <><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></>,
+  evidence: <><path d="M4 5h16v14H4z" /><path d="M8 9h8M8 13h5" /></>,
+  audit: <><path d="M5 20V4h14v16z" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
+  archive: <><path d="M4 8h16v12H4z" /><path d="M7 8V4h10v4" /><path d="M9 12h6" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z" /></>,
 };
 
+const EDITORS: AccountRole[] = ["admin", "contract_manager"];
+const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
 const GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Arbeitsbereich",
     items: [
       { label: "Übersicht", href: "/", icon: "dashboard" },
       { label: "Verträge", href: "/contracts", icon: "contracts" },
-      { label: "To-dos", href: "/work-queue", icon: "workQueue" },
-      { label: "Import", href: "/import", icon: "import" },
+      { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
+      { label: "Import", href: "/import", icon: "import", roles: EDITORS },
     ],
   },
   {
     label: "Kontrolle",
     items: [
-      { label: "Prüfungen", href: "/review", icon: "review" },
+      { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
       { label: "Nachweise", href: "/nachweise", icon: "evidence" },
-      { label: "Audit", href: "/audit", icon: "audit" },
-      { label: "Archiv", href: "/archiv", icon: "archive" },
+      { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
+      { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
     ],
   },
   {
     label: "System",
-    items: [{ label: "Einstellungen", href: "/settings", icon: "settings" }],
+    items: [{ label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] }],
   },
 ];
 
@@ -95,57 +62,50 @@ function titleForPath(pathname: string): string {
   if (pathname.startsWith("/contracts/")) return "Vertrag 360";
   if (pathname === "/contracts") return "Verträge";
   if (pathname === "/work-queue") return "To-dos";
-  if (pathname.startsWith("/equipment")) return pathname === "/equipment" ? "Geräte" : "Gerät";
   if (pathname === "/import") return "Import";
   if (pathname === "/review") return "Prüfungen";
   if (pathname === "/nachweise") return "Nachweise";
   if (pathname === "/audit") return "Audit";
   if (pathname === "/archiv") return "Archiv";
+  if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname === "/settings") return "Einstellungen";
   return "Medflux";
 }
 
 function Sidebar() {
   const pathname = usePathname();
+  const { account, membership, role, logout } = useAuth();
   const [healthy, setHealthy] = useState<boolean | null>(null);
+
   useEffect(() => {
     let mounted = true;
     apiGet<{ status: string }>("/health")
       .then((h) => mounted && setHealthy(h.status === "ok"))
       .catch(() => mounted && setHealthy(false));
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
+
+  const visibleGroups = useMemo(() => GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.roles || (role ? item.roles.includes(role) : false)),
+  })).filter((group) => group.items.length > 0), [role]);
 
   return (
     <aside className="sidebar">
       <Link href="/" className="brand" aria-label="Medflux Startseite">
         <span className="logo" aria-hidden="true" />
-        <span>
-          <strong>Medflux</strong>
-          <small>Intelligentes Vertragsmanagement</small>
-        </span>
+        <span><strong>Medflux</strong><small>Intelligentes Vertragsmanagement</small></span>
       </Link>
       <nav className="side-nav-root" aria-label="Hauptnavigation">
-        {GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label}>
             <div className="nav-label">{group.label}</div>
             <div className="side-nav" role="group" aria-label={group.label}>
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`nav-item${active ? " active" : ""}`}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <span className="ico">
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        {ic[item.icon]}
-                      </svg>
-                    </span>
+                  <Link key={item.href} href={item.href} className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
+                    <span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{ic[item.icon]}</svg></span>
                     {item.label}
                   </Link>
                 );
@@ -156,28 +116,20 @@ function Sidebar() {
       </nav>
       <div className="side-bottom">
         <div className="side-ai">
-          <div className="side-ai-top">
-            <b>Lokale KI</b>
-            <div className="health">
-              <span className="health-dot" aria-hidden="true" />
-              {healthy === null ? "Prüfe…" : healthy ? "Gesund" : "Offline"}
-            </div>
-          </div>
-          <p>
-            Lokale Verarbeitung
-            <br />
-            Keine externen Modellaufrufe
-          </p>
+          <div className="side-ai-top"><b>Lokale KI</b><div className="health"><span className="health-dot" aria-hidden="true" />{healthy === null ? "Prüfe…" : healthy ? "Gesund" : "Offline"}</div></div>
+          <p>Lokale Verarbeitung<br />Keine externen Modellaufrufe</p>
         </div>
         <div className="org-card">
-          <span className="org-avatar" aria-hidden="true">
-            K
-          </span>
-          <div>
-            <b>Krankenhaus</b>
-            <small>Arbeitsbereich {ORG_SLUG}</small>
-          </div>
+          <span className="org-avatar" aria-hidden="true">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "K"}</span>
+          <div><b>{membership?.organization_name ?? "Krankenhaus"}</b><small>Arbeitsbereich {ORG_SLUG}</small></div>
         </div>
+        {account && role ? (
+          <div className="account-card">
+            <strong>{account.display_name}</strong>
+            <small>{ROLE_LABELS[role]} · {account.email}</small>
+            <button type="button" onClick={() => void logout()}>Abmelden</button>
+          </div>
+        ) : null}
       </div>
     </aside>
   );
@@ -186,9 +138,10 @@ function Sidebar() {
 function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { role } = useAuth();
   const [q, setQ] = useState("");
   const showSectionTitle = pathname !== "/";
-  const showImportButton = pathname !== "/";
+  const showImportButton = pathname !== "/" && role != null && EDITORS.includes(role);
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -198,34 +151,25 @@ function Topbar() {
 
   return (
     <header className="topbar">
-      <div className="page-title">
-        {showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}
-      </div>
+      <div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div>
       <div className="top-actions">
         <form className="search" onSubmit={onSubmit} role="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="10" cy="10" r="6" />
-            <path d="m15 15 5 5" />
-          </svg>
-          <input
-            type="search"
-            aria-label="Globale Suche"
-            placeholder="Vertragsnummer, Lieferant, Gerät …"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
+          <input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} />
         </form>
-        {showImportButton ? (
-          <Link className="import-btn" href="/import">
-            Vertrag importieren
-          </Link>
-        ) : null}
+        {showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}
       </div>
     </header>
   );
 }
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { account, loading } = useAuth();
+
+  if (pathname === "/login") return <>{children}</>;
+  if (loading || !account) return <div className="auth-loading">Medflux wird geladen…</div>;
+
   return (
     <div className="app">
       <Sidebar />
