@@ -68,11 +68,25 @@ export function contentUrl(contractId: string, documentVersionId: string, orgSlu
 export async function apiUpload<T>(path: string, files: File[], slug?: string): Promise<T> {
   const form = new FormData(); for (const file of files) form.append("files", file);
   const q = new URLSearchParams(); if (slug) q.set("organization_slug", slug);
-  if (typeof window !== "undefined") { const h=localStorage.getItem("medflux.hospitalId"); const d=localStorage.getItem("medflux.departmentId"); if(h)q.set("hospital_id",h); if(d)q.set("department_id",d); }
+  const h = typeof window !== "undefined" ? localStorage.getItem("medflux.hospitalId") : null;
+  const d = typeof window !== "undefined" ? localStorage.getItem("medflux.departmentId") : null;
+  if (h) q.set("hospital_id", h); if (d) q.set("department_id", d);
   const query = q.toString() ? `?${q.toString()}` : "";
   const res = await fetch(`${API_BASE}${path}${query}`, { method: "POST", body: form, credentials: "include" });
   if (!res.ok) throw new Error(`Request failed: ${res.status} ${res.statusText}`);
-  return (await res.json()) as T;
+  const data = (await res.json()) as T;
+
+  if (path === "/api/documents/import" && slug && (h || d)) {
+    const documents = (data as { documents?: Array<{ contract_id?: string | null }> }).documents ?? [];
+    await Promise.all(documents.filter((item) => item.contract_id).map((item) =>
+      apiPatch(`/api/ownership/contracts/${encodeURIComponent(item.contract_id as string)}?organization_slug=${encodeURIComponent(slug)}`, {
+        hospital_id: h,
+        department_ids: d ? [d] : [],
+        cost_center_id: null,
+      })
+    ));
+  }
+  return data;
 }
 
 export function sourceRegionUrl(documentVersionId: string, orgSlug: string, snippet: string, page: number | null): string {
