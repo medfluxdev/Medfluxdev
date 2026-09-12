@@ -1,14 +1,4 @@
-"""Override-/Audit-Dienst für manuelle Bestätigungen & Material-Fakt-Overrides.
-
-Append-only: `record_override` schreibt IMMER eine neue Zeile in
-`contract_override` (niemals UPDATE). Der „aktuelle wirksame" Wert je `key`
-wird aus der jüngsten `set`-Zeile abgeleitet; eine `void`-Zeile legt eine
-Tombstone (kein wirksamer Wert).
-
-STEP 16 (Authentication) ist NICHT implementiert: `actor_id`/`actor_type`
-bleiben None und `is_development=True` wird gesetzt, um die Provenienz ehrlich
-zu kennzeichnen – es wird NIE eine Mitarbeiter-Identität erfunden.
-"""
+"""Append-only override and audit service for material contract facts."""
 
 from __future__ import annotations
 
@@ -48,7 +38,6 @@ def record_override(
     fact_ref: Optional[str] = None,
     note: Optional[str] = None,
 ) -> ContractOverride:
-    """Schreibt eine append-only Override-/Audit-Zeile (org-gebunden)."""
     _assert_allowed(key, action)
     contract = session.get(Contract, contract_id)
     if contract is None or contract.organization_id != organization_id:
@@ -64,6 +53,8 @@ def record_override(
         note=note,
         actor_id=None,
         actor_type=None,
+        actor_display_name_snapshot=None,
+        actor_role_snapshot=None,
         is_development=True,
     )
     session.add(row)
@@ -71,15 +62,7 @@ def record_override(
     return row
 
 
-def effective_overrides(
-    session: Session, *, organization_id, contract_id
-) -> dict[str, dict]:
-    """Liefert den aktuell wirksamen Override je `key`.
-
-    Rückgabe: {key: {"value": ..., "created_at": ..., "note": ...}}. Ein `void`
-    als jüngste Zeile ergibt KEINEN wirksamen Wert (Tombstone). Kein Fabrication:
-    was nicht gesetzt wurde, fehlt.
-    """
+def effective_overrides(session: Session, *, organization_id, contract_id) -> dict[str, dict]:
     rows = session.scalars(
         select(ContractOverride)
         .where(
@@ -105,14 +88,7 @@ def effective_overrides(
     return effective
 
 
-def audit_history(
-    session: Session, *, organization_id, contract_id
-) -> list[dict]:
-    """Append-only Audit-Historie (neu zuerst), angepasst für das DTO (keine Secrets).
-
-    `old_value` = der VOR dieser Zeile wirksame Override desselben Feldes
-    (chronologisch bestimmt). Macht set/void-Verbleib ehrlich nachvollziehbar.
-    """
+def audit_history(session: Session, *, organization_id, contract_id) -> list[dict]:
     rows = session.scalars(
         select(ContractOverride)
         .where(
@@ -151,6 +127,9 @@ def audit_history(
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "is_development": bool(r.is_development),
             "actor_type": r.actor_type,
+            "actor_id": str(r.actor_id) if r.actor_id else None,
+            "actor_display_name": r.actor_display_name_snapshot,
+            "actor_role": r.actor_role_snapshot,
             "old_value": old_by_id.get(r.id),
         }
         for r in rows
@@ -158,7 +137,6 @@ def audit_history(
 
 
 def confirmed_fact_refs(session: Session, *, organization_id, contract_id) -> set[str]:
-    """Feld-Referenzen, die manuell (confirm) bestätigt wurden."""
     rows = session.scalars(
         select(ContractOverride).where(
             (ContractOverride.organization_id == organization_id)
