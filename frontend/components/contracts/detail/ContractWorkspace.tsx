@@ -1,9 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import ContractDetail from "./ContractDetail";
-import type { ContractDetailResponse, MoneyValue } from "@/lib/contract-detail-types";
+import type {
+  ContractDetailResponse,
+  EvidenceRef,
+  MoneyValue,
+  SourceNavigationTarget,
+} from "@/lib/contract-detail-types";
 import { formatCurrency, formatDate } from "@/lib/format";
+import PdfViewer from "./PdfViewer";
+import EvidencePane from "./EvidencePane";
+import FactReviewPanel from "./FactReviewPanel";
+import OverridePanel from "./OverridePanel";
 
 interface Props {
   data: ContractDetailResponse;
@@ -12,6 +20,7 @@ interface Props {
 }
 
 type TabKey = "overview" | "term" | "finance" | "services" | "equipment" | "documents";
+type DocumentTab = "document" | "evidence" | "review" | "history";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
@@ -22,6 +31,13 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "documents", label: "Dokumente & Prüfung" },
 ];
 
+const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
+  { key: "document", label: "Dokument" },
+  { key: "evidence", label: "Nachweise" },
+  { key: "review", label: "Prüfung" },
+  { key: "history", label: "Historie" },
+];
+
 function money(value: MoneyValue): string {
   if (value.amount == null || !value.currency) return "Nicht verfügbar";
   return formatCurrency(String(value.amount), value.currency);
@@ -30,6 +46,19 @@ function money(value: MoneyValue): string {
 function yesNo(value: boolean | null): string {
   if (value == null) return "Unbekannt";
   return value ? "Ja" : "Nein";
+}
+
+function evidenceTarget(ref: EvidenceRef): SourceNavigationTarget {
+  return {
+    document_version_id: ref.document_version_id,
+    page: ref.page,
+    bbox: ref.bbox,
+    bbox_space: ref.bbox_space,
+    supports_exact_navigation: ref.supports_exact_navigation,
+    label: ref.snippet || ref.field_ref || "Quelle",
+    field_ref: ref.field_ref,
+    evidence_id: ref.evidence_id,
+  };
 }
 
 function InfoCard({ label, value, hint }: { label: string; value: React.ReactNode; hint?: React.ReactNode }) {
@@ -58,6 +87,12 @@ function Section({ title, description, children }: { title: string; description?
 
 export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [documentTab, setDocumentTab] = useState<DocumentTab>("document");
+  const [documentVersionId, setDocumentVersionId] = useState<string | null>(data.documents[0]?.document_version_id ?? null);
+  const [navTarget, setNavTarget] = useState<SourceNavigationTarget | null>(null);
+  const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
+
+  const reload = onReload ?? (() => undefined);
   const openTasks = useMemo(() => data.work_items.filter((item) => item.status !== "resolved"), [data.work_items]);
   const actionableWarnings = useMemo(() => data.warnings.filter((warning) => warning.requires_action || warning.requires_review), [data.warnings]);
 
@@ -73,6 +108,35 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     ["Verbrauchsmaterial", data.scope.consumables_included],
     ["Notdienst", data.scope.emergency_service],
   ] as const;
+
+  function findEvidence(...prefixes: string[]): EvidenceRef | null {
+    return data.evidence.find((ref) => {
+      const field = ref.field_ref ?? "";
+      return prefixes.some((prefix) => field === prefix || field.startsWith(`${prefix}.`));
+    }) ?? null;
+  }
+
+  function openEvidence(ref: EvidenceRef, targetTab: DocumentTab = "document") {
+    setActiveEvidenceId(ref.evidence_id);
+    setNavTarget(evidenceTarget(ref));
+    if (ref.document_version_id) setDocumentVersionId(ref.document_version_id);
+    setActiveTab("documents");
+    setDocumentTab(targetTab);
+  }
+
+  function SourceButton({ evidence }: { evidence: EvidenceRef | null }) {
+    if (!evidence) return null;
+    return (
+      <button type="button" className="cw-source-button" onClick={() => openEvidence(evidence)}>
+        Quelle
+      </button>
+    );
+  }
+
+  const startEvidence = findEvidence("dates.start_date", "dates", "termination");
+  const endEvidence = findEvidence("dates.documented_end_date", "dates.calculated_end_date", "termination");
+  const costEvidence = findEvidence("costs", "payment");
+  const servicesEvidence = findEvidence("services", "scope");
 
   return (
     <div className="contract-workspace">
@@ -91,13 +155,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
 
       <nav className="cw-tabs" aria-label="Vertragsbereiche">
         {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className={activeTab === tab.key ? "active" : ""}
-            aria-current={activeTab === tab.key ? "page" : undefined}
-            onClick={() => setActiveTab(tab.key)}
-          >
+          <button key={tab.key} type="button" className={activeTab === tab.key ? "active" : ""} onClick={() => setActiveTab(tab.key)}>
             {tab.label}
           </button>
         ))}
@@ -108,8 +166,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           <>
             <div className="cw-kpi-grid">
               <InfoCard label="Status" value={data.status ?? "Unbekannt"} />
-              <InfoCard label="Vertragsende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} />
-              <InfoCard label="Jährliche Kosten" value={money(data.costs.annual_recurring)} />
+              <InfoCard label="Vertragsende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} hint={<SourceButton evidence={endEvidence} />} />
+              <InfoCard label="Jährliche Kosten" value={money(data.costs.annual_recurring)} hint={<SourceButton evidence={costEvidence} />} />
               <InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} />
               <InfoCard label="Risiko" value={data.risk_level ?? "Unbekannt"} />
             </div>
@@ -120,10 +178,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
                   {openTasks.slice(0, 6).map((item) => (
                     <div className="cw-task" key={item.work_item_id}>
                       <span className={`cw-priority cw-priority-${item.severity}`}>{item.severity}</span>
-                      <div>
-                        <strong>{item.title_de}</strong>
-                        {item.why_de ? <p>{item.why_de}</p> : null}
-                      </div>
+                      <div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div>
                       <span>{item.target_date ? formatDate(item.target_date) : "Keine Frist"}</span>
                     </div>
                   ))}
@@ -147,9 +202,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
               </Section>
               <Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit">
                 <div className="cw-mini-stats">
-                  <div><strong>{data.evidence.length}</strong><span>Nachweise</span></div>
-                  <div><strong>{data.documents.length}</strong><span>Dokumente</span></div>
-                  <div><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></div>
+                  <button type="button" onClick={() => { setActiveTab("documents"); setDocumentTab("evidence"); }}><strong>{data.evidence.length}</strong><span>Nachweise</span></button>
+                  <button type="button" onClick={() => { setActiveTab("documents"); setDocumentTab("document"); }}><strong>{data.documents.length}</strong><span>Dokumente</span></button>
+                  <button type="button" onClick={() => { setActiveTab("documents"); setDocumentTab("review"); }}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button>
                 </div>
               </Section>
             </div>
@@ -159,8 +214,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "term" && (
           <>
             <div className="cw-kpi-grid cw-kpi-grid-four">
-              <InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} />
-              <InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} />
+              <InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} hint={<SourceButton evidence={startEvidence} />} />
+              <InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} hint={<SourceButton evidence={endEvidence} />} />
               <InfoCard label="Berechnetes Ende" value={data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} />
               <InfoCard label="Restlaufzeit" value={data.dates.days_until_end != null ? `${data.dates.days_until_end} Tage` : "Nicht verfügbar"} />
             </div>
@@ -188,20 +243,14 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "finance" && (
           <>
             <div className="cw-kpi-grid cw-kpi-grid-four">
-              <InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} />
-              <InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} />
+              <InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} hint={<SourceButton evidence={costEvidence} />} />
+              <InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} hint={<SourceButton evidence={costEvidence} />} />
               <InfoCard label="Steuersatz" value={data.costs.tax_rate_percent != null ? `${data.costs.tax_rate_percent} %` : "Nicht verfügbar"} />
               <InfoCard label="Bezugsperiode" value={data.costs.source_period ?? "Nicht verfügbar"} />
             </div>
             <div className="cw-two-col">
               <Section title="Kostenstruktur">
-                {data.costs.category_totals.length > 0 ? (
-                  <div className="cw-list-rows">
-                    {data.costs.category_totals.map((item) => (
-                      <div key={item.key}><span>{item.label}</span><strong>{item.amount != null && item.currency ? formatCurrency(String(item.amount), item.currency) : "Nicht verfügbar"}</strong></div>
-                    ))}
-                  </div>
-                ) : <p className="cw-muted">Keine verlässlichen Kostenkategorien verfügbar.</p>}
+                {data.costs.category_totals.length > 0 ? <div className="cw-list-rows">{data.costs.category_totals.map((item) => <div key={item.key}><span>{item.label}</span><strong>{item.amount != null && item.currency ? formatCurrency(String(item.amount), item.currency) : "Nicht verfügbar"}</strong></div>)}</div> : <p className="cw-muted">Keine verlässlichen Kostenkategorien verfügbar.</p>}
               </Section>
               <Section title="Steuer & Brutto/Netto">
                 <dl className="cw-definition-grid cw-definition-single">
@@ -222,22 +271,14 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           <>
             <Section title="Leistungsumfang" description="Was ist im Vertrag enthalten?">
               <div className="cw-service-grid">
-                {scopeEntries.map(([label, value]) => (
-                  <div className="cw-service-item" key={label}>
-                    <span>{label}</span>
-                    <strong className={value === true ? "yes" : value === false ? "no" : "unknown"}>{yesNo(value)}</strong>
-                  </div>
-                ))}
+                {scopeEntries.map(([label, value]) => <div className="cw-service-item" key={label}><span>{label}</span><strong className={value === true ? "yes" : value === false ? "no" : "unknown"}>{yesNo(value)}</strong></div>)}
               </div>
+              {servicesEvidence ? <div className="cw-inline-source"><SourceButton evidence={servicesEvidence} /></div> : null}
               {data.scope.note_de ? <p className="cw-note">{data.scope.note_de}</p> : null}
             </Section>
             <div className="cw-two-col">
-              <Section title="Enthaltene Leistungen">
-                {data.scope.included_services.length > 0 ? <ul className="cw-bullet-list">{data.scope.included_services.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="cw-muted">Keine zusätzlichen enthaltenen Leistungen dokumentiert.</p>}
-              </Section>
-              <Section title="Ausgeschlossen">
-                {data.scope.excluded_services.length > 0 ? <ul className="cw-bullet-list">{data.scope.excluded_services.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="cw-muted">Keine Ausschlüsse dokumentiert.</p>}
-              </Section>
+              <Section title="Enthaltene Leistungen">{data.scope.included_services.length > 0 ? <ul className="cw-bullet-list">{data.scope.included_services.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="cw-muted">Keine zusätzlichen enthaltenen Leistungen dokumentiert.</p>}</Section>
+              <Section title="Ausgeschlossen">{data.scope.excluded_services.length > 0 ? <ul className="cw-bullet-list">{data.scope.excluded_services.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p className="cw-muted">Keine Ausschlüsse dokumentiert.</p>}</Section>
             </div>
             <Section title="Service-Level (SLA)">
               <dl className="cw-definition-grid">
@@ -254,53 +295,58 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
 
         {activeTab === "equipment" && (
           <Section title="Verknüpfte Geräte" description={`${data.equipment.length} ${data.equipment.length === 1 ? "Gerät" : "Geräte"} diesem Vertrag zugeordnet`}>
-            {data.equipment.length > 0 ? (
-              <div className="cw-equipment-grid">
-                {data.equipment.map((item) => (
-                  <article className="cw-equipment-card" key={item.id}>
-                    <h3>{item.device_name ?? item.system_name ?? "Gerät"}</h3>
-                    <p>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</p>
-                    <dl>
-                      <div><dt>Seriennummer</dt><dd>{item.serial_number ?? "–"}</dd></div>
-                      <div><dt>Inventarnummer</dt><dd>{item.inventory_number ?? "–"}</dd></div>
-                      <div><dt>Standort</dt><dd>{item.location ?? "–"}</dd></div>
-                      <div><dt>Abteilung</dt><dd>{item.department ?? "–"}</dd></div>
-                      <div><dt>Serviceumfang</dt><dd>{item.service_scope ?? "–"}</dd></div>
-                    </dl>
-                    {item.requires_review ? <span className="cw-badge cw-badge-amber">Prüfung erforderlich</span> : null}
-                  </article>
-                ))}
-              </div>
-            ) : <p className="cw-muted">Keine Geräte diesem Vertrag zugeordnet.</p>}
+            {data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-grid">{data.equipment.map((item) => <article className="cw-equipment-card" key={item.id}><h3>{item.device_name ?? item.system_name ?? "Gerät"}</h3><p>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Keine Modellangabe"}</p><dl><div><dt>Seriennummer</dt><dd>{item.serial_number ?? "–"}</dd></div><div><dt>Inventarnummer</dt><dd>{item.inventory_number ?? "–"}</dd></div><div><dt>Standort</dt><dd>{item.location ?? "–"}</dd></div><div><dt>Abteilung</dt><dd>{item.department ?? "–"}</dd></div><div><dt>Abdeckung</dt><dd>{[item.coverage_start ? formatDate(item.coverage_start) : null, item.coverage_end ? formatDate(item.coverage_end) : null].filter(Boolean).join(" – ") || "–"}</dd></div></dl></article>)}</div>}
           </Section>
         )}
 
         {activeTab === "documents" && (
           <>
-            <div className="cw-kpi-grid cw-kpi-grid-four">
+            <div className="cw-document-summary">
               <InfoCard label="Dokumente" value={data.documents.length} />
               <InfoCard label="Nachweise" value={data.evidence.length} />
-              <InfoCard label="Geprüfte Fakten" value={`${data.contract_review.reviewed_count}/${data.contract_review.relevant_count}`} />
+              <InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} />
               <InfoCard label="Offene Prüfungen" value={data.contract_review.unresolved_count} />
             </div>
-            <Section title="Quelldokumente">
-              <div className="cw-list-rows">
-                {data.documents.map((doc) => <div key={doc.document_version_id}><span>{doc.original_filename ?? "Dokument"}</span><strong>{doc.role ?? "Quelle"}</strong></div>)}
+
+            <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">
+              {DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setDocumentTab(tab.key)}>{tab.label}</button>)}
+            </nav>
+
+            {documentTab === "document" && (
+              <div className="cw-document-layout">
+                <aside className="cw-document-sidebar">
+                  <h3>Quelldokumente</h3>
+                  {data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}
+                  <button type="button" className="cw-evidence-shortcut" onClick={() => setDocumentTab("evidence")}>{data.evidence.length} Nachweise anzeigen</button>
+                </aside>
+                <div className="cw-pdf-shell">
+                  <PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} />
+                </div>
               </div>
-            </Section>
-            <Section title="Prüfstatus">
-              <dl className="cw-definition-grid">
-                <div><dt>Status</dt><dd>{data.contract_review.status_label_de}</dd></div>
-                <div><dt>Manuelle Prüfung</dt><dd>{data.review.requires_manual_review ? "Erforderlich" : "Nicht erforderlich"}</dd></div>
-                <div><dt>Kritische offene Fakten</dt><dd>{data.contract_review.critical_unreviewed_count}</dd></div>
-                <div><dt>Datenstand</dt><dd>{data.review.warning_evaluation_as_of_date ? formatDate(data.review.warning_evaluation_as_of_date) : "Nicht verfügbar"}</dd></div>
-              </dl>
-            </Section>
-            <details className="cw-legacy-details">
-              <summary>Vollständige Detail- und Nachweisansicht öffnen</summary>
-              <p className="cw-muted">Hier bleiben alle bisherigen Evidence-, PDF-, Review- und Override-Funktionen während der Workspace-Migration erhalten.</p>
-              <ContractDetail data={data} orgSlug={orgSlug} onReload={onReload} />
-            </details>
+            )}
+
+            {documentTab === "evidence" && (
+              <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">
+                <div className="cw-evidence-layout">
+                  <div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "document")} /></div>
+                  <div className="cw-evidence-preview">
+                    <PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} />
+                  </div>
+                </div>
+              </Section>
+            )}
+
+            {documentTab === "review" && (
+              <div className="cw-integrated-panel">
+                <FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} />
+              </div>
+            )}
+
+            {documentTab === "history" && (
+              <div className="cw-integrated-panel">
+                <OverridePanel data={data} orgSlug={orgSlug} onReload={reload} />
+              </div>
+            )}
           </>
         )}
       </div>
