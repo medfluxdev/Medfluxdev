@@ -60,6 +60,7 @@ def pytest_sessionstart(session) -> None:
             isolation_level="AUTOCOMMIT",
         )
         with admin.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             conn.execute(text(f"CREATE SCHEMA {TEST_SCHEMA}"))
         admin.dispose()
 
