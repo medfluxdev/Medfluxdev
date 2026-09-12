@@ -49,6 +49,34 @@ def upgrade() -> None:
         "ix_app_user_org_active", "app_user", ["organization_id", "active"]
     )
 
+    # Bestehende Review-/Override-Provenienz wird nun auf lokale Benutzer
+    # referenziert. SET NULL erhaelt die historische Aktion, falls ein Benutzer
+    # spaeter administrativ entfernt werden sollte.
+    op.create_foreign_key(
+        "fk_fact_review_authenticated_actor_id_app_user",
+        "fact_review",
+        "app_user",
+        ["authenticated_actor_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+    op.create_foreign_key(
+        "fk_contract_review_authenticated_actor_id_app_user",
+        "contract_review",
+        "app_user",
+        ["authenticated_actor_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+    op.create_foreign_key(
+        "fk_contract_override_actor_id_app_user",
+        "contract_override",
+        "app_user",
+        ["actor_id"],
+        ["id"],
+        ondelete="SET NULL",
+    )
+
     op.create_table(
         "audit_event",
         sa.Column(
@@ -84,5 +112,20 @@ def downgrade() -> None:
     op.drop_index("ix_audit_event_entity", table_name="audit_event")
     op.drop_index("ix_audit_event_org_created", table_name="audit_event")
     op.drop_table("audit_event")
+    op.drop_constraint(
+        "fk_contract_override_actor_id_app_user",
+        "contract_override",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        "fk_contract_review_authenticated_actor_id_app_user",
+        "contract_review",
+        type_="foreignkey",
+    )
+    op.drop_constraint(
+        "fk_fact_review_authenticated_actor_id_app_user",
+        "fact_review",
+        type_="foreignkey",
+    )
     op.drop_index("ix_app_user_org_active", table_name="app_user")
     op.drop_table("app_user")
