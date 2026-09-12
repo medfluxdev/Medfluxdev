@@ -109,12 +109,16 @@ function Sidebar() {
           <span className="org-avatar" aria-hidden="true">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "K"}</span>
           <div><b>{membership?.organization_name ?? "Krankenhaus"}</b><small>Arbeitsbereich {ORG_SLUG}</small></div>
         </div>
-        {account && role ? <div className="account-card">
+        {account && role ? <div className="account-card account-card-prominent">
+          <span className="account-card-label">Angemeldet als</span>
           <strong>{account.display_name}</strong>
-          <small>{ROLE_LABELS[role]} · {account.email}</small>
-          {role === "admin" ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
-          <button type="button" onClick={() => void logout()}>Abmelden</button>
-        </div> : null}
+          <small>{ROLE_LABELS[role]}</small>
+          <small>{account.email}</small>
+          <div className="account-card-actions">
+            {role === "admin" ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
+            <button type="button" onClick={() => void logout()}>Abmelden</button>
+          </div>
+        </div> : <Link className="sidebar-login-btn" href="/login">Anmelden</Link>}
       </div>
     </aside>
   );
@@ -123,18 +127,19 @@ function Sidebar() {
 function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { role } = useAuth();
+  const { account, role, logout } = useAuth();
   const [q, setQ] = useState("");
   const showSectionTitle = pathname !== "/";
   const showImportButton = pathname !== "/" && role != null && EDITORS.includes(role);
   function onSubmit(e: FormEvent) { e.preventDefault(); const term = q.trim(); router.push(term ? `/contracts?q=${encodeURIComponent(term)}` : "/contracts"); }
-  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions"><form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}</div></header>;
+  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions"><form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}{account && role ? <div className="top-user"><span className="top-user-avatar" aria-hidden="true">{account.display_name.slice(0,1).toUpperCase()}</span><span className="top-user-copy"><strong>{account.display_name}</strong><small>{ROLE_LABELS[role]}</small></span><button type="button" className="top-logout-btn" onClick={() => void logout()}>Abmelden</button></div> : <Link className="top-login-btn" href="/login">Anmelden</Link>}</div></header>;
 }
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { account, loading } = useAuth();
   if (pathname === "/login") return <>{children}</>;
-  if (loading || !account) return <div className="auth-loading">Medflux wird geladen…</div>;
+  if (loading) return <div className="auth-loading">Medflux wird geladen…</div>;
+  if (!account) return <div className="auth-login-required"><p>Sie sind nicht angemeldet.</p><Link href="/login">Anmelden</Link></div>;
   return <div className="app"><Sidebar /><main className="main" id="main-content"><Topbar />{children}</main></div>;
 }
