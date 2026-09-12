@@ -7,6 +7,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from app.auth.context import optional_identity
+from app.auth.runtime import bind_identity, reset_identity
 from app.core.config import settings
 
 _PUBLIC_PREFIXES = (
@@ -31,6 +32,7 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
         if path == "/" or any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
             return await call_next(request)
 
+        token = None
         if path.startswith("/api/"):
             identity = optional_identity(request)
             if identity is None:
@@ -39,5 +41,10 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
             if requested_slug and requested_slug != identity.organization_slug:
                 return JSONResponse(status_code=404, content={"detail": "Ressource nicht gefunden."})
             request.state.auth_identity = identity
+            token = bind_identity(identity)
 
-        return await call_next(request)
+        try:
+            return await call_next(request)
+        finally:
+            if token is not None:
+                reset_identity(token)
