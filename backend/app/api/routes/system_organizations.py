@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.service import account_from_selector
 from app.core.config import settings
@@ -16,12 +17,7 @@ class OrganizationCreate(BaseModel):
 
 
 def _require_developer(request: Request, session):
-    """Resolve the authenticated account exactly like /api/me.
-
-    System routes must not depend on middleware request-state ordering.  Using the
-    same session cookie lookup as /api/me guarantees that an account shown as
-    Developer in the UI is treated identically by the system API.
-    """
+    """Resolve the authenticated account exactly like /api/me."""
     selector = request.cookies.get(settings.auth_cookie_name, "")
     account = account_from_selector(session, selector)
     if account is None:
@@ -58,5 +54,28 @@ def create_organization(payload: OrganizationCreate, request: Request):
         session.commit()
         session.refresh(row)
         return {"id": str(row.id), "name": row.name, "slug": row.slug}
+    finally:
+        session.close()
+
+
+@router.delete("/{organization_id}")
+def delete_organization(organization_id: str, request: Request):
+    session = create_session()
+    try:
+        _require_developer(request, session)
+        organization = session.get(Organization, organization_id)
+        if organization is None:
+            raise HTTPException(status_code=404, detail="Organisation wurde nicht gefunden.")
+        name = organization.name
+        session.delete(organization)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Organisation kann nicht gelöscht werden, solange noch zugehörige Daten vorhanden sind.",
+            )
+        return {"ok": True, "name": name}
     finally:
         session.close()
