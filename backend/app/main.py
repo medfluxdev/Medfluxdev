@@ -19,6 +19,7 @@ from app.api.routes import (
 from app.auth.middleware import LocalAuthMiddleware
 from app.auth.provenance import register_auth_provenance_hooks
 from app.core.config import settings
+from app.security.headers import SecurityHeadersMiddleware
 
 register_auth_provenance_hooks()
 
@@ -30,6 +31,11 @@ app = FastAPI(
         "von Wartungs- und Serviceverträgen."
     ),
 )
+
+# Globale Sicherheitsheader zuerst registrieren; Starlette fuehrt Middleware in
+# umgekehrter Registrierungsreihenfolge aus und setzt die Header so auch auf
+# Auth-/Fehlerantworten.
+app.add_middleware(SecurityHeadersMiddleware)
 
 # STEP 16: bei aktivierter lokaler Anmeldung schuetzt die zentrale Middleware
 # alle nicht-oeffentlichen API-Routen und bindet organization_slug an die
