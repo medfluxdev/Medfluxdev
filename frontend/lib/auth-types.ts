@@ -13,6 +13,11 @@ export interface CurrentAccountDto {
   display_name: string;
   is_active: boolean;
   last_login_at: string | null;
+  profile_photo_data_url?: string | null;
+  phone?: string | null;
+  job_title?: string | null;
+  department?: string | null;
+  bio?: string | null;
   memberships: OrganizationMembershipDto[];
 }
 
@@ -24,6 +29,17 @@ export interface ManagedUserDto {
   is_active: boolean;
   last_login_at: string | null;
   created_at: string | null;
+}
+
+export interface UserProfileDto {
+  id: string;
+  email: string;
+  display_name: string;
+  phone: string | null;
+  job_title: string | null;
+  department: string | null;
+  bio: string | null;
+  profile_photo_data_url: string | null;
 }
 
 export const ROLE_LABELS: Record<AccountRole, string> = {
