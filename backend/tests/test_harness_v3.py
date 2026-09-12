@@ -1296,6 +1296,19 @@ async def test_semantic_pack_single_pass_bounds_resolve_calls():
     assert len(resolve_calls) <= 3
 
 
+def test_unknown_applicability_can_deliver_exact_evidence():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    assert "unknown_applicability_delivered_with_exact_evidence" in source
+
+
+def test_applicability_receives_visual_section_context():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    assert "Provisional visual section summaries" in source
+    assert "primary signed agreement material" in source
+
+
 def test_non_sensitive_unknown_applicability_does_not_force_grounding():
     from pathlib import Path
     source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
