@@ -93,7 +93,6 @@ function isActive(pathname: string, href: string): boolean {
 }
 
 function titleForPath(pathname: string): string {
-  if (pathname === "/") return "Übersicht";
   if (pathname.startsWith("/contracts/")) return "Vertrag 360";
   if (pathname === "/contracts") return "Verträge";
   if (pathname === "/work-queue") return "Arbeitsliste";
@@ -189,6 +188,7 @@ function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [q, setQ] = useState("");
+  const showSectionTitle = pathname !== "/";
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -199,7 +199,7 @@ function Topbar() {
   return (
     <header className="topbar">
       <div className="page-title">
-        <h1>{titleForPath(pathname)}</h1>
+        {showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}
       </div>
       <div className="top-actions">
         <form className="search" onSubmit={onSubmit} role="search">
