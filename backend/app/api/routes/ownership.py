@@ -49,6 +49,38 @@ def _validate_responsible(session, organization_id: UUID, account_id: UUID | Non
         raise HTTPException(status_code=422, detail="Verantwortlicher Benutzer ist für diese Organisation nicht verfügbar.")
 
 
+@router.get("/assignees")
+def list_assignees(request: Request, organization_slug: str):
+    actor = _actor(request, organization_slug)
+    session = create_session()
+    try:
+        rows = session.execute(
+            select(Account, AccountMembership)
+            .join(AccountMembership, AccountMembership.account_id == Account.id)
+            .where(
+                (Account.is_active.is_(True))
+                & (AccountMembership.organization_id == actor.organization_id)
+                & (AccountMembership.is_active.is_(True))
+            )
+            .order_by(Account.display_name.asc(), Account.login_name.asc())
+        ).all()
+        return {
+            "items": [
+                {
+                    "id": str(account.id),
+                    "display_name": account.display_name,
+                    "email": account.login_name,
+                    "role": membership.role,
+                    "hospital_id": str(membership.hospital_id) if membership.hospital_id else None,
+                    "department_id": str(membership.department_id) if membership.department_id else None,
+                }
+                for account, membership in rows
+            ]
+        }
+    finally:
+        session.close()
+
+
 @router.get("/contracts/{contract_id}")
 def get_contract_ownership(contract_id: UUID, request: Request, organization_slug: str):
     actor = _actor(request, organization_slug)
