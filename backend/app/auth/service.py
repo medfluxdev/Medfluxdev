@@ -24,6 +24,7 @@ class Actor:
     organization_id: UUID
     organization_slug: str
     role: str
+    is_developer: bool = False
 
 
 def normalize_login(value: str) -> str:
@@ -53,6 +54,7 @@ def create_account(
         display_name=display_name.strip() or login,
         credential_digest=derive_password(password),
         is_active=True,
+        is_developer=False,
     )
     session.add(account)
     session.flush()
@@ -132,6 +134,20 @@ def memberships_for_account(session: Session, account_id: UUID) -> list[tuple[Ac
 
 
 def actor_for_account(session: Session, account: Account, organization_slug: str) -> Optional[Actor]:
+    if account.is_developer:
+        organization = session.scalar(select(Organization).where(Organization.slug == organization_slug))
+        if organization is None:
+            return None
+        return Actor(
+            account_id=account.id,
+            login_name=account.login_name,
+            display_name=account.display_name,
+            organization_id=organization.id,
+            organization_slug=organization.slug,
+            role="admin",
+            is_developer=True,
+        )
+
     row = session.execute(
         select(AccountMembership, Organization)
         .join(Organization, Organization.id == AccountMembership.organization_id)
@@ -151,9 +167,12 @@ def actor_for_account(session: Session, account: Account, organization_slug: str
         organization_id=organization.id,
         organization_slug=organization.slug,
         role=membership.role,
+        is_developer=False,
     )
 
 
 def require_role(actor: Actor, *allowed: str) -> None:
+    if actor.is_developer:
+        return
     if actor.role not in set(allowed):
         raise PermissionError("Für diese Aktion fehlt die Berechtigung.")
