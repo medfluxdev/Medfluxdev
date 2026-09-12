@@ -22,12 +22,21 @@ function BoltIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-8 12h6l-1 8 9-13h-6V2Z" /></svg>;
 }
 
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return hidden ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.8 10.8 0 0 1 12 4c5.2 0 8.6 4.4 9.5 6-.5.9-1.8 2.7-3.9 4.1M6.2 6.2C4.3 7.4 3.1 9.1 2.5 10c.9 1.6 4.3 6 9.5 6 1.1 0 2.2-.2 3.1-.5" /></svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6S18 18 12 18 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
   const { account, refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(params.get("error") === "organization" ? "Ihr Benutzer hat keinen Zugriff auf diesen Arbeitsbereich." : null);
 
@@ -73,7 +82,12 @@ export default function LoginPage() {
             </label>
             <label>
               Passwort
-              <input type="password" autoComplete="current-password" placeholder="Passwort eingeben" value={password} onChange={(event) => setPassword(event.target.value)} required />
+              <span className="auth-password-field">
+                <input type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Passwort eingeben" value={password} onChange={(event) => setPassword(event.target.value)} required />
+                <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Passwort ausblenden" : "Passwort anzeigen"} aria-pressed={showPassword}>
+                  <EyeIcon hidden={showPassword} />
+                </button>
+              </span>
             </label>
             {error ? <p className="auth-error" role="alert">{error}</p> : null}
             <button className="auth-submit" type="submit" disabled={busy}>{busy ? "Anmeldung läuft…" : "Anmelden"}</button>
