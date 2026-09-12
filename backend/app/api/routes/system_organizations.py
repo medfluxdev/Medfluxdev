@@ -2,7 +2,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.database.models import Account, Organization
+from app.auth.service import account_from_selector
+from app.core.config import settings
+from app.database.models import Organization
 from app.database.session import create_session
 
 router = APIRouter(prefix="/api/system/organizations", tags=["system-organizations"])
@@ -14,13 +16,17 @@ class OrganizationCreate(BaseModel):
 
 
 def _require_developer(request: Request, session):
-    if getattr(request.state, "is_developer", False):
-        account_id = getattr(request.state, "account_id", None)
-        return session.get(Account, account_id) if account_id else None
+    """Resolve the authenticated account exactly like /api/me.
 
-    account_id = getattr(request.state, "account_id", None)
-    account = session.get(Account, account_id) if account_id else None
-    if account is None or not account.is_developer:
+    System routes must not depend on middleware request-state ordering.  Using the
+    same session cookie lookup as /api/me guarantees that an account shown as
+    Developer in the UI is treated identically by the system API.
+    """
+    selector = request.cookies.get(settings.auth_cookie_name, "")
+    account = account_from_selector(session, selector)
+    if account is None:
+        raise HTTPException(status_code=401, detail="Bitte anmelden.")
+    if not account.is_developer:
         raise HTTPException(status_code=403, detail="Nur Developer erlaubt.")
     return account
 
