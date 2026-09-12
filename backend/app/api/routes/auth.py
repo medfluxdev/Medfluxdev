@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from app.auth.service import authenticate, create_login_session, memberships_for_account, revoke_login_session
 from app.core.config import settings
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
