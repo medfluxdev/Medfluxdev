@@ -14,6 +14,7 @@ type NavItem = { label: string; href: string; icon: keyof typeof ic; roles?: Acc
 
 const ic: Record<string, Icon> = {
   dashboard: <path d="M4 12h5l3-7 3 14 2-7h3" />,
+  admin: <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 15v-3M12 15V8M16 15v-5" /></>,
   contracts: <><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h5" /></>,
   workQueue: <><path d="M5 5h14v14H5z" /><path d="M8 9h8M8 13h5" /></>,
   import: <path d="M12 3v18M3 12h18" />,
@@ -39,7 +40,10 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
     { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
   ]},
-  { label: "System", items: [{ label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] }] },
+  { label: "System", items: [
+    { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
+    { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
+  ] },
 ];
 
 export const NAV_ITEMS: NavItem[] = GROUPS.flatMap((group) => group.items);
@@ -58,6 +62,7 @@ function titleForPath(pathname: string): string {
   if (pathname === "/nachweise") return "Nachweise";
   if (pathname === "/audit") return "Audit";
   if (pathname === "/archiv") return "Archiv";
+  if (pathname === "/admin") return "Admin Dashboard";
   if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname === "/settings") return "Einstellungen";
   return "Medflux";
@@ -115,6 +120,7 @@ function Sidebar() {
           <small>{ROLE_LABELS[role]}</small>
           <small>{account.email}</small>
           <div className="account-card-actions">
+            {role === "admin" ? <Link href="/admin">Admin Dashboard</Link> : null}
             {role === "admin" ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
             <button type="button" onClick={() => void logout()}>Abmelden</button>
           </div>
