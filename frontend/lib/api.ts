@@ -4,7 +4,6 @@ const API_BASE =
 // Standard-Timeout damit kein Ladezustand ewig haengen kann: Bleibt der
 // Backend-Request ohne Antwort (z. B. Netz/Service haengt), endet der Request
 // mit einem ehrlichen Fehler-Zustand, statt in "laedt…" zu verharren.
-// Ein expliziter Timeout (0 = ohne) ist pro Aufruf überschreibbar.
 const DEFAULT_TIMEOUT_MS = 20000;
 
 function fetchWithTimeout(
@@ -12,8 +11,9 @@ function fetchWithTimeout(
   init: RequestInit,
   timeoutMs: number
 ): Promise<Response> {
+  const withCredentials: RequestInit = { credentials: "include", ...init };
   if (!timeoutMs || timeoutMs <= 0) {
-    return fetch(url, init);
+    return fetch(url, withCredentials);
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -27,7 +27,7 @@ function fetchWithTimeout(
     clearTimeout(timer);
     if (outer) outer.removeEventListener("abort", onOuterAbort);
   };
-  return fetch(url, { ...init, signal: controller.signal }).then(
+  return fetch(url, { ...withCredentials, signal: controller.signal }).then(
     (res) => {
       cleanup();
       return res;
@@ -44,11 +44,7 @@ export async function apiGet<T>(
   signal?: AbortSignal,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<T> {
-  const res = await fetchWithTimeout(
-    `${API_BASE}${path}`,
-    { signal },
-    timeoutMs
-  );
+  const res = await fetchWithTimeout(`${API_BASE}${path}`, { signal }, timeoutMs);
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status} ${res.statusText}`);
   }
@@ -87,6 +83,7 @@ export async function apiPost<T>(
   if (!res.ok) {
     throw new Error(await errorMessage(res));
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -156,6 +153,7 @@ export async function apiUpload<T>(
   const query = slug ? `?organization_slug=${encodeURIComponent(slug)}` : "";
   const res = await fetch(`${API_BASE}${path}${query}`, {
     method: "POST",
+    credentials: "include",
     body: form,
   });
   if (!res.ok) {
