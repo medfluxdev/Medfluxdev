@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from app.auth.service import authenticate, create_login_session, memberships_for_account, revoke_login_session
 from app.core.config import settings
+from app.database.models import Organization
 from app.database.session import create_session
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -19,30 +21,45 @@ class LoginResponse(BaseModel):
     ok: bool = True
 
 
-def _account_payload(account, memberships):
+def _account_payload(account, memberships, developer_organizations=None):
+    membership_items = [
+        {
+            "organization_id": str(org.id),
+            "organization_slug": org.slug,
+            "organization_name": org.name,
+            "role": membership.role,
+            "hospital_id": str(membership.hospital_id) if membership.hospital_id else None,
+            "department_id": str(membership.department_id) if membership.department_id else None,
+            "is_default": membership.is_default,
+        }
+        for membership, org in memberships
+    ]
+    if account.is_developer:
+        membership_items = [
+            {
+                "organization_id": str(org.id),
+                "organization_slug": org.slug,
+                "organization_name": org.name,
+                "role": "admin",
+                "hospital_id": None,
+                "department_id": None,
+                "is_default": False,
+            }
+            for org in (developer_organizations or [])
+        ]
     return {
         "id": str(account.id),
         "email": account.login_name,
         "display_name": account.display_name,
         "is_active": account.is_active,
+        "is_developer": account.is_developer,
         "last_login_at": account.last_login_at.isoformat() if account.last_login_at else None,
         "profile_photo_data_url": account.profile_photo_data_url,
         "phone": account.phone,
         "job_title": account.job_title,
         "department": account.department,
         "bio": account.bio,
-        "memberships": [
-            {
-                "organization_id": str(org.id),
-                "organization_slug": org.slug,
-                "organization_name": org.name,
-                "role": membership.role,
-                "hospital_id": str(membership.hospital_id) if membership.hospital_id else None,
-                "department_id": str(membership.department_id) if membership.department_id else None,
-                "is_default": membership.is_default,
-            }
-            for membership, org in memberships
-        ],
+        "memberships": membership_items,
     }
 
 
@@ -93,6 +110,10 @@ def me(request: Request):
         account = account_from_selector(session, selector)
         if account is None:
             raise HTTPException(status_code=401, detail="Bitte anmelden.")
-        return _account_payload(account, memberships_for_account(session, account.id))
+        memberships = memberships_for_account(session, account.id)
+        organizations = []
+        if account.is_developer:
+            organizations = session.scalars(select(Organization).order_by(Organization.name.asc())).all()
+        return _account_payload(account, memberships, organizations)
     finally:
         session.close()
