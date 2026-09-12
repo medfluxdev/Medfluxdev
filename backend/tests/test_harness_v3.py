@@ -1209,6 +1209,38 @@ def test_performance_diagnostics_counters_are_present():
     } <= literals
 
 
+def test_section_auxiliary_summary_strips_model_refs_and_number_roles():
+    section = SectionUnderstanding(
+        section_index=0,
+        pages=[1],
+        observations=[Observation(topic="identity", summary="x", block_refs=["fake"], related_refs=["fake2"])],
+        option_clusters=[OptionCluster(cluster_label="plan", options=[
+            OptionItem(label="Guard TOP", price_text="1650", block_id="fake", selection_hint=True)
+        ])],
+        numbers=[NumberRole(value="452664", role="contract_number", block_ids=["fake"], reason="model")],
+    )
+    payload = compact_sections([section], budget=300)
+    assert '"block_id"' not in payload
+    assert '"block_ids"' not in payload
+    assert '"role"' not in payload
+    assert "452664" in payload
+
+
+def test_source_first_global_and_map_guards_present():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    assert "source_first_lean_global_context" in source
+    assert "global_understanding_skipped_no_source" in source
+    assert "source_first_lean_map_segmentation" in source
+
+
+def test_shared_region_vision_attempt_budget_guard_present():
+    from pathlib import Path
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
+    assert "region_visual_attempts" in source
+    assert "region_visual_budget" in source
+
+
 def test_resolve_source_first_fallback_markers_present():
     import ast
     from pathlib import Path
