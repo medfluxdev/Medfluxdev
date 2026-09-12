@@ -67,13 +67,20 @@ def test_fresh_environment_contains_no_product_records() -> None:
     try:
         with admin.connect() as conn:
             conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-        url = f"{base_url}?options={quote('-csearch_path=' + schema + ',public')}"
-        engine = create_engine(url)
+        engine = create_engine(base_url).execution_options(
+            schema_translate_map={None: schema}
+        )
         try:
             Base.metadata.create_all(engine)
             with Session(engine) as session:
                 for table in PRODUCT_DOMAINS:
-                    _assert_empty_table(session, table)
+                    count = session.execute(
+                        text(f'SELECT count(*) FROM "{schema}"."{table}"')
+                    ).scalar_one()
+                    assert count == 0, (
+                        f"Frische Datenumgebung ist nicht leer: Tabelle {table} "
+                        f"enthaelt {count} Datensaetze."
+                    )
         finally:
             engine.dispose()
     finally:
