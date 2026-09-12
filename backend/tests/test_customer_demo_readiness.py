@@ -468,7 +468,11 @@ class TestFailureSafeImport:
                     requires_review=False,
                 )
 
-            svc._analysis.analyze = fake_analyze
+            if svc._analysis is None:
+                from types import SimpleNamespace
+                svc._analysis = SimpleNamespace(analyze=fake_analyze)
+            else:
+                svc._analysis.analyze = fake_analyze
 
             def fake_build_canonical(stored, path):
                 extraction = TextExtractionResult(
