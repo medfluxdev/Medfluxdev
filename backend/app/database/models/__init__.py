@@ -1,7 +1,7 @@
 """Registriert alle ORM-Modelle (fuer Beziehungs-Aufloesung + Alembic-Autogenerate)."""
 
 from app.database.models.organization import Organization
-from app.database.models.organization_structure import Hospital, Department, ContractDepartment
+from app.database.models.organization_structure import Hospital, Department, CostCenter, ContractDepartment
 from app.database.models.account import Account, AccountMembership
 from app.database.models.login_session import LoginSession
 from app.database.models.activity_log import ActivityLog
@@ -10,11 +10,7 @@ from app.database.models.document import DocumentFile, DocumentVersion
 from app.database.models.artifact import DocumentArtifact
 from app.database.models.processing import ProcessingRun, ProcessingSummary
 from app.database.models.extraction import ContractExtraction, ExtractionEvidence
-from app.database.models.calculation import (
-    CalculationRun,
-    CalculationResult,
-    CalculationReviewFlag,
-)
+from app.database.models.calculation import CalculationRun, CalculationResult, CalculationReviewFlag
 from app.database.models.contract import Contract, ContractDocument, ContractEquipment
 from app.database.models.equipment import Equipment
 from app.database.models.work_item import WorkItem
@@ -25,36 +21,11 @@ from app.database.models.demo import DemoWorkspace, DemoWorkspaceEntry
 from app.database.models.warning import ContractWarning, WarningEvaluationRun
 
 __all__ = [
-    "Organization",
-    "Hospital",
-    "Department",
-    "ContractDepartment",
-    "Account",
-    "AccountMembership",
-    "LoginSession",
-    "ActivityLog",
-    "ApplicationSetting",
-    "DocumentFile",
-    "DocumentVersion",
-    "DocumentArtifact",
-    "ProcessingRun",
-    "ProcessingSummary",
-    "ContractExtraction",
-    "ExtractionEvidence",
-    "CalculationRun",
-    "CalculationResult",
-    "CalculationReviewFlag",
-    "Contract",
-    "ContractDocument",
-    "ContractEquipment",
-    "Equipment",
-    "WorkItem",
-    "ReviewAction",
-    "ContractOverride",
-    "FactReview",
-    "ContractReview",
-    "DemoWorkspace",
-    "DemoWorkspaceEntry",
-    "WarningEvaluationRun",
-    "ContractWarning",
+    "Organization", "Hospital", "Department", "CostCenter", "ContractDepartment",
+    "Account", "AccountMembership", "LoginSession", "ActivityLog", "ApplicationSetting",
+    "DocumentFile", "DocumentVersion", "DocumentArtifact", "ProcessingRun", "ProcessingSummary",
+    "ContractExtraction", "ExtractionEvidence", "CalculationRun", "CalculationResult", "CalculationReviewFlag",
+    "Contract", "ContractDocument", "ContractEquipment", "Equipment", "WorkItem", "ReviewAction",
+    "ContractOverride", "FactReview", "ContractReview", "DemoWorkspace", "DemoWorkspaceEntry",
+    "WarningEvaluationRun", "ContractWarning",
 ]
