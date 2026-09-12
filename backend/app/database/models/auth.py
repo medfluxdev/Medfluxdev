@@ -6,15 +6,25 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
-from app.database.columns import OrgOwnedMixin, TimestampMixin, org_id_col, uuid_pk
+from app.database.columns import OrgOwnedMixin, org_id_col, uuid_pk
 
 
-class User(Base, OrgOwnedMixin):
+class User(OrgOwnedMixin, Base):
     """Lokaler, organisationsgebundener MedFlux-Benutzer."""
 
     __tablename__ = "app_user"
@@ -49,7 +59,9 @@ class AuditEvent(Base):
     id: Mapped[uuid.UUID] = uuid_pk()
     organization_id: Mapped[uuid.UUID] = org_id_col()
     user_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="SET NULL"), nullable=True
+        PG_UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="SET NULL"),
+        nullable=True,
     )
     action: Mapped[str] = mapped_column(String(80), nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
