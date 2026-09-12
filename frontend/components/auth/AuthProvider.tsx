@@ -60,22 +60,30 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
   }, [pathname, refresh, router]);
 
   const memberships = account?.memberships ?? [];
+  const isAdminAccount = memberships.some((item) => item.role === "admin");
 
   useEffect(() => {
     if (!account || memberships.length === 0) return;
+
     const selectedIsValid = selectedSlug && memberships.some((item) => item.organization_slug === selectedSlug);
     if (selectedIsValid) return;
+
+    // Regular users do not choose an organization themselves. Their membership
+    // is the workspace assigned by an administrator.
+    if (!isAdminAccount) {
+      const assigned = memberships.find((item) => item.organization_slug === defaultOrganizationSlug) ?? memberships[0];
+      setSelectedSlug(assigned.organization_slug);
+      if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, assigned.organization_slug);
+      return;
+    }
+
+    // Admins with one organization enter directly; admins with several choose.
     if (memberships.length === 1) {
       const slug = memberships[0].organization_slug;
       setSelectedSlug(slug);
       if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, slug);
-      return;
     }
-    if (memberships.some((item) => item.organization_slug === defaultOrganizationSlug) && !selectedSlug) {
-      // Multiple memberships must be selected explicitly after login.
-      return;
-    }
-  }, [account, memberships, selectedSlug, defaultOrganizationSlug]);
+  }, [account, memberships, selectedSlug, defaultOrganizationSlug, isAdminAccount]);
 
   const membership = useMemo(
     () => memberships.find((item) => item.organization_slug === selectedSlug) ?? null,
@@ -83,19 +91,26 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
   );
 
   useEffect(() => {
-    if (loading || !account || pathname === "/login" || pathname === "/select-organization") return;
+    if (loading || !account || pathname === "/login") return;
     if (memberships.length === 0) {
       router.replace("/login?error=organization");
-    } else if (memberships.length > 1 && !membership) {
+      return;
+    }
+    if (pathname === "/select-organization") {
+      if (!isAdminAccount || memberships.length <= 1) router.replace("/");
+      return;
+    }
+    if (isAdminAccount && memberships.length > 1 && !membership) {
       router.replace("/select-organization");
     }
-  }, [account, loading, membership, memberships.length, pathname, router]);
+  }, [account, loading, membership, memberships.length, pathname, router, isAdminAccount]);
 
   const selectOrganization = useCallback((slug: string) => {
+    if (!isAdminAccount) return;
     if (!memberships.some((item) => item.organization_slug === slug)) return;
     setSelectedSlug(slug);
     if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, slug);
-  }, [memberships]);
+  }, [memberships, isAdminAccount]);
 
   const logout = useCallback(async () => {
     try {
