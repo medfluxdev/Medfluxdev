@@ -1,8 +1,8 @@
 # STEP 18 Checkpoint – Release Candidate & Krankenhaus-Pilot
 
-Stand: 2026-09-12
+Stand: 2026-09-13
 Branch: `JAMAL`
-Status: **RC candidate; PostgreSQL-Migration, Auth-E2E, CSV-E2E und Backup/Restore gruen; breite Regression und Realbenchmark ausstehend**
+Status: **RC candidate; alle Build-/PostgreSQL-/Auth-/CSV-/Backup-/Regression-Gates gruen; Realbenchmark ausstehend**
 
 ## Statisch umgesetzt
 
@@ -14,7 +14,7 @@ Status: **RC candidate; PostgreSQL-Migration, Auth-E2E, CSV-E2E und Backup/Resto
 - Datenschutz-/Datenfluss-Uebersicht: `docs/DATA_PROTECTION.md`
 - Pilot-Installationsanleitung: `docs/INSTALLATION_PILOT.md`
 
-## Laufzeitnachweis vom 2026-09-12
+## Laufzeitnachweis
 
 ### Build-/DB-freie Gates
 
@@ -42,7 +42,7 @@ Auf Commit `93c5677207cae96445fb8fc3179ebfd93ecbadc7`:
 - bestehende Org-/Audit-/Provenienztests: **bestanden**
 - realer `pg_dump` → Verify → `pg_restore` gegen zweite disposable DB: **bestanden**
 - Schema- und Alembic-Vergleich nach Restore: **bestanden**
-- alle temporären Datenbanken danach entfernt
+- alle temporaeren Datenbanken danach entfernt
 
 ### Gezielter Auth-E2E-Gate
 
@@ -67,12 +67,22 @@ Auf Commit `e536927216c0d62e5205953064a261745a269aee`:
 - No-store-/Nosniff-Header: **bestanden**
 - disposable Testdatenbank danach entfernt
 
-STEP 16 und STEP 17 sind damit fachlich abgeschlossen.
+### Breiter Backend-Regression-Gate
 
-## Verbleibende Release-Kriterien
+Auf Commit `46e9eed7f66615bcaf7a318fef819e8f4447686a` gegen eine eigene disposable PostgreSQL-Datenbank:
 
-1. sichere breitere Backend-Regression bzw. gezielte Rest-Risiko-Suite
-2. realer Vertragsbenchmark (Accutron) mit dokumentierter Evidence-/Feldqualitaet
+- komplette Backend-Suite `pytest -q`: **750 passed, 0 failed, 0 skipped**
+- Laufzeit: **29.44 s**
+- Warnungen: **5**
+- keine optionale AI-Runtime fuer die Tests erforderlich
+- keine externen Netzwerkzugriffe
+- disposable Testdatenbank danach entfernt
+
+Damit sind STEP 16 und STEP 17 abgeschlossen und die breite Backend-Regression ist gruen.
+
+## Verbleibendes Release-Kriterium
+
+1. realer Vertragsbenchmark (Accutron) mit dokumentierter Evidence-/Feldqualitaet
 
 ## Bereits bestanden
 
@@ -86,17 +96,16 @@ STEP 16 und STEP 17 sind damit fachlich abgeschlossen.
 - UAT Kosten-Semantik-Test
 - Backend Import-/Route-Smoke
 - Frontend Production-Build
+- komplette Backend-Regression: 750/750 gruen
 
 ## Keine falsche Release-Behauptung
 
-Solange eines der verbleibenden Runtime-Gates fehlt, bleibt der Status `RC candidate`.
-Insbesondere darf kein echter Vertragsbenchmark durch synthetische Fixtures ersetzt werden.
+Solange der reale Vertragsbenchmark fehlt, bleibt der Status `RC candidate`.
+Ein echter Vertragsbenchmark darf nicht durch synthetische Fixtures ersetzt werden.
 
 ## Bekannte Rest-Risiken vor Pilot
 
 - PostgreSQL-RLS ist noch nicht als zweite Mandanten-Isolationsschicht aktiviert.
-- CSP enthaelt wegen Next.js derzeit `unsafe-inline` und `unsafe-eval`; fuer
-  internet-exponierten Betrieb sollte eine nonce-/production-spezifische CSP folgen.
-- Retention-/Loeschfristen sind Betreiberentscheidungen und nicht automatisch
-  als rechtliche Policy implementiert.
+- CSP enthaelt wegen Next.js derzeit `unsafe-inline` und `unsafe-eval`; fuer internet-exponierten Betrieb sollte eine nonce-/production-spezifische CSP folgen.
+- Retention-/Loeschfristen sind Betreiberentscheidungen und nicht automatisch als rechtliche Policy implementiert.
 - HTTPS/TLS ist Deployment-Aufgabe; bei HTTPS muss `AUTH_COOKIE_SECURE=true` sein.
