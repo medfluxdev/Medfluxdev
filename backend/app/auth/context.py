@@ -21,7 +21,10 @@ def _unauthorized() -> HTTPException:
 
 
 def optional_identity(request: Request) -> AuthIdentity | None:
-    """Liest die lokale Sitzung; im Entwicklungsmodus ist Identitaet optional."""
+    """Liest die lokale Sitzung; Middleware-cached Identitaet wird wiederverwendet."""
+    cached = getattr(request.state, "auth_identity", None)
+    if isinstance(cached, AuthIdentity):
+        return cached
     token = request.cookies.get(settings.auth_cookie_name)
     if not token:
         return None
@@ -37,6 +40,7 @@ def optional_identity(request: Request) -> AuthIdentity | None:
             return None
         if str(identity.organization_id) != payload["org"] or identity.role != payload["role"]:
             return None
+        request.state.auth_identity = identity
         return identity
     finally:
         session.close()
@@ -72,5 +76,14 @@ def require_role(*roles: str) -> Callable[[Request], AuthIdentity]:
 def enforce_org(identity: AuthIdentity, requested_slug: str) -> None:
     """Verhindert, dass organization_slug als Autorisierungs-Credential missbraucht wird."""
     if identity.organization_slug != requested_slug:
-        # 404 statt 403 vermeidet Organisations-Enumeration.
         raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+
+
+def reviewer_name(request: Request, client_value: str | None) -> str | None:
+    """Bei aktiver Auth kommt die Reviewer-Identitaet ausschliesslich vom Server."""
+    if settings.auth_enabled:
+        identity = require_identity(request)
+        if identity.role not in {"admin", "reviewer"}:
+            raise HTTPException(status_code=403, detail="Keine Berechtigung fuer diese Aktion.")
+        return identity.display_name
+    return client_value
