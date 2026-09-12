@@ -1580,8 +1580,30 @@ class HarnessV3:
 
             final_map = maps[-1] if maps else ContractMap()
             selections = list(final_map.selections)
-            number_roles = list(final_map.number_roles)
-            precedence_rules = list(final_map.precedence)
+            number_roles = []
+            for role in final_map.number_roles:
+                role_text = (str(role.reason or "") + " " + str(role.value or "")).lower()
+                if role.role == "customer_number" and any(token in role_text for token in ("vat", "ust-id", "umsatzsteuer", "tax id", "steuer")):
+                    planner.decisions.append({
+                        "purpose": "global_map",
+                        "decision": "number_role_semantic_misclassification_quarantined",
+                        "value": str(role.value),
+                        "role": role.role,
+                    })
+                    issues.append("Nummernrolle semantisch widersprüchlich; manuelle Prüfung erforderlich")
+                    continue
+                number_roles.append(role)
+            precedence_rules = [
+                rule for rule in final_map.precedence
+                if str(rule.document_type or "").strip()
+            ]
+            if len(precedence_rules) != len(final_map.precedence):
+                planner.decisions.append({
+                    "purpose": "global_map",
+                    "decision": "degenerate_precedence_quarantined",
+                    "dropped": len(final_map.precedence) - len(precedence_rules),
+                })
+                issues.append("Dokumentenrang ohne Dokumenttyp verworfen; manuelle Prüfung erforderlich")
             precedence_by_type: dict[str, set[int]] = {}
             for rule in precedence_rules:
                 precedence_by_type.setdefault(rule.document_type, set()).add(rule.rank)
@@ -1631,7 +1653,11 @@ class HarnessV3:
                 "CUSTOMER_NUMBER or OTHER?\n"
                 "- document/attachment/email authority and precedence (AUTHORITATIVE vs SECONDARY).\n"
                 "Only use supplied source block IDs. A selection must be evidenced by a clause, a marked control "
-                "or an explicit statement; never infer a selection from price alone. Ground every decision.\n"
+                "or an explicit statement; never infer a selection from price alone. If visual section summaries or "
+                "vision observations describe a marked checkbox/control, treat that as selection evidence when its source "
+                "block is supplied. For document precedence, identify primary signed agreement/appendix material separately "
+                "from secondary correspondence such as emails; never let secondary correspondence override a contradictory "
+                "primary signed source. Ground every decision.\n"
             )
             applicability_families = ["costs", "identity", "termination"]
             applicability_source_ids = set()
@@ -1667,6 +1693,7 @@ class HarnessV3:
                         applicability_instruction
                         + "\nContractMap: " + applicability_map
                         + "\nOption clusters (perception evidence): " + clusters_json
+                        + (("\nProvisional visual section summaries: " + section_summary) if section_summary else "")
                         + vision_json
                         + "\nSources:\n" + assemble(sorted(applicability_pack, key=lambda b: document.blocks.index(b)))
                     )
@@ -2347,6 +2374,11 @@ class HarnessV3:
                         "applicability_excluded": candidate.applicability,
                     })
                     continue
+                if candidate.applicability == "unknown":
+                    planner.decisions.append({
+                        "field": candidate.field,
+                        "decision": "unknown_applicability_delivered_with_exact_evidence",
+                    })
                 if candidate.field == "identity.contract_number":
                     # G / Qwen-authority invariant: the number role below comes
                     # ONLY from the Qwen number-role/applicability result. This
