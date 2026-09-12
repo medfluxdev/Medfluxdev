@@ -2,7 +2,7 @@
 
 Stand: 2026-09-12
 Branch: `JAMAL`
-Status: **Implementiert; Laufzeit-Gate ausstehend**
+Status: **Implementiert; gezielte DB-freie Runtime-Gates bestanden; PostgreSQL-/E2E-Gate ausstehend**
 
 ## Implementiert
 
@@ -44,12 +44,23 @@ Status: **Implementiert; Laufzeit-Gate ausstehend**
 - Abmelden
 - System-Audit zusätzlich zum Vertrags-Audit
 
-## Noch zu beweisen (Runtime-Gate)
+## Laufzeitnachweis vom 2026-09-12
 
-1. Migration `d7e1f2a5b3c6` auf isolierter PostgreSQL-Testdatenbank.
-2. `MEDFLUX_UNIT_ONLY=1` für die reinen Auth-Security-Tests.
-3. gezielter Login → `/me` → Review/Override → Provenienz → Audit-Smoke-Test.
-4. Frontend Test/Build für Login, Shell und Audit-Komponenten.
+Bounded Gate auf Branch `JAMAL`, Commit `cb2029645efa9b4c7c2606dfadf0d3853e090cc5`, sauberer Worktree:
+
+- Auth-Security-Tests mit `MEDFLUX_UNIT_ONLY=1`: **5 passed in 0.42s**
+- `app.main:app` Import ohne Serverstart/DB-Verbindung: **bestanden**
+- erforderliche Auth-/Audit-Routen registriert: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/audit`
+- Frontend Production-Build: **bestanden** (`Next.js 14.2.15`, Lint/Types OK, 14 Seiten generiert)
+- relevante Python-Dateien wurden mit `py_compile` erfolgreich geprüft
+
+Dieser Nachweis beweist bewusst **nicht** die Migration oder DB-gestützte Auth-/Provenienzpfade.
+
+## Noch zu beweisen (PostgreSQL-/E2E-Gate)
+
+1. Migration `d7e1f2a5b3c6` auf isolierter PostgreSQL-Testdatenbank bis `head`.
+2. gezielter Login → `/me` → Review/Override → Provenienz → Audit-Smoke-Test gegen isolierte DB.
+3. Viewer-Mutationsschutz und Organisations-Isolation gegen isolierte DB.
 
 ## Sicherheitsgrenzen
 
@@ -59,4 +70,4 @@ Status: **Implementiert; Laufzeit-Gate ausstehend**
 - Rollen-/Org-Grenzen werden serverseitig erzwungen; Query-Parameter sind keine Credentials.
 - Bestehende unverifizierte Dev-Einträge bleiben ehrlich als `manual_unverified`/`is_development` erkennbar.
 
-Schritt 16 wird in `PROJECT_PROGRESS.md` erst nach bestandenem Laufzeit-Gate auf **ABGESCHLOSSEN** gesetzt.
+Schritt 16 wird in `PROJECT_PROGRESS.md` erst nach bestandenem PostgreSQL-/E2E-Gate auf **ABGESCHLOSSEN** gesetzt.
