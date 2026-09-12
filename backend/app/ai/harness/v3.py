@@ -726,7 +726,6 @@ class HarnessV3:
                     candidate.ambiguity
                     or candidate.conflicts
                     or candidate.missing_dependencies
-                    or candidate.applicability == "unknown"
                     or candidate.field.startswith(semantic_sensitive_prefixes)
                 )
                 if needs_semantic_verifier:
@@ -2046,6 +2045,23 @@ class HarnessV3:
                     })
                     pack_segments = []
 
+                if len(pack_segments) > 1:
+                    original_segment_count = len(pack_segments)
+                    merged_segment = planner.pack_ranked(
+                        ranked_union or ordered_blocks,
+                        pack_overhead,
+                        purpose="resolve_pack_single_pass:" + pack_name,
+                        extra_reserve=sections_bound + _PACK_SAFETY_MARGIN,
+                        per_block_cost=block_vision_cost,
+                    )
+                    pack_segments = [merged_segment] if merged_segment else []
+                    planner.decisions.append({
+                        "purpose": "resolve_pack_segments:" + pack_name,
+                        "decision": "single_pass_pack_selected",
+                        "segment_count_before": original_segment_count,
+                        "blocks": [block.id for block in merged_segment] if merged_segment else [],
+                    })
+
                 segment_batches: list[CandidateBatch] = []
                 for segment_index, segment in enumerate(pack_segments):
                     if budget_exhausted:
@@ -2180,15 +2196,6 @@ class HarnessV3:
                     if (
                         candidate.status == "supported"
                         and (candidate.conflicts or candidate.missing_dependencies or candidate.ambiguity)
-                    )
-                    or (
-                        candidate.status != "supported"
-                        and (
-                            candidate.evidence_refs
-                            or candidate.conflicts
-                            or candidate.missing_dependencies
-                            or candidate.ambiguity
-                        )
                     )
                 ]
                 skipped_missing = [
@@ -2388,6 +2395,14 @@ class HarnessV3:
                     "applicability_exclusions": excluded_count,
                 })
             if supported_count == 0:
+                planner.decisions.append({
+                    "purpose": "delivery",
+                    "decision": "no_supported_exact_evidence_candidates",
+                    "candidate_count": len(candidates),
+                    "supported_status_count": sum(1 for item in candidates if item.status == "supported"),
+                    "ambiguous_count": sum(1 for item in candidates if item.status == "ambiguous"),
+                    "unsupported_count": sum(1 for item in candidates if item.status == "unsupported"),
+                })
                 issues.append("Keine belastbar belegte Vertragsinformation extrahiert")
 
         except CallBudgetExhausted as exc:
