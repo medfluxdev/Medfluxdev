@@ -63,6 +63,7 @@ function titleForPath(pathname: string): string {
   if (pathname === "/audit") return "Audit";
   if (pathname === "/archiv") return "Archiv";
   if (pathname === "/admin") return "Admin Dashboard";
+  if (pathname === "/profile") return "Mein Profil";
   if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname === "/settings") return "Einstellungen";
   return "Medflux";
@@ -138,7 +139,7 @@ function Topbar() {
   const showSectionTitle = pathname !== "/";
   const showImportButton = pathname !== "/" && role != null && EDITORS.includes(role);
   function onSubmit(e: FormEvent) { e.preventDefault(); const term = q.trim(); router.push(term ? `/contracts?q=${encodeURIComponent(term)}` : "/contracts"); }
-  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions"><form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}{account && role ? <div className="top-user"><span className="top-user-avatar" aria-hidden="true">{account.display_name.slice(0,1).toUpperCase()}</span><span className="top-user-copy"><strong>{account.display_name}</strong><small>{ROLE_LABELS[role]}</small></span><button type="button" className="top-logout-btn" onClick={() => void logout()}>Abmelden</button></div> : <Link className="top-login-btn" href="/login">Anmelden</Link>}</div></header>;
+  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions"><form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}{account && role ? <div className="top-user"><Link href="/profile" className="top-user-profile" aria-label="Mein Profil öffnen"><span className="top-user-avatar" aria-hidden="true">{account.display_name.slice(0,1).toUpperCase()}</span><span className="top-user-copy"><strong>{account.display_name}</strong><small>{ROLE_LABELS[role]}</small></span></Link><button type="button" className="top-logout-btn" onClick={() => void logout()}>Abmelden</button></div> : <Link className="top-login-btn" href="/login">Anmelden</Link>}</div></header>;
 }
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
