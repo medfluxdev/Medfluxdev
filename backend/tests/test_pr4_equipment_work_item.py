@@ -32,8 +32,10 @@ from app.database.models import (
 from app.database.services import (
     add_equipment,
     create_contract,
+    create_document_version,
     create_organization,
     resolve_equipment_master,
+    save_document_file,
 )
 from app.equipment.identity import (
     identification_quality,
@@ -91,10 +93,34 @@ def _org(db) -> Organization:
 
 
 def _contract(db, org, number="CN") -> Contract:
-    return create_contract(
+    contract = create_contract(
         db, organization_id=org.id, supplier="Lieferant",
         status="active", contract_number=f"{number}-{uuid.uuid4().hex[:8]}",
     )
+    token = uuid.uuid4().hex
+    doc = save_document_file(
+        db,
+        organization_id=org.id,
+        sha256=(token + "0" * 32)[:64],
+        original_filename="fixture.pdf",
+        stored_filename="fixture.pdf",
+        file_extension=".pdf",
+        file_size_bytes=1,
+        storage_key=f"tests/{token}/fixture.pdf",
+        mime_type="application/pdf",
+    )
+    ver = create_document_version(
+        db,
+        organization_id=org.id,
+        document_file_id=doc.id,
+        version_no=1,
+        sha256=(uuid.uuid4().hex + "1" * 32)[:64],
+        storage_key=f"tests/{token}/v1.pdf",
+    )
+    attach_minimal_accepted_extraction(
+        db, contract=contract, document_version_id=ver.id
+    )
+    return contract
 
 
 def _warning(db, org, contract, *, wtype, severity="high", requires_action=False,
