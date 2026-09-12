@@ -5,21 +5,27 @@ import { usePathname, useRouter } from "next/navigation";
 import { apiGet, apiPost } from "@/lib/api";
 import type { AccountRole, CurrentAccountDto, OrganizationMembershipDto } from "@/lib/auth-types";
 
+const STORAGE_KEY = "medflux.organization_slug";
+
 interface AuthContextValue {
   account: CurrentAccountDto | null;
   membership: OrganizationMembershipDto | null;
+  memberships: OrganizationMembershipDto[];
+  organizationSlug: string | null;
   loading: boolean;
   role: AccountRole | null;
   refresh: () => Promise<CurrentAccountDto | null>;
+  selectOrganization: (slug: string) => void;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children, organizationSlug }: { children: React.ReactNode; organizationSlug: string }) {
+export function AuthProvider({ children, organizationSlug: defaultOrganizationSlug }: { children: React.ReactNode; organizationSlug: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [account, setAccount] = useState<CurrentAccountDto | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(pathname !== "/login");
 
   const refresh = useCallback(async () => {
@@ -31,6 +37,11 @@ export function AuthProvider({ children, organizationSlug }: { children: React.R
       setAccount(null);
       return null;
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setSelectedSlug(window.localStorage.getItem(STORAGE_KEY));
   }, []);
 
   useEffect(() => {
@@ -48,22 +59,51 @@ export function AuthProvider({ children, organizationSlug }: { children: React.R
     return () => { active = false; };
   }, [pathname, refresh, router]);
 
+  const memberships = account?.memberships ?? [];
+
+  useEffect(() => {
+    if (!account || memberships.length === 0) return;
+    const selectedIsValid = selectedSlug && memberships.some((item) => item.organization_slug === selectedSlug);
+    if (selectedIsValid) return;
+    if (memberships.length === 1) {
+      const slug = memberships[0].organization_slug;
+      setSelectedSlug(slug);
+      if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, slug);
+      return;
+    }
+    if (memberships.some((item) => item.organization_slug === defaultOrganizationSlug) && !selectedSlug) {
+      // Multiple memberships must be selected explicitly after login.
+      return;
+    }
+  }, [account, memberships, selectedSlug, defaultOrganizationSlug]);
+
   const membership = useMemo(
-    () => account?.memberships.find((item) => item.organization_slug === organizationSlug) ?? null,
-    [account, organizationSlug]
+    () => memberships.find((item) => item.organization_slug === selectedSlug) ?? null,
+    [memberships, selectedSlug]
   );
 
   useEffect(() => {
-    if (!loading && pathname !== "/login" && account && !membership) {
+    if (loading || !account || pathname === "/login" || pathname === "/select-organization") return;
+    if (memberships.length === 0) {
       router.replace("/login?error=organization");
+    } else if (memberships.length > 1 && !membership) {
+      router.replace("/select-organization");
     }
-  }, [account, loading, membership, pathname, router]);
+  }, [account, loading, membership, memberships.length, pathname, router]);
+
+  const selectOrganization = useCallback((slug: string) => {
+    if (!memberships.some((item) => item.organization_slug === slug)) return;
+    setSelectedSlug(slug);
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, slug);
+  }, [memberships]);
 
   const logout = useCallback(async () => {
     try {
       await apiPost<{ ok: boolean }>("/api/auth/logout", {});
     } finally {
       setAccount(null);
+      setSelectedSlug(null);
+      if (typeof window !== "undefined") window.localStorage.removeItem(STORAGE_KEY);
       router.replace("/login");
     }
   }, [router]);
@@ -71,11 +111,14 @@ export function AuthProvider({ children, organizationSlug }: { children: React.R
   const value = useMemo<AuthContextValue>(() => ({
     account,
     membership,
+    memberships,
+    organizationSlug: membership?.organization_slug ?? null,
     loading,
     role: membership?.role ?? null,
     refresh,
+    selectOrganization,
     logout,
-  }), [account, membership, loading, refresh, logout]);
+  }), [account, membership, memberships, loading, refresh, selectOrganization, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
