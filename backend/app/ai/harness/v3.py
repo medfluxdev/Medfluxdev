@@ -442,13 +442,25 @@ def compact_sections(sections, budget: int = 700, str_limit: int = 160,
             continue
         payload = _fit_row_to_tokens(row, caps[index])
         fitted[index] = (payload, estimate_tokens(payload))
-    estimate = sum(cost for _, cost in fitted.values())
+    def serialized_payload() -> str:
+        if not fitted:
+            return "[]"
+        return "[" + ",".join(fitted[i][0] for i in sorted(fitted)) + "]"
+
+    payload = serialized_payload()
     drop_order = list(_section_priority(len(sections)))
-    while estimate > budget and drop_order:
+    while estimate_tokens(payload) > budget and drop_order:
         dropped = drop_order.pop()
         if dropped in fitted:
-            estimate -= fitted[dropped][1]
             del fitted[dropped]
+            payload = serialized_payload()
+
+    final_estimate = estimate_tokens(payload)
+    if final_estimate > budget:
+        payload = "[]"
+        final_estimate = estimate_tokens(payload)
+        fitted.clear()
+
     if log is not None:
         log.append({
             "module": "compact_sections",
@@ -457,13 +469,11 @@ def compact_sections(sections, budget: int = 700, str_limit: int = 160,
             "represented": len(fitted),
             "represented_sections": sorted(fitted),
             "dropped_sections": sorted(set(range(len(sections))) - set(fitted)),
-            "estimate_tokens": estimate if fitted else estimate_tokens("[]"),
+            "estimate_tokens": final_estimate,
             "incomplete": len(fitted) < len(sections),
-            "bounded": (estimate if fitted else estimate_tokens("[]")) <= budget,
+            "bounded": final_estimate <= budget,
         })
-    if not fitted:
-        return "[]"
-    return "[" + ",".join(fitted[i][0] for i in sorted(fitted)) + "]"
+    return payload
 
 
 def _merge_maps_v3(maps: list[ContractMap]) -> ContractMap:
