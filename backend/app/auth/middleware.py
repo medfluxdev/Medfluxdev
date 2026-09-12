@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.database.session import create_session
 
 
-_PUBLIC_PATHS = {"/", "/api/health", "/docs", "/openapi.json"}
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
