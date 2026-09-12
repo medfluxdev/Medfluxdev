@@ -22,7 +22,12 @@ class ActivityLog(Base):
         nullable=False,
         index=True,
     )
-    account_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
+    account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("account.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     display_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     role_snapshot: Mapped[str] = mapped_column(String(32), nullable=False)
     event_name: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
