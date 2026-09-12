@@ -66,7 +66,6 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
       { label: "Übersicht", href: "/", icon: "dashboard" },
       { label: "Verträge", href: "/contracts", icon: "contracts" },
       { label: "To-dos", href: "/work-queue", icon: "workQueue" },
-      { label: "Geräte", href: "/equipment", icon: "equipment" },
       { label: "Import", href: "/import", icon: "import" },
     ],
   },
