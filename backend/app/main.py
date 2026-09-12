@@ -11,6 +11,7 @@ from app.api.routes import (
     documents,
     equipment,
     health,
+    intelligence,
     work_queue,
 )
 from app.core.config import settings
@@ -43,6 +44,7 @@ app.include_router(dashboard.router)
 app.include_router(contracts.router)
 app.include_router(equipment.router)
 app.include_router(work_queue.router)
+app.include_router(intelligence.router)
 app.include_router(demo.router)
 
 
