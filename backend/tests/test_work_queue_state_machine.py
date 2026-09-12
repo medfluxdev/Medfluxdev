@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database.models import Contract, ContractWarning, Organization, WorkItem
-from app.database.services import create_contract, create_organization
+from app.database.services import create_contract, create_document_version, create_organization, save_document_file
 from app.models.enums import WorkItemStatus
 from app.work_queue.service import (
     get_work_item_dto,
@@ -73,12 +73,38 @@ def _org(db) -> Organization:
     )
 
 
-def _contract(db, org) -> Contract:
-    return create_contract(
-        db, organization_id=org.id, supplier="WQ-Lieferant",
-        status="active", contract_number=f"WQ-{uuid.uuid4().hex[:8]}",
+def _contract(db, org, number="WQ") -> Contract:
+    contract = create_contract(
+        db,
+        organization_id=org.id,
+        supplier="Lieferant",
+        status="active",
+        contract_number=f"{number}-{uuid.uuid4().hex[:8]}",
     )
-
+    token = uuid.uuid4().hex
+    doc = save_document_file(
+        db,
+        organization_id=org.id,
+        sha256=(token + "0" * 32)[:64],
+        original_filename="fixture.pdf",
+        stored_filename="fixture.pdf",
+        file_extension=".pdf",
+        file_size_bytes=1,
+        storage_key=f"tests/{token}/fixture.pdf",
+        mime_type="application/pdf",
+    )
+    ver = create_document_version(
+        db,
+        organization_id=org.id,
+        document_file_id=doc.id,
+        version_no=1,
+        sha256=(uuid.uuid4().hex + "1" * 32)[:64],
+        storage_key=f"tests/{token}/v1.pdf",
+    )
+    attach_minimal_accepted_extraction(
+        db, contract=contract, document_version_id=ver.id
+    )
+    return contract
 
 def _derived(contract, *, extra_fp=None):
     fp = extra_fp or uuid.uuid4().hex
@@ -228,6 +254,7 @@ def test_sibling_duplicates_collapse_active_items(db):
         ceq = ContractEquipment(
             organization_id=org.id,
             contract_id=contract.id,
+            extraction_id=contract.accepted_extraction_id,
             equipment_id=eq.id,
             device_name="Accutron MR",
             model="Accutron MR",
