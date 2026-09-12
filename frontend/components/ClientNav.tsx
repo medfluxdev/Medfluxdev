@@ -8,6 +8,7 @@ import { apiGet } from "@/lib/api";
 export const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 
 type Icon = React.ReactNode;
+type NavItem = { label: string; href: string; icon: keyof typeof ic };
 
 const ic: Record<string, Icon> = {
   dashboard: <path d="M4 12h5l3-7 3 14 2-7h3" />,
@@ -58,41 +59,33 @@ const ic: Record<string, Icon> = {
   ),
 };
 
-const GROUPS: { label: string; items: { label: string; href: string; icon: keyof typeof ic }[] }[] =
-  [
-    {
-      label: "Arbeitsbereich",
-      items: [
-        { label: "Übersicht", href: "/", icon: "dashboard" },
-        { label: "Verträge", href: "/contracts", icon: "contracts" },
-        { label: "Arbeitsliste", href: "/work-queue", icon: "workQueue" },
-        { label: "Geräte", href: "/equipment", icon: "equipment" },
-        { label: "Import", href: "/import", icon: "import" },
-      ],
-    },
-    {
-      label: "Kontrolle",
-      items: [
-        { label: "Prüfungen", href: "/review", icon: "review" },
-        { label: "Nachweise", href: "/nachweise", icon: "evidence" },
-        { label: "Audit", href: "/audit", icon: "audit" },
-        { label: "Archiv", href: "/archiv", icon: "archive" },
-      ],
-    },
-    {
-      label: "System",
-      items: [{ label: "Einstellungen", href: "/settings", icon: "settings" }],
-    },
-  ];
-
-export const NAV_ITEMS: { label: string; href: string; icon: keyof typeof ic }[] = [
-  { label: "Übersicht", href: "/", icon: "dashboard" },
-  { label: "Verträge", href: "/contracts", icon: "contracts" },
-  { label: "Arbeitsliste", href: "/work-queue", icon: "workQueue" },
-  { label: "Geräte", href: "/equipment", icon: "equipment" },
-  { label: "Import", href: "/import", icon: "import" },
-  { label: "Einstellungen", href: "/settings", icon: "settings" },
+const GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Arbeitsbereich",
+    items: [
+      { label: "Übersicht", href: "/", icon: "dashboard" },
+      { label: "Verträge", href: "/contracts", icon: "contracts" },
+      { label: "Arbeitsliste", href: "/work-queue", icon: "workQueue" },
+      { label: "Geräte", href: "/equipment", icon: "equipment" },
+      { label: "Import", href: "/import", icon: "import" },
+    ],
+  },
+  {
+    label: "Kontrolle",
+    items: [
+      { label: "Prüfungen", href: "/review", icon: "review" },
+      { label: "Nachweise", href: "/nachweise", icon: "evidence" },
+      { label: "Audit", href: "/audit", icon: "audit" },
+      { label: "Archiv", href: "/archiv", icon: "archive" },
+    ],
+  },
+  {
+    label: "System",
+    items: [{ label: "Einstellungen", href: "/settings", icon: "settings" }],
+  },
 ];
+
+export const NAV_ITEMS: NavItem[] = GROUPS.flatMap((group) => group.items);
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
@@ -129,18 +122,18 @@ function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <Link href="/" className="brand">
+      <Link href="/" className="brand" aria-label="Medflux Startseite">
         <span className="logo" aria-hidden="true" />
         <span>
-          <strong>Krankenhaus Wartungsverträge</strong>
-          <small>Verwaltungssystem für Wartungsverträge</small>
+          <strong>Medflux</strong>
+          <small>Wartungsverträge intelligent verwalten</small>
         </span>
       </Link>
       <nav className="side-nav-root" aria-label="Hauptnavigation">
         {GROUPS.map((group) => (
           <div key={group.label}>
             <div className="nav-label">{group.label}</div>
-            <nav className="side-nav" aria-label={group.label}>
+            <div className="side-nav" role="group" aria-label={group.label}>
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
@@ -159,7 +152,7 @@ function Sidebar() {
                   </Link>
                 );
               })}
-            </nav>
+            </div>
           </div>
         ))}
       </nav>
