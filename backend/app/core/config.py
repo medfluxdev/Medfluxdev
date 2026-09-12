@@ -110,12 +110,30 @@ class Settings(BaseSettings):
     contracts_dir: str = "./data/contracts"
     backups_dir: str = "./data/backups"
 
+    # STEP 16: lokale Anmeldung. AUTH_ENABLED=false erhaelt den bisherigen
+    # lokalen Entwicklungsmodus; sobald Auth aktiv ist, muss APP_SECRET_KEY
+    # explizit gesetzt sein und darf niemals beim unsicheren Default bleiben.
     app_secret_key: str = "change-me"
     auth_enabled: bool = False
+    auth_cookie_name: str = "medflux_session"
+    auth_session_ttl_seconds: int = 8 * 60 * 60
+    auth_cookie_secure: bool = False  # lokal HTTP; im HTTPS-Pilot auf true setzen
+    auth_cookie_samesite: str = "lax"
 
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    def validate_auth_runtime(self) -> None:
+        if self.auth_enabled and self.app_secret_key == "change-me":
+            raise RuntimeError(
+                "AUTH_ENABLED=true erfordert einen eigenen APP_SECRET_KEY."
+            )
+        if self.auth_session_ttl_seconds < 300:
+            raise RuntimeError("AUTH_SESSION_TTL_SECONDS muss mindestens 300 sein.")
+        if self.auth_cookie_samesite not in {"lax", "strict", "none"}:
+            raise RuntimeError("AUTH_COOKIE_SAMESITE ist ungueltig.")
+
 
 settings = Settings()
+settings.validate_auth_runtime()
