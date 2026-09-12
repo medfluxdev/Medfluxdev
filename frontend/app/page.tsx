@@ -43,6 +43,14 @@ function FreshnessState({ freshness }: { freshness: DashboardOverview["freshness
   );
 }
 
+function PanelIcon({ tone, children }: { tone: "blue" | "green" | "violet" | "amber"; children: React.ReactNode }) {
+  return (
+    <span className={`dashboard-panel-icon dashboard-panel-icon-${tone}`} aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,10 +78,7 @@ export default function DashboardPage() {
 
   return (
     <div className="page dashboard-page">
-      <PageHeader
-        title="Übersicht"
-        description="Willkommen im Wartungsvertrag-Management"
-      />
+      <PageHeader title="Übersicht" description="Willkommen im Wartungsvertrag-Management" />
 
       {error && (
         <InlineAlert
@@ -92,7 +97,7 @@ export default function DashboardPage() {
       {loading && <LoadingState>Dashboard wird geladen…</LoadingState>}
 
       {!loading && !error && data && data.kpis && (
-        <div className="dashboard">
+        <div className="dashboard dashboard-reference-layout">
           <section className="welcome-hero" aria-labelledby="welcome-heading">
             <div>
               <h2 id="welcome-heading">Willkommen im Wartungsvertrag-Management</h2>
@@ -121,44 +126,60 @@ export default function DashboardPage() {
             <FreshnessState freshness={data.freshness} />
           </section>
 
-          <div className="dash-grid">
-            <section className="panel" aria-labelledby="handlungsbedarf">
-              <div className="panel-head">
-                <div>
-                  <h2 id="handlungsbedarf">Handlungsbedarf</h2>
-                  <p>Priorisierte Aufgaben aus der lokalen Analyse</p>
+          <div className="dash-grid dashboard-card-grid">
+            <section className="panel dashboard-feature-card" aria-labelledby="handlungsbedarf">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="blue">☷</PanelIcon>
+                  <div>
+                    <h2 id="handlungsbedarf">Handlungsbedarf</h2>
+                    <p>Priorisierte Aufgaben aus der lokalen Analyse</p>
+                  </div>
                 </div>
+                <span className="dashboard-count-pill">
+                  <strong>{data.total_action_items}</strong>
+                  offene {data.total_action_items === 1 ? "Punkt" : "Punkte"}
+                </span>
               </div>
               <ActionList items={data.action_items} total={data.total_action_items} />
             </section>
 
-            <section className="panel" aria-labelledby="fristen">
-              <div className="panel-head">
-                <div>
-                  <h2 id="fristen">Fristenübersicht</h2>
-                  <p>Verteilungen aus den akzeptierten Berechnungen</p>
+            <section className="panel dashboard-feature-card" aria-labelledby="fristen">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="blue">◷</PanelIcon>
+                  <div>
+                    <h2 id="fristen">Fristenübersicht</h2>
+                    <p>Verteilungen aus den akzeptierten Berechnungen</p>
+                  </div>
                 </div>
               </div>
               <DeadlineDistribution buckets={data.deadlines} />
             </section>
           </div>
 
-          <div className="lower-grid">
-            <section className="panel" aria-labelledby="kosten">
-              <div className="panel-head">
-                <div>
-                  <h2 id="kosten">Kostenübersicht</h2>
-                  <p>Nur verlässliche, akzeptierte Werte</p>
+          <div className="lower-grid dashboard-card-grid">
+            <section className="panel dashboard-feature-card" aria-labelledby="kosten">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="green">€</PanelIcon>
+                  <div>
+                    <h2 id="kosten">Kostenübersicht</h2>
+                    <p>Nur verlässliche, akzeptierte Werte</p>
+                  </div>
                 </div>
               </div>
               <FinancialOverview financial={data.financial} />
             </section>
 
-            <section className="panel" aria-labelledby="datenqualitaet">
-              <div className="panel-head">
-                <div>
-                  <h2 id="datenqualitaet">Manuelle Prüfung / Datenqualität</h2>
-                  <p>Prüfungen und Bewertungen der extrahierten Angaben</p>
+            <section className="panel dashboard-feature-card" aria-labelledby="datenqualitaet">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="violet">✓</PanelIcon>
+                  <div>
+                    <h2 id="datenqualitaet">Manuelle Prüfung / Datenqualität</h2>
+                    <p>Prüfungen und Bewertungen der extrahierten Angaben</p>
+                  </div>
                 </div>
               </div>
               <DataQuality items={data.data_quality} />
