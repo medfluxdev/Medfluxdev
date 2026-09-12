@@ -7,19 +7,17 @@ import DataQuality from "@/components/dashboard/DataQuality";
 import DeadlineDistribution from "@/components/dashboard/DeadlineDistribution";
 import FinancialOverview from "@/components/dashboard/FinancialOverview";
 import KpiCard from "@/components/dashboard/KpiCard";
+import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
+import PageHeader from "@/components/ui/PageHeader";
 import { apiGet } from "@/lib/api";
 import type { DashboardOverview } from "@/lib/dashboard-types";
 import { formatDate, formatISODateOnly } from "@/lib/format";
 
 const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 
-function FreshnessState({
-  freshness,
-}: {
-  freshness: DashboardOverview["freshness"];
-}) {
+function FreshnessState({ freshness }: { freshness: DashboardOverview["freshness"] }) {
   if (!freshness) return null;
   if (freshness.data_freshness === "stale") {
     return (
@@ -56,9 +54,7 @@ export default function DashboardPage() {
     try {
       const today = formatISODateOnly(new Date());
       const res = await apiGet<DashboardOverview>(
-        `/api/dashboard/overview?organization_slug=${encodeURIComponent(
-          ORG_SLUG
-        )}&as_of_date=${today}`
+        `/api/dashboard/overview?organization_slug=${encodeURIComponent(ORG_SLUG)}&as_of_date=${today}`
       );
       setData(res);
     } catch {
@@ -74,8 +70,26 @@ export default function DashboardPage() {
 
   return (
     <div className="page">
+      <PageHeader
+        title="Übersicht"
+        description="Operative Übersicht zu Wartungsverträgen, Fristen, Kosten und Prüfbedarf."
+        actions={
+          <Link href="/import" className="btn btn-primary">
+            Neuen Vertrag hinzufügen
+          </Link>
+        }
+      />
+
       {error && (
-        <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>
+        <InlineAlert
+          tone="critical"
+          role="alert"
+          action={
+            <Button size="sm" onClick={() => void load()}>
+              Erneut laden
+            </Button>
+          }
+        >
           {error}
         </InlineAlert>
       )}
@@ -84,23 +98,6 @@ export default function DashboardPage() {
 
       {!loading && !error && data && data.kpis && (
         <div className="dashboard">
-          <div className="section-caption">Operative Intelligenz</div>
-
-          <section className="welcome-hero" aria-labelledby="welcome-heading">
-            <div>
-              <h2 id="welcome-heading">
-                Willkommen im Wartungsvertrag-Management
-              </h2>
-              <p>
-                Verwalten Sie alle Wartungsverträge Ihres Krankenhauses an einem Ort
-              </p>
-              <Link href="/import" className="hero-action">
-                <span aria-hidden="true">+</span>
-                Neuen Vertrag hinzufügen
-              </Link>
-            </div>
-          </section>
-
           <section className="intel-strip" aria-label="Kennzahlen">
             {Object.values(data.kpis).map((k) => (
               <div className="intel" key={k.label_de}>
@@ -112,11 +109,7 @@ export default function DashboardPage() {
           <section className="section-caption" style={{ marginTop: 4 }}>
             Datenstand {formatDate(data.as_of_date)}
             {data.total_action_items > 0
-              ? ` · ${data.total_action_items} ${
-                  data.total_action_items === 1
-                    ? "Handlungspunkt"
-                    : "Handlungspunkte"
-                } offen`
+              ? ` · ${data.total_action_items} ${data.total_action_items === 1 ? "Handlungspunkt" : "Handlungspunkte"} offen`
               : " · kein akuter Handlungsbedarf"}
             {" · "}
             <FreshnessState freshness={data.freshness} />
@@ -173,8 +166,7 @@ export default function DashboardPage() {
           <div className="state-icon">∅</div>
           <h3>Keine Arbeitsdaten verfügbar</h3>
           <p>
-            Sobald echte Vertragsdaten importiert sind, erscheinen hier
-            priorisierte Aufgaben mit Risiko, Nachweis und nächster Aktion.
+            Sobald echte Vertragsdaten importiert sind, erscheinen hier priorisierte Aufgaben mit Risiko, Nachweis und nächster Aktion.
           </p>
         </div>
       )}
