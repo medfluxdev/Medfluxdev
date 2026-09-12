@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 
 from app.auth.service import require_role
+from app.core.scope_context import current_scope_context
 from app.contracts.detail.models import ContractDetailResponse
 from app.contracts.detail.service import build_contract_detail
 from app.contracts.overrides.service import OverrideError, record_override
@@ -20,25 +21,23 @@ router = APIRouter(prefix="/api/contracts", tags=["contracts-authenticated"])
 
 def _actor(request: Request, *, allowed: tuple[str, ...]):
     actor = getattr(request.state, "actor", None)
-    if actor is None:
-        raise HTTPException(status_code=401, detail="Bitte anmelden.")
-    try:
-        require_role(actor, *allowed)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+    if actor is None: raise HTTPException(status_code=401, detail="Bitte anmelden.")
+    try: require_role(actor, *allowed)
+    except PermissionError as exc: raise HTTPException(status_code=403, detail=str(exc))
     return actor
 
 
 def _cid(value: str) -> UUID:
-    try:
-        return UUID(value)
-    except ValueError:
-        raise _not_found()
+    try: return UUID(value)
+    except ValueError: raise _not_found()
 
 
 def _log(session, actor, event_name: str, contract_id: UUID, context_data: dict | None = None) -> None:
+    scope = current_scope_context()
     session.add(ActivityLog(
         organization_id=actor.organization_id,
+        hospital_id=scope.hospital_id,
+        department_id=scope.department_id,
         account_id=actor.account_id,
         display_name_snapshot=actor.display_name,
         role_snapshot=actor.role,
@@ -51,8 +50,7 @@ def _log(session, actor, event_name: str, contract_id: UUID, context_data: dict 
 
 
 def _ensure_visible(session, org, actor, cid: UUID) -> None:
-    if org is None or org.id != actor.organization_id or _workspace_denies(session, cid):
-        raise _not_found()
+    if org is None or org.id != actor.organization_id or _workspace_denies(session, cid): raise _not_found()
 
 
 @router.post("/{contract_id}/fact-reviews", response_model=ContractDetailResponse)
