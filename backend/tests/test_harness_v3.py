@@ -18,6 +18,8 @@ from app.ai.harness.models import (
     ContractMap,
     NumberRole,
     Observation,
+    OptionCluster,
+    OptionItem,
     PrecedenceRule,
     SectionUnderstanding,
     SelectionRelation,
