@@ -27,28 +27,19 @@ const ic: Record<string, Icon> = {
 const EDITORS: AccountRole[] = ["admin", "contract_manager"];
 const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
 const GROUPS: { label: string; items: NavItem[] }[] = [
-  {
-    label: "Arbeitsbereich",
-    items: [
-      { label: "Übersicht", href: "/", icon: "dashboard" },
-      { label: "Verträge", href: "/contracts", icon: "contracts" },
-      { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
-      { label: "Import", href: "/import", icon: "import", roles: EDITORS },
-    ],
-  },
-  {
-    label: "Kontrolle",
-    items: [
-      { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
-      { label: "Nachweise", href: "/nachweise", icon: "evidence" },
-      { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
-      { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
-    ],
-  },
-  {
-    label: "System",
-    items: [{ label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] }],
-  },
+  { label: "Arbeitsbereich", items: [
+    { label: "Übersicht", href: "/", icon: "dashboard" },
+    { label: "Verträge", href: "/contracts", icon: "contracts" },
+    { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
+    { label: "Import", href: "/import", icon: "import", roles: EDITORS },
+  ]},
+  { label: "Kontrolle", items: [
+    { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
+    { label: "Nachweise", href: "/nachweise", icon: "evidence" },
+    { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
+    { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
+  ]},
+  { label: "System", items: [{ label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] }] },
 ];
 
 export const NAV_ITEMS: NavItem[] = GROUPS.flatMap((group) => group.items);
@@ -103,12 +94,7 @@ function Sidebar() {
             <div className="side-nav" role="group" aria-label={group.label}>
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
-                return (
-                  <Link key={item.href} href={item.href} className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
-                    <span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{ic[item.icon]}</svg></span>
-                    {item.label}
-                  </Link>
-                );
+                return <Link key={item.href} href={item.href} className={`nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}><span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{ic[item.icon]}</svg></span>{item.label}</Link>;
               })}
             </div>
           </div>
@@ -123,13 +109,12 @@ function Sidebar() {
           <span className="org-avatar" aria-hidden="true">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "K"}</span>
           <div><b>{membership?.organization_name ?? "Krankenhaus"}</b><small>Arbeitsbereich {ORG_SLUG}</small></div>
         </div>
-        {account && role ? (
-          <div className="account-card">
-            <strong>{account.display_name}</strong>
-            <small>{ROLE_LABELS[role]} · {account.email}</small>
-            <button type="button" onClick={() => void logout()}>Abmelden</button>
-          </div>
-        ) : null}
+        {account && role ? <div className="account-card">
+          <strong>{account.display_name}</strong>
+          <small>{ROLE_LABELS[role]} · {account.email}</small>
+          {role === "admin" ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
+          <button type="button" onClick={() => void logout()}>Abmelden</button>
+        </div> : null}
       </div>
     </aside>
   );
@@ -142,41 +127,14 @@ function Topbar() {
   const [q, setQ] = useState("");
   const showSectionTitle = pathname !== "/";
   const showImportButton = pathname !== "/" && role != null && EDITORS.includes(role);
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    const term = q.trim();
-    router.push(term ? `/contracts?q=${encodeURIComponent(term)}` : "/contracts");
-  }
-
-  return (
-    <header className="topbar">
-      <div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div>
-      <div className="top-actions">
-        <form className="search" onSubmit={onSubmit} role="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
-          <input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} />
-        </form>
-        {showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}
-      </div>
-    </header>
-  );
+  function onSubmit(e: FormEvent) { e.preventDefault(); const term = q.trim(); router.push(term ? `/contracts?q=${encodeURIComponent(term)}` : "/contracts"); }
+  return <header className="topbar"><div className="page-title">{showSectionTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div><div className="top-actions"><form className="search" onSubmit={onSubmit} role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg><input type="search" aria-label="Globale Suche" placeholder="Vertragsnummer, Lieferant, Gerät …" value={q} onChange={(e) => setQ(e.target.value)} /></form>{showImportButton ? <Link className="import-btn" href="/import">Vertrag importieren</Link> : null}</div></header>;
 }
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { account, loading } = useAuth();
-
   if (pathname === "/login") return <>{children}</>;
   if (loading || !account) return <div className="auth-loading">Medflux wird geladen…</div>;
-
-  return (
-    <div className="app">
-      <Sidebar />
-      <main className="main" id="main-content">
-        <Topbar />
-        {children}
-      </main>
-    </div>
-  );
+  return <div className="app"><Sidebar /><main className="main" id="main-content"><Topbar />{children}</main></div>;
 }
