@@ -6,11 +6,12 @@ import { apiGet, apiPost } from "@/lib/api";
 import type { AccountRole, CurrentAccountDto, OrganizationMembershipDto } from "@/lib/auth-types";
 
 const STORAGE_KEY = "medflux.organization_slug";
+type ScopedMembership = OrganizationMembershipDto & { hospital_id?: string | null; department_id?: string | null; is_default?: boolean };
 
 interface AuthContextValue {
   account: CurrentAccountDto | null;
-  membership: OrganizationMembershipDto | null;
-  memberships: OrganizationMembershipDto[];
+  membership: ScopedMembership | null;
+  memberships: ScopedMembership[];
   organizationSlug: string | null;
   loading: boolean;
   role: AccountRole | null;
@@ -20,6 +21,15 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function persistAssignedScope(membership: ScopedMembership) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(STORAGE_KEY, membership.organization_slug);
+  if (membership.hospital_id) window.localStorage.setItem("medflux.hospitalId", membership.hospital_id);
+  else window.localStorage.removeItem("medflux.hospitalId");
+  if (membership.department_id) window.localStorage.setItem("medflux.departmentId", membership.department_id);
+  else window.localStorage.removeItem("medflux.departmentId");
+}
 
 export function AuthProvider({ children, organizationSlug: defaultOrganizationSlug }: { children: React.ReactNode; organizationSlug: string }) {
   const pathname = usePathname();
@@ -59,29 +69,25 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     return () => { active = false; };
   }, [pathname, refresh, router]);
 
-  const memberships = account?.memberships ?? [];
+  const memberships = (account?.memberships ?? []) as ScopedMembership[];
   const isAdminAccount = memberships.some((item) => item.role === "admin");
 
   useEffect(() => {
     if (!account || memberships.length === 0) return;
-
     const selectedIsValid = selectedSlug && memberships.some((item) => item.organization_slug === selectedSlug);
-    if (selectedIsValid) return;
 
-    // Regular users do not choose an organization themselves. Their membership
-    // is the workspace assigned by an administrator.
     if (!isAdminAccount) {
-      const assigned = memberships.find((item) => item.organization_slug === defaultOrganizationSlug) ?? memberships[0];
-      setSelectedSlug(assigned.organization_slug);
-      if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, assigned.organization_slug);
+      const assigned = memberships.find((item) => item.is_default) ?? memberships.find((item) => item.organization_slug === defaultOrganizationSlug) ?? memberships[0];
+      if (selectedSlug !== assigned.organization_slug) setSelectedSlug(assigned.organization_slug);
+      persistAssignedScope(assigned);
       return;
     }
 
-    // Admins with one organization enter directly; admins with several choose.
+    if (selectedIsValid) return;
     if (memberships.length === 1) {
-      const slug = memberships[0].organization_slug;
-      setSelectedSlug(slug);
-      if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, slug);
+      const only = memberships[0];
+      setSelectedSlug(only.organization_slug);
+      persistAssignedScope(only);
     }
   }, [account, memberships, selectedSlug, defaultOrganizationSlug, isAdminAccount]);
 
@@ -100,16 +106,15 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
       if (!isAdminAccount || memberships.length <= 1) router.replace("/");
       return;
     }
-    if (isAdminAccount && memberships.length > 1 && !membership) {
-      router.replace("/select-organization");
-    }
+    if (isAdminAccount && memberships.length > 1 && !membership) router.replace("/select-organization");
   }, [account, loading, membership, memberships.length, pathname, router, isAdminAccount]);
 
   const selectOrganization = useCallback((slug: string) => {
     if (!isAdminAccount) return;
-    if (!memberships.some((item) => item.organization_slug === slug)) return;
+    const selected = memberships.find((item) => item.organization_slug === slug);
+    if (!selected) return;
     setSelectedSlug(slug);
-    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, slug);
+    persistAssignedScope(selected);
   }, [memberships, isAdminAccount]);
 
   const logout = useCallback(async () => {
@@ -118,7 +123,11 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     } finally {
       setAccount(null);
       setSelectedSlug(null);
-      if (typeof window !== "undefined") window.localStorage.removeItem(STORAGE_KEY);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem("medflux.hospitalId");
+        window.localStorage.removeItem("medflux.departmentId");
+      }
       router.replace("/login");
     }
   }, [router]);
