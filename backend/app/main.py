@@ -16,7 +16,10 @@ from app.api.routes import (
     work_queue,
 )
 from app.auth.middleware import LocalAuthMiddleware
+from app.auth.provenance import register_auth_provenance_hooks
 from app.core.config import settings
+
+register_auth_provenance_hooks()
 
 app = FastAPI(
     title=settings.app_name,
