@@ -10,6 +10,7 @@ import "./contract-workspace.css";
 import "./auth.css";
 import "./profile.css";
 import "./organization.css";
+import "./ownership.css";
 
 export const metadata: Metadata = {
   title: {
