@@ -6,7 +6,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import type { AccountRole, CurrentAccountDto, OrganizationMembershipDto } from "@/lib/auth-types";
 
 const STORAGE_KEY = "medflux.organization_slug";
-type ScopedMembership = OrganizationMembershipDto & { hospital_id?: string | null; department_id?: string | null; is_default?: boolean };
+type ScopedMembership = OrganizationMembershipDto;
 
 interface AuthContextValue {
   account: CurrentAccountDto | null;
@@ -69,11 +69,13 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     return () => { active = false; };
   }, [pathname, refresh, router]);
 
-  const memberships = (account?.memberships ?? []) as ScopedMembership[];
-  const isAdminAccount = memberships.some((item) => item.role === "admin");
+  const memberships = account?.memberships ?? [];
+  const isDeveloper = Boolean(account?.is_developer);
+  const isAdminAccount = isDeveloper || memberships.some((item) => item.role === "admin");
 
   useEffect(() => {
-    if (!account || memberships.length === 0) return;
+    if (!account) return;
+    if (memberships.length === 0) return;
     const selectedIsValid = selectedSlug && memberships.some((item) => item.organization_slug === selectedSlug);
 
     if (!isAdminAccount) {
@@ -98,16 +100,26 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
 
   useEffect(() => {
     if (loading || !account || pathname === "/login") return;
-    if (memberships.length === 0) {
+
+    if (isDeveloper && memberships.length === 0) {
+      if (pathname !== "/system/organizations") router.replace("/system/organizations");
+      return;
+    }
+
+    if (!isDeveloper && memberships.length === 0) {
       router.replace("/login?error=organization");
       return;
     }
+
     if (pathname === "/select-organization") {
       if (!isAdminAccount || memberships.length <= 1) router.replace("/");
       return;
     }
-    if (isAdminAccount && memberships.length > 1 && !membership) router.replace("/select-organization");
-  }, [account, loading, membership, memberships.length, pathname, router, isAdminAccount]);
+
+    if (isAdminAccount && memberships.length > 1 && !membership && pathname !== "/system/organizations") {
+      router.replace("/select-organization");
+    }
+  }, [account, loading, membership, memberships.length, pathname, router, isAdminAccount, isDeveloper]);
 
   const selectOrganization = useCallback((slug: string) => {
     if (!isAdminAccount) return;
@@ -138,11 +150,11 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     memberships,
     organizationSlug: membership?.organization_slug ?? null,
     loading,
-    role: membership?.role ?? null,
+    role: membership?.role ?? (isDeveloper ? "admin" : null),
     refresh,
     selectOrganization,
     logout,
-  }), [account, membership, memberships, loading, refresh, selectOrganization, logout]);
+  }), [account, membership, memberships, loading, refresh, selectOrganization, logout, isDeveloper]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
