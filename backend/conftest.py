@@ -42,7 +42,7 @@ TEST_SCHEMA = "medflux_test_" + uuid.uuid4().hex
 def _schema_url(base_url: str) -> str:
     """Haengt die search_path-Option an die Basis-URL (Schema-Isolation)."""
     sep = "&" if "?" in base_url else "?"
-    return f"{base_url}{sep}options={quote('-csearch_path=' + TEST_SCHEMA)}"
+    return f"{base_url}{sep}options={quote('-csearch_path=' + TEST_SCHEMA + ',public')}"
 
 
 def pytest_sessionstart(session) -> None:
