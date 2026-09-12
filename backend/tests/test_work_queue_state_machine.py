@@ -19,6 +19,7 @@ import uuid
 from datetime import date
 
 import pytest
+from tests.helpers_persistence import attach_minimal_accepted_extraction
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
