@@ -4,18 +4,24 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Index, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
-from app.database.columns import OrgOwnedMixin, uuid_pk
+from app.database.columns import uuid_pk
 
 
-class ActivityLog(OrgOwnedMixin, Base):
+class ActivityLog(Base):
     __tablename__ = "activity_log"
 
     id: Mapped[uuid.UUID] = uuid_pk()
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("organization.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
     account_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     display_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     role_snapshot: Mapped[str] = mapped_column(String(32), nullable=False)
