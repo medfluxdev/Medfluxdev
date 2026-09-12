@@ -14,6 +14,7 @@ _PUBLIC_PREFIXES = (
     "/api/health",
     "/api/auth/login",
 )
+_WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
 class LocalAuthMiddleware(BaseHTTPMiddleware):
@@ -22,6 +23,7 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
     Die Organisationszugehoerigkeit kommt aus der signierten Sitzung. Ein
     abweichender `organization_slug` wird als nicht vorhanden behandelt, damit
     der Query-Parameter niemals zu einem Autorisierungs-Credential wird.
+    Viewer duerfen lesen, aber keine fachlichen Mutationen ausloesen.
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -40,6 +42,15 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
             requested_slug = request.query_params.get("organization_slug")
             if requested_slug and requested_slug != identity.organization_slug:
                 return JSONResponse(status_code=404, content={"detail": "Ressource nicht gefunden."})
+            if (
+                request.method in _WRITE_METHODS
+                and identity.role == "viewer"
+                and path != "/api/auth/logout"
+            ):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Keine Berechtigung fuer diese Aktion."},
+                )
             request.state.auth_identity = identity
             token = bind_identity(identity)
 
