@@ -57,7 +57,6 @@ export default function WorkQueuePage() {
           { status }
         );
         if (status === "resolved") {
-          // Gelöst = nicht mehr aktiv -> aus der aktiven Liste entfernen.
           setItems((prev) => prev.filter((x) => x.id !== item.id));
         } else {
           setItems((prev) =>
@@ -66,8 +65,8 @@ export default function WorkQueuePage() {
         }
         toast(
           status === "resolved"
-            ? "Arbeitspunkt als erledigt markiert."
-            : "Arbeitspunkt in Bearbeitung übernommen.",
+            ? "Aufgabe als erledigt markiert."
+            : "Aufgabe in Bearbeitung übernommen.",
           "success"
         );
       } catch (err) {
@@ -87,13 +86,13 @@ export default function WorkQueuePage() {
   return (
     <div className="page">
       <PageHeader
-        title="Arbeitsliste"
-        description={`${items.length} ${items.length === 1 ? "offener Punkt" : "offene Punkte"} mit Handlungsbedarf`}
+        title="To-dos"
+        description={`${items.length} ${items.length === 1 ? "offene Aufgabe" : "offene Aufgaben"}`}
       />
 
       {error && (
         <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>
-          Arbeitsliste konnte nicht geladen werden.
+          To-dos konnten nicht geladen werden.
         </InlineAlert>
       )}
 
@@ -103,26 +102,26 @@ export default function WorkQueuePage() {
         </InlineAlert>
       )}
 
-      {loading && <LoadingState>Arbeitspunkte werden geladen…</LoadingState>}
+      {loading && <LoadingState>To-dos werden geladen…</LoadingState>}
 
       {!loading && !error && items.length === 0 && (
         <div className="state-box">
           <div className="state-icon">✓</div>
-          <h3>Keine offenen Arbeitspunkte</h3>
-          <p>Derzeit keine offenen Arbeitspunkte.</p>
+          <h3>Keine offenen To-dos</h3>
+          <p>Aktuell sind keine offenen Aufgaben vorhanden.</p>
         </div>
       )}
 
       {!loading && !error && items.length > 0 && (
-        <section className="panel" aria-label="Arbeitspunkte">
+        <section className="panel" aria-label="To-dos">
         <div className="table-wrap">
           <table className="contract-table">
-            <caption className="sr-text">Offene Arbeitspunkte</caption>
+            <caption className="sr-text">Offene To-dos</caption>
             <thead>
               <tr>
-                <th scope="col">Punkt</th>
+                <th scope="col">Aufgabe</th>
                 <th scope="col">Vertrag</th>
-                <th scope="col">Schwere</th>
+                <th scope="col">Priorität</th>
                 <th scope="col">Frist</th>
                 <th scope="col">Status</th>
                 <th scope="col" className="num">
