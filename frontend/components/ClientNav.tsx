@@ -189,6 +189,7 @@ function Topbar() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const showSectionTitle = pathname !== "/";
+  const showImportButton = pathname !== "/";
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -215,9 +216,11 @@ function Topbar() {
             onChange={(e) => setQ(e.target.value)}
           />
         </form>
-        <Link className="import-btn" href="/import">
-          Vertrag importieren
-        </Link>
+        {showImportButton ? (
+          <Link className="import-btn" href="/import">
+            Vertrag importieren
+          </Link>
+        ) : null}
       </div>
     </header>
   );
