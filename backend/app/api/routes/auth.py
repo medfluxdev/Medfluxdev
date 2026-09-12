@@ -26,6 +26,11 @@ def _account_payload(account, memberships):
         "display_name": account.display_name,
         "is_active": account.is_active,
         "last_login_at": account.last_login_at.isoformat() if account.last_login_at else None,
+        "profile_photo_data_url": account.profile_photo_data_url,
+        "phone": account.phone,
+        "job_title": account.job_title,
+        "department": account.department,
+        "bio": account.bio,
         "memberships": [
             {
                 "organization_id": str(org.id),
