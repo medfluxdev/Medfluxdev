@@ -13,6 +13,7 @@ from app.api.routes import (
     equipment,
     health,
     intelligence,
+    operations,
     work_queue,
 )
 from app.auth.middleware import LocalAuthMiddleware
@@ -57,6 +58,7 @@ app.include_router(contracts.router)
 app.include_router(equipment.router)
 app.include_router(work_queue.router)
 app.include_router(intelligence.router)
+app.include_router(operations.router)
 app.include_router(demo.router)
 
 
