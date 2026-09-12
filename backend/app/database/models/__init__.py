@@ -2,6 +2,7 @@
 
 from app.database.models.organization import Organization
 from app.database.models.application_setting import ApplicationSetting
+from app.database.models.auth import AuditEvent, User
 from app.database.models.document import DocumentFile, DocumentVersion
 from app.database.models.artifact import DocumentArtifact
 from app.database.models.processing import ProcessingRun, ProcessingSummary
@@ -19,10 +20,19 @@ from app.database.models.override import ContractOverride
 from app.database.models.fact_review import ContractReview, FactReview
 from app.database.models.demo import DemoWorkspace, DemoWorkspaceEntry
 from app.database.models.warning import ContractWarning, WarningEvaluationRun
+from app.database.models.intelligence import (
+    ContractRelationRecord,
+    ContractObligationRecord,
+    PolicyDecisionRecord,
+    IntelligenceEvent,
+    ActionProposalRecord,
+)
 
 __all__ = [
     "Organization",
     "ApplicationSetting",
+    "User",
+    "AuditEvent",
     "DocumentFile",
     "DocumentVersion",
     "DocumentArtifact",
@@ -52,11 +62,3 @@ __all__ = [
     "IntelligenceEvent",
     "ActionProposalRecord",
 ]
-
-from app.database.models.intelligence import (
-    ContractRelationRecord,
-    ContractObligationRecord,
-    PolicyDecisionRecord,
-    IntelligenceEvent,
-    ActionProposalRecord,
-)
