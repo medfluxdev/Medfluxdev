@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Optional
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 
+from app.core.scope_context import current_scope_context
 from app.dashboard.models import DashboardOverview
 from app.dashboard.service import DashboardError, build_dashboard_overview
 from app.database.scope_queries import intersect_ids, scoped_contract_ids
@@ -22,8 +22,6 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 def dashboard_overview(
     organization_slug: str,
     as_of_date: Optional[date] = None,
-    hospital_id: Optional[UUID] = None,
-    department_id: Optional[UUID] = None,
 ) -> DashboardOverview:
     today: date = as_of_date or date.today()
     session = create_session()
@@ -31,7 +29,8 @@ def dashboard_overview(
         org = get_organization(session, organization_slug)
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
-        scope_ids = scoped_contract_ids(session, org.id, hospital_id, department_id)
+        scope = current_scope_context()
+        scope_ids = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
         visible_ids = intersect_ids(workspace_contract_ids(session), scope_ids)
         try:
             data = build_dashboard_overview(
