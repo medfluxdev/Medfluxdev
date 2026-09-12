@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import ClientNav from "@/components/ClientNav";
 import { AuthProvider } from "@/components/auth/AuthProvider";
-import ProfileShortcut from "@/components/auth/ProfileShortcut";
 import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 import "./reference-theme.css";
@@ -10,6 +9,7 @@ import "./dashboard-reference.css";
 import "./contract-workspace.css";
 import "./auth.css";
 import "./profile.css";
+import "./organization.css";
 
 export const metadata: Metadata = {
   title: {
@@ -35,7 +35,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div id="main-content" className="skip-target" tabIndex={-1} />
               {children}
             </ClientNav>
-            <ProfileShortcut />
           </AuthProvider>
         </ToastProvider>
       </body>
