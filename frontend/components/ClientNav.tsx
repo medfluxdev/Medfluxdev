@@ -65,7 +65,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Übersicht", href: "/", icon: "dashboard" },
       { label: "Verträge", href: "/contracts", icon: "contracts" },
-      { label: "Arbeitsliste", href: "/work-queue", icon: "workQueue" },
+      { label: "To-dos", href: "/work-queue", icon: "workQueue" },
       { label: "Geräte", href: "/equipment", icon: "equipment" },
       { label: "Import", href: "/import", icon: "import" },
     ],
@@ -95,7 +95,7 @@ function isActive(pathname: string, href: string): boolean {
 function titleForPath(pathname: string): string {
   if (pathname.startsWith("/contracts/")) return "Vertrag 360";
   if (pathname === "/contracts") return "Verträge";
-  if (pathname === "/work-queue") return "Arbeitsliste";
+  if (pathname === "/work-queue") return "To-dos";
   if (pathname.startsWith("/equipment")) return pathname === "/equipment" ? "Geräte" : "Gerät";
   if (pathname === "/import") return "Import";
   if (pathname === "/review") return "Prüfungen";
