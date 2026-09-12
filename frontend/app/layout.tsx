@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import ClientNav from "@/components/ClientNav";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
 import "./reference-theme.css";
@@ -16,11 +17,9 @@ export const metadata: Metadata = {
     "Lokales KI-System für deutsche Krankenhäuser zur Analyse und Überwachung von Wartungs- und Serviceverträgen.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de">
       <body>
@@ -28,10 +27,12 @@ export default function RootLayout({
           Zum Hauptinhalt springen
         </a>
         <ToastProvider>
-          <ClientNav>
-            <div id="main-content" className="skip-target" tabIndex={-1} />
-            {children}
-          </ClientNav>
+          <AuthProvider organizationSlug={ORG_SLUG}>
+            <ClientNav>
+              <div id="main-content" className="skip-target" tabIndex={-1} />
+              {children}
+            </ClientNav>
+          </AuthProvider>
         </ToastProvider>
       </body>
     </html>
