@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import ClientNav from "@/components/ClientNav";
 import { ToastProvider } from "@/components/ui/Toast";
 import "./globals.css";
+import "./reference-theme.css";
 
 export const metadata: Metadata = {
   title: {
