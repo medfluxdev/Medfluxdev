@@ -5,13 +5,14 @@ Safety properties:
 - target URL must differ from the configured MedFlux DATABASE_URL,
 - pg_restore is invoked without shell=True,
 - existing target content is not dropped unless --clean-target is explicit,
-- document files are restored only into an explicit empty/new directory,
+- storage objects are restored only into an explicit empty/new directory,
 - manifest hashes are verified before any restore operation starts.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -24,6 +25,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from app.core.config import settings  # noqa: E402
+from app.documents.storage import DocumentStorage  # noqa: E402
 from verify_backup import verify_backup  # noqa: E402
 
 
@@ -63,7 +65,7 @@ def restore_backup(
 
     target_documents_dir = target_documents_dir.resolve()
     if target_documents_dir.exists() and any(target_documents_dir.iterdir()):
-        raise RuntimeError("Dokument-Ziel ist nicht leer; Restore wird abgebrochen.")
+        raise RuntimeError("Storage-Ziel ist nicht leer; Restore wird abgebrochen.")
     target_documents_dir.mkdir(parents=True, exist_ok=True)
 
     conn_args, env = _postgres_connection(target_database_url)
@@ -75,19 +77,29 @@ def restore_backup(
 
     result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
     if result.returncode != 0:
+        shutil.rmtree(target_documents_dir, ignore_errors=True)
         raise RuntimeError((result.stderr or "pg_restore fehlgeschlagen").strip())
 
-    source_documents = backup / "documents"
+    manifest = json.loads((backup / "manifest.json").read_text(encoding="utf-8"))
+    target_storage = DocumentStorage(target_documents_dir)
     try:
-        if source_documents.exists():
-            for source in source_documents.iterdir():
-                if not source.is_file():
-                    continue
-                destination = target_documents_dir / source.name
-                shutil.copy2(source, destination)
+        storage_objects = manifest.get("storage_objects") or []
+        for item in storage_objects:
+            storage_key = str(item["storage_key"])
+            source = (backup / str(item["backup_path"])).resolve()
+            target_storage.write_reference(storage_key, source.read_bytes())
+
+        # Initial pre-layout v1 draft fallback. These files cannot reconstruct
+        # canonical DB storage references, so reject rather than pretending a
+        # complete restore succeeded.
+        if not storage_objects and manifest.get("documents"):
+            raise RuntimeError(
+                "Legacy-Backup enthaelt keine kanonischen storage_keys und ist "
+                "nicht fuer einen vollstaendigen Restore geeignet."
+            )
     except Exception:
-        # DB-Restore ist bereits erfolgt; Dokumentziel wird wenigstens nicht als
-        # vollstaendig erfolgreich zurueckgelassen.
+        # DB-Restore is already done; remove storage target so callers cannot
+        # mistake a partial document restore for a complete one.
         shutil.rmtree(target_documents_dir, ignore_errors=True)
         raise
 
