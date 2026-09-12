@@ -5,6 +5,9 @@ export interface OrganizationMembershipDto {
   organization_slug: string;
   organization_name: string;
   role: AccountRole;
+  hospital_id?: string | null;
+  department_id?: string | null;
+  is_default?: boolean;
 }
 
 export interface CurrentAccountDto {
@@ -12,6 +15,7 @@ export interface CurrentAccountDto {
   email: string;
   display_name: string;
   is_active: boolean;
+  is_developer?: boolean;
   last_login_at: string | null;
   profile_photo_data_url?: string | null;
   phone?: string | null;
