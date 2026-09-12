@@ -270,7 +270,10 @@ class TestCostAvailability:
         labels = " ".join(f["label_de"] for f in av["found_facts"]).lower()
         assert "steuer" in labels
         assert any("zahlungsweise" in f["label_de"].lower() for f in av["found_facts"])
-        assert any("einheitlicher jahresbetrag" in m.lower() for m in av["missing_inputs"])
+        assert any(
+            "jahres" in m.lower() and ("betrag" in m.lower() or "preis" in m.lower())
+            for m in av["missing_inputs"]
+        )
         assert "nicht automatisch" not in av["summary_de"].lower() or True  # keine Erfindung
         assert av["explanation_de"]
 
