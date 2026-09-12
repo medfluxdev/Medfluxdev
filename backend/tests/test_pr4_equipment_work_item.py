@@ -15,6 +15,7 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
+from tests.helpers_persistence import attach_minimal_accepted_extraction
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete as sa_delete, func, select, text
 from sqlalchemy.orm import Session
