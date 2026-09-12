@@ -10,7 +10,6 @@ import KpiCard from "@/components/dashboard/KpiCard";
 import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
-import PageHeader from "@/components/ui/PageHeader";
 import { apiGet } from "@/lib/api";
 import type { DashboardOverview } from "@/lib/dashboard-types";
 import { formatDate, formatISODateOnly } from "@/lib/format";
@@ -78,8 +77,6 @@ export default function DashboardPage() {
 
   return (
     <div className="page dashboard-page">
-      <PageHeader title="Übersicht" description="Willkommen im intelligenten Vertragsmanagement" />
-
       {error && (
         <InlineAlert
           tone="critical"
