@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     ai,
     auth,
+    contract_actions_secure,
     contracts,
     dashboard,
     demo,
@@ -42,6 +43,7 @@ app.include_router(users.router)
 app.include_router(ai.router)
 app.include_router(documents.router)
 app.include_router(dashboard.router)
+app.include_router(contract_actions_secure.router)
 app.include_router(contracts.router)
 app.include_router(equipment.router)
 app.include_router(work_queue.router)
