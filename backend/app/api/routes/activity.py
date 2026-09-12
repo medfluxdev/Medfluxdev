@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.auth.service import require_role
 from app.database.models.activity_log import ActivityLog
 from app.database.session import create_session
+from app.demo.workspace import workspace_contract_ids
 
 router = APIRouter(prefix="/api/activity", tags=["activity"])
 
@@ -35,6 +36,9 @@ def list_activity(request: Request, organization_slug: str, object_id: str | Non
         if object_uuid is not None:
             stmt = stmt.where(ActivityLog.object_id == object_uuid)
         rows = session.scalars(stmt.order_by(ActivityLog.created_at.desc()).limit(min(max(limit, 1), 500))).all()
+        allowed_contracts = workspace_contract_ids(session)
+        if allowed_contracts is not None:
+            rows = [row for row in rows if row.object_type != "contract" or row.object_id in allowed_contracts]
         return {
             "items": [
                 {
