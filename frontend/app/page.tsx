@@ -69,15 +69,10 @@ export default function DashboardPage() {
   }, [load]);
 
   return (
-    <div className="page">
+    <div className="page dashboard-page">
       <PageHeader
         title="Übersicht"
-        description="Operative Übersicht zu Wartungsverträgen, Fristen, Kosten und Prüfbedarf."
-        actions={
-          <Link href="/import" className="btn btn-primary">
-            Neuen Vertrag hinzufügen
-          </Link>
-        }
+        description="Willkommen im Wartungsvertrag-Management"
       />
 
       {error && (
@@ -98,6 +93,17 @@ export default function DashboardPage() {
 
       {!loading && !error && data && data.kpis && (
         <div className="dashboard">
+          <section className="welcome-hero" aria-labelledby="welcome-heading">
+            <div>
+              <h2 id="welcome-heading">Willkommen im Wartungsvertrag-Management</h2>
+              <p>Verwalten Sie alle Wartungsverträge Ihres Krankenhauses an einem Ort</p>
+              <Link href="/import" className="hero-action">
+                <span aria-hidden="true">+</span>
+                Neuen Vertrag hinzufügen
+              </Link>
+            </div>
+          </section>
+
           <section className="intel-strip" aria-label="Kennzahlen">
             {Object.values(data.kpis).map((k) => (
               <div className="intel" key={k.label_de}>
@@ -106,7 +112,7 @@ export default function DashboardPage() {
             ))}
           </section>
 
-          <section className="section-caption" style={{ marginTop: 4 }}>
+          <section className="section-caption dashboard-data-state" style={{ marginTop: 4 }}>
             Datenstand {formatDate(data.as_of_date)}
             {data.total_action_items > 0
               ? ` · ${data.total_action_items} ${data.total_action_items === 1 ? "Handlungspunkt" : "Handlungspunkte"} offen`
