@@ -5,6 +5,7 @@ import json
 import sys
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -53,6 +54,38 @@ def test_verify_backup_accepts_matching_manifest(tmp_path: Path):
     assert result["document_count"] == 1
 
 
+def test_verify_backup_accepts_canonical_storage_layout(tmp_path: Path):
+    verify = _load("medflux_verify_backup_storage_test", "scripts/verify_backup.py")
+    dump = tmp_path / "database.dump"
+    dump.write_bytes(b"pg-dump")
+    storage_key = f"{'a' * 32}/original.pdf"
+    stored = tmp_path / "storage" / storage_key
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(b"pdf-bytes")
+    manifest = {
+        "format": "medflux-backup-v1",
+        "organization_slug": "hospital",
+        "database": {
+            "path": "database.dump",
+            "sha256": sha256(dump.read_bytes()).hexdigest(),
+            "size_bytes": dump.stat().st_size,
+        },
+        "storage_objects": [
+            {
+                "storage_key": storage_key,
+                "backup_path": f"storage/{storage_key}",
+                "sha256": sha256(stored.read_bytes()).hexdigest(),
+                "size_bytes": stored.stat().st_size,
+            }
+        ],
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = verify.verify_backup(tmp_path)
+
+    assert result["storage_object_count"] == 1
+
+
 def test_verify_backup_rejects_tampering(tmp_path: Path):
     verify = _load("medflux_verify_backup_tamper_test", "scripts/verify_backup.py")
     dump = tmp_path / "database.dump"
@@ -88,10 +121,14 @@ def test_verify_backup_rejects_path_escape(tmp_path: Path):
 
 
 def test_restore_rejects_configured_database(monkeypatch, tmp_path: Path):
-    verify = _load("verify_backup", "scripts/verify_backup.py")
+    _load("verify_backup", "scripts/verify_backup.py")
     restore = _load("medflux_restore_backup_test", "scripts/restore_backup.py")
     monkeypatch.setattr(restore, "verify_backup", lambda _path: {"ok": True})
-    monkeypatch.setattr(restore.settings, "database_url", "postgresql+psycopg://u:p@127.0.0.1:5432/medflux")
+    monkeypatch.setattr(
+        restore.settings,
+        "database_url",
+        "postgresql+psycopg://u:p@127.0.0.1:5432/medflux",
+    )
 
     with pytest.raises(RuntimeError, match="laufende MedFlux-Datenbank"):
         restore.restore_backup(
@@ -99,3 +136,45 @@ def test_restore_rejects_configured_database(monkeypatch, tmp_path: Path):
             target_database_url="postgresql://u:p@127.0.0.1:5432/medflux",
             target_documents_dir=tmp_path / "documents-restored",
         )
+
+
+def test_restore_recreates_canonical_storage_key(monkeypatch, tmp_path: Path):
+    verify = _load("verify_backup", "scripts/verify_backup.py")
+    restore = _load("medflux_restore_backup_storage_test", "scripts/restore_backup.py")
+    storage_key = f"{'b' * 32}/original.pdf"
+    source = tmp_path / "storage" / storage_key
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"pdf-bytes")
+    (tmp_path / "database.dump").write_bytes(b"dump")
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "format": "medflux-backup-v1",
+                "database": {"path": "database.dump", "sha256": "x", "size_bytes": 4},
+                "storage_objects": [
+                    {"storage_key": storage_key, "backup_path": f"storage/{storage_key}"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(restore, "verify_backup", lambda _path: {"ok": True})
+    monkeypatch.setattr(
+        restore.settings,
+        "database_url",
+        "postgresql+psycopg://u:p@127.0.0.1:5432/medflux",
+    )
+    monkeypatch.setattr(
+        restore.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stderr=""),
+    )
+
+    target = tmp_path / "restored-storage"
+    restore.restore_backup(
+        backup=tmp_path,
+        target_database_url="postgresql://u:p@127.0.0.1:5432/medflux_restore_test",
+        target_documents_dir=target,
+    )
+
+    assert (target / storage_key).read_bytes() == b"pdf-bytes"
