@@ -2,7 +2,7 @@
 
 Stand: 2026-09-12
 Branch: `JAMAL`
-Status: **RC candidate; PostgreSQL-Migration, Auth-E2E und Backup/Restore gruen; CSV-Fixture, breite Regression und Realbenchmark ausstehend**
+Status: **RC candidate; PostgreSQL-Migration, Auth-E2E, CSV-E2E und Backup/Restore gruen; breite Regression und Realbenchmark ausstehend**
 
 ## Statisch umgesetzt
 
@@ -55,13 +55,24 @@ Auf Commit `5392c049657e8e35c178dee3ede51af1f49a56fa`:
 - Reviewer-Schreibzugriff: **bestanden**
 - disposable Testdatenbank danach entfernt
 
-STEP 16 ist damit abgeschlossen. Der echte PostgreSQL Backup-/Restore-Gate von STEP 17 ist ebenfalls erfüllt.
+### Gezielter CSV-E2E-Gate
+
+Auf Commit `e536927216c0d62e5205953064a261745a269aee`:
+
+- `backend/tests/test_step17_csv_e2e.py`: **3 passed in 1.92s**
+- authentifizierter Export: **bestanden**
+- Organisations-Scope / Cross-Org-404: **bestanden**
+- Archiv-Default und `include_archived=false`: **bestanden**
+- UTF-8 BOM und Semikolonformat: **bestanden**
+- No-store-/Nosniff-Header: **bestanden**
+- disposable Testdatenbank danach entfernt
+
+STEP 16 und STEP 17 sind damit fachlich abgeschlossen.
 
 ## Verbleibende Release-Kriterien
 
-1. CSV-Export organisationsgebunden gegen echte isolierte PostgreSQL-Fixture mit Auth
-2. sichere breitere Backend-Regression bzw. gezielte Rest-Risiko-Suite
-3. realer Vertragsbenchmark (Accutron) mit dokumentierter Evidence-/Feldqualitaet
+1. sichere breitere Backend-Regression bzw. gezielte Rest-Risiko-Suite
+2. realer Vertragsbenchmark (Accutron) mit dokumentierter Evidence-/Feldqualitaet
 
 ## Bereits bestanden
 
@@ -69,6 +80,7 @@ STEP 16 ist damit abgeschlossen. Der echte PostgreSQL Backup-/Restore-Gate von S
 - PostgreSQL-Migration bis Head
 - Login-/Session-/Audit-E2E
 - Viewer-Mutationsschutz und Org-Isolation
+- organisationsgebundener CSV-E2E-Gate
 - gezielte Step-17 Backup-Security-Unit-Tests
 - echter Backup → Verify → Restore-Gate
 - UAT Kosten-Semantik-Test
