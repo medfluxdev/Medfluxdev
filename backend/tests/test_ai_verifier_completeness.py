@@ -6,6 +6,7 @@ from app.core.config import Settings
 from app.models.contract import Contract
 from app.models.enums import BillingInterval, TimeUnit
 from app.models.values import Duration
+from app.models.evidence import SourceEvidence
 
 
 settings = Settings(_env_file=None)
@@ -57,3 +58,24 @@ def test_explicit_billing_interval_requires_verifier_decision():
     contract.payment.billing_interval = BillingInterval.ANNUAL
 
     assert "payment.billing_interval" in _pipeline()._expected_verifier_fields(contract)
+
+
+def test_missing_verifier_decision_downgrades_section_evidence():
+    contract = Contract()
+    contract.identity.contract_number = "V-123"
+    contract.identity.evidence = SourceEvidence(
+        source_type="paragraph",
+        paragraph_index=1,
+        source_text="Vertragsnummer V-123",
+        confidence=0.95,
+        requires_review=False,
+    )
+
+    pipeline = _pipeline()
+    pipeline._mark_verifier_fields_for_review(
+        contract, {"identity.contract_number"}
+    )
+
+    assert contract.identity.evidence is not None
+    assert contract.identity.evidence.requires_review is True
+    assert contract.identity.evidence.confidence == 0.5
