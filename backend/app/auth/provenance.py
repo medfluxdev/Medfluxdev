@@ -21,8 +21,14 @@ def _apply_review_identity(target) -> None:
     if identity is None:
         return
     target.reviewer_display_name = identity.display_name
-    target.reviewer_identity_type = "authenticated_local"
+    target.reviewer_identity_type = (
+        "authenticated_account"
+        if hasattr(identity, "account_id")
+        else "authenticated_local"
+    )
     target.authenticated_actor_id = identity.user_id
+    if hasattr(target, "actor_role_snapshot"):
+        target.actor_role_snapshot = identity.role
 
 
 def _apply_override_identity(target: ContractOverride) -> None:
@@ -30,7 +36,13 @@ def _apply_override_identity(target: ContractOverride) -> None:
     if identity is None:
         return
     target.actor_id = identity.user_id
-    target.actor_type = "authenticated_local"
+    target.actor_type = (
+        "authenticated_account"
+        if hasattr(identity, "account_id")
+        else "authenticated_local"
+    )
+    target.actor_display_name_snapshot = identity.display_name
+    target.actor_role_snapshot = identity.role
     target.is_development = False
 
 
