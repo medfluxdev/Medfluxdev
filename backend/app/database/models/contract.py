@@ -45,6 +45,8 @@ LIFECYCLE_STATE_ALLOWED = {
     "deleted",
 }
 
+CONTRACT_SCOPE_ALLOWED = {"organization", "hospital", "department"}
+
 CONTRACT_DOCUMENT_ROLE_ALLOWED = {
     "main",
     "amendment",
@@ -62,6 +64,18 @@ class Contract(OrgOwnedMixin, Base):
     __tablename__ = "contract"
 
     id: Mapped[uuid.UUID] = uuid_pk()
+    hospital_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("hospital.id", ondelete="SET NULL"), nullable=True
+    )
+    cost_center_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("cost_center.id", ondelete="SET NULL"), nullable=True
+    )
+    responsible_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    scope_type: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="organization", server_default="organization"
+    )
     # Akzeptierte (aktuelle) Laeufe – Zeiger, keine Kopie.
     accepted_extraction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -126,10 +140,17 @@ class Contract(OrgOwnedMixin, Base):
             f"lifecycle_state IN ({', '.join(repr(v) for v in sorted(LIFECYCLE_STATE_ALLOWED))})",
             name="lifecycle_state",
         ),
+        CheckConstraint(
+            f"scope_type IN ({', '.join(repr(v) for v in sorted(CONTRACT_SCOPE_ALLOWED))})",
+            name="scope_type",
+        ),
         Index("ix_contract_status", "status"),
         Index("ix_contract_risk_level", "risk_level"),
         Index("ix_contract_accepted_extraction_id", "accepted_extraction_id"),
         Index("ix_contract_org_is_archived", "organization_id", "is_archived"),
+        Index("ix_contract_org_hospital", "organization_id", "hospital_id"),
+        Index("ix_contract_org_cost_center", "organization_id", "cost_center_id"),
+        Index("ix_contract_responsible_account", "responsible_account_id"),
     )
 
 
