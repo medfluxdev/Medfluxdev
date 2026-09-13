@@ -62,9 +62,7 @@ class FactReview(Base):
         String(32), default="manual_unverified", nullable=False
     )
     authenticated_actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("app_user.id", ondelete="SET NULL"),
-        nullable=True,
+        PG_UUID(as_uuid=True), nullable=True
     )
     actor_role_snapshot: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
