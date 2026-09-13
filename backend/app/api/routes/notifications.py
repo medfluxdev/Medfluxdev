@@ -45,7 +45,7 @@ def notification_feed(
             work_stmt = work_stmt.where(WorkItem.contract_id.in_(allowed))
             action_stmt = action_stmt.where(ActionProposalRecord.contract_id.in_(allowed))
 
-        work_items = session.scalars(work_stmt.order_by(WorkItem.updated_at.desc()).limit(limit)).all()
+        work_items = session.scalars(work_stmt.order_by(WorkItem.last_seen_at.desc()).limit(limit)).all()
         actions = session.scalars(action_stmt.limit(limit)).all()
         items = [
             {
