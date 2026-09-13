@@ -41,6 +41,7 @@ python -m pytest -q `
     tests/test_ai_source_grounding.py `
     tests/test_ai_structured.py `
     tests/test_auth_review_provenance.py `
+    tests/test_review_critical_completion.py `
     tests/test_operations_csv_safety.py `
     tests/test_security_runtime_config.py
 
