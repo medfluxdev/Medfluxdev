@@ -5,8 +5,8 @@
 .dashboard-reference-layout .welcome-hero { order:1; }
 .dashboard-reference-layout .dashboard-data-state { order:2; }
 .dashboard-reference-layout .dashboard-kpi-strip { order:3; }
-.dashboard-reference-layout .dashboard-priority-grid { order:10; }
-.dashboard-reference-layout .lower-grid { order:11; }
+.dashboard-reference-layout .dashboard-priority-grid { order:11; }
+.dashboard-reference-layout .lower-grid { order:10; }
 .dashboard-card-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; align-items:stretch; }
 .dashboard-priority-grid { margin-top:18px; }
 .dashboard-priority-card { border-color:#d8e4ec; }
