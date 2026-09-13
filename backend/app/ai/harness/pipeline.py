@@ -77,6 +77,8 @@ def field_types() -> dict[str, Any]:
 
 
 def strict_value(annotation, value):
+    if not has_fact_value(value):
+        raise ValueError("Supported fact has no value")
     parsed = TypeAdapter(annotation).validate_json(json.dumps(value), strict=True)
 
     def check(raw, validated):
@@ -93,6 +95,50 @@ def strict_value(annotation, value):
 
     check(value, parsed)
     return parsed
+
+
+class CallBudgetExhausted(RuntimeError):
+    pass
+
+
+def has_fact_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, dict):
+        return any(has_fact_value(item) for item in value.values())
+    if isinstance(value, list):
+        return any(has_fact_value(item) for item in value)
+    return True
+
+
+def candidate_schema() -> dict:
+    schema = CandidateBatch.model_json_schema()
+    reference = {"$ref": "#/$defs/JsonValue"}
+    schema["$defs"]["JsonValue"] = {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "number"},
+            {"type": "boolean"},
+            {"type": "object", "additionalProperties": reference},
+            {"type": "array", "items": reference},
+            {"type": "null"},
+        ]
+    }
+    fact = schema["$defs"]["FactCandidate"]
+    fact["required"] = list(
+        dict.fromkeys(
+            [
+                *fact["required"],
+                "value",
+                "normalized_value",
+                "evidence_refs",
+                "reasoning_summary",
+            ]
+        )
+    )
+    return schema
 
 
 def _find_quote(source: str, quote: str) -> tuple[str, int, int] | None:
@@ -229,6 +275,13 @@ def _coalesce_batch(batch: CandidateBatch, expected_fields: set[str] | None = No
     """Collapse duplicate chunk candidates without first-wins behavior."""
     by_field: dict[str, list[FactCandidate]] = {}
     for item in batch.candidates:
+        value = (
+            item.normalized_value
+            if item.normalized_value is not None
+            else item.value
+        )
+        if item.status == "supported" and not has_fact_value(value):
+            item.status = "unsupported"
         by_field.setdefault(item.field, []).append(item)
 
     out: list[FactCandidate] = []
@@ -298,6 +351,8 @@ class HarnessV2:
         provider = None
 
         def failure_category(exc: Exception) -> str:
+            if isinstance(exc, CallBudgetExhausted):
+                return "call_budget_exhausted"
             done_reason = getattr(provider, "last_done_reason", None)
             if done_reason in {"length", "max_tokens"}:
                 return "truncated_output"
@@ -314,8 +369,12 @@ class HarnessV2:
 
         async def call(purpose, text, schema_type, images=None):
             if len(calls) >= self.settings.harness_max_calls:
-                raise ContextOverflow("Model call budget exhausted")
-            schema = schema_type.model_json_schema()
+                raise CallBudgetExhausted("Model call budget exhausted")
+            schema = (
+                candidate_schema()
+                if schema_type is CandidateBatch
+                else schema_type.model_json_schema()
+            )
             instruction = SYSTEM + "\nOutput schema: " + json.dumps(schema, separators=(",", ":"))
             # Vision tokenization varies substantially; keep a separate conservative reserve.
             extra_reserve = 2048 if images else 0
@@ -380,6 +439,14 @@ class HarnessV2:
             return True
 
         async def verify(batch: CandidateBatch, context: str, purpose: str):
+            for candidate in batch.candidates:
+                value = (
+                    candidate.normalized_value
+                    if candidate.normalized_value is not None
+                    else candidate.value
+                )
+                if candidate.status == "supported" and not has_fact_value(value):
+                    candidate.status = "unsupported"
             if not batch.candidates:
                 return batch
             decisions = await call(
@@ -446,8 +513,9 @@ class HarnessV2:
                 # Add a small neighborhood around directly relevant blocks to retain
                 # local definitions/exceptions that the map may not have linked.
                 relevant_ids = {block.id for block in ranked}
+                direct_ids = set(relevant_ids)
                 for _, index, block in scored:
-                    if block.id not in relevant_ids:
+                    if block.id not in direct_ids:
                         continue
                     for neighbor_index in (index - 1, index + 1):
                         if 0 <= neighbor_index < len(document.blocks):
@@ -638,7 +706,11 @@ class HarnessV2:
                     "block": block.id,
                     "vision": "skipped_repeated_empty_decoration",
                 })
-            visual_budget = min(len(visual_candidates), max(0, self.settings.harness_max_calls // 5))
+            visual_budget = min(
+                len(visual_candidates),
+                max(0, self.settings.harness_max_calls - 2 * len(TOPICS) - 1),
+                max(0, self.settings.harness_max_calls // 5),
+            )
             for block in visual_candidates[:visual_budget]:
                 if descriptor.capabilities.vision is True and image_loader is not None:
                     try:
@@ -814,7 +886,7 @@ class HarnessV2:
                 # Prefer one full-family pass when possible.  For genuinely long
                 # contracts, process every relevant structural segment and reconcile
                 # candidates afterwards; no character-prefix truncation exists.
-                family_overhead = SYSTEM + prompt + json.dumps(CandidateBatch.model_json_schema())
+                family_overhead = SYSTEM + prompt + json.dumps(candidate_schema())
                 full_document_prompt = family_overhead + assemble(document.blocks)
                 if planner.fits(full_document_prompt):
                     # When the whole contract fits, retrieval must not narrow the model's
@@ -962,7 +1034,7 @@ class HarnessV2:
                                 recovery_ranked,
                                 SYSTEM
                                 + recovery_prefix
-                                + json.dumps(CandidateBatch.model_json_schema()),
+                                + json.dumps(candidate_schema()),
                                 purpose="recovery_context:" + family,
                             )
                             if recovery_blocks:
