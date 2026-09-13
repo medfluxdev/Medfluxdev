@@ -8,6 +8,10 @@ on:
     branches:
       - JAMAL-AHMAD-FULL-INTEGRATION
 
+concurrency:
+  group: integration-check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-syntax:
     runs-on: ubuntu-latest
