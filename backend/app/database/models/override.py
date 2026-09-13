@@ -47,9 +47,7 @@ class ContractOverride(OrgOwnedMixin, Base):
     fact_ref: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("app_user.id", ondelete="SET NULL"),
-        nullable=True,
+        PG_UUID(as_uuid=True), nullable=True
     )
     actor_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     actor_display_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
