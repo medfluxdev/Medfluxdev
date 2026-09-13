@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { type AccountRole } from "@/lib/auth-types";
+import type { AIStatus } from "@/lib/ai-types";
 
 type Icon = React.ReactNode;
 type NavItem = { label: string; href: string; icon: keyof typeof icons; roles?: AccountRole[] };
@@ -20,38 +21,29 @@ const icons: Record<string, Icon> = {
   evidence: <><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></>,
   audit: <><path d="M5 20V4h14v16z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
   archive: <><path d="M4 8h16v12H4z"/><path d="M7 8V4h10v4"/><path d="M9 12h6"/></>,
-  settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></>,
+  settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7 1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></>,
 };
 
 const EDITORS: AccountRole[] = ["admin", "contract_manager"];
 const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
 
 const GROUPS: { label: string; items: NavItem[] }[] = [
-  {
-    label: "Arbeitsbereich",
-    items: [
-      { label: "Übersicht", href: "/", icon: "dashboard" },
-      { label: "Verträge", href: "/contracts", icon: "contracts" },
-      { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
-    ],
-  },
-  {
-    label: "Dokumente & Prüfung",
-    items: [
-      { label: "Import", href: "/import", icon: "import", roles: EDITORS },
-      { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
-      { label: "Nachweise", href: "/nachweise", icon: "evidence" },
-      { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
-    ],
-  },
-  {
-    label: "Administration",
-    items: [
-      { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
-      { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
-      { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
-    ],
-  },
+  { label: "Arbeitsbereich", items: [
+    { label: "Übersicht", href: "/", icon: "dashboard" },
+    { label: "Verträge", href: "/contracts", icon: "contracts" },
+    { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
+  ]},
+  { label: "Dokumente & Prüfung", items: [
+    { label: "Import", href: "/import", icon: "import", roles: EDITORS },
+    { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
+    { label: "Nachweise", href: "/nachweise", icon: "evidence" },
+    { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
+  ]},
+  { label: "Administration", items: [
+    { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
+    { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
+    { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
+  ]},
 ];
 
 function isActive(pathname: string, href: string) {
@@ -61,7 +53,8 @@ function isActive(pathname: string, href: string) {
 export default function AppSidebar() {
   const pathname = usePathname();
   const { account, membership, role } = useAuth();
-  const [healthy, setHealthy] = useState<boolean | null>(null);
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
+  const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -71,16 +64,16 @@ export default function AppSidebar() {
   useEffect(() => {
     let mounted = true;
     apiGet<{ status: string }>("/health")
-      .then((health) => mounted && setHealthy(health.status === "ok"))
-      .catch(() => mounted && setHealthy(false));
+      .then((health) => mounted && setApiHealthy(health.status === "ok"))
+      .catch(() => mounted && setApiHealthy(false));
+    apiGet<AIStatus>("/api/ai/status")
+      .then((status) => mounted && setAiStatus(status))
+      .catch(() => mounted && setAiStatus(null));
     return () => { mounted = false; };
   }, []);
 
   const groups = useMemo(
-    () => GROUPS.map((group) => ({
-      ...group,
-      items: group.items.filter((item) => !item.roles || (role ? item.roles.includes(role) : false)),
-    })).filter((group) => group.items.length),
+    () => GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || (role ? item.roles.includes(role) : false)) })).filter((group) => group.items.length),
     [role]
   );
 
@@ -92,6 +85,9 @@ export default function AppSidebar() {
     });
   }
 
+  const aiReady = Boolean(aiStatus?.available && aiStatus?.model_available);
+  const statusTitle = `API: ${apiHealthy === null ? "unbekannt" : apiHealthy ? "verfügbar" : "offline"} · KI: ${aiStatus === null ? "unbekannt" : aiReady ? "bereit" : "nicht bereit"}`;
+
   return (
     <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
       <div className="sidebar-head">
@@ -99,9 +95,7 @@ export default function AppSidebar() {
           <span className="logo" />
           <span className="sidebar-label-copy"><strong>Medflux</strong><small>Intelligentes Vertragsmanagement</small></span>
         </Link>
-        <button className="sidebar-collapse-button" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"} aria-pressed={collapsed}>
-          {collapsed ? "›" : "‹"}
-        </button>
+        <button className="sidebar-collapse-button" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"} aria-pressed={collapsed}>{collapsed ? "›" : "‹"}</button>
       </div>
 
       <nav className="side-nav-root" aria-label="Hauptnavigation">
@@ -127,9 +121,9 @@ export default function AppSidebar() {
       </nav>
 
       <div className="side-bottom">
-        <div className="side-ai" title={collapsed ? `API: ${healthy === null ? "Prüfe" : healthy ? "Gesund" : "Offline"}` : undefined}>
-          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{collapsed ? "" : healthy === null ? "Prüfe…" : healthy ? "API verfügbar" : "API offline"}</div></div>
-          <p className="sidebar-label-copy">Lokale Verarbeitung<br/>Keine externen Modellaufrufe</p>
+        <div className="side-ai" title={statusTitle}>
+          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{collapsed ? "" : apiHealthy === null ? "API unbekannt" : apiHealthy ? "API verfügbar" : "API offline"}</div></div>
+          <p className="sidebar-label-copy">KI: {aiStatus === null ? "Status unbekannt" : aiReady ? `${aiStatus.model} bereit` : aiStatus.message || "Nicht bereit"}</p>
         </div>
         <div className="org-card" title={collapsed ? membership?.organization_name ?? "Krankenhaus" : undefined}>
           <span className="org-avatar">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "M"}</span>
