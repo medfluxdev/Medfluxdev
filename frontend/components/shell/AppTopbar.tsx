@@ -24,7 +24,7 @@ function titleForPath(pathname: string) {
   if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname.startsWith("/settings/organization")) return "Organisation";
   if (pathname === "/settings") return "Einstellungen";
-  return "Medflux";
+  return "MedFlux";
 }
 
 export default function AppTopbar() {
