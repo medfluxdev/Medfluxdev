@@ -210,3 +210,22 @@ def test_reviewer_cannot_change_global_ai_selection(auth_fixture: dict[str, str]
         )
         assert response.status_code == 403
         assert "Administratoren" in response.json()["detail"]
+
+
+def test_authenticated_write_rejects_untrusted_origin(auth_fixture: dict[str, str]) -> None:
+    with TestClient(app) as client:
+        login = _login(
+            client,
+            org_slug=auth_fixture["org_slug"],
+            username="reviewer",
+            password=auth_fixture["password"],
+        )
+        assert login.status_code == 200
+
+        response = client.post(
+            "/api/documents/import",
+            params={"organization_slug": auth_fixture["org_slug"]},
+            headers={"Origin": "https://evil.example"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Ungueltiger Anfrage-Ursprung."
