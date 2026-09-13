@@ -151,6 +151,9 @@ def audit_history(
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "is_development": bool(r.is_development),
             "actor_type": r.actor_type,
+            "actor_id": str(r.actor_id) if r.actor_id else None,
+            "actor_display_name": r.actor_display_name_snapshot,
+            "actor_role": r.actor_role_snapshot,
             "old_value": old_by_id.get(r.id),
         }
         for r in rows
