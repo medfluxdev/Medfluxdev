@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import ContractTable from "@/components/contracts/ContractTable";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
+import PageHeader from "@/components/ui/PageHeader";
 import { apiGet, apiPost } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import type { ContractListResponse } from "@/lib/contract-types";
@@ -60,7 +61,10 @@ export default function ArchivPage() {
 
   return (
     <div className="page">
-      <div className="section-caption">Nicht-destruktives Ablegen</div>
+      <PageHeader
+        title="Archiv"
+        description="Nicht-destruktiv abgelegte Verträge mit Wiederherstellung ins aktive Portfolio."
+      />
 
       {error && (
         <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>

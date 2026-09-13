@@ -1,0 +1,292 @@
+/* MedFlux visual identity v1.0
+   Governing reference: docs/VISUAL_IDENTITY.md */
+
+:root {
+  --font-brand: "Poppins", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --brand-teal: #14b8a6;
+  --brand-teal-hover: #0fa494;
+  --brand-blue: #0f4c81;
+  --brand-blue-hover: #0b3d68;
+  --brand-light: #e6f4f8;
+  --brand-text: #1f2937;
+  --brand-muted: #6b7280;
+
+  /* Map the approved identity onto both current token vocabularies. */
+  --font-sans: var(--font-brand);
+  --font-ui: var(--font-brand);
+  --bg: #f8fbfc;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #e6f4f8;
+  --surface-muted: #f8fafc;
+  --surface-canvas: #f8fbfc;
+  --surface-raised: #ffffff;
+  --surface-subtle: #f8fafc;
+  --border: #dbe7eb;
+  --border-default: #dbe7eb;
+  --border-strong: #c7d8df;
+  --text: #1f2937;
+  --text-primary: #1f2937;
+  --text-muted: #6b7280;
+  --text-secondary: #6b7280;
+  --muted: #6b7280;
+  --accent: #0f4c81;
+  --accent-strong: #0b3d68;
+  --accent-soft: #e6f4f8;
+  --interactive: #0f4c81;
+  --interactive-hover: #0b3d68;
+  --focus-color: #1469a8;
+  --focus-ring: #1469a8;
+}
+
+body {
+  font-family: var(--font-brand);
+  color: var(--brand-text);
+}
+
+/* Reusable logo */
+.medflux-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.68rem;
+  min-width: 0;
+  color: var(--brand-text);
+}
+
+.medflux-logo__mark {
+  width: 42px;
+  height: 30px;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.medflux-logo__copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1;
+}
+
+.medflux-logo__wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--font-brand);
+  font-size: 1.22rem;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+}
+
+.medflux-logo__med {
+  color: var(--brand-teal);
+}
+
+.medflux-logo__flux {
+  color: var(--brand-blue);
+}
+
+.medflux-logo__descriptor {
+  margin-top: 0.28rem;
+  color: var(--brand-blue);
+  font-size: 0.47rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.medflux-logo--compact .medflux-logo__mark {
+  width: 34px;
+  height: 26px;
+}
+
+/* Shell */
+.sidebar {
+  background: #ffffff;
+  border-right-color: #dbe7eb;
+}
+
+.sidebar .brand {
+  text-decoration: none;
+}
+
+.sidebar .brand .medflux-logo {
+  padding: 0.2rem 0;
+}
+
+.sidebar .brand .medflux-logo__mark {
+  width: 40px;
+  height: 30px;
+}
+
+.sidebar-collapsed .brand .medflux-logo__mark {
+  width: 34px;
+}
+
+.nav-item {
+  color: #526579;
+}
+
+.nav-item:hover {
+  background: var(--brand-light);
+  color: var(--brand-blue);
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-blue) 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(15, 76, 129, 0.18);
+}
+
+.topbar {
+  border-bottom-color: #dbe7eb;
+}
+
+/* Core actions */
+.btn-primary,
+.auth-submit,
+.user-admin-form button,
+.user-edit-row button,
+.sidebar-login-btn {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled),
+.auth-submit:hover:not(:disabled),
+.user-admin-form button:hover:not(:disabled),
+.user-edit-row button:hover:not(:disabled),
+.sidebar-login-btn:hover {
+  background: var(--brand-blue-hover);
+  border-color: var(--brand-blue-hover);
+}
+
+a {
+  text-decoration-color: color-mix(in srgb, var(--brand-teal), transparent 42%);
+}
+
+.hero-action {
+  color: var(--brand-blue);
+}
+
+/* Identity-led dashboard area */
+.welcome-hero {
+  background:
+    radial-gradient(circle at 92% 18%, rgba(255,255,255,0.18), transparent 24%),
+    linear-gradient(120deg, var(--brand-teal) 0%, #0797a7 48%, var(--brand-blue) 100%);
+  box-shadow: 0 8px 24px rgba(15, 76, 129, 0.15);
+}
+
+/* Login */
+.auth-page {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(20, 184, 166, 0.32), transparent 28%),
+    radial-gradient(circle at 84% 82%, rgba(15, 76, 129, 0.42), transparent 30%),
+    linear-gradient(135deg, #092f51 0%, #0f4c81 54%, #0a777e 100%);
+}
+
+.auth-login-brand {
+  display: grid;
+  justify-items: center;
+}
+
+.auth-login-brand .medflux-logo {
+  padding: 0.9rem 1.2rem;
+  border: 1px solid rgba(255,255,255,0.72);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 16px 40px rgba(4, 27, 49, 0.2);
+}
+
+.auth-login-brand .medflux-logo__mark {
+  width: 74px;
+  height: 48px;
+}
+
+.auth-login-brand .medflux-logo__wordmark {
+  font-size: 2rem;
+}
+
+.auth-login-brand .medflux-logo__descriptor {
+  margin-top: 0.4rem;
+  font-size: 0.52rem;
+}
+
+.auth-login-brand > p {
+  margin-top: 1.1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.auth-card {
+  border-color: rgba(255,255,255,0.86);
+  box-shadow: 0 24px 64px rgba(4, 27, 49, 0.22);
+}
+
+.auth-card h2,
+.auth-form label {
+  color: var(--brand-text);
+}
+
+.auth-intro,
+.auth-benefits {
+  color: var(--brand-muted);
+}
+
+.auth-form input:focus,
+.user-admin-form input:focus,
+.user-admin-form select:focus,
+.user-edit-row input:focus,
+.user-edit-row select:focus {
+  border-color: var(--brand-teal);
+  outline-color: rgba(20, 184, 166, 0.34);
+}
+
+.auth-password-toggle:focus-visible {
+  outline-color: var(--focus-color);
+}
+
+.auth-benefits svg {
+  stroke: var(--brand-blue);
+}
+
+/* Cards and selected low-emphasis regions */
+.panel,
+.card,
+.detail-card,
+.intel,
+.kpi-card,
+.kpi {
+  border-color: #dbe7eb;
+}
+
+.side-ai,
+.org-card,
+.account-card,
+.state-icon {
+  background: #f4fafb;
+}
+
+.status-badge--success {
+  color: #0b796b;
+  background: #e3f7f3;
+}
+
+@media (max-width: 700px) {
+  .auth-login-brand .medflux-logo {
+    padding: 0.72rem 0.9rem;
+  }
+
+  .auth-login-brand .medflux-logo__mark {
+    width: 58px;
+    height: 40px;
+  }
+
+  .auth-login-brand .medflux-logo__wordmark {
+    font-size: 1.62rem;
+  }
+}

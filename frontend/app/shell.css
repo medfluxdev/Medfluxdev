@@ -1,0 +1,215 @@
+.app {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 272px;
+  transition: width 160ms ease;
+}
+
+.sidebar.sidebar-collapsed {
+  width: 76px;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sidebar-collapse-button {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sidebar-collapse-button:hover {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+
+.sidebar-collapsed .sidebar-label-copy {
+  display: none !important;
+}
+
+.sidebar-collapsed .brand {
+  justify-content: center;
+}
+
+.sidebar-collapsed .sidebar-head {
+  flex-direction: column;
+}
+
+.sidebar-collapsed .nav-item {
+  justify-content: center;
+}
+
+.sidebar-collapsed .side-ai,
+.sidebar-collapsed .org-card {
+  justify-content: center;
+}
+
+.sidebar-collapsed .org-avatar {
+  margin: 0;
+}
+
+.main {
+  min-width: 0;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.account-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: min(300px, calc(100vw - 2rem));
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-popover);
+  z-index: 50;
+}
+
+.account-menu-identity {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem 0.625rem;
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 0.25rem;
+}
+
+.account-menu-identity small {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.account-menu-panel a,
+.account-menu-panel button {
+  width: 100%;
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.625rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.account-menu-panel a:hover,
+.account-menu-panel button:hover {
+  background: var(--surface-subtle);
+}
+
+.scope-picker {
+  max-width: min(52vw, 680px);
+}
+
+.scope-picker select {
+  min-height: 2.25rem;
+}
+
+@media (max-width: 980px) {
+  .sidebar {
+    width: 220px;
+  }
+
+  .sidebar.sidebar-collapsed {
+    width: 68px;
+  }
+
+  .topbar .search {
+    min-width: 160px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app {
+    display: block;
+  }
+
+  .sidebar,
+  .sidebar.sidebar-collapsed {
+    width: 100%;
+    min-height: auto;
+  }
+
+  .sidebar-collapse-button {
+    display: none;
+  }
+
+  .sidebar-collapsed .sidebar-label-copy {
+    display: initial !important;
+  }
+
+  .sidebar .side-nav-root {
+    display: flex;
+    overflow-x: auto;
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .sidebar .side-nav-group {
+    min-width: max-content;
+  }
+
+  .sidebar .side-bottom {
+    display: none;
+  }
+
+  .topbar {
+    position: static;
+  }
+
+  .top-actions {
+    flex-wrap: wrap;
+  }
+
+  .scope-picker {
+    order: 3;
+    width: 100%;
+    max-width: none;
+  }
+
+  .scope-picker select {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}

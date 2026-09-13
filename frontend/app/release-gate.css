@@ -1,0 +1,83 @@
+/* FE-10 release-gate safeguards. Keep these rules generic and non-visual:
+   keyboard focus must stay visible, horizontally dense content must scroll
+   inside its own region, and 320px layouts must not force page-level overflow. */
+
+:where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+}
+
+.table-wrap,
+.fr-table-wrap,
+.cw-tabs,
+.cw-subtabs,
+.cw-document-sidebar {
+  max-width: 100%;
+}
+
+.table-wrap,
+.fr-table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+img,
+svg,
+canvas {
+  max-width: 100%;
+}
+
+@media (max-width: 390px) {
+  .page {
+    min-width: 0;
+  }
+
+  .profile-header,
+  .cw-header,
+  .dashboard-feature-head,
+  .user-admin-head,
+  .org-settings-head {
+    min-width: 0;
+  }
+
+  .cw-tabs,
+  .cw-subtabs {
+    scrollbar-width: thin;
+  }
+
+  .btn,
+  button,
+  select,
+  input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 320px) {
+  .page {
+    padding-inline: 10px;
+  }
+
+  .cw-integrated-panel .detail-card,
+  .dashboard-feature-card,
+  .cw-section,
+  .cw-info-card {
+    padding-inline: 12px;
+  }
+
+  .cw-header h1,
+  .profile-header h1 {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

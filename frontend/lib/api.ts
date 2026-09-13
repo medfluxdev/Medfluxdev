@@ -1,22 +1,64 @@
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-// Standard-Timeout damit kein Ladezustand ewig haengen kann: Bleibt der
-// Backend-Request ohne Antwort (z. B. Netz/Service haengt), endet der Request
-// mit einem ehrlichen Fehler-Zustand, statt in "laedt…" zu verharren.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 20000;
 
-function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
+export class ApiError extends Error {
+  status?: number;
+  code: "timeout" | "network" | "http";
+
+  constructor(message: string, options: { status?: number; code?: "timeout" | "network" | "http" } = {}) {
+    super(message);
+    this.name = "ApiError";
+    this.status = options.status;
+    this.code = options.code ?? "http";
+  }
+}
+
+export function userMessageForStatus(status: number): string {
+  if (status === 401) return "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.";
+  if (status === 403) return "Sie haben für diese Aktion keine Berechtigung.";
+  if (status === 404) return "Die angeforderten Daten wurden nicht gefunden.";
+  if (status === 409) return "Die Aktion konnte wegen eines Konflikts nicht abgeschlossen werden. Bitte laden Sie den aktuellen Stand neu.";
+  if (status === 422) return "Die Eingaben konnten nicht verarbeitet werden. Bitte prüfen Sie Ihre Angaben.";
+  if (status >= 500) return "Der Server ist momentan nicht verfügbar. Bitte versuchen Sie es erneut.";
+  return "Die Anfrage konnte nicht abgeschlossen werden.";
+}
+
+function notifySessionExpired(path: string) {
+  if (typeof window === "undefined" || path === "/api/auth/login" || path === "/api/auth/logout") return;
+  window.dispatchEvent(new CustomEvent("medflux:session-expired"));
+}
+
+function scopedPath(path: string): string {
+  if (typeof window === "undefined" || !path.startsWith("/api/")) return path;
+  if (!path.includes("organization_slug=")) return path;
+  const selectedOrganization = window.localStorage.getItem("medflux.organization_slug");
+  const hospitalId = window.localStorage.getItem("medflux.hospitalId");
+  const departmentId = window.localStorage.getItem("medflux.departmentId");
+  const [base, query = ""] = path.split("?", 2);
+  const params = new URLSearchParams(query);
+  if (selectedOrganization) params.set("organization_slug", selectedOrganization);
+  if (hospitalId && !params.has("hospital_id")) params.set("hospital_id", hospitalId);
+  if (departmentId && !params.has("department_id")) params.set("department_id", departmentId);
+  return `${base}?${params.toString()}`;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const withCredentials: RequestInit = { credentials: "include", ...init };
   if (!timeoutMs || timeoutMs <= 0) {
-    return fetch(url, withCredentials);
+    try {
+      return await fetch(url, withCredentials);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      throw new ApiError("Die Verbindung zum Server ist fehlgeschlagen. Bitte prüfen Sie Ihre Netzwerkverbindung.", { code: "network" });
+    }
   }
+
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   const outer = init.signal;
   const onOuterAbort = () => controller.abort();
   if (outer) {
@@ -27,28 +69,18 @@ function fetchWithTimeout(
     clearTimeout(timer);
     if (outer) outer.removeEventListener("abort", onOuterAbort);
   };
-  return fetch(url, { ...withCredentials, signal: controller.signal }).then(
-    (res) => {
-      cleanup();
-      return res;
-    },
-    (err) => {
-      cleanup();
-      throw err;
-    }
-  );
-}
 
-export async function apiGet<T>(
-  path: string,
-  signal?: AbortSignal,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<T> {
-  const res = await fetchWithTimeout(`${API_BASE}${path}`, { signal }, timeoutMs);
-  if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+  try {
+    return await fetch(url, { ...withCredentials, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiError("Die Anfrage hat zu lange gedauert. Bitte versuchen Sie es erneut.", { code: "timeout" });
+    }
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError("Die Verbindung zum Server ist fehlgeschlagen. Bitte prüfen Sie Ihre Netzwerkverbindung.", { code: "network" });
+  } finally {
+    cleanup();
   }
-  return (await res.json()) as T;
 }
 
 async function errorMessage(res: Response): Promise<string> {
@@ -56,125 +88,85 @@ async function errorMessage(res: Response): Promise<string> {
   if (text) {
     try {
       const body = JSON.parse(text) as { detail?: unknown };
-      if (typeof body.detail === "string" && body.detail) {
-        return body.detail;
-      }
+      if (typeof body.detail === "string" && body.detail.trim()) return body.detail.trim();
     } catch {
-      /* kein JSON-Fehlertext vorhanden */
+      // Non-JSON server responses use the standardized status message below.
     }
   }
-  return `Request failed: ${res.status} ${res.statusText}`;
+  return userMessageForStatus(res.status);
 }
 
-export async function apiPost<T>(
-  path: string,
-  body: unknown,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<T> {
-  const res = await fetchWithTimeout(
-    `${API_BASE}${path}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    timeoutMs
-  );
-  if (!res.ok) {
-    throw new Error(await errorMessage(res));
-  }
-  if (res.status === 204) return undefined as T;
+async function throwForResponse(res: Response, path: string): Promise<never> {
+  if (res.status === 401) notifySessionExpired(path);
+  throw new ApiError(await errorMessage(res), { status: res.status, code: "http" });
+}
+
+export async function apiGet<T>(path: string, signal?: AbortSignal, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { signal }, timeoutMs);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
-export async function apiPut<T>(
-  path: string,
-  body: unknown,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<T> {
-  const res = await fetchWithTimeout(
-    `${API_BASE}${path}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    timeoutMs
-  );
-  if (!res.ok) {
-    throw new Error(await errorMessage(res));
-  }
+export async function apiPost<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
-export async function apiPatch<T>(
-  path: string,
-  body: unknown,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<T> {
-  const res = await fetchWithTimeout(
-    `${API_BASE}${path}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-    timeoutMs
-  );
-  if (!res.ok) {
-    throw new Error(await errorMessage(res));
-  }
+export async function apiPut<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
-// Sichere Content-URL fuer den lokalen PDF-Viewer. Klebt ausschliesslich an
-// opaque IDs (contract_id / version_id) + org-slug; kein storage_key, kein
-// Dateisystempfad. Die Bytes liefert das Backend org-/vertragsgebunden.
-export function contentUrl(
-  contractId: string,
-  documentVersionId: string,
-  orgSlug: string
-): string {
-  const q = new URLSearchParams({ organization_slug: orgSlug });
-  return `${API_BASE}/api/contracts/${encodeURIComponent(
-    contractId
-  )}/documents/${encodeURIComponent(documentVersionId)}/content?${q.toString()}`;
+export async function apiPatch<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
+  if (!res.ok) return throwForResponse(res, path);
+  return (await res.json()) as T;
 }
 
-export async function apiUpload<T>(
-  path: string,
-  files: File[],
-  slug?: string
-): Promise<T> {
+export function contentUrl(contractId: string, documentVersionId: string, orgSlug: string): string {
+  const selected = typeof window !== "undefined" ? window.localStorage.getItem("medflux.organization_slug") : null;
+  const q = new URLSearchParams({ organization_slug: selected || orgSlug });
+  const h = typeof window !== "undefined" ? window.localStorage.getItem("medflux.hospitalId") : null;
+  const d = typeof window !== "undefined" ? window.localStorage.getItem("medflux.departmentId") : null;
+  if (h) q.set("hospital_id", h);
+  if (d) q.set("department_id", d);
+  return `${API_BASE}/api/contracts/${encodeURIComponent(contractId)}/documents/${encodeURIComponent(documentVersionId)}/content?${q.toString()}`;
+}
+
+export async function apiUpload<T>(path: string, files: File[], slug?: string): Promise<T> {
   const form = new FormData();
-  for (const file of files) {
-    form.append("files", file);
+  for (const file of files) form.append("files", file);
+  const selected = typeof window !== "undefined" ? localStorage.getItem("medflux.organization_slug") : null;
+  const effectiveSlug = selected || slug;
+  const q = new URLSearchParams();
+  if (effectiveSlug) q.set("organization_slug", effectiveSlug);
+  const h = typeof window !== "undefined" ? localStorage.getItem("medflux.hospitalId") : null;
+  const d = typeof window !== "undefined" ? localStorage.getItem("medflux.departmentId") : null;
+  if (h) q.set("hospital_id", h);
+  if (d) q.set("department_id", d);
+  const query = q.toString() ? `?${q.toString()}` : "";
+  const res = await fetchWithTimeout(`${API_BASE}${path}${query}`, { method: "POST", body: form }, DEFAULT_TIMEOUT_MS);
+  if (!res.ok) return throwForResponse(res, path);
+  const data = (await res.json()) as T;
+  if (path === "/api/documents/import" && effectiveSlug && (h || d)) {
+    const documents = (data as { documents?: Array<{ contract_id?: string | null }> }).documents ?? [];
+    await Promise.all(documents.filter((item) => item.contract_id).map((item) => apiPatch(`/api/ownership/contracts/${encodeURIComponent(item.contract_id as string)}?organization_slug=${encodeURIComponent(effectiveSlug)}`, { hospital_id: h, department_ids: d ? [d] : [], cost_center_id: null })));
   }
-  const query = slug ? `?organization_slug=${encodeURIComponent(slug)}` : "";
-  const res = await fetch(`${API_BASE}${path}${query}`, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  });
-  if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
+  return data;
 }
 
-// Quell-Geometrie-Endpoint: schmalste nachweisbare PDF-Region fuer ein
-// Fakten-Snippet (PR-5 UAT D). Ehrlicher `status` aus dem Backend (exact /
-// coarse / none) – nie erfundene Koordinaten.
-export function sourceRegionUrl(
-  documentVersionId: string,
-  orgSlug: string,
-  snippet: string,
-  page: number | null
-): string {
-  const q = new URLSearchParams({ organization_slug: orgSlug });
+export function sourceRegionUrl(documentVersionId: string, orgSlug: string, snippet: string, page: number | null): string {
+  const selected = typeof window !== "undefined" ? localStorage.getItem("medflux.organization_slug") : null;
+  const q = new URLSearchParams({ organization_slug: selected || orgSlug });
   q.set("snippet", snippet);
   if (page != null) q.set("page", String(page));
-  return `${API_BASE}/api/documents/${encodeURIComponent(
-    documentVersionId
-  )}/source-region?${q.toString()}`;
+  if (typeof window !== "undefined") {
+    const h = localStorage.getItem("medflux.hospitalId");
+    const d = localStorage.getItem("medflux.departmentId");
+    if (h) q.set("hospital_id", h);
+    if (d) q.set("department_id", d);
+  }
+  return `${API_BASE}/api/documents/${encodeURIComponent(documentVersionId)}/source-region?${q.toString()}`;
 }

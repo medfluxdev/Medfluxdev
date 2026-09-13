@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { apiGet, apiPost } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { apiPost } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
-import type {
-  ContractDetailResponse,
-  EvidenceRef,
-  FactReviewStateDto,
-  FactReviewDto,
-} from "@/lib/contract-detail-types";
+import { ROLE_LABELS } from "@/lib/auth-types";
+import type { ContractDetailResponse, EvidenceRef, FactReviewStateDto, FactReviewDto } from "@/lib/contract-detail-types";
+import ValueOriginBadge, { type ValueOriginKind } from "./ValueOriginBadge";
 
 interface Props {
   data: ContractDetailResponse;
@@ -17,14 +15,7 @@ interface Props {
   onNavigate?: (ev: EvidenceRef) => void;
 }
 
-type AuthIdentity = {
-  user_id: string;
-  organization_id: string;
-  organization_slug: string;
-  username: string;
-  display_name: string;
-  role: string;
-};
+type ViewMode = "focus" | "table";
 
 function valueText(v: unknown): string {
   if (v == null || v === "") return "–";
@@ -35,18 +26,24 @@ function valueText(v: unknown): string {
   return text.length > 120 ? `${text.slice(0, 120)}…` : text;
 }
 
-function stampAttr(iso: string): string {
-  return iso.slice(0, 10);
+function hasValue(v: unknown): boolean {
+  return !(v == null || v === "");
+}
+
+function originKind(state: FactReviewStateDto, target: "original" | "effective"): ValueOriginKind {
+  const value = target === "original" ? state.original_value : state.effective_value;
+  if (!hasValue(value)) return "missing";
+  if (target === "effective" && state.state === "corrected") return "corrected";
+  if (target === "effective" && state.state === "confirmed") return "reviewed";
+  if (state.evidence_count > 0) return "extracted";
+  return "system";
 }
 
 function stampTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return stampAttr(iso);
-  return new Intl.DateTimeFormat("de-DE", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(d);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(d);
 }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -55,91 +52,88 @@ const ACTION_LABEL: Record<string, string> = {
   voided: "Verworfen",
   reopened: "Erneut geöffnet",
 };
-
 const RESULT_VERB: Record<string, string> = {
   confirmed: "Bestätigt",
   corrected: "Korrigiert",
   voided: "Verworfen",
 };
 
-function reviewResultLabel(state: string): string {
-  return RESULT_VERB[state] ?? "Geprüft";
+function identityHint(identity: string | null) {
+  if (identity === "authenticated_account") return "authentifiziert";
+  if (!identity || identity === "manual_unverified") return "älterer manueller Eintrag";
+  return identity;
 }
 
-const STATE_TONE: Record<string, string> = {
-  unreviewed: "",
-  needs_review: "",
-  confirmed: " ok",
-  corrected: " ok",
-  voided: "",
-};
-
-function identityHint(identity: string | null): string {
-  if (!identity || identity === "manual_unverified") return "manuell, unverifiziert";
-  if (identity === "authenticated_local") return "authentifiziert";
-  return identity;
+function tone(state: string) {
+  return state === "confirmed" || state === "corrected" ? " ok" : "";
 }
 
 export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }: Props) {
   const toast = useToast();
   const panelRef = useRef<HTMLElement | null>(null);
-  const [reviewer, setReviewer] = useState("");
-  const [authenticatedReviewer, setAuthenticatedReviewer] = useState<AuthIdentity | null>(null);
-  const [note, setNote] = useState("");
+  const { account, role } = useAuth();
+  const canReview = role === "admin" || role === "contract_manager" || role === "reviewer";
   const [corrected, setCorrected] = useState<Record<string, string>>({});
-  const [openFact, setOpenFact] = useState<string | null>(null);
+  const [correctionNotes, setCorrectionNotes] = useState<Record<string, string>>({});
+  const [activeFact, setActiveFact] = useState<string | null>(null);
+  const [editFact, setEditFact] = useState<string | null>(null);
   const [historyFact, setHistoryFact] = useState<string | null>(null);
   const [ack, setAck] = useState(false);
   const [completionNote, setCompletionNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    apiGet<AuthIdentity>("/api/auth/me")
-      .then((identity) => {
-        if (mounted) setAuthenticatedReviewer(identity);
-      })
-      .catch(() => {
-        if (mounted) setAuthenticatedReviewer(null);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const effectiveReviewer = authenticatedReviewer?.display_name ?? reviewer.trim();
+  const [view, setView] = useState<ViewMode>("focus");
   const cr = data.contract_review;
 
-  const evidenceById = new Map<string, EvidenceRef>();
-  for (const e of data.evidence) {
-    if (e.evidence_id) evidenceById.set(e.evidence_id, e);
-  }
+  const states = useMemo(
+    () => (data.fact_review_states ?? []).filter((s) => s.present || s.state !== "unreviewed" || s.has_history),
+    [data.fact_review_states]
+  );
+  const selected = states.find((s) => s.fact_key === (activeFact ?? states[0]?.fact_key)) ?? states[0] ?? null;
+  const selectedIndex = selected ? states.findIndex((s) => s.fact_key === selected.fact_key) : -1;
+  const evidenceById = useMemo(() => {
+    const m = new Map<string, EvidenceRef>();
+    for (const e of data.evidence) if (e.evidence_id) m.set(e.evidence_id, e);
+    return m;
+  }, [data.evidence]);
+  const historyByFact = (fk: string): FactReviewDto[] => (data.fact_reviews ?? []).filter((r) => r.fact_key === fk);
+  const hasUnsavedCorrection = Boolean(editFact && ((corrected[editFact] ?? "").trim() || (correctionNotes[editFact] ?? "").trim()));
+
+  useEffect(() => {
+    if (!hasUnsavedCorrection) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const scopeChange = (event: Event) => {
+      if (!window.confirm("Es gibt eine noch nicht gespeicherte Korrektur. Arbeitsbereich trotzdem wechseln?")) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("medflux:scope-change", scopeChange);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("medflux:scope-change", scopeChange);
+    };
+  }, [hasUnsavedCorrection]);
 
   async function postFact(body: Record<string, unknown>): Promise<boolean> {
-    if (!effectiveReviewer) {
-      setMsg({
-        ok: false,
-        text: "Bitte zuerst Prüfer*in angeben. Im Anmeldemodus wird die serverseitig authentifizierte Identität automatisch verwendet.",
-      });
+    if (!canReview) {
+      setMsg({ ok: false, text: "Für diese Aktion fehlt die Berechtigung." });
       return false;
     }
     setBusy(true);
     setMsg(null);
     try {
-      await apiPost(
-        `/api/contracts/${encodeURIComponent(
-          data.contract_id
-        )}/fact-reviews?organization_slug=${encodeURIComponent(orgSlug)}`,
-        { ...body, reviewer_display_name: effectiveReviewer }
-      );
+      await apiPost(`/api/contracts/${encodeURIComponent(data.contract_id)}/fact-reviews?organization_slug=${encodeURIComponent(orgSlug)}`, body);
       setMsg({ ok: true, text: "Prüf-Aktion gespeichert." });
       toast("Prüf-Aktion gespeichert.", "success");
       onReload();
       window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 30);
       return true;
-    } catch {
-      setMsg({ ok: false, text: "Prüf-Aktion konnte nicht gespeichert werden." });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : "Prüf-Aktion konnte nicht gespeichert werden." });
       toast("Prüf-Aktion konnte nicht gespeichert werden.", "error");
       return false;
     } finally {
@@ -147,389 +141,149 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
     }
   }
 
-  function confirmFact(fk: string) {
-    void postFact({
-      fact_key: fk,
-      action: "confirmed",
-      note: note || null,
-    });
+  function nextFact() {
+    if (selectedIndex >= 0 && selectedIndex < states.length - 1) setActiveFact(states[selectedIndex + 1].fact_key);
   }
-
+  function previousFact() {
+    if (selectedIndex > 0) setActiveFact(states[selectedIndex - 1].fact_key);
+  }
+  async function confirmFact(fk: string) {
+    const ok = await postFact({ fact_key: fk, action: "confirmed" });
+    if (ok) nextFact();
+  }
   async function correctFact(fk: string) {
     const value = corrected[fk];
-    if (!value || String(value).trim() === "") {
+    const note = correctionNotes[fk];
+    if (!value || !String(value).trim()) {
       setMsg({ ok: false, text: "Bitte einen korrigierten Wert angeben." });
+      return;
+    }
+    if (!note || !String(note).trim()) {
+      setMsg({ ok: false, text: "Bitte begründen Sie die Korrektur." });
       return;
     }
     const ok = await postFact({
       fact_key: fk,
       action: "corrected",
       corrected_value: String(value).trim(),
-      note: note || null,
+      note: String(note).trim(),
     });
-    if (ok) setOpenFact(null);
+    if (ok) {
+      setCorrected((current) => ({ ...current, [fk]: "" }));
+      setCorrectionNotes((current) => ({ ...current, [fk]: "" }));
+      setEditFact(null);
+      nextFact();
+    }
   }
-
   function reopenFact(fk: string) {
-    void postFact({
-      fact_key: fk,
-      action: "reopened",
-      note: note || null,
-    });
+    void postFact({ fact_key: fk, action: "reopened" });
   }
 
-  async function postLifecycle(path: "start" | "complete"): Promise<boolean> {
-    if (!effectiveReviewer) {
-      setMsg({
-        ok: false,
-        text: "Bitte zuerst Prüfer*in angeben. Im Anmeldemodus wird die serverseitig authentifizierte Identität automatisch verwendet.",
-      });
-      return false;
+  async function postLifecycle(path: "start" | "complete") {
+    if (!canReview) {
+      setMsg({ ok: false, text: "Für diese Aktion fehlt die Berechtigung." });
+      return;
     }
     setBusy(true);
     setMsg(null);
     try {
-      await apiPost(
-        `/api/contracts/${encodeURIComponent(
-          data.contract_id
-        )}/review/${path}?organization_slug=${encodeURIComponent(orgSlug)}`,
-        {
-          reviewer_display_name: effectiveReviewer,
-          note: path === "complete" ? completionNote : note,
-          acknowledge_unreviewed: path === "complete" ? ack : false,
-        }
-      );
-      setMsg({
-        ok: true,
-        text: path === "complete" ? "Review abgeschlossen." : "Review erneut geöffnet.",
+      await apiPost(`/api/contracts/${encodeURIComponent(data.contract_id)}/review/${path}?organization_slug=${encodeURIComponent(orgSlug)}`, {
+        note: path === "complete" ? completionNote : null,
+        acknowledge_unreviewed: path === "complete" ? ack : false,
       });
-      toast(
-        path === "complete" ? "Review abgeschlossen." : "Review erneut geöffnet.",
-        "success"
-      );
+      toast(path === "complete" ? "Review abgeschlossen." : "Review erneut geöffnet.", "success");
       onReload();
-      window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 30);
-      return true;
-    } catch {
-      setMsg({
-        ok: false,
-        text:
-          path === "complete"
-            ? "Abschluss nicht möglich – bitte ungeprüfte Angaben quittieren."
-            : "Review konnte nicht geöffnet werden.",
-      });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : "Review-Aktion konnte nicht gespeichert werden." });
       toast("Review-Aktion konnte nicht gespeichert werden.", "error");
-      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  const states = (data.fact_review_states ?? []).filter(
-    (s) => s.present || s.state !== "unreviewed" || s.has_history
-  );
-  const historyByFact = (fk: string): FactReviewDto[] =>
-    (data.fact_reviews ?? []).filter((r) => r.fact_key === fk);
+  function selectFact(fk: string) {
+    if (hasUnsavedCorrection && editFact !== fk && !window.confirm("Nicht gespeicherte Korrektur verwerfen?")) return;
+    setActiveFact(fk);
+    setEditFact(null);
+    setHistoryFact(null);
+    setView("focus");
+  }
 
-  if (!cr) {
+  function EvidenceButtons({ s }: { s: FactReviewStateDto }) {
+    if (!s.needs_evidence && s.evidence_count === 0) return null;
+    if (s.evidence_count === 0) return <span className="fact-review small">Kein Quellen-Beleg verlinkt – bitte prüfen</span>;
     return (
-      <section
-        id="fact-review-panel"
-        ref={panelRef}
-        tabIndex={-1}
-        className="detail-card"
-        aria-label="Faktprüfung"
-      >
-        <h2>Faktprüfung</h2>
-        <p className="muted">
-          Für diesen Datensatz liegt noch keine Prüf-Übersicht vor.
-        </p>
-      </section>
+      <div className="fr-evidence-links">
+        {s.linked_evidence_refs.map((eid) => {
+          const ev = evidenceById.get(eid);
+          if (!ev) return null;
+          return <button key={eid} type="button" className="fact-cite-link" onClick={() => onNavigate?.(ev)}>{ev.page != null ? `Seite ${ev.page}` : "Quelle"}{ev.requires_review ? " · zu prüfen" : ""}</button>;
+        })}
+      </div>
     );
   }
 
+  function History({ s }: { s: FactReviewStateDto }) {
+    const rows = historyByFact(s.fact_key);
+    return (
+      <ul className="audit-list fr-history">
+        {rows.length === 0 && <li className="muted small">Noch keine Einträge.</li>}
+        {rows.map((r) => (
+          <li key={r.id}>
+            <span className={`audit-action audit-${r.action}`}>{ACTION_LABEL[r.action] ?? r.action_label_de ?? r.action}</span>
+            <span className="audit-key">{r.fact_label_de || r.fact_key}</span>
+            {r.action === "confirmed" && <span className="audit-value">Wert übernommen</span>}
+            {r.action === "corrected" && <><span className="audit-old">{valueText(r.previous_effective_value)} → </span><span className="audit-value">{valueText(r.new_effective_value)}</span></>}
+            {r.note && <span className="muted"> – {r.note}</span>}
+            <span className="audit-date">{stampTime(r.created_at)}</span>
+            <span className="audit-ref">{r.reviewer_display_name ?? "–"} · {identityHint(r.reviewer_identity_type)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (!cr) return <section id="fact-review-panel" ref={panelRef} tabIndex={-1} className="detail-card"><h2>Faktprüfung</h2><p className="muted">Für diesen Datensatz liegt noch keine Prüf-Übersicht vor.</p></section>;
+
   return (
-    <section
-      id="fact-review-panel"
-      ref={panelRef}
-      tabIndex={-1}
-      className="detail-card"
-      aria-label="Faktprüfung"
-    >
-      <h2>Faktprüfung</h2>
-      <p className="muted small">
-        Faktgenaue menschliche Prüfung der materialen Vertragsangaben.
-        „Bestätigen“ ändert den Wert nie; „Korrigieren“ setzt einen neuen
-        wirksamen Wert. Beides ist append-only im Audit sichtbar.
-      </p>
+    <section id="fact-review-panel" ref={panelRef} tabIndex={-1} className="detail-card fr-workspace" aria-label="Faktprüfung">
+      <div className="fr-title-row">
+        <div><h2>Faktprüfung</h2><p className="muted small">Prüfen Sie die automatisch erkannten Vertragsangaben und bestätigen oder korrigieren Sie die Werte. Alle Änderungen werden mit dem angemeldeten Benutzer protokolliert.</p></div>
+        <div className="fr-view-toggle"><button className={view === "focus" ? "active" : ""} onClick={() => setView("focus")}>Einzelprüfung</button><button className={view === "table" ? "active" : ""} onClick={() => setView("table")}>Alle Angaben</button></div>
+      </div>
+      {msg && <p className={msg.ok ? "form-ok" : "form-error"} role="status">{msg.text}</p>}
+      <div className="fr-review-summary">
+        <div className="fr-review-meta"><strong>Vertragsreview</strong><span>{cr.reviewed_count} von {cr.relevant_count} Angaben geprüft · {cr.unresolved_count} ungeprüft</span><span className={`fact-review${cr.status === "reviewed" ? " ok" : ""}`}>{cr.critical_unreviewed_count > 0 ? `${cr.critical_unreviewed_count} kritisch ungeprüft · ` : ""}{cr.status_label_de}</span></div>
+        <div className="fr-current-reviewer"><span>Prüfung durch</span><strong>{account?.display_name ?? "Angemeldeter Benutzer"}</strong><small>{role ? ROLE_LABELS[role] : ""}</small></div>
+        {canReview ? <><label className="fr-ack"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> Verbleibende ungeprüfte Angaben akzeptieren</label><div className="fr-complete"><input type="text" placeholder="Abschluss-Notiz (optional)" value={completionNote} onChange={(e) => setCompletionNote(e.target.value)} /><button type="button" className="btn btn-sm" onClick={() => void postLifecycle("complete")} disabled={busy || (!ack && cr.unresolved_count > 0)}>Review abschließen</button><button type="button" className="btn-link" onClick={() => void postLifecycle("start")} disabled={busy}>Review erneut öffnen</button></div></> : <p className="fr-readonly-note">Nur-Lese-Zugriff: Prüfschritte können nicht verändert werden.</p>}
+      </div>
 
-      {msg && (
-        <p className={msg.ok ? "form-ok" : "form-error"} role="status">
-          {msg.text}
-        </p>
+      {states.length === 0 ? <p className="muted">Keine Angaben vorhanden.</p> : view === "table" ? (
+        <div className="fr-table-wrap"><table className="fr-table"><thead><tr><th>Angabe</th><th>Original</th><th>Wirksam</th><th>Quelle</th><th>Status</th>{canReview ? <th>Aktion</th> : null}</tr></thead><tbody>{states.map((s) => <tr key={s.fact_key}><td><button className="fr-table-name" onClick={() => selectFact(s.fact_key)}>{s.label_de}</button>{s.is_critical && <small>kritisch</small>}</td><td><span className="fr-value-with-origin">{valueText(s.original_value)}<ValueOriginBadge kind={originKind(s, "original")} /></span></td><td><span className="fr-value-with-origin"><strong>{valueText(s.effective_value)}</strong><ValueOriginBadge kind={originKind(s, "effective")} /></span></td><td><EvidenceButtons s={s} /></td><td><span className={`fact-review${tone(s.state)}`}>{RESULT_VERB[s.state] ?? s.state_label_de}</span></td>{canReview ? <td><div className="fr-table-actions"><button title="Bestätigen" onClick={() => void confirmFact(s.fact_key)} disabled={busy}>✓</button><button title="Korrigieren" onClick={() => { setActiveFact(s.fact_key); setEditFact(s.fact_key); setView("focus"); }} disabled={busy}>✎</button><button title="Historie" onClick={() => { setActiveFact(s.fact_key); setHistoryFact(s.fact_key); setView("focus"); }}>◷</button></div></td> : null}</tr>)}</tbody></table></div>
+      ) : (
+        <div className="fr-focus-layout">
+          <nav className="fr-fact-nav" aria-label="Materiale Angaben"><div className="fr-nav-head"><strong>Angaben</strong><span>{states.length}</span></div>{states.map((s, i) => <button key={s.fact_key} type="button" className={selected?.fact_key === s.fact_key ? "active" : ""} onClick={() => selectFact(s.fact_key)}><span className="fr-nav-index">{i + 1}</span><span><strong>{s.label_de}</strong><small>{s.is_critical ? "Kritisch" : "Standard"}</small></span><i className={`fr-status-dot${tone(s.state)}`} aria-hidden="true" /></button>)}</nav>
+          {selected && <article className="fr-fact-detail">
+            <div className="fr-detail-head"><div><span className="fr-step">Angabe {selectedIndex + 1} von {states.length}</span><h3>{selected.label_de}</h3>{selected.is_critical && <span className="fr-critical-label">Kritische Angabe</span>}</div><span className={`fact-review${tone(selected.state)}`}>{RESULT_VERB[selected.state] ?? selected.state_label_de}</span></div>
+            <div className="fr-value-grid">
+              <div><label>Original aus Dokument <ValueOriginBadge kind={originKind(selected, "original")} /></label><div className="fr-value-box">{valueText(selected.original_value)}</div></div>
+              <div><label>Wirksam im System <ValueOriginBadge kind={originKind(selected, "effective")} /></label><div className="fr-value-box effective">{valueText(selected.effective_value)}</div></div>
+            </div>
+            <div className="fr-source-block"><strong>Quellen-Beleg</strong><EvidenceButtons s={selected} /></div>
+            {selected.reviewed_at && <p className="fr-reviewed"><strong>{RESULT_VERB[selected.state] ?? "Geprüft"}</strong> · {selected.reviewer_display_name ?? "–"} · {stampTime(selected.reviewed_at)}</p>}
+            {canReview ? <div className="fr-detail-actions"><button type="button" className="fr-confirm" onClick={() => void confirmFact(selected.fact_key)} disabled={busy}>✓ Bestätigen</button><button type="button" className="btn btn-sm" onClick={() => setEditFact(editFact === selected.fact_key ? null : selected.fact_key)} disabled={busy}>✎ Korrigieren</button>{selected.state !== "unreviewed" && <button type="button" className="btn-link" onClick={() => reopenFact(selected.fact_key)} disabled={busy}>Erneut öffnen</button>}<button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div> : <div className="fr-detail-actions"><button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div>}
+            {editFact === selected.fact_key && canReview ? (
+              <div className="fr-edit-row fr-edit-stack">
+                <label>Korrigierter Wert<input type="text" autoFocus placeholder="Korrigierter Wert" value={corrected[selected.fact_key] ?? ""} onChange={(e) => setCorrected((prev) => ({ ...prev, [selected.fact_key]: e.target.value }))} /></label>
+                <label>Begründung der Korrektur<input type="text" placeholder="Warum wird der Wert geändert?" value={correctionNotes[selected.fact_key] ?? ""} onChange={(e) => setCorrectionNotes((prev) => ({ ...prev, [selected.fact_key]: e.target.value }))} /></label>
+                <div className="fr-edit-actions"><button className="btn btn-sm" onClick={() => void correctFact(selected.fact_key)} disabled={busy}>Korrektur speichern</button><button type="button" className="btn-link" onClick={() => { setCorrected((current) => ({ ...current, [selected.fact_key]: "" })); setCorrectionNotes((current) => ({ ...current, [selected.fact_key]: "" })); setEditFact(null); }} disabled={busy}>Abbrechen</button></div>
+              </div>
+            ) : null}
+            {historyFact === selected.fact_key && <History s={selected} />}
+            <div className="fr-pager"><button type="button" onClick={previousFact} disabled={selectedIndex <= 0}>← Vorherige Angabe</button><span>{selectedIndex + 1} / {states.length}</span><button type="button" onClick={nextFact} disabled={selectedIndex >= states.length - 1}>Nächste Angabe →</button></div>
+          </article>}
+        </div>
       )}
-
-      <div className="override-group">
-        {authenticatedReviewer ? (
-          <p className="muted small">
-            Prüfer*in: <strong>{authenticatedReviewer.display_name}</strong> · authentifiziert
-            · die gespeicherte Identität wird serverseitig aus der Anmeldung gebunden.
-          </p>
-        ) : (
-          <>
-            <label className="reviewer-label" htmlFor="fact-reviewer">
-              Prüfer*in (Entwicklungsmodus ohne Anmeldung: manuell/unverifiziert)
-            </label>
-            <input
-              id="fact-reviewer"
-              type="text"
-              placeholder="z. B. Klinik-Werksteam"
-              value={reviewer}
-              onChange={(e) => setReviewer(e.target.value)}
-              aria-label="Name der prüfenden Person"
-            />
-          </>
-        )}
-      </div>
-
-      <div className="override-group">
-        <h3>Vertragsreview</h3>
-        <p className="muted small">
-          {cr.reviewed_count} von {cr.relevant_count} relevanten Angaben geprüft
-          {cr.unresolved_count > 0 ? ` · ${cr.unresolved_count} ungeprüft` : ""}
-          {cr.critical_unreviewed_count > 0 && (
-            <span className="fact-review">
-              {" "}· {cr.critical_unreviewed_count} kritisch ungeprüft
-            </span>
-          )}
-          {" · "}
-          <span className={`fact-review${cr.status === "reviewed" ? " ok" : ""}`}>
-            {cr.status_label_de}
-          </span>
-        </p>
-        {cr.critical_unreviewed_count > 0 && (
-          <p className="form-error" role="alert">
-            Abschluss gesperrt: {cr.critical_unreviewed_count} kritische Angabe
-            {cr.critical_unreviewed_count === 1 ? "" : "n"} ist
-            {cr.critical_unreviewed_count === 1 ? "" : "en"} noch nicht einzeln geprüft.
-          </p>
-        )}
-        {cr.status === "changed_after_review" && (
-          <p className="muted small">
-            Materiale Änderung nach Abschluss am{" "}
-            {cr.changed_noted_at ? stampTime(cr.changed_noted_at) : "–"} – bitte
-            erneut prüfen oder abschließen.
-          </p>
-        )}
-        {cr.reviewer_display_name && (
-          <p className="muted small">
-            Abgeschlossen durch {cr.reviewer_display_name} (
-            {identityHint(cr.reviewer_identity_type)})
-            {cr.reviewed_at ? ` · ${stampTime(cr.reviewed_at)}` : ""}
-          </p>
-        )}
-        {cr.completion_note && (
-          <p className="muted small">Notiz: {cr.completion_note}</p>
-        )}
-
-        <div className="override-row">
-          <label className="reviewer-label" htmlFor="fact-complete-ack">
-            <input
-              id="fact-complete-ack"
-              type="checkbox"
-              checked={ack}
-              onChange={(e) => setAck(e.target.checked)}
-            />{" "}
-            Verbleibende nicht-kritische ungeprüfte Angaben akzeptieren
-          </label>
-        </div>
-        <div className="override-row">
-          <input
-            type="text"
-            placeholder="Abschluss-Notiz (optional)"
-            value={completionNote}
-            onChange={(e) => setCompletionNote(e.target.value)}
-            aria-label="Notiz zum Review-Abschluss"
-          />
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => void postLifecycle("complete")}
-            disabled={
-              busy ||
-              cr.critical_unreviewed_count > 0 ||
-              (!ack && cr.unresolved_count > 0)
-            }
-            title={
-              cr.critical_unreviewed_count > 0
-                ? "Kritische Angaben müssen zuerst einzeln geprüft werden"
-                : !ack && cr.unresolved_count > 0
-                  ? "Bitte die nicht-kritischen ungeprüften Angaben quittieren"
-                  : "Review abschließen"
-            }
-          >
-            Review abschließen
-          </button>
-          <button
-            type="button"
-            className="btn-link"
-            onClick={() => void postLifecycle("start")}
-            disabled={busy}
-          >
-            Review erneut öffnen
-          </button>
-        </div>
-      </div>
-
-      <div className="override-group">
-        <h3>Materiale Angaben</h3>
-        {states.length === 0 && <p className="muted">Keine Angaben vorhanden.</p>}
-        <ul className="fact-states">
-          {states.map((s: FactReviewStateDto) => {
-            const fk = s.fact_key;
-            const open = openFact === fk;
-            const showHistory = historyFact === fk;
-            return (
-              <li key={fk} className="fact-state">
-                <div className="fact-state-head">
-                  <span className="fact-review-name">
-                    {s.is_critical && (
-                      <span className="fact-critical" title="Material-relevante Angabe">
-                        kritisch{" "}
-                      </span>
-                    )}
-                    {s.label_de}
-                  </span>
-                  <span className={`fact-review${STATE_TONE[s.state] ?? ""}`}>
-                    {RESULT_VERB[s.state] ?? s.state_label_de}
-                  </span>
-                </div>
-                <div className="fact-state-values">
-                  <span className="muted">Original: {valueText(s.original_value)}</span>
-                  <span className="muted">
-                    Wirksam: <strong>{valueText(s.effective_value)}</strong>
-                  </span>
-                </div>
-                {(s.needs_evidence || s.evidence_count > 0) && (
-                  <div className="fact-evidence">
-                    {s.evidence_count === 0 ? (
-                      <span className="fact-review small">
-                        Kein Quellen-Beleg verlinkt – bitte prüfen
-                      </span>
-                    ) : (
-                      <>
-                        <span className="muted small">
-                          Quellen-Beleg{s.evidence_count > 1 ? `e (${s.evidence_count})` : ""}:{" "}
-                        </span>
-                        {s.linked_evidence_refs.map((eid) => {
-                          const ev = evidenceById.get(eid);
-                          if (!ev) return null;
-                          return (
-                            <button
-                              key={eid}
-                              type="button"
-                              className="fact-cite-link"
-                              onClick={() => onNavigate?.(ev)}
-                              title={`${ev.snippet ?? ""}${
-                                ev.requires_review ? " · Beleg einsehbar, aber zu prüfen" : ""
-                              }`}
-                            >
-                              {ev.page != null ? `Seite ${ev.page}` : "Quelle"}
-                              {ev.requires_review ? " · zu prüfen" : ""}
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
-                )}
-                {s.reviewed_at && (
-                  <div className="fact-review-result">
-                    <span className="fact-review-result-action">
-                      {reviewResultLabel(s.state)}
-                    </span>
-                    <span className="fact-review-result-meta">
-                      {" "}· Prüfer: {s.reviewer_display_name ?? "–"} · {stampTime(s.reviewed_at)}
-                    </span>
-                  </div>
-                )}
-                <div className="override-row fact-state-actions">
-                  <button type="button" className="btn btn-sm" onClick={() => confirmFact(fk)} disabled={busy}>
-                    Bestätigen
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => setOpenFact(open ? null : fk)}
-                    disabled={busy}
-                  >
-                    {open ? "Abbrechen" : "Korrigieren"}
-                  </button>
-                  {s.state !== "unreviewed" && (
-                    <button type="button" className="btn-link" onClick={() => reopenFact(fk)} disabled={busy}>
-                      Erneut öffnen
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn-link"
-                    onClick={() => setHistoryFact(showHistory ? null : fk)}
-                  >
-                    {showHistory ? "Historie ausblenden" : "Historie"}
-                  </button>
-                </div>
-                {open && (
-                  <div className="override-row">
-                    <input
-                      type="text"
-                      placeholder="Korrigierter Wert"
-                      value={corrected[fk] ?? ""}
-                      onChange={(e) =>
-                        setCorrected((prev) => ({ ...prev, [fk]: e.target.value }))
-                      }
-                      aria-label={`Korrigierter Wert für ${s.label_de}`}
-                    />
-                    <button type="button" className="btn btn-sm" onClick={() => correctFact(fk)} disabled={busy}>
-                      Speichern
-                    </button>
-                  </div>
-                )}
-                {showHistory && (
-                  <ul className="audit-list">
-                    {historyByFact(fk).length === 0 && (
-                      <li className="muted small">Noch keine Einträge.</li>
-                    )}
-                    {historyByFact(fk).map((r) => (
-                      <li key={r.id}>
-                        <span className={`audit-action audit-${r.action}`}>
-                          {ACTION_LABEL[r.action] ?? r.action_label_de ?? r.action}
-                        </span>
-                        <span className="audit-key" title={r.fact_key}>
-                          {r.fact_label_de || r.fact_key}
-                        </span>
-                        {r.action === "confirmed" && (
-                          <span className="audit-value">Wert übernommen (kein Override)</span>
-                        )}
-                        {r.action === "corrected" && (
-                          <>
-                            <span className="audit-old">
-                              {valueText(r.previous_effective_value)} →{" "}
-                            </span>
-                            <span className="audit-value">{valueText(r.new_effective_value)}</span>
-                          </>
-                        )}
-                        {r.note && <span className="muted"> – {r.note}</span>}
-                        <span className="audit-date">{stampTime(r.created_at)}</span>
-                        <span className="audit-ref">{identityHint(r.reviewer_identity_type)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
     </section>
   );
 }

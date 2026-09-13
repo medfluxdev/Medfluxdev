@@ -1,0 +1,327 @@
+.contract-table-shell {
+  position: relative;
+}
+
+.contract-view-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  border-radius: 0.85rem;
+  background: var(--surface-subtle, rgba(248, 250, 252, 0.72));
+}
+
+.active-filter-area,
+.saved-view-area {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.contract-tool-label {
+  font-weight: 700;
+  color: var(--text, #0f172a);
+}
+
+.contract-tool-muted {
+  color: var(--text-muted, #64748b);
+  font-size: 0.9rem;
+}
+
+.active-filter-chips,
+.saved-view-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.active-filter-chip,
+.saved-view-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.42));
+  border-radius: 999px;
+  background: var(--surface, #fff);
+}
+
+.active-filter-chip {
+  padding: 0.28rem 0.65rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.active-filter-chip:hover,
+.saved-view-apply:hover,
+.saved-view-delete:hover {
+  background: var(--surface-hover, rgba(226, 232, 240, 0.65));
+}
+
+.saved-view-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.saved-view-create input {
+  min-width: 180px;
+  height: 2.15rem;
+}
+
+.saved-view-item {
+  overflow: hidden;
+}
+
+.saved-view-apply,
+.saved-view-delete {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.saved-view-apply {
+  padding: 0.35rem 0.15rem 0.35rem 0.65rem;
+}
+
+.saved-view-delete {
+  align-self: stretch;
+  padding: 0 0.55rem;
+  border-left: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  font-size: 1rem;
+}
+
+.contract-table-preferences {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.contract-density {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.contract-density .btn-ghost.active {
+  background: var(--surface-selected, rgba(59, 130, 246, 0.12));
+  border-color: var(--border-strong, rgba(148, 163, 184, 0.55));
+}
+
+.contract-column-menu {
+  position: relative;
+}
+
+.contract-column-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 220px;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+}
+
+.contract-column-popover label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.25rem;
+  cursor: pointer;
+}
+
+.contract-column-popover .btn-ghost {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.contract-table-scroll {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+}
+
+.contract-table-scroll:focus-visible {
+  outline: 3px solid var(--focus-ring, #2563eb);
+  outline-offset: 2px;
+}
+
+.contract-table-shell .contract-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface, #fff);
+}
+
+.contract-table-shell.density-compact .contract-table th,
+.contract-table-shell.density-compact .contract-table td {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.contract-table-shell.density-compact .contract-supplier,
+.contract-table-shell.density-compact .warning-title {
+  margin-top: 0.1rem;
+}
+
+.contract-title-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.contract-preview-button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--link, #2563eb);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.contract-quick-preview {
+  position: fixed;
+  z-index: 70;
+  right: 1rem;
+  top: 5.5rem;
+  width: min(420px, calc(100vw - 2rem));
+  max-height: calc(100vh - 7rem);
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  border-radius: 1rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+}
+
+.contract-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.contract-preview-head h2 {
+  margin: 0.15rem 0 0.2rem;
+  font-size: 1.15rem;
+}
+
+.contract-preview-head p {
+  margin: 0;
+  color: var(--text-muted, #64748b);
+}
+
+.contract-preview-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+}
+
+.contract-preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.contract-preview-grid div {
+  padding: 0.65rem;
+  border-radius: 0.7rem;
+  background: var(--surface-subtle, rgba(248, 250, 252, 0.8));
+}
+
+.contract-preview-grid dt {
+  color: var(--text-muted, #64748b);
+  font-size: 0.78rem;
+}
+
+.contract-preview-grid dd {
+  margin: 0.2rem 0 0;
+  font-weight: 650;
+}
+
+.contract-preview-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border-radius: 0.7rem;
+  background: var(--surface-warning, rgba(245, 158, 11, 0.1));
+}
+
+.contract-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+@media (max-width: 980px) {
+  .contract-view-tools {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .contract-table-preferences,
+  .active-filter-area,
+  .saved-view-area {
+    align-items: stretch;
+    justify-content: space-between;
+  }
+
+  .contract-table-preferences {
+    flex-wrap: wrap;
+  }
+
+  .contract-density {
+    flex: 1 1 auto;
+  }
+
+  .contract-density .btn-ghost {
+    flex: 1;
+  }
+
+  .saved-view-create {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .saved-view-create input {
+    flex: 1 1 180px;
+  }
+
+  .contract-column-popover {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    top: auto;
+    bottom: 1rem;
+    max-height: 70vh;
+    overflow: auto;
+  }
+
+  .contract-quick-preview {
+    left: 1rem;
+    right: 1rem;
+    top: auto;
+    bottom: 1rem;
+    width: auto;
+    max-height: 75vh;
+  }
+
+  .contract-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import ContractTable from "@/components/contracts/ContractTable";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
+import PageHeader from "@/components/ui/PageHeader";
 import { apiGet } from "@/lib/api";
 import type { ContractListResponse } from "@/lib/contract-types";
 
@@ -41,7 +42,10 @@ export default function ReviewPage() {
 
   return (
     <div className="page">
-      <div className="section-caption">Manuelle Prüfung · Faktengenauigkeit</div>
+      <PageHeader
+        title="Prüfungen"
+        description="Manuelle Prüfung materialer Vertragsangaben und faktengenauer Quellenbelege."
+      />
 
       {error && (
         <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>
@@ -68,7 +72,7 @@ export default function ReviewPage() {
               <div className="state-icon">✓</div>
               <h3>Keine offenen Prüfungen</h3>
               <p>
-                Für die aktuell geladenen Verträge liegt kein offener manueller
+                Alle aktiven Verträge sind geprüft – es liegt kein manueller
                 Prüfbedarf vor.
               </p>
             </div>

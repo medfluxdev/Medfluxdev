@@ -1,7 +1,7 @@
 "use client";
 
 import { evidenceGroupLabel } from "@/lib/contract-detail-types";
-import type { EvidenceRef, SourceNavigationTarget } from "@/lib/contract-detail-types";
+import type { EvidenceRef } from "@/lib/contract-detail-types";
 import { evidencePrecision } from "@/lib/source-geometry";
 
 interface Props {
@@ -14,19 +14,6 @@ function fieldLabel(fieldRef: string | null): string {
   if (!fieldRef) return "Quellenangabe";
   const last = fieldRef.split(".").pop() ?? fieldRef;
   return last.replace(/_/g, " ");
-}
-
-function toTarget(ref: EvidenceRef): SourceNavigationTarget {
-  return {
-    document_version_id: ref.document_version_id,
-    page: ref.page,
-    bbox: ref.bbox,
-    bbox_space: ref.bbox_space,
-    supports_exact_navigation: ref.supports_exact_navigation,
-    label: `${fieldLabel(ref.field_ref)} · ${sourceLabel(ref)}`,
-    field_ref: ref.field_ref,
-    evidence_id: ref.evidence_id,
-  };
 }
 
 function isCoarseBbox(ref: EvidenceRef): boolean {
@@ -49,11 +36,12 @@ function sourceLabel(ref: EvidenceRef): string {
   return "Quelle";
 }
 
-export default function EvidencePane({
-  evidence,
-  activeEvidenceId,
-  onNavigate,
-}: Props) {
+function confidenceLabel(value: number | null): string | null {
+  if (value == null || !Number.isFinite(value) || value < 0 || value > 1) return null;
+  return `Konfidenz ${Math.round(value * 100)}%`;
+}
+
+export default function EvidencePane({ evidence, activeEvidenceId, onNavigate }: Props) {
   if (evidence.length === 0) {
     return <p className="evidence-empty">Keine Quellenangaben vorhanden.</p>;
   }
@@ -62,7 +50,8 @@ export default function EvidencePane({
     <ul className="evidence-list">
       {evidence.map((ref) => {
         const active = ref.evidence_id === activeEvidenceId;
-        const navigable = ref.bbox != null && ref.page != null;
+        const exactPosition = Boolean(ref.bbox && ref.page != null && ref.supports_exact_navigation && !isCoarseBbox(ref));
+        const confidence = confidenceLabel(ref.confidence);
         return (
           <li key={ref.evidence_id}>
             <button
@@ -73,8 +62,8 @@ export default function EvidencePane({
             >
               <span className="evidence-head">
                 <span className="evidence-field">{fieldLabel(ref.field_ref)}</span>
-                <span className={`evidence-pill${navigable && !ref.requires_review ? " ok" : ""}`}>
-                  {ref.requires_review ? "Unbestätigt" : precisionLabel(ref)}
+                <span className={`evidence-pill${exactPosition ? " ok" : ""}`}>
+                  {precisionLabel(ref)}
                 </span>
               </span>
               {evidenceGroupLabel(ref.field_ref?.split(".")[0] ?? null) && (
@@ -82,36 +71,23 @@ export default function EvidencePane({
                   {evidenceGroupLabel(ref.field_ref?.split(".")[0] ?? null)}
                 </span>
               )}
-              {(ref.page != null ||
-                ref.paragraph_index != null ||
-                ref.table_index != null) && (
+              {(ref.page != null || ref.paragraph_index != null || ref.table_index != null) && (
                 <span className="evidence-meta">
                   {sourceLabel(ref)}
                   {ref.source_type ? ` · ${ref.source_type}` : ""}
-                  {ref.confidence != null
-                    ? ` · Konfidenz ${Math.round(ref.confidence * 100)}%`
-                    : ""}
+                  {confidence ? ` · ${confidence}` : ""}
                 </span>
               )}
-              {ref.snippet && (
-                <span className="evidence-snippet">
-                  „{ref.snippet}&quot;
-                </span>
-              )}
-              {ref.requires_review && (
-                <span className="evidence-review">
-                  Unbestätigt · Menschliche Prüfung erforderlich
-                </span>
-              )}
-              {!navigable && ref.page != null && (
+              {ref.snippet && <span className="evidence-snippet">„{ref.snippet}“</span>}
+              {ref.requires_review && <span className="evidence-review">Manuelle Prüfung empfohlen</span>}
+              {!exactPosition && ref.page != null && !isCoarseBbox(ref) && (
                 <span className="evidence-note">
-                  Quelle bei Seite {ref.page}, aber ohne exakte Position (keine Hervorhebung).
+                  Quelle auf Seite {ref.page}, aber ohne exakte Position (keine Wort-Hervorhebung).
                 </span>
               )}
-              {navigable && isCoarseBbox(ref) && (
+              {ref.page != null && isCoarseBbox(ref) && (
                 <span className="evidence-note">
-                  Seitenbereich grob markiert – die Quelle ist dort nur ungefähr
-                  lokalisiert (keine exakte Wort-Position).
+                  Seitenbereich grob markiert – die Quelle ist dort nur ungefähr lokalisiert (keine exakte Wort-Position).
                 </span>
               )}
               {ref.page == null && (

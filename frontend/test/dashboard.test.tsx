@@ -4,7 +4,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import DashboardPage from "@/app/page";
 import type { DashboardOverview } from "@/lib/dashboard-types";
 
-// API-Layer mocken, damit die Seite rein client-seitig deterministisch testbar ist.
 const apiGetMock = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiGet: (...args: unknown[]) => apiGetMock(...args),
@@ -66,9 +65,7 @@ function fixture(overrides: Partial<DashboardOverview> = {}): DashboardOverview 
       contracts_without_reliable_total_value: 1,
       multi_currency: false,
     },
-    data_quality: [
-      { label_de: "Fehlende Kostenangaben", count: 1, severity: "medium" },
-    ],
+    data_quality: [{ label_de: "Fehlende Kostenangaben", count: 1, severity: "medium" }],
     ...overrides,
   };
 }
@@ -94,9 +91,7 @@ describe("Dashboard Übersicht", () => {
   it("zeigt einen generischen Fehlerzustand bei Backend-Fehler", async () => {
     apiGetMock.mockRejectedValue(new Error("boom"));
     render(<DashboardPage />);
-    await waitFor(() =>
-      expect(screen.getByText("Dashboard konnte nicht geladen werden.")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText("Dashboard konnte nicht geladen werden.")).toBeInTheDocument());
   });
 
   it("zeigt 'kein akuter Handlungsbedarf' bei leerer Action-Liste", async () => {
@@ -104,9 +99,8 @@ describe("Dashboard Übersicht", () => {
     data.action_items = [];
     data.total_action_items = 0;
     await renderWithData(data);
-    expect(
-      screen.getByText("Derzeit kein akuter Handlungsbedarf.")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Kein akuter Handlungsbedarf.")).toBeInTheDocument();
+    expect(screen.getByText("Aktuell sind keine priorisierten Aufgaben offen.")).toBeInTheDocument();
   });
 
   it("zeigt einen leeren Datenbestand an", async () => {
@@ -138,12 +132,12 @@ describe("Dashboard Übersicht", () => {
       data_quality: [],
     };
     await renderWithData(empty);
-    expect(screen.getByText("Derzeit kein akuter Handlungsbedarf.")).toBeInTheDocument();
+    expect(screen.getByText("Kein akuter Handlungsbedarf.")).toBeInTheDocument();
   });
 
   it("zeigt den normalen Dashboard-Inhalt mit deutschen KPI-Labels", async () => {
     await renderWithData(fixture());
-    expect(screen.getByText("Operative Intelligenz")).toBeInTheDocument();
+    expect(screen.getByText("Willkommen im intelligenten Vertragsmanagement")).toBeInTheDocument();
     expect(screen.getByText("Aktive Verträge")).toBeInTheDocument();
     expect(screen.getByText("Handlungsbedarf")).toBeInTheDocument();
     expect(screen.getByText("Kündigungsfrist verstrichen")).toBeInTheDocument();
@@ -154,9 +148,7 @@ describe("Dashboard Übersicht", () => {
 
   it("formatiert Währungen und Datum deutsch (42.500,00 €)", async () => {
     await renderWithData(fixture());
-    expect(
-      screen.getByText(/Jährliche Kosten: 42\.500,00\s*€/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Jährliche Kosten: 42\.500,00\s*€/)).toBeInTheDocument();
     expect(screen.getByText(/21\.04\.2025/)).toBeInTheDocument();
   });
 
@@ -164,26 +156,18 @@ describe("Dashboard Übersicht", () => {
     await renderWithData(fixture());
     const critical = screen.getByText("Kündigungsfrist verstrichen");
     const tag = critical.closest("li")?.querySelector(".severity-tag");
-    // Text-Label "Kritisch" ist vorhanden -> nicht nur Farbkodierung.
     expect(tag).toHaveTextContent("Kritisch");
     expect(screen.getByText(/seit 41 Tagen überfällig/)).toBeInTheDocument();
   });
 
   it("zeigt einen kritischen Handlungspunkt an erster Stelle der Liste", async () => {
     await renderWithData(fixture());
-    const items = screen.getAllByRole("listitem");
-    const firstActionText = items[1]?.textContent ?? "";
-    // Zuerst prüfen: erste Action-Zeile enthält den kritischen Eintrag.
-    expect(
-      screen.getAllByText("Kündigungsfrist verstrichen").length
-    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Kündigungsfrist verstrichen").length).toBeGreaterThanOrEqual(1);
   });
 
   it("weist 'Kosten nicht verlässlich ermittelt' bei unzuverlässigen Kosten aus", async () => {
     await renderWithData(fixture());
-    expect(
-      screen.getByText("Kosten nicht verlässlich ermittelt")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Kosten nicht verlässlich ermittelt")).toBeInTheDocument();
   });
 
   it("zeigt mehrere Währungen getrennt an", async () => {
@@ -195,7 +179,7 @@ describe("Dashboard Übersicht", () => {
     ];
     await renderWithData(data);
     expect(screen.getAllByText("CHF").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("EUR").length).toBeGreaterThanOrEqual(2); // KPI-Hinweis + Liste
+    expect(screen.getAllByText("EUR").length).toBeGreaterThanOrEqual(2);
   });
 
   it("hat keine automatisierten WCAG-A11y-Verstöße im normalen Zustand", async () => {

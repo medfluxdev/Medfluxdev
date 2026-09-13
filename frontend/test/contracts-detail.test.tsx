@@ -10,51 +10,42 @@ vi.mock("@/lib/api", () => ({
   apiGet: (...args: unknown[]) => apiGetMock(...args),
   contentUrl: (contractId: string, versionId: string) =>
     `http://test.local/content/${contractId}/${versionId}`,
+  sourceRegionUrl: () => "http://test.local/source-region",
 }));
 
 vi.mock("pdfjs-dist", () => {
   const pageStub = {
-    getViewport: ({ scale }: { scale: number }) => ({
-      width: 400 * scale,
-      height: 500 * scale,
-    }),
+    getViewport: ({ scale }: { scale: number }) => ({ width: 400 * scale, height: 500 * scale }),
     render: () => ({ promise: Promise.resolve(), cancel: () => {} }),
   };
-  const docStub = {
-    numPages: 3,
-    getPage: async () => pageStub,
-    destroy: async () => {},
-  };
+  const docStub = { numPages: 3, getPage: async () => pageStub, destroy: async () => {} };
   return {
     GlobalWorkerOptions: { workerSrc: "" },
     getDocument: () => ({ promise: Promise.resolve(docStub) }),
   };
 });
 
-type NavState = { params: { "contract-id": string } };
-const nav: NavState = {
-  params: { "contract-id": "11111111-1111-1111-1111-111111111111" },
-};
+const CONTRACT_ID = "11111111-1111-1111-1111-111111111111";
 
 vi.mock("next/navigation", () => ({
-  useParams: () => nav.params,
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useParams: () => ({ "contract-id": CONTRACT_ID }),
+  usePathname: () => `/contracts/${CONTRACT_ID}`,
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
 function detailFixture(overrides: Partial<ContractDetailResponse> = {}): ContractDetailResponse {
   return {
     organization_slug: "krankenhaus",
-    contract_id: "11111111-1111-1111-1111-111111111111",
+    contract_id: CONTRACT_ID,
+    is_archived: false,
+    archived_at: null,
     contract_number: "CN-9876",
     contract_title: "MRT Wartungsvertrag",
     supplier: "Siemens Healthineers",
     status: "active",
     risk_level: "medium",
-    identity: {
-      contract_number: "CN-9876",
-      contract_type: "Wartung",
-      department: "Radiologie",
-    },
+    identity: { contract_number: "CN-9876", contract_type: "Wartung", department: "Radiologie" },
     dates: {
       start_date: "2024-01-01",
       start_date_status: "explicit",
@@ -68,14 +59,14 @@ function detailFixture(overrides: Partial<ContractDetailResponse> = {}): Contrac
       current_status: "active",
       current_status_explanation: "Vertrag ist aktiv.",
       review_required: false,
-    },
+    } as ContractDetailResponse["dates"],
     costs: {
       annual_recurring: { amount: "42500", currency: "EUR", status: "explicit", explanation: null },
       monthly_recurring: { amount: null, currency: "EUR", status: null, explanation: null },
       total_contract_value_status: null,
       currency_conflict: false,
       tax_basis: null,
-    },
+    } as ContractDetailResponse["costs"],
     scope: {
       included_services: ["Wartung", "Remote-Support"],
       excluded_services: ["Ersatzteile"],
@@ -89,7 +80,7 @@ function detailFixture(overrides: Partial<ContractDetailResponse> = {}): Contrac
       spare_parts_included: null,
       consumables_included: null,
       emergency_service: null,
-    },
+    } as ContractDetailResponse["scope"],
     sla: {
       response_time: "4 Stunden",
       resolution_time: null,
@@ -98,46 +89,49 @@ function detailFixture(overrides: Partial<ContractDetailResponse> = {}): Contrac
       availability_24_7: true,
       sla_notes: null,
     },
-    equipment: [
-      { device_name: "MRT Magnetom", manufacturer: "Siemens", model: "Vida", serial_number: "SN-1", system_name: null, equipment_category: null },
-    ],
-    review: {
-      requires_manual_review: false,
+    equipment: [{
+      id: "eq-1",
+      equipment_id: "EQ-1",
+      device_name: "MRT Magnetom",
+      manufacturer: "Siemens",
+      model: "Vida",
+      serial_number: "SN-1",
+      inventory_number: null,
+      system_name: null,
+      equipment_category: null,
+      equipment_type: null,
+      location: null,
+      department: "Radiologie",
+      service_scope: null,
+      coverage_start: null,
+      coverage_end: null,
+      included_services: [],
+      excluded_services: [],
+      sla_notes: null,
+      identification_quality: null,
+      relationship_quality: null,
+      requires_review: false,
       review_reasons: [],
-      data_freshness: "current",
-      warning_evaluation_as_of_date: "2026-08-31",
-    },
-    warnings: [
-      {
-        warning_type: "cancellation_deadline_approaching",
-        severity: "medium",
-        title_de: "Kündigungsfrist nähert sich",
-        target_kind: "date",
-        target_date: "2027-03-01",
-        days_remaining: 182,
-        requires_action: true,
-        requires_review: false,
-        action_state: null,
-      },
-    ],
+      field_ref: null,
+      page: null,
+      source_type: null,
+    }],
+    review: { requires_manual_review: false, review_reasons: [], data_freshness: "current", warning_evaluation_as_of_date: "2026-08-31" },
+    warnings: [{
+      warning_type: "cancellation_deadline_approaching",
+      severity: "medium",
+      title_de: "Kündigungsfrist nähert sich",
+      target_kind: "date",
+      target_date: "2027-03-01",
+      days_remaining: 182,
+      requires_action: true,
+      requires_review: false,
+      action_state: null,
+    }],
+    work_items: [],
     documents: [
-      {
-        document_version_id: "aaaa0000-0000-0000-0000-000000000001",
-        role: "main",
-        original_filename: "wartung.pdf",
-        mime_type: "application/pdf",
-        file_size_bytes: 4582,
-        viewer_supported: true,
-      },
-      {
-        document_version_id: "aaaa0000-0000-0000-0000-000000000002",
-        role: "annex",
-        original_filename: "anhang.docx",
-        mime_type:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        file_size_bytes: 1200,
-        viewer_supported: false,
-      },
+      { document_version_id: "aaaa0000-0000-0000-0000-000000000001", role: "main", original_filename: "wartung.pdf", mime_type: "application/pdf", file_size_bytes: 4582, viewer_supported: true },
+      { document_version_id: "aaaa0000-0000-0000-0000-000000000002", role: "annex", original_filename: "anhang.docx", mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", file_size_bytes: 1200, viewer_supported: false },
     ],
     evidence: [
       {
@@ -177,6 +171,12 @@ function detailFixture(overrides: Partial<ContractDetailResponse> = {}): Contrac
         supports_exact_navigation: false,
       },
     ],
+    overrides: [],
+    audit_log: [],
+    import_state: { import_state: "analysis_ok", state_label_de: "Analyse abgeschlossen", document_version_id: "aaaa0000-0000-0000-0000-000000000001", can_retry: false, message: null, analysis_status: "ok", requires_review: false },
+    fact_review_states: [],
+    fact_reviews: [],
+    contract_review: { status: "unreviewed", status_label_de: "Nicht geprüft", reviewer_display_name: null, reviewer_identity_type: "manual_unverified", authenticated_actor_id: null, reviewed_at: null, changed_noted_at: null, completion_note: null, relevant_count: 0, reviewed_count: 0, unresolved_count: 0, critical_count: 0, critical_reviewed_count: 0, critical_unreviewed_count: 0 },
     ...overrides,
   };
 }
@@ -188,132 +188,93 @@ beforeEach(() => {
     ok: true,
     status: 200,
     arrayBuffer: async () => new ArrayBuffer(8),
+    json: async () => ({}),
   });
 });
 
 async function renderWithData(data: ContractDetailResponse) {
   apiGetMock.mockResolvedValue(data);
   const utils = render(<ContractDetailPage />);
-  await waitFor(() => expect(apiGetMock).toHaveBeenCalled());
+  await screen.findByRole("heading", { name: "MRT Wartungsvertrag" });
   return utils;
 }
 
-describe("Vertrags-Detail + Quellenanzeige (STEP 14)", () => {
-  it("lädt und zeigt Detaildaten aus der akzeptierten Wahrheit", async () => {
+async function openTab(name: string) {
+  await userEvent.click(screen.getByRole("button", { name }));
+}
+
+async function openDocuments(subtab?: "Dokument" | "Nachweise" | "Prüfung" | "Historie") {
+  await openTab("Dokumente & Prüfung");
+  if (subtab && subtab !== "Dokument") {
+    await userEvent.click(screen.getByRole("button", { name: subtab }));
+  }
+}
+
+describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
+  it("lädt die akzeptierte Wahrheit und zeigt fachliche Daten in den passenden Tabs", async () => {
     await renderWithData(detailFixture());
-    expect(
-      screen.getByRole("heading", { name: "MRT Wartungsvertrag" })
-    ).toBeInTheDocument();
     expect(screen.getAllByText(/CN-9876/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Siemens/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("42.500,00 €").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
+
+    await openTab("Laufzeit & Kündigung");
+    expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
+
+    await openTab("Geräte");
     expect(screen.getByText("MRT Magnetom")).toBeInTheDocument();
   });
 
-  it("unterstützt PDF-Quelle und meldet DOCX ehrlich als nicht darstellbar", async () => {
+  it("zeigt die Quelldokumente und lädt den PDF-Viewer", async () => {
     await renderWithData(detailFixture());
-    expect(screen.getByText("wartung.pdf")).toBeInTheDocument();
-    expect(screen.getByText("anhang.docx")).toBeInTheDocument();
-    expect(
-      screen.getByText(/DOCX kann derzeit nicht als PDF-Vorschau/).textContent
-    ).toContain("DOCX");
+    await openDocuments();
+    expect(screen.getByRole("button", { name: /wartung\.pdf/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /anhang\.docx/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument());
   });
 
-  it("zeigt Quellenangaben mit ehrlicher Navigations-Präzision", async () => {
+  it("zeigt Nachweise mit ehrlicher Navigations-Präzision", async () => {
     await renderWithData(detailFixture());
-    const pane = screen.getByRole("region", {
-      name: "Quellenangaben",
-    });
-    expect(within(pane).getByText("Positionsbestimmt")).toBeInTheDocument();
-    expect(
-      within(pane).getByText("Ohne Positionsangabe")
-    ).toBeInTheDocument();
-    expect(within(pane).getByText(/Konfidenz 98%/)).toBeInTheDocument();
+    await openDocuments("Nachweise");
+    expect(screen.getByText("Positionsbestimmt")).toBeInTheDocument();
+    expect(screen.getByText("Ohne Positionsangabe")).toBeInTheDocument();
+    expect(screen.getByText(/Konfidenz 98%/)).toBeInTheDocument();
   });
 
-  it("markiert eine ausgewählte PDF-Quelle und zeigt den Viewer", async () => {
+  it("markiert eine ausgewählte Quelle und öffnet das Original im PDF-Viewer", async () => {
     await renderWithData(detailFixture());
-    const sourceBtn = screen.getByRole("button", { name: /wartung\.pdf/ });
+    await openDocuments("Nachweise");
+    const sourceBtn = screen.getByRole("button", { name: /start date/i });
     await userEvent.click(sourceBtn);
     expect(sourceBtn).toHaveAttribute("aria-pressed", "true");
-    await waitFor(() =>
-      expect(
-        screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })
-      ).toBeInTheDocument()
-    );
-    expect(screen.getByText(/Seite 1 \/ 3/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument());
   });
 
-  it("navigiert zu einer exakt lokalisierten Quelle", async () => {
+  it("Quelle ohne Seitenangabe erfindet keine Hervorhebung", async () => {
     await renderWithData(detailFixture());
-    const exactBtn = screen.getByRole("button", { name: /start date/ });
-    await userEvent.click(exactBtn);
-    await waitFor(() =>
-      expect(screen.getByText(/Seitenbereich\) hervorgehoben/)).toBeInTheDocument()
-    );
-    expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument();
+    await openDocuments("Nachweise");
+    const sourceBtn = screen.getByRole("button", { name: /annual cost/i });
+    await userEvent.click(sourceBtn);
+    expect(screen.getByText(/Keine Seitenangabe/)).toBeInTheDocument();
+    expect(screen.queryByText(/hervorgehoben/)).not.toBeInTheDocument();
   });
 
-  it("hat keine automatisierten WCAG-A11y-Verstöße", async () => {
+  it("hat im Dokument-Workspace keine automatisierten WCAG-A11y-Verstöße", async () => {
     const { container } = await renderWithData(detailFixture());
-    await waitFor(() =>
-      expect(
-        screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })
-      ).toBeInTheDocument()
-    );
+    await openDocuments();
+    await waitFor(() => expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument());
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
 
-  it("(PR-2) klickbarer Fakt öffnet die Quelle im Original", async () => {
+  it("behält beim Wechsel zwischen Quelle und Vertrags-Tabs den Workspace-Kontext", async () => {
     await renderWithData(detailFixture());
-    // "Beginn" ist belegt durch dates.start_date (pdf_points bbox, Seite 2).
-    const beginBtn = screen.getByRole("button", { name: "Beginn — Quelle öffnen" });
-    await userEvent.click(beginBtn);
-    await waitFor(() =>
-      expect(screen.getByText(/Seitenbereich\) hervorgehoben/)).toBeInTheDocument()
-    );
-    expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument();
-    // Der Wert ist als "Positionsbestimmt" (nicht erfunden) markiert.
-    expect(screen.getAllByText("Seite 2 (Seitenbereich)").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("(PR-2) Fakt mit Quelle ohne Seitenangabe springt den Viewer NICHT (keine erfundene Hervorhebung)", async () => {
-    await renderWithData(detailFixture());
-    // "Jährlich wiederkehrend" ist belegt durch costs.annual_cost mit page=null.
-    const annualBtn = screen.getByRole("button", {
-      name: "Jährlich wiederkehrend — Quelle öffnen",
-    });
-    await userEvent.click(annualBtn);
-    // Viewer nicht gesprungen, kein Highlight-Banner.
-    expect(screen.getByText(/Seite 1 \/ 3/)).toBeInTheDocument();
-    expect(screen.queryByText(/hervorgehoben/)).not.toBeInTheDocument();
-    // Die Quelle ist im Panel dennoch ausgewaehlt (als nicht lokalisierbar markiert).
-    const pane = screen.getByRole("region", { name: "Quellenangaben" });
-    expect(
-      within(pane).getByText(/Ohne Positionsangabe/)
-    ).toBeInTheDocument();
-  });
-
-  it("(PR-2) Faktklick behält den Werkstatt-Kontext (Rückkehr ohne Kontextverlust)", async () => {
-    await renderWithData(detailFixture());
-    const endurance = screen.getByRole("button", {
-      name: "Beginn — Quelle öffnen",
-    });
-    await userEvent.click(endurance);
+    await openDocuments("Nachweise");
+    await userEvent.click(screen.getByRole("button", { name: /start date/i }));
     await waitFor(() => expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument());
-    // Wechsel zu einem anderen belegten Fakt im selben Workspace.
-    const endBtn = screen.getByRole("button", {
-      name: "Berechnetes Ende — Quelle öffnen",
-    });
-    expect(endBtn).toBeInTheDocument();
-    await userEvent.click(endBtn);
-    // Kontext bleibt: Ueberschrift + Warnungen weiterhin sichtbar.
-    expect(
-      screen.getByRole("heading", { name: "MRT Wartungsvertrag" })
-    ).toBeInTheDocument();
+    await openTab("Übersicht");
+    expect(screen.getByRole("heading", { name: "MRT Wartungsvertrag" })).toBeInTheDocument();
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
   });
 });

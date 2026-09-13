@@ -487,6 +487,7 @@ export default function ContractDetail({ data, orgSlug, onReload }: Props) {
   const docs = useMemo(() => data.documents, [data.documents]);
   const evidence = useMemo(() => data.evidence, [data.evidence]);
   const viewerSectionRef = useRef<HTMLElement | null>(null);
+  const archiveModalRef = useRef<HTMLDivElement | null>(null);
 
   const [activeVersionId, setActiveVersionId] = useState<string | null>(() => {
     const first = docs.find((d) => d.viewer_supported);
@@ -507,6 +508,49 @@ export default function ContractDetail({ data, orgSlug, onReload }: Props) {
       if (archiveNavTimer.current != null) window.clearTimeout(archiveNavTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!archiveConfirm) return;
+
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const selector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function focusFirstControl() {
+      archiveModalRef.current?.querySelector<HTMLElement>(selector)?.focus();
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setArchiveConfirm(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      const controls = Array.from(
+        archiveModalRef.current?.querySelectorAll<HTMLElement>(selector) ?? []
+      );
+      if (controls.length === 0) return;
+
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    focusFirstControl();
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus({ preventScroll: true });
+    };
+  }, [archiveConfirm]);
 
   const openArchiveDialog = () => {
     setArchiveError(null);
@@ -765,13 +809,11 @@ export default function ContractDetail({ data, orgSlug, onReload }: Props) {
           }}
         >
           <div
+            ref={archiveModalRef}
             className="modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="archive-dialog-title"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setArchiveConfirm(false);
-            }}
           >
             <h3 id="archive-dialog-title">
               {data.is_archived ? "Vertrag wiederherstellen?" : "Vertrag archivieren?"}
@@ -915,9 +957,6 @@ export default function ContractDetail({ data, orgSlug, onReload }: Props) {
                   onFocusEvidence={handleFocusEvidence}
                   review={false}
                 />
-              )}
-              {data.dates.duration_years != null && (
-                <Rule label="Laufzeit">{data.dates.duration_years} Jahre</Rule>
               )}
               {data.dates.payment_start_rule && (
                 <EvidenceRule

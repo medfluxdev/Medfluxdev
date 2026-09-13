@@ -80,7 +80,7 @@ type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];
 export default function SettingsPage() {
   const push = useToast();
   const [activeSection, setActiveSection] =
-    useState<SettingsSectionId>("allgemein");
+    useState<SettingsSectionId>("lokale-ki");
 
   const [snapshot, setSnapshot] = useState<AISnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -206,7 +206,6 @@ export default function SettingsPage() {
         <nav
           className="settings-nav"
           aria-label="Einstellungsbereiche"
-          style={{ display: "grid", gap: 8, alignContent: "start" }}
         >
           {SETTINGS_SECTIONS.map((item) => {
             const selected = activeSection === item.id;
@@ -214,24 +213,9 @@ export default function SettingsPage() {
               <button
                 key={item.id}
                 type="button"
+                className={`settings-nav-item${selected ? " active" : ""}`}
                 aria-current={selected ? "page" : undefined}
                 onClick={() => setActiveSection(item.id)}
-                style={{
-                  width: "100%",
-                  minHeight: 40,
-                  padding: "9px 14px",
-                  borderRadius: 8,
-                  border: selected ? "1px solid #1769d2" : "1px solid #d8e1ec",
-                  background: selected ? "#1769d2" : "#ffffff",
-                  color: selected ? "#ffffff" : "#1f3349",
-                  font: "inherit",
-                  fontWeight: 700,
-                  textAlign: "left",
-                  cursor: "pointer",
-                  boxShadow: selected ? "0 2px 6px rgba(23, 105, 210, 0.18)" : "none",
-                  transition:
-                    "background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease",
-                }}
               >
                 {item.label}
               </button>
@@ -373,7 +357,32 @@ export default function SettingsPage() {
                   >
                     {saving ? "Speichern…" : "Auswahl speichern"}
                   </Button>
+                  <Button variant="ghost" onClick={runTest} disabled={testing}>
+                    {testing ? "Test läuft…" : "KI-Verbindung testen"}
+                  </Button>
                 </div>
+
+                {testError && (
+                  <InlineAlert tone="critical" role="alert">
+                    {testError}
+                  </InlineAlert>
+                )}
+
+                {testResult && !testError && (
+                  <InlineAlert
+                    tone={testResult.error ? "warning" : "success"}
+                    role="status"
+                  >
+                    {testResult.error
+                      ? `Der Test-Endpunkt meldet: ${testResult.error}`
+                      : `Verbindung erfolgreich (${testResult.provider} / ${testResult.model}).`}
+                    {testResult.response && (
+                      <span className="result-msg">
+                        Antwort (gekürzt): {testResult.response.slice(0, 500)}
+                      </span>
+                    )}
+                  </InlineAlert>
+                )}
 
                 <details className="advanced-details">
                   <summary>Erweiterte Einstellungen</summary>

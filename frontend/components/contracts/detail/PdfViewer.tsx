@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  EvidenceBbox,
-  SourceNavigationTarget,
-} from "@/lib/contract-detail-types";
+import type { EvidenceBbox, SourceNavigationTarget } from "@/lib/contract-detail-types";
 import { contentUrl, sourceRegionUrl } from "@/lib/api";
 import { resolveEvidenceRect, evidencePrecision } from "@/lib/source-geometry";
 import PageControls from "./PageControls";
@@ -23,29 +20,25 @@ interface Props {
 }
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
-
 type PdfJsModule = typeof import("pdfjs-dist");
 type PdfDoc = Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>;
 
-// Lokale, deterministisch gepinnte pdfjs (kein CDN). Worker wird aus /public
-// geladen. Bytes kommen ausschliesslich vom sicheren Content-Endpoint.
-export default function PdfViewer({
-  contractId,
-  orgSlug,
-  documentVersionId,
-  active,
-  navTarget,
-}: Props) {
+function sourceErrorMessage(status: number | null, aborted: boolean): string {
+  if (aborted) return "Das Quelldokument hat nicht rechtzeitig geantwortet.";
+  if (status === 403) return "Sie haben keine Berechtigung für dieses Quelldokument.";
+  if (status === 404) return "Das Quelldokument oder diese Dokumentversion wurde nicht gefunden.";
+  if (status != null && status >= 500) return "Das Quelldokument ist serverseitig momentan nicht verfügbar.";
+  return "Quelle konnte nicht geladen werden.";
+}
+
+export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget }: Props) {
   const [status, setStatus] = useState<LoadStatus>("idle");
+  const [errorText, setErrorText] = useState("Quelle konnte nicht geladen werden.");
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [dims, setDims] = useState<{ width: number; height: number } | null>(null);
   const [retrySeq, setRetrySeq] = useState(0);
-
-  // UAT Defect D: schmalste nachweisbare Geometrie. Das Backend verfeinert
-  // die (grobe) Evidenz-Box nur, wenn es die Fundstelle deterministisch im
-  // Original belegen kann – sonst bleibt die bestehende Region unveraendert.
   const [refined, setRefined] = useState<{
     key: string;
     status: string;
@@ -53,38 +46,46 @@ export default function PdfViewer({
     bbox_space: "pdf_points" | "normalized";
   } | null>(null);
   const refinedKeyRef = useRef<string | null>(null);
-
   const pdfRef = useRef<PdfJsModule | null>(null);
   const docRef = useRef<PdfDoc | null>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const requestSeq = useRef(0);
-
   const canRender = status === "ready";
 
-  // Modul + Dokument laden (nur wenn vorgesehen).
   useEffect(() => {
     if (!active || !documentVersionId) {
       setStatus("idle");
       return;
     }
     let cancelled = false;
+    let timedOut = false;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30000);
     setStatus("loading");
+    setErrorText("Quelle konnte nicht geladen werden.");
+    setDims(null);
     const seq = ++requestSeq.current;
 
     (async () => {
+      let responseStatus: number | null = null;
       try {
+        if (docRef.current) {
+          void docRef.current.destroy();
+          docRef.current = null;
+        }
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
         const res = await fetch(contentUrl(contractId, documentVersionId, orgSlug), {
           signal: controller.signal,
+          credentials: "include",
         });
-        if (!res.ok) {
-          throw new Error(`content ${res.status}`);
-        }
+        responseStatus = res.status;
+        if (!res.ok) throw new Error(`content ${res.status}`);
         const data = await res.arrayBuffer();
         const doc = await pdfjs.getDocument({ data }).promise;
         if (cancelled || seq !== requestSeq.current) {
@@ -94,10 +95,15 @@ export default function PdfViewer({
         pdfRef.current = pdfjs;
         docRef.current = doc;
         setPageCount(doc.numPages);
-        setPageNumber(1);
+        const requestedPage = navTarget?.document_version_id === documentVersionId ? navTarget.page : null;
+        setPageNumber(requestedPage ? Math.min(Math.max(1, requestedPage), doc.numPages) : 1);
         setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
+      } catch (error) {
+        if (!cancelled) {
+          const aborted = timedOut || (error instanceof DOMException && error.name === "AbortError");
+          setErrorText(sourceErrorMessage(responseStatus, aborted));
+          setStatus("error");
+        }
       } finally {
         clearTimeout(timer);
       }
@@ -106,8 +112,14 @@ export default function PdfViewer({
     return () => {
       cancelled = true;
       controller.abort();
+      renderTaskRef.current?.cancel();
     };
-  }, [active, documentVersionId, contractId, orgSlug, retrySeq]);
+  }, [active, documentVersionId, contractId, orgSlug, retrySeq, navTarget?.document_version_id, navTarget?.page]);
+
+  useEffect(() => () => {
+    renderTaskRef.current?.cancel();
+    if (docRef.current) void docRef.current.destroy();
+  }, []);
 
   const renderPage = useCallback(async () => {
     const pdfjs = pdfRef.current;
@@ -141,7 +153,6 @@ export default function PdfViewer({
     void renderPage();
   }, [status, renderPage]);
 
-  // Navigation: zur Ziel-Seite springen.
   useEffect(() => {
     if (
       status !== "ready" ||
@@ -149,40 +160,27 @@ export default function PdfViewer({
       navTarget.document_version_id !== documentVersionId ||
       navTarget.page == null ||
       navTarget.page === pageNumber
-    ) {
-      return;
-    }
+    ) return;
     setPageNumber(Math.min(Math.max(1, navTarget.page), pageCount));
   }, [navTarget, status, documentVersionId, pageCount, pageNumber]);
 
-  // Feine Quell-Geometrie per Backend nachladen (nicht-blockierend). Bei
-  // jedem neuen Ziel/Snippet genau einmal; kein Ergebnis bleibt still.
   useEffect(() => {
     if (
-      status !== "ready" ||
-      !documentVersionId ||
-      !navTarget ||
-      !navTarget.supports_exact_navigation ||
-      !navTarget.label ||
-      navTarget.page == null
-    ) {
-      return;
-    }
+      status !== "ready" || !documentVersionId || !navTarget ||
+      !navTarget.supports_exact_navigation || !navTarget.label || navTarget.page == null
+    ) return;
     const key = `${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
     if (refinedKeyRef.current === key) return;
     refinedKeyRef.current = key;
     let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
         const res = await fetch(
-          sourceRegionUrl(
-            documentVersionId,
-            orgSlug,
-            navTarget.label,
-            navTarget.page ?? null
-          )
+          sourceRegionUrl(documentVersionId, orgSlug, navTarget.label, navTarget.page ?? null),
+          { credentials: "include", signal: controller.signal }
         );
-        if (!res || typeof res.ok !== "boolean" || !res.ok) return;
+        if (!res.ok) return;
         const body = (await res.json()) as {
           status?: string;
           bbox?: number[] | null;
@@ -190,74 +188,40 @@ export default function PdfViewer({
           page?: number | null;
         };
         if (cancelled) return;
-        if (
-          body?.status === "exact" &&
-          Array.isArray(body.bbox) &&
-          body.bbox.length === 4 &&
-          body.page === navTarget.page
-        ) {
+        if (body.status === "exact" && Array.isArray(body.bbox) && body.bbox.length === 4 && body.page === navTarget.page) {
           setRefined({
             key,
             status: body.status,
-            bbox: {
-              x0: body.bbox[0],
-              y0: body.bbox[1],
-              x1: body.bbox[2],
-              y1: body.bbox[3],
-            },
-            bbox_space:
-              body.bbox_space === "normalized"
-                ? "normalized"
-                : "pdf_points",
+            bbox: { x0: body.bbox[0], y0: body.bbox[1], x1: body.bbox[2], y1: body.bbox[3] },
+            bbox_space: body.bbox_space === "normalized" ? "normalized" : "pdf_points",
           });
         }
       } catch {
-        // Fehlschlag ist ehrlich: bestehende (grobe) Region bleibt.
+        // Existing coarse evidence remains available when refinement fails.
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [status, documentVersionId, navTarget, orgSlug]);
 
-  // Overlay zeichnen, sobald Seiten-Render + Ziel/Seite vorliegen.
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (
-      !navTarget ||
-      !dims ||
-      navTarget.document_version_id !== documentVersionId ||
-      navTarget.page !== pageNumber ||
-      !navTarget.supports_exact_navigation
-    ) {
-      return;
-    }
-    // Verfeinerte, schmalste Fundstelle bevorzugen (falls beweisbar exakt);
-    // sonst bleibt die vorhandene (grobe) Evidenz-Box massgeblich.
+    if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber || !navTarget.supports_exact_navigation) return;
     const refinedKey = `${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
-    const useRefined =
-      refined !== null &&
-      refined.key === refinedKey &&
-      refined.status === "exact" &&
-      refined.bbox !== null;
-    const bbox = useRefined ? refined!.bbox! : navTarget.bbox;
-    const bboxSpace = useRefined ? refined!.bbox_space : navTarget.bbox_space;
+    const useRefined = refined !== null && refined.key === refinedKey && refined.status === "exact" && refined.bbox !== null;
+    const bbox = useRefined ? refined.bbox! : navTarget.bbox;
+    const bboxSpace = useRefined ? refined.bbox_space : navTarget.bbox_space;
     if (!bbox) return;
     canvas.width = dims.width;
     canvas.height = dims.height;
     const rect = resolveEvidenceRect(bbox, bboxSpace, BASE_SCALE * zoom, dims);
     if (!rect) return;
-    // Ehrliche Geometrie (UAT Defect D): eine seitenfuellende Region wird
-    // als "ungefaehre Lage" gezeichnet (gestrichelt, weich) – nicht als
-    // praezise Markierung. Nur eine schmale, vertrauenswuerdige Region darf
-    // sich wie eine exakte Position anfuehlen.
-    const pagePoints = {
-      width: dims.width / (BASE_SCALE * zoom),
-      height: dims.height / (BASE_SCALE * zoom),
-    };
+    const pagePoints = { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) };
     const precision = evidencePrecision(bbox, bboxSpace, pagePoints);
     if (precision === "coarse") {
       ctx.fillStyle = "rgba(255, 200, 0, 0.12)";
@@ -265,12 +229,7 @@ export default function PdfViewer({
       ctx.strokeStyle = "#d97706";
       ctx.lineWidth = 1.5;
       ctx.setLineDash([8, 6]);
-      ctx.strokeRect(
-        rect.x + 2,
-        rect.y + 2,
-        Math.max(0, rect.width - 4),
-        Math.max(0, rect.height - 4)
-      );
+      ctx.strokeRect(rect.x + 2, rect.y + 2, Math.max(0, rect.width - 4), Math.max(0, rect.height - 4));
       ctx.setLineDash([]);
       ctx.font = "12px sans-serif";
       ctx.fillStyle = "#92400e";
@@ -281,22 +240,11 @@ export default function PdfViewer({
     ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
     ctx.strokeStyle = "#d97706";
     ctx.lineWidth = 2;
-    ctx.strokeRect(
-      rect.x + 1,
-      rect.y + 1,
-      Math.max(0, rect.width - 2),
-      Math.max(0, rect.height - 2)
-    );
+    ctx.strokeRect(rect.x + 1, rect.y + 1, Math.max(0, rect.width - 2), Math.max(0, rect.height - 2));
   }, [navTarget, dims, documentVersionId, pageNumber, zoom, refined]);
 
   if (!active || !documentVersionId) {
-    return (
-      <div className="pdf-viewer pdf-idle" role="region" aria-label="Quellansicht">
-        <p className="pdf-placeholder">
-          Wählen Sie oben ein Quelldokument aus, um die Quelle zu öffnen.
-        </p>
-      </div>
-    );
+    return <div className="pdf-viewer pdf-idle" role="region" aria-label="Quellansicht"><p className="pdf-placeholder">Wählen Sie oben ein Quelldokument aus, um die Quelle zu öffnen.</p></div>;
   }
 
   return (
@@ -312,47 +260,21 @@ export default function PdfViewer({
         onZoomIn={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
         onResetZoom={() => setZoom(1)}
       />
-
-      {status === "loading" && <p className="pdf-status">Quelle wird geladen…</p>}
+      {status === "loading" && <p className="pdf-status" role="status">Quelle wird geladen…</p>}
       {status === "error" && (
-        <p className="pdf-status pdf-error" role="alert">
-          Quelle konnte nicht geladen werden.{" "}
-          <button
-            type="button"
-            className="btn-link"
-            onClick={() => setRetrySeq((n) => n + 1)}
-          >
-            Erneut laden
-          </button>
-        </p>
-      )}
-
-      {canRender && (
-        <div className="pdf-stage">
-          <div className="pdf-page-wrap" style={{ width: dims?.width }}>
-            <canvas ref={pageCanvasRef} className="pdf-page-canvas" />
-            <canvas
-              ref={overlayCanvasRef}
-              className="pdf-overlay-canvas"
-              aria-hidden="true"
-            />
-          </div>
+        <div className="pdf-status pdf-error" role="alert">
+          <strong>Quelldokument nicht verfügbar</strong>
+          <span>{errorText}</span>
+          <button type="button" className="btn-link" onClick={() => setRetrySeq((n) => n + 1)}>Erneut laden</button>
         </div>
       )}
-
+      {canRender && <div className="pdf-stage"><div className="pdf-page-wrap" style={{ width: dims?.width }}><canvas ref={pageCanvasRef} className="pdf-page-canvas" /><canvas ref={overlayCanvasRef} className="pdf-overlay-canvas" aria-hidden="true" /></div></div>}
       {navTarget && pageNumber === navTarget.page && navTarget.page != null && (
         <p className="pdf-nav-info" aria-live="polite">
-          {navTarget.supports_exact_navigation &&
-          navTarget.bbox &&
-          evidencePrecision(
+          {navTarget.supports_exact_navigation && navTarget.bbox && evidencePrecision(
             navTarget.bbox,
             navTarget.bbox_space,
-            dims
-              ? {
-                  width: dims.width / (BASE_SCALE * zoom),
-                  height: dims.height / (BASE_SCALE * zoom),
-                }
-              : undefined
+            dims ? { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) } : undefined
           ) === "exact"
             ? `Quelle (Seitenbereich) hervorgehoben: ${navTarget.label}`
             : navTarget.supports_exact_navigation && navTarget.bbox

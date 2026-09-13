@@ -6,6 +6,7 @@ import PdfViewer from "@/components/contracts/detail/PdfViewer";
 import SourceLink from "@/components/contracts/detail/SourceLink";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
+import PageHeader from "@/components/ui/PageHeader";
 import { apiGet } from "@/lib/api";
 import type {
   ContractDetailResponse,
@@ -104,7 +105,10 @@ export default function NachweisePage() {
 
   return (
     <div className="page">
-      <div className="section-caption">Quellen &amp; Belege</div>
+      <PageHeader
+        title="Nachweise"
+        description="Quellen, Belege und Originaldokumente der lokalen Vertragsanalyse."
+      />
 
       {error && (
         <InlineAlert
