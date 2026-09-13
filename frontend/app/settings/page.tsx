@@ -83,6 +83,8 @@ export default function SettingsPage() {
     useState<SettingsSectionId>("allgemein");
 
   const [snapshot, setSnapshot] = useState<AISnapshot | null>(null);
+  const [identityRole, setIdentityRole] = useState<string | null>(null);
+  const [authIdentityKnown, setAuthIdentityKnown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,7 +115,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     load();
+    apiGet<{ role: string }>("/api/auth/me")
+      .then((identity) => setIdentityRole(identity.role))
+      .catch(() => setIdentityRole(null))
+      .finally(() => setAuthIdentityKnown(true));
   }, [load]);
+
+  const selectionReadOnly = authIdentityKnown && identityRole !== null && identityRole !== "admin";
 
   const providers = useMemo<ProviderInfo[]>(
     () => (snapshot ? snapshot.providers : []),
@@ -299,6 +307,7 @@ export default function SettingsPage() {
                     id="ki-provider"
                     className="select"
                     value={providerId}
+                    disabled={selectionReadOnly}
                     onChange={(e) => onProviderChange(e.target.value)}
                   >
                     {providers.map((p) => (
@@ -319,7 +328,7 @@ export default function SettingsPage() {
                     id="ki-model"
                     className="select"
                     value={modelId}
-                    disabled={selectableModels.length === 0}
+                    disabled={selectionReadOnly || selectableModels.length === 0}
                     onChange={(e) => setModelId(e.target.value)}
                   >
                     {selectableModels.length === 0 && (
@@ -359,6 +368,12 @@ export default function SettingsPage() {
                   <p className="field-note">{snapshot.selection.message_de}</p>
                 </div>
 
+                {selectionReadOnly && (
+                  <InlineAlert tone="info" role="status">
+                    Die globale KI-Auswahl kann nur von Administratoren geändert werden.
+                  </InlineAlert>
+                )}
+
                 {saveError && (
                   <InlineAlert tone="critical" role="alert">
                     {saveError}
@@ -369,7 +384,7 @@ export default function SettingsPage() {
                   <Button
                     variant="primary"
                     onClick={save}
-                    disabled={saving || selectableModels.length === 0 || !modelId}
+                    disabled={selectionReadOnly || saving || selectableModels.length === 0 || !modelId}
                   >
                     {saving ? "Speichern…" : "Auswahl speichern"}
                   </Button>
@@ -444,11 +459,11 @@ export default function SettingsPage() {
           {activeSection === "sicherheit" && (
             <Section id="sicherheit" title="Benutzer &amp; Sicherheit">
             <p className="side-note">
-              Medflux läuft derzeit als lokale Installation. Eine verwaltete
-              Benutzer- und Rechteverwaltung ist für einen späteren Schritt
-              vorgesehen. Es werden keine Vertragsdaten an externe Dienste
-              übertragen; Provider werden ausschließlich über lokale
-              Endpunkte (localhost) erkannt und angesprochen.
+              Medflux unterstützt lokale Benutzerrollen für Administration,
+              menschliche Prüfung und lesenden Zugriff. Organisationsgrenzen
+              werden serverseitig an die signierte Sitzung gebunden. Vertragsdaten
+              bleiben lokal; KI-Provider werden ausschließlich über konfigurierte
+              lokale Endpunkte angesprochen.
             </p>
           </Section>
           )}
