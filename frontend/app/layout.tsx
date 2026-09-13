@@ -17,6 +17,7 @@ import "./shell.css";
 import "./contracts-list.css";
 import "./import-enhancements.css";
 import "./work-queue.css";
+import "./operational-workflows.css";
 import "./release-gate.css";
 import "./brand-identity.css";
 
