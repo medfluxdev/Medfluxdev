@@ -11,11 +11,13 @@ from __future__ import annotations
 import json
 import re
 from datetime import date
+from difflib import SequenceMatcher
 from typing import Any, Iterable, Optional
 
 from pydantic import BaseModel, Field
 
 from app.ai.groups.critical_policy import current_verifier_fields, policy_for
+from app.ai.groups.normalize import _table_role_anchor
 from app.ai.schema import pydantic_json_schema
 from app.ai.service import AIService
 from app.models.enums import BillingInterval, ContractType, TimeUnit
@@ -207,17 +209,59 @@ def _contains_time_value(text: str, value: Any) -> bool:
     return _contains_duration_value(text, formatted)
 
 
+def _party_norm(value: Any) -> str:
+    text = str(value or "").casefold()
+    text = re.sub(r"[^a-z0-9äöüß]+", " ", text)
+    return " ".join(text.split())
+
+
+def _party_similar(left: Any, right: Any) -> bool:
+    a = _party_norm(left)
+    b = _party_norm(right)
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    return SequenceMatcher(None, a, b).ratio() >= 0.72
+
+
 def _party_evidence(field: str, value: Any, texts: list[str]) -> Optional[str]:
     needle = " ".join(str(value or "").split())
     if not needle:
         return None
+
+    # For the two operational party roles, prefer the deterministic table-column
+    # anchor used by source grounding. This prevents a table containing both
+    # organizations and both role labels from accidentally supporting a swapped
+    # customer/supplier assignment merely because all tokens occur in one unit.
+    role_name = {
+        "identity.customer": "customer",
+        "identity.supplier": "supplier",
+    }.get(field)
+    if role_name:
+        anchor = _table_role_anchor(texts, role_name)
+        if anchor is not None:
+            if not _party_similar(needle, anchor):
+                return None
+            for text in texts:
+                idx = text.casefold().find(anchor.casefold())
+                if idx >= 0:
+                    return _short_excerpt(text, idx, idx + len(anchor))
+
+    # Non-table fallback is deliberately strict: role label and organization
+    # must occur on the same physical line.
     label_re = _PARTY_LABELS[field]
     for text in texts:
-        low = text.casefold()
-        idx = low.find(needle.casefold())
-        role = label_re.search(text)
-        if idx >= 0 and role:
-            return _short_excerpt(text, min(idx, role.start()), max(idx + len(needle), role.end()))
+        for line in text.splitlines() or [text]:
+            low = line.casefold()
+            idx = low.find(needle.casefold())
+            role = label_re.search(line)
+            if idx >= 0 and role:
+                return _short_excerpt(
+                    line,
+                    min(idx, role.start()),
+                    max(idx + len(needle), role.end()),
+                )
     return None
 
 
