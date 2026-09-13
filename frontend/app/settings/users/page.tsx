@@ -2,21 +2,30 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS, type AccountRole, type ManagedUserDto } from "@/lib/auth-types";
+import {
+  createUser,
+  listUsers,
+  listUserScopes,
+  updateUser,
+  updateUserScope,
+  type UserScopeDto,
+} from "@/lib/domain-api/users";
+import {
+  getOrganizationStructure,
+  type DepartmentDto,
+  type HospitalDto,
+  type OrganizationStructureDto,
+} from "@/lib/domain-api/organizations";
 
 const ROLES: AccountRole[] = ["admin", "contract_manager", "reviewer", "viewer"];
-type Hospital = { id: string; name: string; code: string; is_active: boolean };
-type Department = { id: string; hospital_id: string; name: string; code: string; is_active: boolean };
-type Structure = { hospitals: Hospital[]; departments: Department[] };
-type UserScope = { account_id: string; hospital_id: string | null; department_id: string | null; is_default: boolean };
 
 export default function UsersPage() {
   const { role, account, organizationSlug } = useAuth();
   const [items, setItems] = useState<ManagedUserDto[]>([]);
-  const [scopes, setScopes] = useState<Record<string, UserScope>>({});
-  const [structure, setStructure] = useState<Structure>({ hospitals: [], departments: [] });
+  const [scopes, setScopes] = useState<Record<string, UserScopeDto>>({});
+  const [structure, setStructure] = useState<OrganizationStructureDto>({ hospitals: [], departments: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -28,11 +37,10 @@ export default function UsersPage() {
     if (!organizationSlug) return;
     setLoading(true);
     try {
-      const query = encodeURIComponent(organizationSlug);
       const [usersResponse, scopesResponse, structureResponse] = await Promise.all([
-        apiGet<{ items: ManagedUserDto[] }>(`/api/users?organization_slug=${query}`),
-        apiGet<{ items: UserScope[] }>(`/api/user-scopes?organization_slug=${query}`),
-        apiGet<Structure>(`/api/organization-structure?organization_slug=${query}`),
+        listUsers(organizationSlug),
+        listUserScopes(organizationSlug),
+        getOrganizationStructure(organizationSlug),
       ]);
       setItems(usersResponse.items);
       setScopes(Object.fromEntries(scopesResponse.items.map((item) => [item.account_id, item])));
@@ -49,18 +57,21 @@ export default function UsersPage() {
     else setLoading(false);
   }, [role, organizationSlug, load]);
 
-  async function createUser(event: FormEvent) {
+  async function createManagedUser(event: FormEvent) {
     event.preventDefault();
     if (!organizationSlug) return;
-    setBusy(true); setMessage(null);
+    setBusy(true);
+    setMessage(null);
     try {
-      await apiPost<ManagedUserDto>(`/api/users?organization_slug=${encodeURIComponent(organizationSlug)}`, form);
+      await createUser(organizationSlug, form);
       setForm({ email: "", display_name: "", password: "", role: "viewer" });
       setMessage({ error: false, text: "Benutzer wurde angelegt. Bitte anschließend Krankenhaus und Abteilung zuweisen." });
       await load();
     } catch (err) {
       setMessage({ error: true, text: err instanceof Error ? err.message : "Benutzer konnte nicht angelegt werden." });
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   function beginEdit(user: ManagedUserDto) {
@@ -69,40 +80,58 @@ export default function UsersPage() {
     setEdit({ display_name: user.display_name, role: user.role, password: "", hospital_id: scope?.hospital_id ?? "", department_id: scope?.department_id ?? "" });
   }
 
-  const editDepartments = useMemo(() => structure.departments.filter((item) => item.is_active && (!edit.hospital_id || item.hospital_id === edit.hospital_id)), [structure.departments, edit.hospital_id]);
+  const editDepartments = useMemo(
+    () => structure.departments.filter((item) => item.is_active && (!edit.hospital_id || item.hospital_id === edit.hospital_id)),
+    [structure.departments, edit.hospital_id],
+  );
 
   async function saveUser(user: ManagedUserDto) {
     if (!organizationSlug) return;
-    setBusy(true); setMessage(null);
+    setBusy(true);
+    setMessage(null);
     try {
-      const query = encodeURIComponent(organizationSlug);
-      await apiPatch<ManagedUserDto>(`/api/users/${encodeURIComponent(user.id)}?organization_slug=${query}`, { display_name: edit.display_name, role: edit.role, password: edit.password || undefined });
-      await apiPatch<UserScope>(`/api/user-scopes/${encodeURIComponent(user.id)}?organization_slug=${query}`, { hospital_id: edit.hospital_id || null, department_id: edit.department_id || null, is_default: true });
+      await updateUser(organizationSlug, user.id, {
+        display_name: edit.display_name,
+        role: edit.role,
+        password: edit.password || undefined,
+      });
+      await updateUserScope(organizationSlug, user.id, {
+        hospital_id: edit.hospital_id || null,
+        department_id: edit.department_id || null,
+        is_default: true,
+      });
       setEditing(null);
       setMessage({ error: false, text: "Benutzer und Arbeitsbereich wurden aktualisiert." });
       await load();
     } catch (err) {
       setMessage({ error: true, text: err instanceof Error ? err.message : "Änderung konnte nicht gespeichert werden." });
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function toggleUser(user: ManagedUserDto) {
     if (!organizationSlug) return;
-    setBusy(true); setMessage(null);
+    setBusy(true);
+    setMessage(null);
     try {
-      await apiPatch<ManagedUserDto>(`/api/users/${encodeURIComponent(user.id)}?organization_slug=${encodeURIComponent(organizationSlug)}`, { is_active: !user.is_active });
+      await updateUser(organizationSlug, user.id, { is_active: !user.is_active });
       await load();
     } catch (err) {
       setMessage({ error: true, text: err instanceof Error ? err.message : "Status konnte nicht geändert werden." });
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (role !== "admin") return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Die Benutzerverwaltung ist Administratoren vorbehalten.</p><Link href="/">Zur Übersicht</Link></section>;
+  if (role !== "admin") {
+    return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Die Benutzerverwaltung ist Administratoren vorbehalten.</p><Link href="/">Zur Übersicht</Link></section>;
+  }
 
   return <div className="user-admin">
     <div className="user-admin-head"><div><h1>Benutzerverwaltung</h1><p className="cw-muted">Benutzer, Rollen sowie Krankenhaus- und Abteilungszugriffe verwalten.</p></div><Link href="/settings">Zurück zu Einstellungen</Link></div>
     {message ? <div className={`user-admin-message${message.error ? " error" : ""}`} role="status">{message.text}</div> : null}
-    <form className="user-admin-form" onSubmit={createUser}>
+    <form className="user-admin-form" onSubmit={createManagedUser}>
       <label>Name<input value={form.display_name} onChange={(e) => setForm((v) => ({ ...v, display_name: e.target.value }))} required /></label>
       <label>E-Mail<input type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required /></label>
       <label>Initiales Passwort<input type="password" minLength={10} value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required /></label>
@@ -114,8 +143,8 @@ export default function UsersPage() {
       {!loading && items.length === 0 ? <p className="cw-muted">Keine Benutzer vorhanden.</p> : null}
       {items.map((user) => {
         const scope = scopes[user.id];
-        const hospitalName = structure.hospitals.find((item) => item.id === scope?.hospital_id)?.name;
-        const departmentName = structure.departments.find((item) => item.id === scope?.department_id)?.name;
+        const hospitalName = structure.hospitals.find((item: HospitalDto) => item.id === scope?.hospital_id)?.name;
+        const departmentName = structure.departments.find((item: DepartmentDto) => item.id === scope?.department_id)?.name;
         return <article className="user-row" key={user.id}>
           <div><strong>{user.display_name}</strong><small>{user.id === account?.id ? "Aktueller Benutzer" : "Benutzer"}</small></div>
           <div>{user.email}<small>{hospitalName ? ` · ${hospitalName}${departmentName ? ` / ${departmentName}` : ""}` : user.role === "admin" ? " · Organisationsweit" : " · Noch nicht zugewiesen"}</small></div>
