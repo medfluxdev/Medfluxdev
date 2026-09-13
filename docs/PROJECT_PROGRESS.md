@@ -3763,3 +3763,10 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 - Removed the raster logo's white background and preserved alpha transparency.
 - Removed the login logo container's white background, border, padding, and shadow.
 - The MedFlux logo now renders directly on its surrounding surface without a visible frame.
+
+
+### Login contrast correction — primary logo on light identity background
+
+- Replaced the dark login background with a light `#E6F4F8`-based brand gradient so the canonical teal/dark-blue logo remains fully legible.
+- Kept the logo transparent and unframed.
+- Reduced the login card shadow and border contrast for a calmer, integrated healthcare presentation.
