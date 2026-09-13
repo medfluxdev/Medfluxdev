@@ -6,8 +6,10 @@ import ContractDetailPage from "@/app/contracts/[contract-id]/page";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 
 const apiGetMock = vi.fn();
+const apiPostMock = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiGet: (...args: unknown[]) => apiGetMock(...args),
+  apiPost: (...args: unknown[]) => apiPostMock(...args),
   contentUrl: (contractId: string, versionId: string) =>
     `http://test.local/content/${contractId}/${versionId}`,
 }));
@@ -184,6 +186,7 @@ function detailFixture(overrides: Partial<ContractDetailResponse> = {}): Contrac
 beforeEach(() => {
   vi.clearAllMocks();
   apiGetMock.mockReset();
+  apiPostMock.mockReset();
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
@@ -192,7 +195,11 @@ beforeEach(() => {
 });
 
 async function renderWithData(data: ContractDetailResponse) {
-  apiGetMock.mockResolvedValue(data);
+  apiGetMock.mockImplementation((path: string) =>
+    path === "/api/auth/me"
+      ? Promise.reject(new Error("development mode"))
+      : Promise.resolve(data)
+  );
   const utils = render(<ContractDetailPage />);
   await waitFor(() => expect(apiGetMock).toHaveBeenCalled());
   return utils;
