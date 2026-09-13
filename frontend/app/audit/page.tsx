@@ -4,24 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
 import PageHeader from "@/components/ui/PageHeader";
-import { apiGet } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { getContract, listContracts } from "@/lib/domain-api/contracts";
+import { listActivity, type ActivityDto } from "@/lib/domain-api/activity";
 import type { AuditEntryDto, ContractDetailResponse, FactReviewDto } from "@/lib/contract-detail-types";
-import type { ContractListResponse, ContractListItem } from "@/lib/contract-types";
+import type { ContractListItem } from "@/lib/contract-types";
 import { formatDate } from "@/lib/format";
-
-const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
-
-interface ActivityDto {
-  id: string;
-  account_id: string | null;
-  display_name: string;
-  role: string;
-  event_name: string;
-  object_type: string;
-  object_id: string | null;
-  context_data: Record<string, unknown> | null;
-  created_at: string | null;
-}
 
 const EVENT_LABELS: Record<string, string> = {
   "fact_review.confirmed": "Fakt bestätigt",
@@ -35,6 +23,16 @@ const EVENT_LABELS: Record<string, string> = {
   "override.confirm": "Fakt manuell bestätigt",
   "contract.archived": "Vertrag archiviert",
   "contract.unarchived": "Vertrag wiederhergestellt",
+  "contract.ownership_updated": "Vertragszuordnung geändert",
+  "equipment.ownership_updated": "Gerätezuordnung geändert",
+  "account.created": "Benutzer angelegt",
+  "account.updated": "Benutzer geändert",
+  "account.scope_updated": "Benutzerbereich geändert",
+  "hospital.created": "Krankenhaus angelegt",
+  "hospital.updated": "Krankenhaus geändert",
+  "department.created": "Abteilung angelegt",
+  "department.updated": "Abteilung geändert",
+  "cost_center.created": "Kostenstelle angelegt",
 };
 
 function valueText(value: unknown): string {
@@ -90,8 +88,8 @@ function ActivityRow({ item }: { item: ActivityDto }) {
   return (
     <li>
       <span className="audit-action audit-confirm">{EVENT_LABELS[item.event_name] ?? item.event_name}</span>
-      <span className="audit-key">{item.display_name}</span>
-      <span className="audit-ref">{item.role}</span>
+      <span className="audit-key">{item.display_name ?? "System"}</span>
+      <span className="audit-ref">{item.role ?? "system"}</span>
       {item.context_data && Object.keys(item.context_data).length > 0 ? <span className="audit-value">{valueText(item.context_data)}</span> : null}
       {item.created_at ? <time className="audit-date">{formatDate(item.created_at)}</time> : null}
     </li>
@@ -99,6 +97,7 @@ function ActivityRow({ item }: { item: ActivityDto }) {
 }
 
 export default function AuditPage() {
+  const { organizationSlug } = useAuth();
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
   const [contractId, setContractId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ContractDetailResponse | null>(null);
@@ -109,11 +108,11 @@ export default function AuditPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const loadContracts = useCallback(async () => {
+    if (!organizationSlug) return;
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({ organization_slug: ORG_SLUG, page_size: "100" });
-      const res = await apiGet<ContractListResponse>(`/api/contracts?${p.toString()}`);
+      const res = await listContracts(organizationSlug, { page_size: 100 });
       setContracts(res.items);
       setContractId((cur) => cur ?? (res.items[0]?.contract_id ?? null));
     } catch {
@@ -121,17 +120,18 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [organizationSlug]);
 
   useEffect(() => { void loadContracts(); }, [loadContracts]);
 
   const loadDetail = useCallback(async (id: string) => {
+    if (!organizationSlug) return;
     setLoadingDetail(true);
     setDetailError(null);
     try {
       const [detailResponse, activityResponse] = await Promise.all([
-        apiGet<ContractDetailResponse>(`/api/contracts/${encodeURIComponent(id)}?organization_slug=${encodeURIComponent(ORG_SLUG)}`),
-        apiGet<{ items: ActivityDto[] }>(`/api/activity?organization_slug=${encodeURIComponent(ORG_SLUG)}&object_id=${encodeURIComponent(id)}`),
+        getContract(id, organizationSlug),
+        listActivity(organizationSlug, { objectId: id, limit: 200 }),
       ]);
       setDetail(detailResponse);
       setActivity(activityResponse.items);
@@ -142,7 +142,7 @@ export default function AuditPage() {
     } finally {
       setLoadingDetail(false);
     }
-  }, []);
+  }, [organizationSlug]);
 
   useEffect(() => { if (contractId) void loadDetail(contractId); }, [contractId, loadDetail]);
 
