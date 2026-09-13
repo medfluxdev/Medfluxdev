@@ -19,6 +19,7 @@ from app.database.models.calculation import (
 from app.database.models.contract import Contract, ContractDocument, ContractEquipment
 from app.database.models.equipment import Equipment
 from app.database.models.work_item import WorkItem
+from app.database.models.work_item_collaboration import WorkItemCollaboration, WorkItemComment
 from app.database.models.review import ReviewAction
 from app.database.models.override import ContractOverride
 from app.database.models.fact_review import ContractReview, FactReview
@@ -60,6 +61,8 @@ __all__ = [
     "ContractEquipment",
     "Equipment",
     "WorkItem",
+    "WorkItemCollaboration",
+    "WorkItemComment",
     "ReviewAction",
     "ContractOverride",
     "FactReview",
