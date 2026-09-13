@@ -20,8 +20,8 @@ export default function MedFluxLogo({
       <Image
         className="medflux-logo__image"
         src="/brand/medflux-main-logo.png"
-        width={860}
-        height={536}
+        width={733}
+        height={499}
         alt="MedFlux"
         priority={priority}
       />
