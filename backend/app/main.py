@@ -1,12 +1,14 @@
-"""Medflux Backend – Einstiegspunkt (FastAPI)."""
+"""MedFlux Backend – integrated JAMAL + Ahmad entrypoint."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    activity,
     ai,
     auth,
     contracts,
+    cost_center_routes,
     dashboard,
     demo,
     documents,
@@ -14,11 +16,18 @@ from app.api.routes import (
     health,
     intelligence,
     operations,
+    organization_structure,
+    ownership,
+    profile,
+    system_organizations,
+    user_scopes,
+    users,
     work_queue,
 )
 from app.auth.middleware import LocalAuthMiddleware
 from app.auth.provenance import register_auth_provenance_hooks
 from app.core.config import settings
+from app.core.scope_context import ScopeContextMiddleware
 from app.security.headers import SecurityHeadersMiddleware
 
 register_auth_provenance_hooks()
@@ -32,31 +41,37 @@ app = FastAPI(
     ),
 )
 
-# STEP 16: bei aktivierter lokaler Anmeldung schuetzt die zentrale Middleware
-# alle nicht-oeffentlichen API-Routen und bindet organization_slug an die
-# authentifizierte Organisation.
+# Scope runs after auth (Starlette executes middleware in reverse registration
+# order), so account membership can make hospital/department scope authoritative.
+app.add_middleware(ScopeContextMiddleware)
 app.add_middleware(LocalAuthMiddleware)
 
-# Lokale Entwicklung: erlaube die konfigurierten Frontend-Origins (Standard:
-# http://localhost:3000). Der Origin-Set wird über settings.cors_origins
-# gesteuert (Umgebung/.env). Erlaubt nur die vom Frontend benötigten Methoden
-# und Header – kein Wildcard. Cookies werden nur bei aktivierter Auth freigegeben.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=settings.auth_enabled,
-    allow_methods=["GET", "POST", "PUT", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
-# Starlette macht die zuletzt registrierte Middleware zur aeusseren Schicht.
-# Deshalb steht diese Registrierung zuletzt und versieht auch Auth-/CORS-
-# Antworten mit den grundlegenden Sicherheitsheadern.
+# Keep JAMAL security headers outermost.
 app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(auth.audit_router)
+
+# Ahmad account / organization administration.
+app.include_router(profile.router)
+app.include_router(users.router)
+app.include_router(user_scopes.router)
+app.include_router(system_organizations.router)
+app.include_router(organization_structure.router)
+app.include_router(cost_center_routes.router)
+app.include_router(ownership.router)
+app.include_router(activity.router)
+
+# Existing JAMAL product APIs remain authoritative.
 app.include_router(ai.router)
 app.include_router(documents.router)
 app.include_router(dashboard.router)
