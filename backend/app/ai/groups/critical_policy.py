@@ -1,8 +1,8 @@
 """Central policy inventory for safety-critical extracted contract claims.
 
-The policy is deliberately data-only: extraction/verifier code can consume it
-without duplicating severity/default/evidence semantics. A claim listed here is
-not automatically VERIFIED; callers must enforce the configured strategy.
+The policy is deliberately data-only. A claim listed here is never considered
+verified merely because it passed schema validation; it must be enforced by the
+semantic scalar verifier or a specialized deterministic verifier.
 """
 
 from __future__ import annotations
@@ -75,20 +75,23 @@ CURRENT_VERIFIER_CLAIMS: tuple[CriticalClaimPolicy, ...] = (
     CriticalClaimPolicy("sla.availability_24_7", Criticality.CRITICAL, EvidenceStrategy.FIELD),
 )
 
-
-# Dynamic/list claims need a slightly different completeness model. They remain
-# explicit backlog rather than being silently omitted from the safety inventory.
-PENDING_CRITICAL_CLAIMS: tuple[CriticalClaimPolicy, ...] = (
-    CriticalClaimPolicy("equipment[].device_name", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("equipment[].model", Criticality.HIGH, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("equipment[].serial_number", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("equipment[].inventory_number", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("equipment[].coverage_start", Criticality.HIGH, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("equipment[].coverage_end", Criticality.HIGH, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("equipment[].service_scope", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT),
-    CriticalClaimPolicy("services.included_services", Criticality.CRITICAL, EvidenceStrategy.SECTION),
-    CriticalClaimPolicy("services.excluded_services", Criticality.CRITICAL, EvidenceStrategy.SECTION),
+# List/dynamic claims are enforced by specialized deterministic gates because a
+# scalar `section.field` verifier cannot safely address individual list members.
+SPECIALIZED_CRITICAL_CLAIMS: tuple[CriticalClaimPolicy, ...] = (
+    CriticalClaimPolicy("equipment[].device_name", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("equipment[].model", Criticality.HIGH, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("equipment[].serial_number", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("equipment[].inventory_number", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("equipment[].coverage_start", Criticality.HIGH, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("equipment[].coverage_end", Criticality.HIGH, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("equipment[].service_scope", Criticality.CRITICAL, EvidenceStrategy.EQUIPMENT, semantic_verifier_required=False),
+    CriticalClaimPolicy("services.included_services", Criticality.CRITICAL, EvidenceStrategy.SECTION, semantic_verifier_required=False),
+    CriticalClaimPolicy("services.excluded_services", Criticality.CRITICAL, EvidenceStrategy.SECTION, semantic_verifier_required=False),
 )
+
+# Reserved for claims discovered by future schema expansion that are not yet
+# enforced. Keeping this explicit prevents silent policy debt.
+PENDING_CRITICAL_CLAIMS: tuple[CriticalClaimPolicy, ...] = ()
 
 
 def current_verifier_fields() -> tuple[str, ...]:
@@ -96,7 +99,7 @@ def current_verifier_fields() -> tuple[str, ...]:
 
 
 def policy_for(field: str) -> CriticalClaimPolicy | None:
-    for policy in CURRENT_VERIFIER_CLAIMS + PENDING_CRITICAL_CLAIMS:
+    for policy in CURRENT_VERIFIER_CLAIMS + SPECIALIZED_CRITICAL_CLAIMS + PENDING_CRITICAL_CLAIMS:
         if policy.field == field:
             return policy
     return None
