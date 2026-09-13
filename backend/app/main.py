@@ -24,6 +24,7 @@ from app.api.routes import (
     processing_jobs,
     profile,
     reports,
+    security_sessions,
     system_organizations,
     user_scopes,
     users,
@@ -69,6 +70,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(auth.audit_router)
+app.include_router(security_sessions.router)
 
 # Ahmad account / organization administration.
 app.include_router(profile.router)
