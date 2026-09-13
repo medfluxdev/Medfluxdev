@@ -1,4 +1,4 @@
-from app.ai.groups.normalize import ground_source_identity
+from app.ai.groups.normalize import ground_source_identity, ground_source_services
 from app.documents.extraction.schemas import ExtractionUnit, SourceType
 from app.models.contract import Contract
 from app.models.enums import ContractType
@@ -118,6 +118,24 @@ def test_ground_source_identity_collapses_concatenated_customer_to_role_grounded
     assert contract.identity.customer == "Krankenhaus Nordwest GmbH"
 
 
+def test_ground_source_identity_reads_role_row_after_embedded_table_lines():
+    contract = Contract()
+    contract.identity.supplier = "MED TRON AG (Valentina Malvaso, Customer Service DACH)"
+    units = [
+        _unit(
+            SourceType.TABLE,
+            1,
+            "Auftraggeber | Auftragnehmer\nStraße Auftraggeber\nPLZ Auftraggeber\nKontakt Auftraggeber\nTelefon Auftraggeber\n"
+            "KRANKENHAUS N07;fPNEST GMRH | MEDTRON AG",
+        ),
+        _unit(SourceType.PARAGRAPH, 20, "MED TRON AG (Valentina Malvaso, Customer Service DACH)"),
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.supplier == "MEDTRON AG"
+
+
 def test_ground_source_identity_fills_supplier_only_from_explicit_table_role():
     contract = Contract()
     units = [
@@ -139,6 +157,20 @@ def test_ground_source_identity_fills_explicit_title_and_type():
     units = [
         _unit(SourceType.PARAGRAPH, 1, "MEDTRON Guard Servicevereinbarung Accutron MR"),
         _unit(SourceType.PARAGRAPH, 2, "Weitere Vertragsinformationen"),
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.contract_title == "MEDTRON Guard Servicevereinbarung Accutron MR"
+    assert contract.identity.contract_type == ContractType.SERVICE
+
+
+def test_ground_source_identity_prioritizes_explicit_heading_over_email_subject():
+    contract = Contract()
+    contract.identity.contract_title = "Servicevertrag Guard TOP für Accutron MR"
+    units = [
+        _unit(SourceType.PARAGRAPH, 1, "MEDTRON Guard Servicevereinbarung Accutron MR"),
+        _unit(SourceType.PARAGRAPH, 14, "Betreff: Servicevertrag Guard TOP für Accutron MR"),
     ]
 
     ground_source_identity(contract, units)
@@ -172,3 +204,39 @@ def test_ground_source_identity_does_not_replace_distinct_company():
     ground_source_identity(contract, units)
 
     assert contract.identity.customer == "Krankenhaus Süd GmbH"
+
+
+def test_ground_source_services_promotes_supported_null_flags_to_true():
+    contract = Contract()
+    contract.services.included_services = [
+        "Wartung inkl. Austausch von Verschleißteilen",
+        "Notwendige Software-Updates",
+        "Kostenlose Reparaturen",
+    ]
+    units = [
+        _unit(
+            SourceType.TABLE,
+            2,
+            "Wartung inkl. Austausch von Verschleißteilen | X\n"
+            "Notwendige Software-Updates | X\nKostenlose Reparaturen | X",
+        )
+    ]
+
+    issues = ground_source_services(contract, units)
+
+    assert contract.services.maintenance is True
+    assert contract.services.repair is True
+    assert contract.services.software_updates is True
+    assert len(issues) == 3
+
+
+def test_ground_source_services_never_turns_absence_into_false_or_true():
+    contract = Contract()
+    contract.services.included_services = ["Arbeitszeit", "Fahrtkosten"]
+    units = [_unit(SourceType.TABLE, 2, "Arbeitszeit | X\nFahrtkosten | X")]
+
+    ground_source_services(contract, units)
+
+    assert contract.services.maintenance is None
+    assert contract.services.repair is None
+    assert contract.services.software_updates is None
