@@ -3791,3 +3791,10 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 - Confirmed that the profile model, API route, frontend form, and migration `f9a3b4c5d6e7` agree on the editable fields.
 - Static verification completed for the Windows and Docker startup commands.
 - Local runtime verification requires the configured database service.
+
+
+### Profile authentication correction — 2026-09-13
+
+- Runtime logs showed `GET /api/me` returning 200 while `GET /api/profile` returned 401 for the same browser session.
+- The profile route now resolves the authenticated account directly from the configured login-session cookie, matching the proven `/api/me` behavior.
+- Added a regression test preventing the profile route from returning to fragile `request.state.account_id` authentication.
