@@ -45,60 +45,23 @@ body {
   color: var(--brand-text);
 }
 
-/* Reusable logo */
+/* Canonical logo: approved board item 01 — Main Logo. */
 .medflux-logo {
   display: inline-flex;
   align-items: center;
-  gap: 0.68rem;
+  justify-content: center;
   min-width: 0;
-  color: var(--brand-text);
 }
 
-.medflux-logo__mark {
-  width: 42px;
-  height: 30px;
-  flex: 0 0 auto;
-  overflow: visible;
+.medflux-logo__image {
+  display: block;
+  width: 168px;
+  height: auto;
+  object-fit: contain;
 }
 
-.medflux-logo__copy {
-  display: grid;
-  min-width: 0;
-  line-height: 1;
-}
-
-.medflux-logo__wordmark {
-  display: inline-flex;
-  align-items: baseline;
-  font-family: var(--font-brand);
-  font-size: 1.22rem;
-  font-weight: 700;
-  letter-spacing: -0.045em;
-  white-space: nowrap;
-}
-
-.medflux-logo__med {
-  color: var(--brand-teal);
-}
-
-.medflux-logo__flux {
-  color: var(--brand-blue);
-}
-
-.medflux-logo__descriptor {
-  margin-top: 0.28rem;
-  color: var(--brand-blue);
-  font-size: 0.47rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  line-height: 1.2;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.medflux-logo--compact .medflux-logo__mark {
-  width: 34px;
-  height: 26px;
+.medflux-logo--compact .medflux-logo__image {
+  width: 48px;
 }
 
 /* Shell */
@@ -112,16 +75,16 @@ body {
 }
 
 .sidebar .brand .medflux-logo {
-  padding: 0.2rem 0;
+  width: 100%;
+  padding: 0.15rem 0;
 }
 
-.sidebar .brand .medflux-logo__mark {
-  width: 40px;
-  height: 30px;
+.sidebar .brand .medflux-logo__image {
+  width: 154px;
 }
 
-.sidebar-collapsed .brand .medflux-logo__mark {
-  width: 34px;
+.sidebar-collapsed .brand .medflux-logo__image {
+  width: 48px;
 }
 
 .nav-item {
@@ -193,25 +156,17 @@ a {
 }
 
 .auth-login-brand .medflux-logo {
-  padding: 0.9rem 1.2rem;
+  width: min(300px, 82vw);
+  padding: 0.8rem 1rem;
   border: 1px solid rgba(255,255,255,0.72);
   border-radius: 14px;
-  background: rgba(255,255,255,0.96);
+  background: rgba(255,255,255,0.98);
   box-shadow: 0 16px 40px rgba(4, 27, 49, 0.2);
 }
 
-.auth-login-brand .medflux-logo__mark {
-  width: 74px;
-  height: 48px;
-}
-
-.auth-login-brand .medflux-logo__wordmark {
-  font-size: 2rem;
-}
-
-.auth-login-brand .medflux-logo__descriptor {
-  margin-top: 0.4rem;
-  font-size: 0.52rem;
+.auth-login-brand .medflux-logo__image {
+  width: 250px;
+  max-width: 100%;
 }
 
 .auth-login-brand > p {
@@ -278,15 +233,11 @@ a {
 
 @media (max-width: 700px) {
   .auth-login-brand .medflux-logo {
-    padding: 0.72rem 0.9rem;
+    width: min(260px, 82vw);
+    padding: 0.65rem 0.8rem;
   }
 
-  .auth-login-brand .medflux-logo__mark {
-    width: 58px;
-    height: 40px;
-  }
-
-  .auth-login-brand .medflux-logo__wordmark {
-    font-size: 1.62rem;
+  .auth-login-brand .medflux-logo__image {
+    width: 220px;
   }
 }
