@@ -2,7 +2,8 @@
 
 Equipment is a list, so the scalar semantic verifier cannot safely address it
 with a simple ``section.field`` key. This module verifies every extracted item
-against source text without deriving or inventing replacement values.
+against source text without deriving or inventing replacement values and detects
+conflicting duplicate equipment identities emitted by different chunks.
 """
 
 from __future__ import annotations
@@ -85,13 +86,93 @@ def _find_support(field: str, value: Any, source_texts: list[str]) -> bool:
     return True
 
 
-def verify_equipment_claims(contract: Contract, units: Iterable[object]) -> list[str]:
-    """Return fail-closed issues for unsupported equipment fields.
+def _identity_keys(equipment: Any) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    serial = _norm(getattr(equipment, "serial_number", None))
+    inventory = _norm(getattr(equipment, "inventory_number", None))
+    device = _norm(getattr(equipment, "device_name", None))
+    model = _norm(getattr(equipment, "model", None))
+    if serial:
+        keys.add(("serial", serial))
+    if inventory:
+        keys.add(("inventory", inventory))
+    if device and model:
+        keys.add(("device_model", f"{device}|{model}"))
+    return keys
 
-    The function never changes the extracted fact. If an item has SourceEvidence,
-    unsupported item fields mark that evidence as review-required; absence of an
-    evidence object is already handled by GroupPipeline and remains an issue.
+
+def _value_signature(value: Any) -> Any:
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, list):
+        return tuple(sorted(_norm(item) for item in value))
+    return _norm(value)
+
+
+def _mark_review(equipment: Any) -> None:
+    ev = getattr(equipment, "evidence", None)
+    if ev is not None:
+        ev.requires_review = True
+        if ev.confidence is None or ev.confidence > 0.5:
+            ev.confidence = 0.5
+
+
+def _duplicate_conflict_issues(contract: Contract) -> list[str]:
+    """Flag two list items that clearly identify the same device but disagree.
+
+    We only correlate strong identities (serial, inventory, or exact device+model)
+    to avoid collapsing distinct devices that merely share a generic product name.
     """
+    issues: list[str] = []
+    seen: dict[tuple[str, str], int] = {}
+    comparable_fields = (
+        "manufacturer",
+        "device_name",
+        "model",
+        "serial_number",
+        "inventory_number",
+        "system_name",
+        "location",
+        "department",
+        "service_scope",
+        "coverage_start",
+        "coverage_end",
+    )
+    reported_pairs: set[tuple[int, int]] = set()
+
+    for index, equipment in enumerate(contract.equipment):
+        for key in _identity_keys(equipment):
+            other_index = seen.get(key)
+            if other_index is None:
+                seen[key] = index
+                continue
+            pair = (other_index, index)
+            if pair in reported_pairs:
+                continue
+            other = contract.equipment[other_index]
+            conflicts: list[str] = []
+            for field in comparable_fields:
+                left = getattr(other, field, None)
+                right = getattr(equipment, field, None)
+                if left in (None, "", []) or right in (None, "", []):
+                    continue
+                if _value_signature(left) != _value_signature(right):
+                    conflicts.append(field)
+            if conflicts:
+                reported_pairs.add(pair)
+                _mark_review(other)
+                _mark_review(equipment)
+                issues.append(
+                    f"Equipment[{other_index}]↔Equipment[{index}]: gleiche Geräteidentität ({key[0]}) "
+                    f"mit widersprüchlichen Feldern: {', '.join(conflicts)}"
+                )
+    return issues
+
+
+def verify_equipment_claims(contract: Contract, units: Iterable[object]) -> list[str]:
+    """Return fail-closed issues for unsupported or contradictory equipment facts."""
     source_texts = _texts(units)
     issues: list[str] = []
     fields = (
@@ -117,16 +198,12 @@ def verify_equipment_claims(contract: Contract, units: Iterable[object]) -> list
             if not _find_support(field, value, source_texts):
                 unsupported.append(field)
 
-        if not unsupported:
-            continue
+        if unsupported:
+            _mark_review(equipment)
+            for field in unsupported:
+                issues.append(
+                    f"Equipment[{index}].{field}: Wert nicht feldspezifisch in der Quelle gestützt"
+                )
 
-        ev = getattr(equipment, "evidence", None)
-        if ev is not None:
-            ev.requires_review = True
-            if ev.confidence is None or ev.confidence > 0.5:
-                ev.confidence = 0.5
-        for field in unsupported:
-            issues.append(
-                f"Equipment[{index}].{field}: Wert nicht feldspezifisch in der Quelle gestützt"
-            )
+    issues.extend(_duplicate_conflict_issues(contract))
     return issues
