@@ -4,8 +4,10 @@ Arbeiten mit temporären Speicherverzeichnissen, keine externen Dateien.
 """
 
 import hashlib
+import io
 
 import pytest
+from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
 from app.api.routes import documents as documents_module
@@ -201,3 +203,17 @@ def test_api_import_requires_organization_and_empty_batch_is_supported():
     body = response.json()
     assert body["total"] == 0
     assert body["documents"] == []
+
+
+@pytest.mark.asyncio
+async def test_route_upload_reader_rejects_oversize_before_processing(monkeypatch):
+    monkeypatch.setattr(documents_module.settings, "max_upload_size_mb", 1)
+    uploaded = UploadFile(
+        filename="too-big.pdf",
+        file=io.BytesIO(b"x" * (1024 * 1024 + 1)),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await documents_module._read_upload_bounded(uploaded)
+
+    assert exc.value.status_code == 413
