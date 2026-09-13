@@ -18,14 +18,14 @@ This document is the canonical map between backend capabilities and frontend con
 |---|---|---|---|---|
 | Authentication | `/api/auth/*` | `backend/app/api/routes/auth.py` | `AuthProvider`, login/profile flows | Connected |
 | Dashboard | `GET /api/dashboard/overview` | `dashboard.py` | `frontend/app/page.tsx` | Connected |
-| Contracts | `GET /api/contracts`, detail, review, archive, overrides, document content | `contracts.py` | contract list/detail/workspace | Connected; route semantics audit remains |
-| Documents | import, retry, reanalyze, source-region | `documents.py` | import + PDF/evidence flows | Partial |
-| Equipment | list/detail | `equipment.py` | contract detail and work queue only | Partial; dedicated UI missing |
-| Work queue | list + status transition | `work_queue.py` | `/work-queue` | Connected |
+| Contracts | portfolio/detail/review/archive/overrides/document content | `contracts.py` | contract list/detail/workspace | Connected; domain adapter added |
+| Documents | import, retry, reanalyze, source-region | `documents.py` | import + PDF/evidence flows | Scope hardened; domain adapter added |
+| Equipment | list/detail | `equipment.py` | contract detail and work queue only | Domain adapter added; dedicated UI missing |
+| Work queue | list + status transition | `work_queue.py` | `/work-queue` | Domain adapter added; page migration pending |
 | AI runtime | status, snapshot, test, selection | `ai.py` | `/settings` | Connected |
 | Contract intelligence | graph, obligations, policies, actions, events | `intelligence.py` | domain adapter added; UI not yet wired | Ready for UI after verification |
 | Operations | contract CSV export | `operations.py` | no clear consumer | Backend scope hardened; UI missing |
-| Activity/Audit | activity + auth audit APIs | activity/auth routes | audit/profile surfaces | Partial |
+| Activity/Audit | activity + auth audit APIs | activity/auth routes | audit/profile surfaces | Activity scope hardened; UI audit remains |
 | Organizations/users | system organizations, org structure, users/scopes | system/users/organization routes | developer/admin/settings | Connected; scope audit remaining |
 
 ## Semantic mapping / naming collisions
@@ -59,41 +59,48 @@ These must not be merged into one DTO or list.
 - Contracts apply scope filtering to portfolio/detail visibility.
 - Equipment applies hospital/department filtering.
 - Work Queue filters by scoped contract IDs.
-- Intelligence now rejects contract-bound reads outside the current hospital/department scope and filters graph/event results.
-- Operations CSV export now limits rows to current scoped contract IDs.
+- Intelligence rejects contract-bound reads outside the current hospital/department scope and filters graph/event results.
+- Operations CSV export limits rows to current scoped contract IDs.
+- Document retry/reanalyze/source-region now fail closed for scoped users unless the document is linked to a visible contract.
+- New imports persist the current hospital/department ownership on the backend before the response returns; the frontend no longer performs a follow-up ownership PATCH.
+- Activity now filters contract events by visible contract IDs and non-contract events by persisted hospital/department scope.
 
-### Contract action route finding
-`backend/app/api/routes/contract_actions_secure.py` is not registered in `backend/app/main.py` and must not be treated as a live API. It also references the current contract workspace helper with an outdated call shape. Until it is reconciled with the live `contracts.py` router, no frontend button may depend on it.
+### Contract action route resolution
+The unregistered duplicate `backend/app/api/routes/contract_actions_secure.py` was removed. It was stale and referenced outdated helper signatures. The registered `contracts.py` router remains canonical.
 
-This is important because the live `contracts.py` currently remains the registered contract router. We will decide in a later integration pass whether to merge the role/provenance improvements from the secure file into the live route or remove the stale duplicate.
+Mutation authorization is enforced by the active `LocalAuthMiddleware` plus route-level reviewer identity logic:
+- viewers cannot mutate;
+- reviewers may mutate fact-review/review and work-queue paths only;
+- archive/override/import/ownership mutations remain limited to broader roles through middleware/route checks.
 
-## Frontend domain API target
+No frontend code should target a second contract mutation router.
 
-A thin adapter layer is being established under `frontend/lib/domain-api/`.
+## Frontend domain API layer
 
-Started:
+Established under `frontend/lib/domain-api/`:
 - `intelligence.ts` — graph, obligations, policies, action proposals, events.
+- `contracts.ts` — portfolio/detail/review/archive/override/document URL.
+- `documents.ts` — import/retry/reanalyze/source-region URL.
+- `equipment.ts` — list/detail.
+- `workQueue.ts` — list/status lifecycle.
 
-Planned:
-- `contracts.ts`
-- `documents.ts`
-- `equipment.ts`
-- `workQueue.ts`
+Still planned:
 - `operations.ts`
 - `organizations.ts`
+- optional `activity.ts` once the audit UI contract is finalized.
 
 Responsibilities:
 - construct routes/query parameters;
 - centralize TypeScript DTOs where practical;
-- expose semantic methods (`listWorkItems`, `getContractObligations`, `reanalyzeDocument`) instead of raw endpoint strings;
+- expose semantic methods instead of raw endpoint strings;
 - preserve semantic differences between dashboard actions, work items and intelligence proposals;
 - do not calculate domain values.
 
-## Verification guard
-`backend/tests/test_integration_scope_guards.py` protects the integration baseline by checking that Intelligence and CSV export keep their scope dependencies and filters.
+## Verification guards
+`backend/tests/test_integration_scope_guards.py` protects the integration baseline by checking that Intelligence, CSV export, Documents and Activity keep their scope dependencies and filters.
 
 ## Next implementation slice
-1. Finish route-by-route request/response/consumer inventory for Documents, Contracts, Users, Ownership and Activity.
-2. Reconcile live `contracts.py` mutation authorization with the unregistered `contract_actions_secure.py` implementation.
-3. Add frontend domain adapters for documents/equipment/work queue before moving existing pages to them.
-4. Only then wire Intelligence panels into Contract Workspace.
+1. Audit and harden Ownership/Users/Organization Structure against hospital/department scope edge cases.
+2. Migrate existing Work Queue and Import consumers to the new domain adapters without changing UI behavior.
+3. Add Operations adapter + scoped CSV download surface.
+4. Then wire Intelligence panels into Contract Workspace using the canonical evidence model.
