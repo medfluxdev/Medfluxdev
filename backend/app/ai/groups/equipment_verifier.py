@@ -83,7 +83,9 @@ def _find_support(field: str, value: Any, source_texts: list[str]) -> bool:
         values = list(value or [])
         return all(any(_contains_exactish(text, item) for text in source_texts) for item in values)
 
-    return True
+    # Unknown equipment fields are never silently accepted. If the checked
+    # field set is expanded without adding a verifier rule, fail closed.
+    return False
 
 
 def _identity_keys(equipment: Any) -> set[tuple[str, str]]:
