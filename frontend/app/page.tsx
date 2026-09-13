@@ -86,6 +86,16 @@ export default function DashboardPage() {
             {" · "}<FreshnessState freshness={data.freshness} />
           </section>
 
+          <section className="intel-strip dashboard-kpi-strip" aria-label="Kennzahlen">
+            {Object.entries(data.kpis)
+              .filter(([, card]) => card.label_de !== "Gesamtvertragswert")
+              .map(([key, card]) => (
+                <div className="intel" key={key}>
+                  <KpiCard card={card} href={KPI_LINKS[key]} />
+                </div>
+              ))}
+          </section>
+
           <div className="dash-grid dashboard-card-grid dashboard-priority-grid">
             <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="handlungsbedarf">
               <div className="panel-head dashboard-feature-head">
@@ -108,16 +118,6 @@ export default function DashboardPage() {
               <DeadlineDistribution buckets={data.deadlines} />
             </section>
           </div>
-
-          <section className="intel-strip dashboard-kpi-strip" aria-label="Kennzahlen">
-            {Object.entries(data.kpis)
-              .filter(([, card]) => card.label_de !== "Gesamtvertragswert")
-              .map(([key, card]) => (
-                <div className="intel" key={key}>
-                  <KpiCard card={card} href={KPI_LINKS[key]} />
-                </div>
-              ))}
-          </section>
 
           <div className="lower-grid dashboard-card-grid">
             <section className="panel dashboard-feature-card" aria-labelledby="kosten">
