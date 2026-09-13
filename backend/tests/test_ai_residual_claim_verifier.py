@@ -122,3 +122,14 @@ def test_default_currency_requires_source_support():
         contract, [_unit("Alle Preise verstehen sich in EUR")]
     )
     assert not any("costs.default_currency" in issue for issue in supported)
+
+
+def test_residual_money_does_not_accept_numeric_prefix_collision():
+    contract = Contract()
+    contract.costs.travel_cost = Money(amount=12, currency="EUR")
+
+    issues = verify_residual_critical_claims(
+        contract, [_unit("Fahrtkosten: 1.200 EUR")]
+    )
+
+    assert any("costs.travel_cost" in issue for issue in issues)
