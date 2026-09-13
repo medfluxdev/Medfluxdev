@@ -5,7 +5,7 @@ Last updated: 2026-09-13
 Status: IN PROGRESS
 Progress: 9/10 development steps complete (90%)
 Active step: FE-10 — Accessibility, performance, and release verification
-Next action: Run the full frontend test/build gate, complete 1440/1280/768/390/320 reflow checks, and fix any release-blocking findings.
+Next action: Run the unified release gate, complete 1440/1280/768/390/320 reflow checks, and fix any remaining release-blocking findings.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -175,26 +175,29 @@ Verification note:
 Status: IN PROGRESS
 Depends on: FE-09
 
-Implemented in current release-gate batch:
+Implemented in current release-gate batches:
 - Removed the known profile `<img>` production-build warning by using local/data-URL-compatible `next/image`.
 - Added generic visible focus safeguards and reduced-motion behavior.
-- Added reflow safeguards for dense tables/tabs and 390/320-pixel layouts; horizontal overflow is contained inside labeled dense regions instead of the page.
-- Added `docs/FRONTEND_RELEASE_VERIFICATION.md` with automated, journey, reflow, accessibility, performance and data-integrity gates.
+- Added reflow safeguards for dense tables/tabs and 390/320-pixel layouts; horizontal overflow is contained inside dense regions instead of the page.
+- PDF.js remains lazy through dynamic import and only initializes while the source workspace is active.
+- Account menu supports Escape dismissal and restores focus to the menu trigger.
+- Removed the persistent topbar's duplicate semantic `h1`; main page content now owns the top-level heading.
+- Added shell tests for account-menu keyboard dismissal/focus restoration and accessible global search submission.
+- Added a single `npm run verify` command that runs lint, tests and production build sequentially.
+- Updated `docs/FRONTEND_RELEASE_VERIFICATION.md` with automated, journey, reflow, accessibility, performance and data-integrity gates.
 
 Remaining release gate:
-- [ ] Full frontend test suite passes on the current head.
-- [ ] Production build passes without release-blocking warnings.
-- [ ] Verify representative widths 1440 / 1280 / 768 / 390 / 320.
+- [ ] `npm run verify` passes on the current head.
+- [ ] Verify representative widths 1440 / 1280 / 768 / 390 / 320 in the browser.
 - [ ] Recheck keyboard/focus on login, dashboard, contracts, source review, import, work queue and admin journeys.
 - [ ] Resolve remaining noisy React `act(...)` test-harness warnings where practical.
-- [ ] Record final build size/performance baseline and verify no external runtime dependency was introduced.
+- [ ] Record final production build size/performance baseline and verify no external runtime dependency was introduced.
 
-## Current verification commands
+## Current verification command
 From `frontend/`:
 
 ```bash
-npm run test
-npm run build
+npm run verify
 ```
 
 Run backend `pytest` only when backend behavior changes.
