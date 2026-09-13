@@ -8,27 +8,6 @@ import { apiGet, apiUpload } from "@/lib/api";
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
-
-  it("bricht auch haengende Uploads ueber ihren Timeout ab", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        (_url: string, init: RequestInit): Promise<Response> =>
-          new Promise<Response>((_resolve, reject) => {
-            init.signal?.addEventListener("abort", () =>
-              reject(new DOMException("Aborted", "AbortError"))
-            );
-          })
-      )
-    );
-    vi.useFakeTimers();
-    const file = new File(["x"], "contract.pdf", { type: "application/pdf" });
-    const p = apiUpload<unknown>("/api/documents/import", [file], "hospital", 500);
-    p.catch(() => undefined);
-    await vi.advanceTimersByTimeAsync(600);
-    await expect(p).rejects.toThrow();
-  });
-
 });
 
 function stubFetch(promiseFor: (init: RequestInit) => Promise<Response>) {
@@ -43,7 +22,6 @@ function stubFetch(promiseFor: (init: RequestInit) => Promise<Response>) {
 
 describe("API-Schicht: garantierte Terminierung", () => {
   it("bricht einen haengenden GET nach dem Standard-Timeout mit Fehler ab", async () => {
-    // Ein fetch, das NIE aufloest, aber auf das AbortSignal hoert (Timeout).
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -58,7 +36,7 @@ describe("API-Schicht: garantierte Terminierung", () => {
 
     vi.useFakeTimers();
     const p = apiGet<unknown>("/api/never");
-    p.catch(() => undefined); // Rejection wird hier bewusst behandelt.
+    p.catch(() => undefined);
     await vi.advanceTimersByTimeAsync(21000);
     await expect(p).rejects.toThrow();
   });
@@ -94,5 +72,25 @@ describe("API-Schicht: garantierte Terminierung", () => {
   it("meldet HTTP-Fehler weiterhin als ehrlichen Fehler", async () => {
     stubFetch(async () => new Response("kaputt", { status: 500 }));
     await expect(apiGet<unknown>("/api/500")).rejects.toThrow("Request failed: 500");
+  });
+
+  it("bricht auch haengende Uploads ueber ihren Timeout ab", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit): Promise<Response> =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError"))
+            );
+          })
+      )
+    );
+    vi.useFakeTimers();
+    const file = new File(["x"], "contract.pdf", { type: "application/pdf" });
+    const p = apiUpload<unknown>("/api/documents/import", [file], "hospital", 500);
+    p.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(600);
+    await expect(p).rejects.toThrow();
   });
 });
