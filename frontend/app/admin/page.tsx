@@ -49,8 +49,8 @@ export default function AdminPage() {
   const activeUsers = useMemo(() => users.filter((user) => user.is_active).length, [users]);
   const reviews = overview?.data_quality.reduce((sum, item) => sum + item.count, 0) ?? 0;
 
-  if (account?.is_developer || role !== "admin") {
-    return <div className={styles.page}><section className={styles.denied}><h1>Keine Berechtigung</h1><p>Dieses Dashboard ist ausschließlich für Organisationsadministratoren verfügbar.</p><Link href={account?.is_developer ? "/developer" : "/"}>Zur Übersicht</Link></section></div>;
+  if (role !== "admin" || !membership) {
+    return <div className={styles.page}><section className={styles.denied}><h1>Keine Berechtigung</h1><p>Bitte wählen Sie zuerst eine Organisation mit Administratorzugriff aus.</p><Link href={account?.is_developer ? "/developer" : "/"}>Zur Übersicht</Link></section></div>;
   }
 
   return <div className={styles.page}>
