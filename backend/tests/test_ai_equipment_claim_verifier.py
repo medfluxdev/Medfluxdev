@@ -132,3 +132,40 @@ def test_equipment_location_is_operationally_grounded():
     )
     issues = verify_equipment_claims(contract, [_unit("Pump X befindet sich im OP 2")])
     assert any(".location" in issue for issue in issues)
+
+
+def test_equipment_included_service_rejects_explicit_exclusion():
+    contract = Contract(
+        equipment=[
+            Equipment(
+                device_name="Pump X",
+                included_services=["Kalibrierung"],
+                evidence=SourceEvidence(source_text="Pump X"),
+            )
+        ]
+    )
+    issues = verify_equipment_claims(
+        contract, [_unit("Pump X: Kalibrierung ist nicht enthalten")]
+    )
+    assert any("included_services" in issue for issue in issues)
+
+
+def test_equipment_excluded_service_requires_negative_semantics():
+    contract = Contract(
+        equipment=[
+            Equipment(
+                device_name="Pump X",
+                excluded_services=["Kalibrierung"],
+                evidence=SourceEvidence(source_text="Pump X"),
+            )
+        ]
+    )
+    positive = verify_equipment_claims(
+        contract, [_unit("Pump X: Kalibrierung ist enthalten")]
+    )
+    assert any("excluded_services" in issue for issue in positive)
+
+    negative = verify_equipment_claims(
+        contract, [_unit("Pump X: Kalibrierung ist nicht enthalten")]
+    )
+    assert not any("excluded_services" in issue for issue in negative)
