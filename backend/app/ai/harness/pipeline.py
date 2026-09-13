@@ -788,6 +788,25 @@ class HarnessV2:
                 })
 
             for index, segment in enumerate(segments):
+                if len(calls) >= max(
+                    1, self.settings.harness_max_calls - 2 * len(TOPICS)
+                ):
+                    issues.append(
+                        "ContractMap: Anfragebudget reserviert; weitere Quellen "
+                        "benötigen Prüfung"
+                    )
+                    planner.decisions.append(
+                        {
+                            "purpose": "global_understanding",
+                            "decision": "call_budget_reserved_for_families",
+                            "deferred_blocks": [
+                                block.id
+                                for remainder in segments[index:]
+                                for block in remainder
+                            ],
+                        }
+                    )
+                    break
                 try:
                     mapping = await call(
                         "understanding:" + str(index),
@@ -829,6 +848,13 @@ class HarnessV2:
                     + union_map.model_dump_json()
                 )
                 try:
+                    if (
+                        self.settings.harness_max_calls - len(calls)
+                        <= 2 * len(TOPICS)
+                    ):
+                        raise CallBudgetExhausted(
+                            "Core extraction calls reserved"
+                        )
                     synthesized = await call("global_map", synthesis, ContractMap)
                     if any(
                         ref not in document.index
@@ -862,6 +888,9 @@ class HarnessV2:
                     "competing clauses, definitions, annexes and amendment authority. Keep unresolved alternatives "
                     "as conflicting/ambiguous; abstain instead of guessing. Return candidates only for requested "
                     "fields. evidence_refs must quote exact text from the referenced source block. Do not put "
+                    "the extracted fact only in reasoning_summary: populate value with the actual typed fact. "
+                    "Use supported only for a nonempty value established by the evidence. Null means missing, "
+                    "not supported. Zero prices and false boolean values are valid facts. "
                     "generated evidence inside normalized values. Do not compute annualized costs or derived dates. "
                     "Money={amount:number,currency:string,period:monthly|quarterly|semi_annual|annual|once}; "
                     "For costs.scheduled_prices preserve every explicit staged price separately as "
@@ -922,7 +951,79 @@ class HarnessV2:
                     })
                     family_segments = []
 
+                remaining_families = len(topic_names) - family_index
+                calls_left = self.settings.harness_max_calls - len(calls)
+                segment_allowance = max(
+                    0, calls_left // (2 * remaining_families)
+                )
+                if (
+                    len(family_segments) > segment_allowance
+                    and segment_allowance
+                ):
+                    pending = list(ranked)
+                    selected_segments = []
+                    for allocation in range(segment_allowance):
+                        selected = planner.pack_ranked(
+                            pending,
+                            family_overhead
+                            + "Visual observations for these blocks: []\n",
+                            purpose=f"budget_context:{family}:{allocation}",
+                        )
+                        if not selected:
+                            break
+                        selected_ids = {block.id for block in selected}
+                        selected_segments.append(
+                            [
+                                block
+                                for block in document.blocks
+                                if block.id in selected_ids
+                            ]
+                        )
+                        pending = [
+                            block
+                            for block in pending
+                            if block.id not in selected_ids
+                        ]
+                    if pending:
+                        issues.append(
+                            f"{family}: CallBudgetExhausted; zusätzliche "
+                            "Quellen benötigen Prüfung"
+                        )
+                        planner.decisions.append(
+                            {
+                                "purpose": family,
+                                "decision": "ranked_context_with_deferred_sources",
+                                "deferred_blocks": [
+                                    block.id for block in pending
+                                ],
+                            }
+                        )
+                    family_segments = selected_segments
+
                 for segment_index, segment in enumerate(family_segments):
+                    remaining_families = (
+                        len(topic_names) - family_index - 1
+                    )
+                    if (
+                        self.settings.harness_max_calls - len(calls)
+                        < 2 * (remaining_families + 1)
+                    ):
+                        issues.append(
+                            f"{family}: CallBudgetExhausted; nicht analysierte "
+                            "Quellen benötigen Prüfung"
+                        )
+                        planner.decisions.append(
+                            {
+                                "purpose": family,
+                                "decision": "call_budget_reserved_for_families",
+                                "deferred_blocks": [
+                                    block.id
+                                    for remainder in family_segments[segment_index:]
+                                    for block in remainder
+                                ],
+                            }
+                        )
+                        break
                     context = assemble(segment)
                     visual = vision_context(segment)
                     local_prompt = prompt + "Visual observations for these blocks: " + visual + "\n"
