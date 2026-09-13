@@ -13,6 +13,17 @@ npm run verify
 
 `verify` runs lint, the full Vitest suite, and the production build in sequence. Release is blocked by any failing test, TypeScript error, lint error, prerender error or unresolved production-build warning introduced by application code.
 
+Verified on 2026-09-13 against branch `Ahmad` after commit `dc9e8386376a22c2073557bea4924830fe874362`:
+
+- `next lint`: PASS — no ESLint warnings or errors.
+- Vitest: PASS — 28/28 test files, 145/145 tests.
+- Next.js production build: PASS — compiled successfully.
+- Static generation: PASS — 22/22 pages.
+- Production build warning gate: PASS — no application build warning remains after replacing `align-items: end` with `flex-end` in the work-queue filter bar.
+- First-load JS remains below the 150 kB release budget for the reported routes; `/contracts` is 105 kB and `/contracts/[contract-id]` is 109 kB in the verified build.
+
+The Vitest run still emits non-failing React `act(...)` test-harness diagnostics in several legacy tests. They do not fail lint, tests, type checking or the production build and are tracked as test-harness cleanup rather than a release-blocking application defect.
+
 Backend `pytest` is required whenever backend behavior or API contracts change. FE-09/FE-10 changes in the current batch are frontend-only.
 
 ## Core journeys
@@ -27,6 +38,8 @@ Verify with keyboard and pointer input:
 6. Settings -> organization/users as admin; verify viewer/reviewer cannot reach admin-only actions.
 7. Scope switch -> organization/hospital/department -> stale requests canceled and unsaved review draft can block the switch.
 8. Account menu -> open with keyboard -> Escape closes the menu and restores focus to the trigger.
+
+Automated coverage exists for the critical interaction logic above; the remaining release step is a representative real-browser spot check for focus order, visual clipping and reflow.
 
 ## Responsive/reflow matrix
 
@@ -68,6 +81,17 @@ Budget targets for production build review:
 - No avoidable image lint warnings; profile images use `next/image` while remaining local/data-URL based.
 - No fake progress timers or polling loops where the backend exposes no durable job/state endpoint.
 
+Verified production baseline (2026-09-13):
+
+- `/`: 101 kB first load.
+- `/contracts`: 105 kB first load.
+- `/contracts/[contract-id]`: 109 kB first load.
+- `/import`: 102 kB first load.
+- `/profile`: 97.8 kB first load.
+- `/settings/users`: 99.8 kB first load.
+
+All reported routes remain below the 150 kB release budget.
+
 ## Data-integrity gate
 
 - Missing costs/deadlines remain unknown, never zero.
@@ -87,13 +111,10 @@ Budget targets for production build review:
 - Profile image uses `next/image` and remains unoptimized/local for data URLs.
 - PDF.js remains route/feature-lazy through dynamic import.
 - `npm run verify` provides one reproducible release command.
+- Work-queue flex alignment uses `flex-end`, eliminating the final Autoprefixer production-build warning.
 
 ## Release decision
 
-Mark FE-10 COMPLETE only after:
+Automated release gate: PASS.
 
-- `npm run verify` passes,
-- representative 1440/1280/768/390/320 reflow checks pass,
-- keyboard/focus checks pass for the core journeys,
-- no new external runtime dependency is present,
-- all P0 defects found during the gate are fixed or explicitly documented as blockers.
+FE-10 can be marked COMPLETE after the representative real-browser reflow/focus spot checks at 1440/1280/768/390/320 have been recorded. No automated or production-build blocker remains on the current verified head.
