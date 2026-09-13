@@ -190,12 +190,38 @@ async def main() -> None:
     ap.add_argument("--report", default=str(BENCH / "report_groups.json"))
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--runs", type=int, default=1)
+    ap.add_argument("--key", default="", help="Run exactly one ground-truth contract key.")
+    ap.add_argument(
+        "--file-contains",
+        default="",
+        help="Run contracts whose benchmark filename contains this text (case-insensitive).",
+    )
+    ap.add_argument(
+        "--require-perfect",
+        action="store_true",
+        help="Exit non-zero unless every selected report passes every ground-truth field.",
+    )
     args = ap.parse_args()
 
     gt = json.loads(Path(args.gt).read_text(encoding="utf-8"))
     orchestrator = ContractAnalysisOrchestrator()
 
     keys = list(gt["contracts"].keys())
+    if args.key:
+        if args.key not in gt["contracts"]:
+            raise SystemExit(f"Unknown benchmark key: {args.key}")
+        keys = [args.key]
+    if args.file_contains:
+        needle = args.file_contains.casefold()
+        keys = [
+            key
+            for key in keys
+            if needle in str(gt["contracts"][key].get("file", "")).casefold()
+        ]
+        if not keys:
+            raise SystemExit(
+                f"No benchmark contract filename contains: {args.file_contains}"
+            )
     if args.limit:
         keys = keys[: args.limit]
 
@@ -237,6 +263,16 @@ async def main() -> None:
             f"verif_calls={v.get('verifier_calls')} ({e.get('processing_duration')}s)"
         )
     print(f"Report: {Path(args.report)}")
+
+    if args.require_perfect:
+        failed = [
+            r
+            for r in reports
+            if r.get("error")
+            or r.get("fields_passed", 0) != r.get("fields_total", 0)
+        ]
+        if failed:
+            raise SystemExit(2)
 
 
 if __name__ == "__main__":
