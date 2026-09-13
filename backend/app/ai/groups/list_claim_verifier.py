@@ -38,14 +38,29 @@ def _item_present(text: str, item: str) -> bool:
     return bool(needle) and needle in _norm(text)
 
 
+def _local_clause(text: str, start: int, end: int) -> str:
+    separators = ".;|\n"
+    left = 0
+    for sep in separators:
+        pos = text.rfind(sep, 0, start)
+        if pos >= 0:
+            left = max(left, pos + 1)
+    right = len(text)
+    for sep in separators:
+        pos = text.find(sep, end)
+        if pos >= 0:
+            right = min(right, pos)
+    return text[left:right]
+
+
 def _excluded_item_supported(text: str, item: str) -> bool:
     if not _item_present(text, item):
         return False
     low = text.casefold()
-    idx = low.find(_norm(item))
-    start = max(0, idx - 100)
-    end = min(len(text), idx + len(item) + 120)
-    return bool(_NEGATION_RE.search(text[start:end]))
+    needle = _norm(item)
+    idx = low.find(needle)
+    clause = _local_clause(text, idx, idx + len(needle))
+    return bool(_NEGATION_RE.search(clause))
 
 
 def verify_service_list_claims(contract: Contract, units: Iterable[object]) -> list[str]:
