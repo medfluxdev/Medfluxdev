@@ -71,13 +71,54 @@ def _amount(value: Any) -> float | None:
         return None
 
 
+def _number_variants(number: float | int) -> set[str]:
+    value = float(number)
+    variants: set[str] = set()
+    if value.is_integer():
+        integer = int(value)
+        plain = str(integer)
+        us_grouped = f"{integer:,}"
+        de_grouped = us_grouped.replace(",", ".")
+        space_grouped = us_grouped.replace(",", " ")
+        variants.update(
+            {
+                plain,
+                f"{plain}.00",
+                f"{plain},00",
+                us_grouped,
+                f"{us_grouped}.00",
+                de_grouped,
+                f"{de_grouped},00",
+                space_grouped,
+                f"{space_grouped},00",
+            }
+        )
+        return variants
+
+    raw = format(value, ".12f").rstrip("0").rstrip(".")
+    whole, fraction = raw.split(".", 1)
+    integer = int(whole)
+    us_grouped = f"{integer:,}"
+    de_grouped = us_grouped.replace(",", ".")
+    space_grouped = us_grouped.replace(",", " ")
+    variants.update(
+        {
+            raw,
+            raw.replace(".", ","),
+            f"{us_grouped}.{fraction}",
+            f"{de_grouped},{fraction}",
+            f"{space_grouped},{fraction}",
+        }
+    )
+    return variants
+
+
 def _contains_number(text: str, number: float | int) -> bool:
-    variants = {str(number).replace(".", ","), str(number)}
-    if float(number).is_integer():
-        i = int(number)
-        variants.update({str(i), f"{i:,}".replace(",", "."), f"{i:,}".replace(",", " ")})
-    compact = text.replace(" ", "")
-    return any(v.replace(" ", "") in compact for v in variants)
+    for variant in sorted(_number_variants(number), key=len, reverse=True):
+        pattern = rf"(?<!\d){re.escape(variant)}(?!\d|[.,]\d)"
+        if re.search(pattern, text):
+            return True
+    return False
 
 
 def _currency_of(value: Any) -> str | None:
