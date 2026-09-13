@@ -14,8 +14,10 @@ $env:MEDFLUX_UNIT_ONLY = "1"
 Write-Host "[STEP18] Python syntax gate..."
 python -m py_compile `
     app/ai/groups/critical_policy.py `
+    app/ai/groups/equipment_verifier.py `
     app/ai/groups/evidence.py `
     app/ai/groups/extractor.py `
+    app/ai/groups/list_claim_verifier.py `
     app/ai/groups/verifier.py `
     app/api/routes/operations.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -24,7 +26,9 @@ Write-Host "[STEP18] Targeted fail-closed tests..."
 python -m pytest -q `
     tests/test_ai_critical_policy.py `
     tests/test_ai_critical_verifier_expansion.py `
+    tests/test_ai_equipment_claim_verifier.py `
     tests/test_ai_equipment_evidence.py `
+    tests/test_ai_service_list_verifier.py `
     tests/test_ai_evidence_fail_closed.py `
     tests/test_ai_verifier_safety.py `
     tests/test_ai_verifier_fail_closed.py `
