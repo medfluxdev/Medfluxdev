@@ -147,6 +147,14 @@ class Settings(BaseSettings):
             raise RuntimeError("AUTH_SESSION_TTL_SECONDS muss mindestens 300 sein.")
         if self.auth_cookie_samesite not in {"lax", "strict", "none"}:
             raise RuntimeError("AUTH_COOKIE_SAMESITE ist ungueltig.")
+        if self.auth_cookie_samesite == "none" and not self.auth_cookie_secure:
+            raise RuntimeError(
+                "AUTH_COOKIE_SAMESITE=none erfordert AUTH_COOKIE_SECURE=true."
+            )
+        if self.auth_enabled and "*" in self.cors_origins_list:
+            raise RuntimeError(
+                "AUTH_ENABLED=true erlaubt keinen CORS-Wildcard-Origin."
+            )
 
 
 settings = Settings()
