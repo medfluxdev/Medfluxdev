@@ -7,6 +7,7 @@ from app.api.routes import (
     activity,
     ai,
     auth,
+    contract_billing,
     contracts,
     cost_center_routes,
     dashboard,
@@ -96,6 +97,7 @@ app.include_router(work_queue_collaboration.router)
 app.include_router(intelligence.router)
 app.include_router(intelligence_actions.router)
 app.include_router(intelligence_analytics.router)
+app.include_router(contract_billing.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(operations.router)
