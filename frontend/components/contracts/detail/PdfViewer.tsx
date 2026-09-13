@@ -23,8 +23,17 @@ type LoadStatus = "idle" | "loading" | "ready" | "error";
 type PdfJsModule = typeof import("pdfjs-dist");
 type PdfDoc = Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>;
 
+function sourceErrorMessage(status: number | null, aborted: boolean): string {
+  if (aborted) return "Das Quelldokument hat nicht rechtzeitig geantwortet.";
+  if (status === 403) return "Sie haben keine Berechtigung für dieses Quelldokument.";
+  if (status === 404) return "Das Quelldokument oder diese Dokumentversion wurde nicht gefunden.";
+  if (status != null && status >= 500) return "Das Quelldokument ist serverseitig momentan nicht verfügbar.";
+  return "Quelle konnte nicht geladen werden.";
+}
+
 export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget }: Props) {
   const [status, setStatus] = useState<LoadStatus>("idle");
+  const [errorText, setErrorText] = useState("Quelle konnte nicht geladen werden.");
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -51,19 +60,31 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
       return;
     }
     let cancelled = false;
+    let timedOut = false;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30000);
     setStatus("loading");
+    setErrorText("Quelle konnte nicht geladen werden.");
+    setDims(null);
     const seq = ++requestSeq.current;
 
     (async () => {
+      let responseStatus: number | null = null;
       try {
+        if (docRef.current) {
+          void docRef.current.destroy();
+          docRef.current = null;
+        }
         const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.js";
         const res = await fetch(contentUrl(contractId, documentVersionId, orgSlug), {
           signal: controller.signal,
           credentials: "include",
         });
+        responseStatus = res.status;
         if (!res.ok) throw new Error(`content ${res.status}`);
         const data = await res.arrayBuffer();
         const doc = await pdfjs.getDocument({ data }).promise;
@@ -74,10 +95,15 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
         pdfRef.current = pdfjs;
         docRef.current = doc;
         setPageCount(doc.numPages);
-        setPageNumber(1);
+        const requestedPage = navTarget?.document_version_id === documentVersionId ? navTarget.page : null;
+        setPageNumber(requestedPage ? Math.min(Math.max(1, requestedPage), doc.numPages) : 1);
         setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("error");
+      } catch (error) {
+        if (!cancelled) {
+          const aborted = timedOut || (error instanceof DOMException && error.name === "AbortError");
+          setErrorText(sourceErrorMessage(responseStatus, aborted));
+          setStatus("error");
+        }
       } finally {
         clearTimeout(timer);
       }
@@ -86,8 +112,14 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     return () => {
       cancelled = true;
       controller.abort();
+      renderTaskRef.current?.cancel();
     };
-  }, [active, documentVersionId, contractId, orgSlug, retrySeq]);
+  }, [active, documentVersionId, contractId, orgSlug, retrySeq, navTarget?.document_version_id, navTarget?.page]);
+
+  useEffect(() => () => {
+    renderTaskRef.current?.cancel();
+    if (docRef.current) void docRef.current.destroy();
+  }, []);
 
   const renderPage = useCallback(async () => {
     const pdfjs = pdfRef.current;
@@ -141,11 +173,12 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (refinedKeyRef.current === key) return;
     refinedKeyRef.current = key;
     let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
         const res = await fetch(
           sourceRegionUrl(documentVersionId, orgSlug, navTarget.label, navTarget.page ?? null),
-          { credentials: "include" }
+          { credentials: "include", signal: controller.signal }
         );
         if (!res.ok) return;
         const body = (await res.json()) as {
@@ -167,7 +200,10 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
         // Existing coarse evidence remains available when refinement fails.
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [status, documentVersionId, navTarget, orgSlug]);
 
   useEffect(() => {
@@ -178,8 +214,8 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber || !navTarget.supports_exact_navigation) return;
     const refinedKey = `${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
     const useRefined = refined !== null && refined.key === refinedKey && refined.status === "exact" && refined.bbox !== null;
-    const bbox = useRefined ? refined!.bbox! : navTarget.bbox;
-    const bboxSpace = useRefined ? refined!.bbox_space : navTarget.bbox_space;
+    const bbox = useRefined ? refined.bbox! : navTarget.bbox;
+    const bboxSpace = useRefined ? refined.bbox_space : navTarget.bbox_space;
     if (!bbox) return;
     canvas.width = dims.width;
     canvas.height = dims.height;
@@ -224,8 +260,14 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
         onZoomIn={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
         onResetZoom={() => setZoom(1)}
       />
-      {status === "loading" && <p className="pdf-status">Quelle wird geladen…</p>}
-      {status === "error" && <p className="pdf-status pdf-error" role="alert">Quelle konnte nicht geladen werden. <button type="button" className="btn-link" onClick={() => setRetrySeq((n) => n + 1)}>Erneut laden</button></p>}
+      {status === "loading" && <p className="pdf-status" role="status">Quelle wird geladen…</p>}
+      {status === "error" && (
+        <div className="pdf-status pdf-error" role="alert">
+          <strong>Quelldokument nicht verfügbar</strong>
+          <span>{errorText}</span>
+          <button type="button" className="btn-link" onClick={() => setRetrySeq((n) => n + 1)}>Erneut laden</button>
+        </div>
+      )}
       {canRender && <div className="pdf-stage"><div className="pdf-page-wrap" style={{ width: dims?.width }}><canvas ref={pageCanvasRef} className="pdf-page-canvas" /><canvas ref={overlayCanvasRef} className="pdf-overlay-canvas" aria-hidden="true" /></div></div>}
       {navTarget && pageNumber === navTarget.page && navTarget.page != null && (
         <p className="pdf-nav-info" aria-live="polite">
