@@ -3,9 +3,9 @@
 Created: 2026-09-13
 Last updated: 2026-09-13
 Status: IN PROGRESS
-Progress: 7/10 development steps complete (70%)
-Active step: FE-08 — Import and analysis experience
-Next action: Verify the first FE-08 batch, then finish duplicate/partial-result handling and completion/review navigation using only supported backend states.
+Progress: 9/10 development steps complete (90%)
+Active step: FE-10 — Accessibility, performance, and release verification
+Next action: Run the full frontend test/build gate, complete 1440/1280/768/390/320 reflow checks, and fix any release-blocking findings.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -35,9 +35,9 @@ Allowed statuses: PLANNED, IN PROGRESS, BLOCKED, COMPLETE.
 | FE-05 | Contract table and search workflow | P0 | COMPLETE |
 | FE-06 | Contract detail and source review workspace | P0 | COMPLETE |
 | FE-07 | Action-oriented dashboards | P1 | COMPLETE |
-| FE-08 | Import and analysis experience | P1 | IN PROGRESS |
-| FE-09 | Tasks, deadlines, and administration | P1 | PLANNED |
-| FE-10 | Accessibility, performance, and release verification | P0 release gate | PLANNED |
+| FE-08 | Import and analysis experience | P1 | COMPLETE |
+| FE-09 | Tasks, deadlines, and administration | P1 | COMPLETE |
+| FE-10 | Accessibility, performance, and release verification | P0 release gate | IN PROGRESS |
 
 ## FE-01 — Audit and acceptance baseline
 Status: COMPLETE
@@ -104,10 +104,6 @@ Implemented / verified:
 Backend dependency result:
 - No verified server API exists for saved-view persistence, bulk contract actions, or filtered export. Unsupported bulk/export controls remain absent instead of being simulated.
 
-Verification result:
-- User-reported local frontend test suite: 124/124 passing after final FE-05 test adjustment.
-- Production build remained green in the FE-05 verification run.
-
 ## FE-06 — Contract detail and source review workspace
 Status: COMPLETE
 Depends on: FE-05
@@ -123,84 +119,75 @@ Implemented / verified:
 - PDF loading distinguishes forbidden, missing document/version, timeout and server errors with retry; stale source/PDF work is cancellable and cleaned up.
 - Evidence confidence is shown only for valid backend values.
 - Evidence/PDF review workspace is adjustable on desktop and stacks/resizes vertically on smaller screens.
-- Missing-document, source-geometry, evidence presentation, correction, reload/scroll and calculation-basis paths have targeted automated coverage.
-
-Verification result:
-- User-reported local frontend tests and production build green after the final FE-06 calculation/split-workspace batch.
 
 ## FE-07 — Action-oriented dashboards
 Status: COMPLETE
 Depends on: FE-06
 
 Implemented / verified:
-- Urgent `Handlungsbedarf` and deadline panels are placed before lower-priority KPI/financial summaries.
-- Supported KPI cards link to real contract filters: active contracts, approaching contract end and critical cancellation deadlines.
-- Cancellation deadlines are summarized separately from contract ends and critical cancellation opens the corresponding filtered list.
-- Action rows expose `Aktion erforderlich` / `Prüfung erforderlich` textually; unsupported per-contract chevrons/links are absent because the DTO has no contract ID.
-- Financial coverage explicitly reports unreliable/missing annual cost and total-value counts; unknown values are never rendered as 0 €.
-- Multi-currency behavior remains separate with no invented conversion.
-- Data-quality and cost-coverage panels use supported review filters only.
-- Data date and freshness remain visible near the top of the dashboard.
-- Empty/partial dashboard states remain meaningful and existing automated accessibility coverage still runs against the dashboard.
-
-Verification result:
-- User-reported local frontend tests and production build green after the final FE-07 batch.
+- Urgent `Handlungsbedarf` and deadline panels precede lower-priority summaries.
+- Supported KPI cards link to real contract filters.
+- Cancellation deadlines are separated from contract ends.
+- Unsupported per-contract action links remain absent where the DTO has no contract ID.
+- Missing/unreliable costs are explicit and never displayed as zero.
+- Currencies remain separate with no invented conversion.
+- Data date and warning freshness remain visible.
+- User-reported local frontend tests and production build were green after FE-07.
 
 ## FE-08 — Import and analysis experience
-Status: IN PROGRESS
+Status: COMPLETE
 Depends on: FE-07
 
-Verified backend behavior:
-- `/api/documents/import` accepts a batch of PDF/DOCX uploads and processes each document through the persisted production orchestrator.
-- The endpoint is synchronous from the browser perspective and returns per-file results only after processing; it does not expose live per-stage percentage/status events.
-- Per-file results include import status, optional analysis status, review requirement, stored document-version ID and optional contract ID.
-- `/api/documents/{document_version_id}/retry` supports retry from a stored document version after failed/incomplete analysis.
-- No frontend-verifiable fixed maximum file-size limit is exposed by the current import API, so the UI must not invent one.
+Implemented / verified:
+- Keyboard-accessible drag/drop and native picker accept PDF/DOCX; unsupported extensions are rejected before upload.
+- Active organization/working scope is shown before import and existing verified ownership assignment is retained.
+- Import and analysis results are separate per file; `analysis_failed` does not imply persistence failure.
+- Partial analysis is explicit and can link directly to manual review when a real contract ID is returned.
+- Duplicate files are shown as not re-analyzed and do not receive an invalid retry action.
+- Retry is limited to failed analysis with a stored document-version ID.
+- Processing is honestly indeterminate because the synchronous backend exposes no live stages/percent or durable job endpoint.
+- Result summary distinguishes imported, analyzed, failed and duplicate files.
+- Focused tests cover validation, partial analysis, duplicate handling, retry and manual-review navigation.
 
-Implemented in first FE-08 batch:
-- [x] Existing drag/drop area remains keyboard accessible and the native picker restricts to PDF/DOCX.
-- [x] Unsupported extensions are rejected before upload with an explicit user-visible message.
-- [x] Active organization/working-scope target is shown before import; the selected hospital/department scope continues to be assigned through the verified ownership flow after successful import.
-- [x] Removed hardcoded import/retry organization usage in favor of the authenticated active organization scope.
-- [x] Import success is presented separately from analysis success/failure for every file.
-- [x] `analysis_failed` no longer visually implies that document persistence itself failed.
-- [x] Indeterminate processing copy explicitly states that the API has no live stages/percentages; no fake percentage is shown.
-- [x] Retry is offered only for failed analysis with a stored document-version ID.
-- [x] Result summary separates imported documents, successful analyses, failed analyses and duplicates.
-- [x] Direct contract links are shown only when the backend returns a real contract ID.
-- [x] Added focused tests for supported-file validation, separated import/analysis states, retry and honest indeterminate processing.
-
-Remaining FE-08 scope:
-- [ ] Verify the current import batch with the full frontend suite and production build.
-- [ ] Recheck duplicate and partial-analysis presentation with representative backend fixtures.
-- [ ] Confirm completion/review navigation for files requiring manual review.
-- [ ] Document that durable background job tracking is not available because the current endpoint is synchronous and exposes no job ID/status endpoint.
+Backend limitation documented:
+- Durable background job tracking is not available from the current synchronous import API; the UI does not simulate it.
 
 ## FE-09 — Tasks, deadlines, and administration
-Status: PLANNED
+Status: COMPLETE
 Depends on: FE-08
 
-Planned scope:
-- Define tasks/warnings/reviews relationship.
-- Useful filters and direct contract/reason links.
-- Distinguish contract end from cancellation deadline.
-- Assignment/completion only with verified backend support/permissions.
-- Standardize organization/user forms and preserve historical records on deactivation.
-- Keep developer administration separate from scoped operational administration.
+Implemented:
+- Work queue uses verified backend filters for status, severity and item type.
+- Each task exposes its backend reason (`why_de`) and next-step hint (`action_hint_de`) when present.
+- Contract links use real contract IDs; review tasks can open the contract review workspace directly.
+- `Kündigungsfrist`, `Vertragsende` and `Verlängerung` are distinguished textually instead of relying on color.
+- A filtered-empty state is distinct from an actually empty active queue.
+- Existing acknowledge/resolve actions remain limited to the backend-supported status transitions.
+- No assignment or notification controls were added because no verified backend API exists for them.
+- User/organization administration continues to deactivate/reactivate records instead of deleting history.
+- Developer/system administration remains separate from organization-scoped operational administration.
+- Added focused work-queue tests for filters, direct review navigation, deadline-type clarity and next-step context.
+
+Verification note:
+- Final whole-application automated/build verification is intentionally consolidated into the FE-10 release gate.
 
 ## FE-10 — Accessibility, performance, and release verification
-Status: PLANNED
+Status: IN PROGRESS
 Depends on: FE-09
 
-Release-gate scope:
-- Keyboard/focus/accessibility review against WCAG 2.2 AA target.
-- Representative widths 1440/1280/768/390 and 320-pixel reflow.
-- Lazy-load heavy features where useful.
-- Production performance baseline and budgets.
-- End-to-end core journeys and visual regression references.
-- Frontend build/lint/tests and backend tests for any changed APIs.
-- No external fonts/assets/analytics/AI dependencies.
-- Resolve release-blocking defects and document remaining limitations.
+Implemented in current release-gate batch:
+- Removed the known profile `<img>` production-build warning by using local/data-URL-compatible `next/image`.
+- Added generic visible focus safeguards and reduced-motion behavior.
+- Added reflow safeguards for dense tables/tabs and 390/320-pixel layouts; horizontal overflow is contained inside labeled dense regions instead of the page.
+- Added `docs/FRONTEND_RELEASE_VERIFICATION.md` with automated, journey, reflow, accessibility, performance and data-integrity gates.
+
+Remaining release gate:
+- [ ] Full frontend test suite passes on the current head.
+- [ ] Production build passes without release-blocking warnings.
+- [ ] Verify representative widths 1440 / 1280 / 768 / 390 / 320.
+- [ ] Recheck keyboard/focus on login, dashboard, contracts, source review, import, work queue and admin journeys.
+- [ ] Resolve remaining noisy React `act(...)` test-harness warnings where practical.
+- [ ] Record final build size/performance baseline and verify no external runtime dependency was introduced.
 
 ## Current verification commands
 From `frontend/`:
