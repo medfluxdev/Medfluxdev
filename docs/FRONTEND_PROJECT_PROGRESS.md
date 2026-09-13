@@ -3,9 +3,9 @@
 Created: 2026-09-13
 Last updated: 2026-09-13
 Status: IN PROGRESS
-Progress: 5/10 development steps complete (50%)
-Active step: FE-06 — Contract detail and source review workspace
-Next action: Run the full frontend test/build verification for the completed FE-06 implementation batches; if green, finish the acceptance checklist and advance to FE-07.
+Progress: 6/10 development steps complete (60%)
+Active step: FE-07 — Action-oriented dashboards
+Next action: Prioritize urgent actions/cancellation deadlines, make KPI cards actionable, and improve missing-data/scope clarity without inventing unsupported backend data.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -33,8 +33,8 @@ Allowed statuses: PLANNED, IN PROGRESS, BLOCKED, COMPLETE.
 | FE-03 | Application shell and organization navigation | P0 | COMPLETE |
 | FE-04 | Loading, errors, authentication, and service states | P0 | COMPLETE |
 | FE-05 | Contract table and search workflow | P0 | COMPLETE |
-| FE-06 | Contract detail and source review workspace | P0 | IN PROGRESS |
-| FE-07 | Action-oriented dashboards | P1 | PLANNED |
+| FE-06 | Contract detail and source review workspace | P0 | COMPLETE |
+| FE-07 | Action-oriented dashboards | P1 | IN PROGRESS |
 | FE-08 | Import and analysis experience | P1 | PLANNED |
 | FE-09 | Tasks, deadlines, and administration | P1 | PLANNED |
 | FE-10 | Accessibility, performance, and release verification | P0 release gate | PLANNED |
@@ -90,16 +90,16 @@ Status: COMPLETE
 Depends on: FE-04
 
 Implemented / verified:
-- [x] Existing filters, sorting, pagination and URL state preserved.
-- [x] Compact/comfortable density preference persisted locally.
-- [x] Column visibility preference persisted locally; hiding all columns is prevented.
-- [x] Sticky headers and keyboard-focusable horizontal scrolling.
-- [x] Active URL filters shown as individually removable chips with clear-all action.
-- [x] Saved views implemented with explicit local-only persistence.
-- [x] Quick preview uses already-loaded list data without leaving list context.
-- [x] List URL and scroll position are remembered before opening a contract and restored on return.
-- [x] Existing filter URL round-trip and pagination tests remained green after integration.
-- [x] New list-preference tests cover filter chips, density, columns, quick preview and saved views.
+- Existing filters, sorting, pagination and URL state preserved.
+- Compact/comfortable density preference persisted locally.
+- Column visibility preference persisted locally; hiding all columns is prevented.
+- Sticky headers and keyboard-focusable horizontal scrolling.
+- Active URL filters shown as individually removable chips with clear-all action.
+- Saved views implemented with explicit local-only persistence.
+- Quick preview uses already-loaded list data without leaving list context.
+- List URL and scroll position are remembered before opening a contract and restored on return.
+- Existing filter URL round-trip and pagination tests remained green after integration.
+- New list-preference tests cover filter chips, density, columns, quick preview and saved views.
 
 Backend dependency result:
 - No verified server API exists for saved-view persistence, bulk contract actions, or filtered export. Unsupported bulk/export controls remain absent instead of being simulated.
@@ -108,68 +108,46 @@ Verification result:
 - User-reported local frontend test suite: 124/124 passing after final FE-05 test adjustment.
 - Production build remained green in the FE-05 verification run.
 
-Key files:
-- `frontend/components/contracts/ContractTable.tsx`
-- `frontend/components/contracts/ContractListViewTools.tsx`
-- `frontend/app/contracts-list.css`
-- `frontend/test/contract-list-preferences.test.tsx`
-
 ## FE-06 — Contract detail and source review workspace
-Status: IN PROGRESS
+Status: COMPLETE
 Depends on: FE-05
 
-Existing foundation already present:
-- Clear contract summary header and tabbed overview/term/finance/services/equipment/documents structure.
-- Source navigation to document version/page/highlight.
-- Evidence, fact review, override and history views.
+Implemented / verified:
+- Clear summary plus overview/term/finance/services/equipment/documents structure retained.
+- Correct document version/page/highlight navigation retained with explicit exact/approximate/page-only source precision.
+- Review values distinguish extracted, reviewed, corrected, missing and system-backed provenance without guessing unsupported origin.
+- Deterministic calculated end/cancellation/renewal/cost values receive `Berechnet` only when the backend supplies a calculation basis.
+- Calculation explanations expose backend inputs and explicitly state that calculations are deterministic rather than AI-generated.
+- Correction workflow requires a reason through the verified backend `note` field; previous/effective values and reason remain visible in history.
+- Unsaved correction drafts protect browser and organization/hospital/department context changes.
+- PDF loading distinguishes forbidden, missing document/version, timeout and server errors with retry; stale source/PDF work is cancellable and cleaned up.
+- Evidence confidence is shown only for valid backend values.
+- Evidence/PDF review workspace is adjustable on desktop and stacks/resizes vertically on smaller screens.
+- Missing-document, source-geometry, evidence presentation, correction, reload/scroll and calculation-basis paths have targeted automated coverage.
 
-Implemented in FE-06:
-- [x] Correction workflow requires a reason and sends it through the verified backend `note` field.
-- [x] Previous/effective values and correction reason remain visible in review history.
-- [x] Unsaved correction drafts trigger browser navigation protection.
-- [x] Organization/hospital/department scope changes are cancelable before local scope is mutated, allowing review drafts to block accidental context switches.
-- [x] PDF source loading distinguishes forbidden, missing version/document, server error and timeout states with a real retry action.
-- [x] PDF/source refinement requests are cancellable; previous PDF documents/render tasks are cleaned up when switching.
-- [x] Fact review labels actual backend-supported provenance as `Extrahiert`, `Geprüft`, `Korrigiert`, `Fehlt` or `Systemwert`; labels are not guessed from UI state.
-- [x] Evidence confidence is shown only for finite values within 0..1; invalid confidence is suppressed instead of presented as meaningful.
-- [x] Evidence precision wording distinguishes exact, approximate, page-only and missing-position source states.
-- [x] Small-screen review/source workspace stacks evidence and PDF panels and makes document switching usable without sticky desktop assumptions.
-- [x] Deterministic dates/costs now receive explicit `Berechnet` provenance only when the backend supplies a real `CalcBasis`; missing basis falls back to `Systemwert` rather than claiming a calculation.
-- [x] Calculation explanations and backend-supplied inputs are displayed in dedicated calculation-basis cards with an explicit statement that the frontend does not perform AI calculation.
-- [x] Evidence/PDF split workspace is adjustable on desktop and vertically adjustable on narrower screens without changing source-navigation semantics.
-- [x] Added targeted tests for correction reason, provenance labels, evidence confidence/precision, and deterministic calculation-basis rendering.
-
-Acceptance verification still required before marking COMPLETE:
-- [ ] Full frontend test suite after the latest ContractWorkspace/calculation changes.
-- [ ] Production build/type-check after the latest ContractWorkspace/calculation changes.
-- [ ] Confirm existing document-version/source-geometry/detail-navigation tests remain green.
-- [ ] Confirm missing-document/PDF retry paths remain green.
-
-Key files:
-- `frontend/components/contracts/detail/ContractWorkspace.tsx`
-- `frontend/components/contracts/detail/CalculationBasisPanel.tsx`
-- `frontend/components/contracts/detail/FactReviewPanel.tsx`
-- `frontend/components/contracts/detail/ValueOriginBadge.tsx`
-- `frontend/components/contracts/detail/EvidencePane.tsx`
-- `frontend/components/contracts/detail/PdfViewer.tsx`
-- `frontend/components/OrganizationScopePicker.tsx`
-- `frontend/app/contract-workspace-enhancements.css`
-- `frontend/test/calculation-basis.test.tsx`
-- `frontend/test/fact-confirm-reviewer.test.tsx`
-- `frontend/test/value-origin-badge.test.tsx`
-- `frontend/test/evidence-pane-presentation.test.tsx`
+Verification result:
+- User-reported local frontend tests and production build green after the final FE-06 calculation/split-workspace batch.
 
 ## FE-07 — Action-oriented dashboards
-Status: PLANNED
+Status: IN PROGRESS
 Depends on: FE-06
 
-Planned scope:
-- Urgent actions and cancellation deadlines first.
-- Scope/period-aware KPIs.
-- KPI links to filtered lists.
-- Explicit missing-data coverage and unknown cost.
-- Currencies stay separate without an approved conversion basis.
-- Role-aligned dashboards and meaningful partial/empty states.
+Verified backend foundation:
+- Dashboard DTO provides active/current accepted projection state, accepted deterministic calculations and active warnings only.
+- `DeadlineBucket` explicitly separates cancellation deadlines from contract-end counts.
+- Financial totals are grouped per currency and expose counts of contracts without reliable values.
+- Action items expose warning type, severity, review/action flags and optional reliable annual cost.
+- Current DTO does not expose a contract ID on action items, so direct per-contract links must not be invented.
+
+Implementation scope:
+- [ ] Put urgent actions and cancellation deadlines before lower-priority summaries.
+- [ ] Make supported KPI indicators link to corresponding filtered contract views.
+- [ ] Keep KPI/financial scope and period/freshness visible.
+- [ ] Make missing-data coverage explicit; unknown/unreliable cost must never appear as zero.
+- [ ] Keep currencies separate without an approved conversion basis.
+- [ ] Improve deadline presentation while preserving cancellation vs contract-end distinction.
+- [ ] Use meaningful partial/empty states.
+- [ ] Do not add unsupported per-contract links or role-specific data that the DTO cannot identify reliably.
 
 ## FE-08 — Import and analysis experience
 Status: PLANNED
