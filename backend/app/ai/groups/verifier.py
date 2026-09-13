@@ -331,6 +331,23 @@ def _party_evidence(field: str, value: Any, texts: list[str]) -> Optional[str]:
     return None
 
 
+def _local_clause(text: str, start: int, end: Optional[int] = None) -> str:
+    """Return the punctuation/table-delimited clause around a matched fact."""
+    end = end if end is not None else start
+    separators = ".;|\n"
+    left = 0
+    for sep in separators:
+        pos = text.rfind(sep, 0, start)
+        if pos >= 0:
+            left = max(left, pos + 1)
+    right = len(text)
+    for sep in separators:
+        pos = text.find(sep, end)
+        if pos >= 0:
+            right = min(right, pos)
+    return text[left:right]
+
+
 def _bool_evidence(texts: list[str], terms: tuple[str, ...], expected: bool) -> Optional[str]:
     for text in texts:
         low = text.casefold()
@@ -338,14 +355,17 @@ def _bool_evidence(texts: list[str], terms: tuple[str, ...], expected: bool) -> 
         if not positions:
             continue
         idx = min(positions)
-        start = max(0, idx - 80)
-        end = min(len(text), idx + 140)
-        window = text[start:end]
-        negated = bool(_NEGATION_RE.search(window))
+        term_end = idx + max(
+            len(term)
+            for term in terms
+            if low.find(term.casefold()) == idx
+        )
+        clause = _local_clause(text, idx, term_end)
+        negated = bool(_NEGATION_RE.search(clause))
         if expected and not negated:
-            return _short_excerpt(text, idx, idx + 1)
+            return _short_excerpt(text, idx, term_end)
         if not expected and negated:
-            return _short_excerpt(text, idx, idx + 1)
+            return _short_excerpt(text, idx, term_end)
     return None
 
 
@@ -378,12 +398,12 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
         for text in texts:
             if not (m := _FIELD_LABELS[field].search(text)):
                 continue
-            window = _short_excerpt(text, m.start(), m.end())
-            negated = bool(_NEGATION_RE.search(window))
+            clause = _local_clause(text, m.start(), m.end())
+            negated = bool(_NEGATION_RE.search(clause))
             if expected and not negated:
-                return window
+                return _short_excerpt(text, m.start(), m.end())
             if not expected and negated:
-                return window
+                return _short_excerpt(text, m.start(), m.end())
         return None
 
     if field in {"dates.start_date", "dates.end_date"}:
@@ -483,12 +503,12 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
         for text in texts:
             if not (m := _24_7_RE.search(text)):
                 continue
-            window = _short_excerpt(text, m.start(), m.end())
-            negated = bool(_NEGATION_RE.search(window))
+            clause = _local_clause(text, m.start(), m.end())
+            negated = bool(_NEGATION_RE.search(clause))
             if expected and not negated:
-                return window
+                return _short_excerpt(text, m.start(), m.end())
             if not expected and negated:
-                return window
+                return _short_excerpt(text, m.start(), m.end())
         return None
 
     return None
