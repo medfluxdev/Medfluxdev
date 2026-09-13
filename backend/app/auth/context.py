@@ -14,6 +14,7 @@ from app.auth.service import (
     account_from_selector,
     actor_for_account,
     get_identity_by_id,
+    memberships_for_account,
 )
 from app.core.config import settings
 from app.database.session import create_session
@@ -65,9 +66,7 @@ def optional_identity(request: Request) -> AuthIdentity | Actor | None:
             return None
         requested_slug = request.query_params.get("organization_slug")
         if not requested_slug:
-            memberships = __import__(
-                "app.auth.service", fromlist=["memberships_for_account"]
-            ).memberships_for_account(session, account.id)
+            memberships = memberships_for_account(session, account.id)
             if account.is_developer:
                 return None
             if len(memberships) == 1:
