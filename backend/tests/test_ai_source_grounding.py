@@ -1,6 +1,7 @@
 from app.ai.groups.normalize import ground_source_identity
 from app.documents.extraction.schemas import ExtractionUnit, SourceType
 from app.models.contract import Contract
+from app.models.enums import ContractType
 
 
 def _unit(source_type: SourceType, index: int, text: str) -> ExtractionUnit:
@@ -90,6 +91,73 @@ def test_ground_source_identity_canonicalizes_ocr_party_name_from_clean_source()
 
     assert contract.identity.customer == "Krankenhaus Nordwest GmbH"
     assert any("customer" in issue for issue in issues)
+
+
+def test_ground_source_identity_collapses_concatenated_customer_to_role_grounded_company():
+    contract = Contract()
+    contract.identity.customer = (
+        "Krankenhaus Nordwest GmbH; Hospital zum Heiligen Geist GmbH; "
+        "FÄZ Fachärztezentrum Frankfurt GmbH; Stiftung Hospital zum Heiligen Geist"
+    )
+    units = [
+        _unit(
+            SourceType.TABLE,
+            1,
+            "Auftraggeber | Auftragnehmer\nKRANKENHAUS N07;fPNEST GMRH | MEDTRON AG",
+        ),
+        _unit(
+            SourceType.PARAGRAPH,
+            27,
+            "Monique Arras / MPG Koordinatorin / Krankenhaus Nordwest GmbH / Steinbacher Hohl 2-26",
+        ),
+        _unit(SourceType.PARAGRAPH, 28, "Hospital zum Heiligen Geist GmbH"),
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.customer == "Krankenhaus Nordwest GmbH"
+
+
+def test_ground_source_identity_fills_supplier_only_from_explicit_table_role():
+    contract = Contract()
+    units = [
+        _unit(
+            SourceType.TABLE,
+            1,
+            "Auftraggeber | Auftragnehmer\nKrankenhaus Nordwest GmbH | MEDTRON AG",
+        )
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.customer == "Krankenhaus Nordwest GmbH"
+    assert contract.identity.supplier == "MEDTRON AG"
+
+
+def test_ground_source_identity_fills_explicit_title_and_type():
+    contract = Contract()
+    units = [
+        _unit(SourceType.PARAGRAPH, 1, "MEDTRON Guard Servicevereinbarung Accutron MR"),
+        _unit(SourceType.PARAGRAPH, 2, "Weitere Vertragsinformationen"),
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.contract_title == "MEDTRON Guard Servicevereinbarung Accutron MR"
+    assert contract.identity.contract_type == ContractType.SERVICE
+
+
+def test_ground_source_identity_does_not_infer_title_from_generic_prose():
+    contract = Contract()
+    units = [
+        _unit(SourceType.PARAGRAPH, 1, "Vielen Dank für Ihre Bestellung."),
+        _unit(SourceType.PARAGRAPH, 2, "Das Gerät wird im Krankenhaus eingesetzt."),
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.contract_title is None
+    assert contract.identity.contract_type == ContractType.UNKNOWN
 
 
 def test_ground_source_identity_does_not_replace_distinct_company():
