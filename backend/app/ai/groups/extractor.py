@@ -208,14 +208,21 @@ class GroupPipeline:
             getattr(equipment, name, None) not in (None, "", [])
             for name in (
                 "device_name",
+                "manufacturer",
                 "model",
                 "serial_number",
                 "inventory_number",
+                "system_name",
+                "equipment_category",
+                "equipment_type",
+                "location",
+                "department",
                 "coverage_start",
                 "coverage_end",
                 "service_scope",
                 "included_services",
                 "excluded_services",
+                "sla_notes",
             )
         )
 
