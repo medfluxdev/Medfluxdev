@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Medflux"
     app_version: str = "0.1.0"
+    app_env: str = "development"
 
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000
@@ -125,9 +126,22 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     def validate_auth_runtime(self) -> None:
+        env = self.app_env.strip().casefold()
+        if env not in {"development", "test", "pilot", "production"}:
+            raise RuntimeError(
+                "APP_ENV muss development, test, pilot oder production sein."
+            )
+        if env in {"pilot", "production"} and not self.auth_enabled:
+            raise RuntimeError(
+                "APP_ENV=pilot/production erfordert AUTH_ENABLED=true."
+            )
         if self.auth_enabled and self.app_secret_key == "change-me":
             raise RuntimeError(
                 "AUTH_ENABLED=true erfordert einen eigenen APP_SECRET_KEY."
+            )
+        if env in {"pilot", "production"} and not self.auth_cookie_secure:
+            raise RuntimeError(
+                "APP_ENV=pilot/production erfordert AUTH_COOKIE_SECURE=true."
             )
         if self.auth_session_ttl_seconds < 300:
             raise RuntimeError("AUTH_SESSION_TTL_SECONDS muss mindestens 300 sein.")
