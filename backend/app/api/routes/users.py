@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth.credential_store import derive_password
 from app.auth.dependencies import current_actor
@@ -128,10 +128,26 @@ def update_user(request: Request, organization_slug: str, account_id: str, paylo
         if row is None:
             raise HTTPException(status_code=404, detail="Benutzer nicht gefunden.")
         account, membership = row
+        membership_count = int(
+            session.scalar(
+                select(func.count(AccountMembership.id)).where(
+                    AccountMembership.account_id == account.id
+                )
+            )
+            or 0
+        )
         changes: dict[str, object] = {}
         if payload.display_name is not None:
             new_name = payload.display_name.strip() or account.display_name
             if new_name != account.display_name:
+                if membership_count > 1 and not actor.is_developer:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=(
+                            "Der Anzeigename eines organisationsübergreifenden "
+                            "Kontos kann nur systemweit geändert werden."
+                        ),
+                    )
                 changes["display_name"] = new_name
                 account.display_name = new_name
         if payload.role is not None:
@@ -143,10 +159,21 @@ def update_user(request: Request, organization_slug: str, account_id: str, paylo
         if payload.is_active is not None:
             if account.id == actor.account_id and payload.is_active is False:
                 raise HTTPException(status_code=422, detail="Der eigene Benutzer kann nicht deaktiviert werden.")
-            changes["is_active"] = payload.is_active
+            # Organization admins manage only this organization's membership.
+            # Account.is_active is global and must not be toggled from an
+            # organization-scoped endpoint because the same account may belong
+            # to other organizations.
+            changes["membership_is_active"] = payload.is_active
             membership.is_active = payload.is_active
-            account.is_active = payload.is_active
         if payload.password is not None:
+            if membership_count > 1 and not actor.is_developer:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Das Passwort eines organisationsübergreifenden Kontos "
+                        "kann nur systemweit zurückgesetzt werden."
+                    ),
+                )
             if len(payload.password) < 10:
                 raise HTTPException(status_code=422, detail="Das Passwort muss mindestens 10 Zeichen lang sein.")
             account.credential_digest = derive_password(payload.password)
