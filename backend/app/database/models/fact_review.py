@@ -66,6 +66,7 @@ class FactReview(Base):
         ForeignKey("app_user.id", ondelete="SET NULL"),
         nullable=True,
     )
+    actor_role_snapshot: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     evidence_ref: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -104,6 +105,7 @@ class ContractReview(Base):
         ForeignKey("app_user.id", ondelete="SET NULL"),
         nullable=True,
     )
+    actor_role_snapshot: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     change_noted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
