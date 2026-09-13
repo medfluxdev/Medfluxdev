@@ -64,9 +64,16 @@ def _service_item_supported(text: str, item: str, *, excluded: bool) -> bool:
     idx = low.find(needle)
     if not needle or idx < 0:
         return False
-    start = max(0, idx - 100)
-    end = min(len(low), idx + len(needle) + 120)
-    negated = bool(_NEGATION_RE.search(low[start:end]))
+    left = 0
+    right = len(low)
+    for sep in ".;|\n":
+        pos = low.rfind(sep, 0, idx)
+        if pos >= 0:
+            left = max(left, pos + 1)
+        pos = low.find(sep, idx + len(needle))
+        if pos >= 0:
+            right = min(right, pos)
+    negated = bool(_NEGATION_RE.search(low[left:right]))
     return negated if excluded else not negated
 
 
