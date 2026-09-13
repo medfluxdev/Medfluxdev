@@ -1,4 +1,4 @@
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPatch } from "@/lib/api";
 
 export interface ContractRelation {
   id: string;
@@ -53,6 +53,7 @@ export interface ContractPoliciesResponse {
 
 export interface IntelligenceActionProposal {
   id: string;
+  contract_id?: string | null;
   kind: string;
   reason: string | null;
   status: string;
@@ -105,6 +106,18 @@ export function getContractPolicies(organizationSlug: string, contractId: string
 export function getContractActionProposals(organizationSlug: string, contractId: string) {
   return apiGet<ContractActionsResponse>(
     `/api/intelligence/contracts/${encodeURIComponent(contractId)}/actions?${orgQuery(organizationSlug)}`
+  );
+}
+
+export function transitionActionProposal(
+  organizationSlug: string,
+  proposalId: string,
+  status: "approved" | "rejected" | "executed" | "cancelled",
+  note?: string,
+) {
+  return apiPatch<IntelligenceActionProposal>(
+    `/api/intelligence/actions/${encodeURIComponent(proposalId)}?${orgQuery(organizationSlug)}`,
+    { status, note: note || null },
   );
 }
 
