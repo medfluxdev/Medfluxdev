@@ -23,8 +23,7 @@ Medflux importiert Verträge lokal (PDF/DOCX), analysiert sie vollständig lokal
 | Frontend       | Next.js / React / TypeScript                  |
 | Backend        | Python + FastAPI                              |
 | Lokale KI      | Ollama (Qwen3 8B Q4)                          |
-| Datenbank MVP  | SQLite                                        |
-| Produktion     | PostgreSQL                                    |
+| Datenbank      | PostgreSQL 18                                 |
 | PDF            | PyMuPDF                                       |
 | DOCX           | python-docx                                   |
 | OCR            | lokal, nur wenn nötig                         |
@@ -53,7 +52,8 @@ Medflux/
 
 - Node.js 20+
 - Python 3.11+
-- Ollama (mit installiertem Modell, z. B. `qwen3:8b-q4`)
+- PostgreSQL 18+
+- Ollama (mit installiertem Modell, z. B. `qwen3:8b`)
 - (optional) Docker
 
 ### Backend starten (lokal)
@@ -63,6 +63,7 @@ cd backend
 python -m venv .venv
 # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -75,6 +76,13 @@ npm run dev
 ```
 
 Dann das Frontend unter `http://localhost:3000` öffnen.
+
+### Docker Compose
+
+`docker compose up --build` startet PostgreSQL 18, Backend und Frontend. Der
+Backend-Container führt vor dem Start automatisch `alembic upgrade head` aus.
+Für Pilot/Produktion müssen Auth, Secret, sichere Cookies und echte
+Datenbank-Credentials in der Umgebung gesetzt werden.
 
 ### Umgebungsvariablen
 
