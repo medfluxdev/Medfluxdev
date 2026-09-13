@@ -7,7 +7,9 @@ from sqlalchemy import select
 
 from app.auth.dependencies import current_actor
 from app.auth.service import require_role
+from app.core.scope_context import current_scope_context
 from app.database.models.activity_log import ActivityLog
+from app.database.scope_queries import intersect_ids, scoped_contract_ids
 from app.database.session import create_session
 from app.demo.workspace import workspace_contract_ids
 
@@ -15,7 +17,12 @@ router = APIRouter(prefix="/api/activity", tags=["activity"])
 
 
 @router.get("")
-def list_activity(request: Request, organization_slug: str, object_id: str | None = None, limit: int = 200):
+def list_activity(
+    request: Request,
+    organization_slug: str,
+    object_id: str | None = None,
+    limit: int = 200,
+):
     actor = current_actor(request, organization_slug)
     try:
         require_role(actor, "admin", "contract_manager")
@@ -31,13 +38,50 @@ def list_activity(request: Request, organization_slug: str, object_id: str | Non
 
     session = create_session()
     try:
-        stmt = select(ActivityLog).where(ActivityLog.organization_id == actor.organization_id)
+        stmt = select(ActivityLog).where(
+            ActivityLog.organization_id == actor.organization_id
+        )
         if object_uuid is not None:
             stmt = stmt.where(ActivityLog.object_id == object_uuid)
-        rows = session.scalars(stmt.order_by(ActivityLog.created_at.desc()).limit(min(max(limit, 1), 500))).all()
-        allowed_contracts = workspace_contract_ids(session)
-        if allowed_contracts is not None:
-            rows = [row for row in rows if row.object_type != "contract" or row.object_id in allowed_contracts]
+        rows = session.scalars(
+            stmt.order_by(ActivityLog.created_at.desc()).limit(min(max(limit, 1), 500))
+        ).all()
+
+        scope = current_scope_context()
+        visible_contracts = intersect_ids(
+            workspace_contract_ids(session),
+            scoped_contract_ids(
+                session,
+                actor.organization_id,
+                scope.hospital_id,
+                scope.department_id,
+            ),
+        )
+        if visible_contracts is not None:
+            rows = [
+                row
+                for row in rows
+                if row.object_type != "contract" or row.object_id in visible_contracts
+            ]
+
+        # Non-contract activity is also constrained by the persisted activity
+        # scope when a hospital/department context is active. Global records with
+        # no scope remain visible to organization-wide users only.
+        if scope.department_id is not None:
+            rows = [
+                row
+                for row in rows
+                if row.object_type == "contract"
+                or row.department_id == scope.department_id
+            ]
+        elif scope.hospital_id is not None:
+            rows = [
+                row
+                for row in rows
+                if row.object_type == "contract"
+                or row.hospital_id == scope.hospital_id
+            ]
+
         return {
             "items": [
                 {
