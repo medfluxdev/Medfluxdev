@@ -16,6 +16,7 @@ const icons: Record<string, Icon> = {
   dashboard: <path d="M4 12h5l3-7 3 14 2-7h3" />,
   admin: <><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 15v-3M12 15V8M16 15v-5"/></>,
   contracts: <><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></>,
+  equipment: <><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></>,
   workQueue: <><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 13h5"/></>,
   import: <path d="M12 3v18M3 12h18" />,
   review: <><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></>,
@@ -34,6 +35,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Arbeitsbereich", items: [
     { label: "Übersicht", href: "/", icon: "dashboard" },
     { label: "Verträge", href: "/contracts", icon: "contracts" },
+    { label: "Geräte", href: "/equipment", icon: "equipment" },
     { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
   ]},
   { label: "Dokumente & Prüfung", items: [
@@ -60,6 +62,7 @@ export default function AppSidebar() {
   const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
   const [statusCheckedAt, setStatusCheckedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
     let mounted = true;
     let controller: AbortController | null = null;
