@@ -24,6 +24,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.core.scope_context import current_scope_context
+from app.database.scope_queries import intersect_ids, scoped_contract_ids
+
 from app.contracts.overrides.keys import (
     OVERRIDE_KEY_TAX_BASIS,
     OVERRIDE_KEY_TAX_RATE_PERCENT,
@@ -119,10 +122,15 @@ def _build_augmented_detail(session, *, organization_id, contract_id):
     return data
 
 
-def _workspace_denies(session, contract_id: UUID) -> bool:
-    allowed = workspace_contract_ids(session)
+def _workspace_denies(session, organization_id, contract_id: UUID) -> bool:
+    demo_ids = workspace_contract_ids(session)
+    scope = current_scope_context()
+    scope_ids = scoped_contract_ids(
+        session, organization_id, scope.hospital_id, scope.department_id
+    )
+    allowed = intersect_ids(demo_ids, scope_ids)
     if allowed is None:
-        return False  # Demo-Workspace aus = normales Portfolio
+        return False
     return contract_id not in allowed
 
 
@@ -243,7 +251,15 @@ def contract_list(
                 params,
                 organization_id=org.id,
                 request_as_of=today,
-                workspace_contract_ids=workspace_contract_ids(session),
+                workspace_contract_ids=intersect_ids(
+                    workspace_contract_ids(session),
+                    scoped_contract_ids(
+                        session,
+                        org.id,
+                        current_scope_context().hospital_id,
+                        current_scope_context().department_id,
+                    ),
+                ),
             )
         except SearchError as exc:
             raise HTTPException(status_code=400, detail=exc.detail_de)
@@ -292,7 +308,7 @@ def contract_detail(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, cid):
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()  # Demo-Modus: außerhalb des Workspace unsichtbar
         try:
             data = _build_augmented_detail(
@@ -327,7 +343,7 @@ def contract_fact_review(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, cid):
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()
         try:
             data = build_contract_detail(
@@ -384,7 +400,7 @@ def contract_review_start(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, cid):
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()
         try:
             start_review(
@@ -424,7 +440,7 @@ def contract_review_complete(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, cid):
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()
         try:
             data = build_contract_detail(
@@ -504,6 +520,8 @@ def contract_archive(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
+        if _workspace_denies(session, org.id, cid):
+            raise _not_found()
         existing = session.execute(
             select(Contract.id).where(
                 (Contract.id == cid)
@@ -534,6 +552,8 @@ def contract_unarchive(
     try:
         org = get_organization(session, organization_slug)
         if org is None:
+            raise _not_found()
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()
         existing = session.execute(
             select(Contract.id).where(
@@ -571,6 +591,8 @@ def contract_override(
     try:
         org = get_organization(session, organization_slug)
         if org is None:
+            raise _not_found()
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()
         try:
             value = None
@@ -626,6 +648,8 @@ def contract_document_content(
     try:
         org = get_organization(session, organization_slug)
         if org is None:
+            raise _not_found()
+        if _workspace_denies(session, org.id, cid):
             raise _not_found()
         svc = DocumentPersistenceService()
         version = session.scalars(
