@@ -15,6 +15,7 @@ import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { formatDate } from "@/lib/format";
+import styles from "./ContractIntelligencePanel.module.css";
 
 interface Props {
   contractId: string;
@@ -95,11 +96,11 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
       {!loading && !error && total === 0 && <p className="cw-muted">Für diesen Vertrag liegen noch keine zusätzlichen Intelligence-Datensätze vor.</p>}
 
       {!loading && !error && total > 0 && (
-        <div className="cw-intelligence-grid">
+        <div className={styles.grid}>
           <div className="card card-pad">
             <h3>Vertragsbeziehungen <span className="muted">({state.relations.length})</span></h3>
             {state.relations.length === 0 ? <p className="cw-muted">Keine Beziehungen erkannt.</p> : (
-              <ul className="cw-intelligence-list">
+              <ul className={styles.list}>
                 {state.relations.map((item) => <li key={item.id}>
                   <div><strong>{item.relation_type}</strong>{reviewBadge(item.requires_review)}</div>
                   {item.rationale ? <p>{item.rationale}</p> : null}
@@ -112,7 +113,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
           <div className="card card-pad">
             <h3>Pflichten <span className="muted">({state.obligations.length})</span></h3>
             {state.obligations.length === 0 ? <p className="cw-muted">Keine strukturierten Pflichten vorhanden.</p> : (
-              <ul className="cw-intelligence-list">
+              <ul className={styles.list}>
                 {state.obligations.map((item) => <li key={item.id}>
                   <div><strong>{item.title || item.key}</strong>{reviewBadge(item.requires_review)}</div>
                   {item.description ? <p>{item.description}</p> : null}
@@ -125,7 +126,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
           <div className="card card-pad">
             <h3>Regelprüfungen <span className="muted">({state.policies.length})</span></h3>
             {state.policies.length === 0 ? <p className="cw-muted">Keine Policy-Entscheidungen vorhanden.</p> : (
-              <ul className="cw-intelligence-list">
+              <ul className={styles.list}>
                 {state.policies.map((item, index) => <li key={`${item.policy_key}-${item.policy_version}-${index}`}>
                   <div><strong>{item.policy_key}</strong><StatusBadge tone={policyTone(item.outcome)} label={item.outcome} />{reviewBadge(item.requires_review)}</div>
                   {item.explanation ? <p>{item.explanation}</p> : null}
@@ -138,7 +139,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
           <div className="card card-pad">
             <h3>Handlungsvorschläge <span className="muted">({state.actions.length})</span></h3>
             {state.actions.length === 0 ? <p className="cw-muted">Keine Handlungsvorschläge vorhanden.</p> : (
-              <ul className="cw-intelligence-list">
+              <ul className={styles.list}>
                 {state.actions.map((item) => <li key={item.id}>
                   <div><strong>{item.kind}</strong><StatusBadge tone="neutral" label={item.status} />{item.requires_human_approval ? <StatusBadge tone="warning" label="Freigabe erforderlich" /> : null}</div>
                   {item.reason ? <p>{item.reason}</p> : null}
