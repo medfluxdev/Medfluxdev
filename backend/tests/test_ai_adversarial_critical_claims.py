@@ -145,3 +145,22 @@ def test_table_with_both_party_names_does_not_support_swapped_roles():
     values = {v.field: v for v in _collect_sensitive_values(contract, units=[table])}
     assert values["identity.customer"].evidence is None
     assert values["identity.supplier"].evidence is None
+
+
+def test_negation_from_neighbor_clause_cannot_flip_service_bool():
+    contract = Contract()
+    contract.services.repair = False
+    claim = _field(
+        contract,
+        [_unit("Wartung ist nicht enthalten; Reparatur ist enthalten")],
+        "services.repair",
+    )
+    assert claim.evidence is None
+
+    contract.services.repair = True
+    claim = _field(
+        contract,
+        [_unit("Wartung ist nicht enthalten; Reparatur ist enthalten")],
+        "services.repair",
+    )
+    assert claim.evidence_scope == "field"
