@@ -215,3 +215,23 @@ def test_organization_backup_accepts_matching_single_tenant_database():
     session = _FakeSession([org])
 
     assert backup._assert_single_org_backup_scope(session, "hospital-a") is org
+
+
+def test_restore_rejects_same_database_with_different_credentials_and_loopback_alias(
+    monkeypatch, tmp_path: Path
+):
+    _load("verify_backup", "scripts/verify_backup.py")
+    restore = _load("medflux_restore_backup_identity_test", "scripts/restore_backup.py")
+    monkeypatch.setattr(restore, "verify_backup", lambda _path: {"ok": True})
+    monkeypatch.setattr(
+        restore.settings,
+        "database_url",
+        "postgresql+psycopg://medflux:old@localhost:5432/medflux?sslmode=disable",
+    )
+
+    with pytest.raises(RuntimeError, match="laufende MedFlux-Datenbank"):
+        restore.restore_backup(
+            backup=tmp_path,
+            target_database_url="postgresql://other:new@127.0.0.1:5432/medflux",
+            target_documents_dir=tmp_path / "documents-restored",
+        )
