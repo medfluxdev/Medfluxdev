@@ -26,6 +26,8 @@ const icons: Record<string, Icon> = {
 
 const EDITORS: AccountRole[] = ["admin", "contract_manager"];
 const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
+const STATUS_REFRESH_MS = 60_000;
+const STATUS_STALE_MS = 120_000;
 
 const GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Arbeitsbereich", items: [
@@ -55,6 +57,8 @@ export default function AppSidebar() {
   const { account, membership, role } = useAuth();
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
+  const [statusCheckedAt, setStatusCheckedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -63,13 +67,39 @@ export default function AppSidebar() {
 
   useEffect(() => {
     let mounted = true;
-    apiGet<{ status: string }>("/health")
-      .then((health) => mounted && setApiHealthy(health.status === "ok"))
-      .catch(() => mounted && setApiHealthy(false));
-    apiGet<AIStatus>("/api/ai/status")
-      .then((status) => mounted && setAiStatus(status))
-      .catch(() => mounted && setAiStatus(null));
-    return () => { mounted = false; };
+    let controller: AbortController | null = null;
+
+    async function refreshStatus() {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      const [apiResult, aiResult] = await Promise.allSettled([
+        apiGet<{ status: string }>("/health", signal),
+        apiGet<AIStatus>("/api/ai/status", signal),
+      ]);
+      if (!mounted || signal.aborted) return;
+      setApiHealthy(apiResult.status === "fulfilled" ? apiResult.value.status === "ok" : false);
+      setAiStatus(aiResult.status === "fulfilled" ? aiResult.value : null);
+      const checkedAt = Date.now();
+      setStatusCheckedAt(checkedAt);
+      setNow(checkedAt);
+    }
+
+    void refreshStatus();
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+      void refreshStatus();
+    }, STATUS_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshStatus();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      mounted = false;
+      controller?.abort();
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const groups = useMemo(
@@ -85,8 +115,11 @@ export default function AppSidebar() {
     });
   }
 
+  const statusStale = statusCheckedAt !== null && now - statusCheckedAt > STATUS_STALE_MS;
   const aiReady = Boolean(aiStatus?.available && aiStatus?.model_available);
-  const statusTitle = `API: ${apiHealthy === null ? "unbekannt" : apiHealthy ? "verfügbar" : "offline"} · KI: ${aiStatus === null ? "unbekannt" : aiReady ? "bereit" : "nicht bereit"}`;
+  const apiLabel = statusStale ? "API Status veraltet" : apiHealthy === null ? "API unbekannt" : apiHealthy ? "API verfügbar" : "API offline";
+  const aiLabel = statusStale ? "Status veraltet" : aiStatus === null ? "Status unbekannt" : aiReady ? `${aiStatus.model} bereit` : aiStatus.message || "Nicht bereit";
+  const statusTitle = `API: ${statusStale ? "veraltet" : apiHealthy === null ? "unbekannt" : apiHealthy ? "verfügbar" : "offline"} · KI: ${statusStale ? "veraltet" : aiStatus === null ? "unbekannt" : aiReady ? "bereit" : "nicht bereit"}`;
 
   return (
     <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
@@ -121,9 +154,9 @@ export default function AppSidebar() {
       </nav>
 
       <div className="side-bottom">
-        <div className="side-ai" title={statusTitle}>
-          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{collapsed ? "" : apiHealthy === null ? "API unbekannt" : apiHealthy ? "API verfügbar" : "API offline"}</div></div>
-          <p className="sidebar-label-copy">KI: {aiStatus === null ? "Status unbekannt" : aiReady ? `${aiStatus.model} bereit` : aiStatus.message || "Nicht bereit"}</p>
+        <div className="side-ai" title={statusTitle} aria-live="polite">
+          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{collapsed ? "" : apiLabel}</div></div>
+          <p className="sidebar-label-copy">KI: {aiLabel}</p>
         </div>
         <div className="org-card" title={collapsed ? membership?.organization_name ?? "Krankenhaus" : undefined}>
           <span className="org-avatar">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "M"}</span>
