@@ -303,7 +303,7 @@ def _canonicalize_party_name(
             continue
         if quality + 0.02 < anchor_quality:
             continue
-        weighted = score + max(0.0, min(0.2, quality - anchor_quality))
+        weighted = score + max(0.0, min(0.5, quality - anchor_quality))
         if weighted > best_score:
             best = candidate
             best_score = weighted
