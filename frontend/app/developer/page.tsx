@@ -70,7 +70,7 @@ export default function DeveloperDashboard() {
 
       <aside className={styles.sideColumn}>
         <form className={styles.panel} onSubmit={createOrganization}><div className={styles.panelHead}><div><h2>Organisation hinzufügen</h2><p>Neuen isolierten Arbeitsbereich anlegen</p></div></div><div className={styles.form}><label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Klinikgruppe Heidelberg" required/></label><label>Slug<input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} placeholder="klinikgruppe-heidelberg" required/></label><button type="submit" disabled={busy}>{busy ? "Wird angelegt…" : "Organisation anlegen"}</button></div></form>
-        <section className={styles.panel}><div className={styles.panelHead}><div><h2>Systemwerkzeuge</h2><p>Technische Konfiguration</p></div></div><nav className={styles.tools}><Link href="/settings">Lokale KI & Verarbeitung <span>→</span></Link><Link href="/system/organizations">Organisationen verwalten <span>→</span></Link><Link href="/profile">Developer-Profil <span>→</span></Link></nav></section>
+        <section className={styles.panel}><div className={styles.panelHead}><div><h2>Systemwerkzeuge</h2><p>Technische Konfiguration</p></div></div><nav className={styles.tools}><Link href="/settings">Lokale KI & Verarbeitung <span>→</span></Link><Link href="/developer/processing">Processing Runs & Fehlerdiagnose <span>→</span></Link><Link href="/system/organizations">Organisationen verwalten <span>→</span></Link><Link href="/profile">Developer-Profil <span>→</span></Link></nav></section>
       </aside>
     </div>
   </div>;
