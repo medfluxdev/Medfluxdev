@@ -145,7 +145,10 @@ class GroupPipeline:
 
         if self._run_verification:
             verifier_result, calls = await run_verifier(
-                self._ai, contract, self._context_text(chunks)
+                self._ai,
+                contract,
+                self._context_text(chunks),
+                units=units,
             )
             diag.ai_calls += calls
             diag.verifier_issues += len(verifier_result.decisions)
