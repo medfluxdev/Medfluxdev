@@ -63,11 +63,18 @@ function EmptyRow({ colSpan }: { colSpan: number }) {
   );
 }
 
+function rememberListContext() {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem("medflux.contracts.returnUrl", `${window.location.pathname}${window.location.search}`);
+  sessionStorage.setItem("medflux.contracts.scrollY", String(window.scrollY));
+}
+
 export default function ContractTable({ items, extraHeader, extra }: Props) {
   const router = useRouter();
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnKey, boolean>>(DEFAULT_COLUMNS);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [preview, setPreview] = useState<ContractListItem | null>(null);
 
   useEffect(() => {
     try {
@@ -78,8 +85,16 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
         const parsed = JSON.parse(storedColumns) as Partial<Record<ColumnKey, boolean>>;
         setVisibleColumns({ ...DEFAULT_COLUMNS, ...parsed });
       }
+
+      const returnUrl = sessionStorage.getItem("medflux.contracts.returnUrl");
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      const storedScroll = Number(sessionStorage.getItem("medflux.contracts.scrollY") ?? "0");
+      if (returnUrl === currentUrl && Number.isFinite(storedScroll) && storedScroll > 0) {
+        window.requestAnimationFrame(() => window.scrollTo({ top: storedScroll, behavior: "auto" }));
+        sessionStorage.removeItem("medflux.contracts.scrollY");
+      }
     } catch {
-      // Ungültige lokale Präferenzen ignorieren und sichere Defaults verwenden.
+      // Lokale UI-Präferenzen dürfen die Vertragsliste nie blockieren.
     }
   }, []);
 
@@ -144,6 +159,7 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
               function openContract360(e: MouseEvent<HTMLTableRowElement>) {
                 const target = e.target as HTMLElement;
                 if (target.closest("a, button, input, select, textarea, [role='button']")) return;
+                rememberListContext();
                 router.push(`/contracts/${c.contract_id}`);
               }
 
@@ -151,16 +167,19 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
                 <tr key={c.contract_id} className="contract-row" onClick={openContract360}>
                   {visibleColumns.number ? (
                     <th scope="row" className="contract-number">
-                      <Link href={`/contracts/${c.contract_id}`} className="contract-number-link" aria-label={`${c.contract_number ?? "Vertrag"} öffnen`}>
+                      <Link href={`/contracts/${c.contract_id}`} onClick={rememberListContext} className="contract-number-link" aria-label={`${c.contract_number ?? "Vertrag"} öffnen`}>
                         {c.contract_number ?? "–"}
                       </Link>
                     </th>
                   ) : null}
                   {visibleColumns.title ? (
                     <td className="contract-title">
-                      <Link href={`/contracts/${c.contract_id}`} className="contract-title-link" aria-label={`${c.contract_title ?? "Vertrag"} öffnen`}>
-                        {c.contract_title ?? "–"}
-                      </Link>
+                      <div className="contract-title-line">
+                        <Link href={`/contracts/${c.contract_id}`} onClick={rememberListContext} className="contract-title-link" aria-label={`${c.contract_title ?? "Vertrag"} öffnen`}>
+                          {c.contract_title ?? "–"}
+                        </Link>
+                        <button type="button" className="contract-preview-button" onClick={() => setPreview(c)} aria-label={`${c.contract_title ?? c.contract_number ?? "Vertrag"} in Schnellansicht öffnen`}>Vorschau</button>
+                      </div>
                       {c.supplier && <span className="contract-supplier">{c.supplier}</span>}
                     </td>
                   ) : null}
@@ -182,6 +201,31 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
           </tbody>
         </table>
       </div>
+
+      {preview ? (
+        <aside className="contract-quick-preview" aria-label="Vertrag Schnellansicht">
+          <div className="contract-preview-head">
+            <div>
+              <span className="contract-preview-eyebrow">Schnellansicht</span>
+              <h2>{preview.contract_title ?? preview.contract_number ?? "Vertrag"}</h2>
+              <p>{preview.supplier ?? "Lieferant nicht angegeben"}</p>
+            </div>
+            <button type="button" className="btn-ghost" onClick={() => setPreview(null)} aria-label="Schnellansicht schließen">Schließen</button>
+          </div>
+          <dl className="contract-preview-grid">
+            <div><dt>Vertragsnummer</dt><dd>{preview.contract_number ?? "Nicht angegeben"}</dd></div>
+            <div><dt>Status</dt><dd>{STATUS_LABEL[preview.status ?? ""] ?? preview.status ?? "Nicht angegeben"}</dd></div>
+            <div><dt>Risiko</dt><dd>{RISK_LABEL[preview.risk_level ?? ""] ?? preview.risk_level ?? "Nicht angegeben"}</dd></div>
+            <div><dt>Jährliche Kosten</dt><dd>{formatAnnualCost(preview.annual_cost)}</dd></div>
+            <div><dt>Vertragsende</dt><dd>{formatDate(preview.contract_end_date)}</dd></div>
+            <div><dt>Kündigung bis</dt><dd>{formatDate(preview.latest_cancellation_date)}</dd></div>
+          </dl>
+          {preview.primary_warning?.title_de ? <div className="contract-preview-warning"><strong>Warnung</strong><span>{preview.primary_warning.title_de}</span></div> : null}
+          <div className="contract-preview-actions">
+            <Link href={`/contracts/${preview.contract_id}`} onClick={rememberListContext} className="btn">Vollständige Detailansicht öffnen</Link>
+          </div>
+        </aside>
+      ) : null}
     </div>
   );
 }
