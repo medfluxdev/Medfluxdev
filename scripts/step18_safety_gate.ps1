@@ -20,11 +20,15 @@ Write-Host "[STEP18] Python syntax gate..."
     app/ai/groups/evidence.py `
     app/ai/groups/extractor.py `
     app/ai/groups/list_claim_verifier.py `
+    app/ai/groups/normalize.py `
     app/ai/groups/residual_claim_verifier.py `
     app/ai/groups/verifier.py `
+    app/api/routes/contracts.py `
     app/api/routes/operations.py `
+    app/contracts/review/service.py `
     app/auth/provenance.py `
-    app/core/config.py
+    app/core/config.py `
+    ../scripts/benchmark_groups.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "[STEP18] Targeted fail-closed tests..."
