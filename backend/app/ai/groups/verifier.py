@@ -221,7 +221,7 @@ def _contains_currency(text: str, currency: Optional[str]) -> bool:
         return True
     markers = {
         "EUR": ("eur", "€", "euro"),
-        "USD": ("usd", "$", "us-dollar", "us dollar"),
+        "USD": ("usd", "us$", "us-dollar", "us dollar"),
         "CHF": ("chf", "fr.", "franken"),
         "GBP": ("gbp", "£", "pound"),
     }.get(currency, (currency.casefold(),))
