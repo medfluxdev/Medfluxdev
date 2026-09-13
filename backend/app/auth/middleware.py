@@ -17,6 +17,11 @@ _PUBLIC_PREFIXES = (
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
+def _origin_allowed(origin: str) -> bool:
+    normalized = origin.rstrip("/")
+    return normalized in {value.rstrip("/") for value in settings.cors_origins_list}
+
+
 class LocalAuthMiddleware(BaseHTTPMiddleware):
     """Erzwingt bei AUTH_ENABLED jede nicht-oeffentliche API-Anfrage.
 
@@ -42,6 +47,16 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
             requested_slug = request.query_params.get("organization_slug")
             if requested_slug and requested_slug != identity.organization_slug:
                 return JSONResponse(status_code=404, content={"detail": "Ressource nicht gefunden."})
+            if request.method in _WRITE_METHODS:
+                # Cookie-authenticated browser writes must originate from the
+                # explicitly configured frontend. SameSite=Lax is useful
+                # defense-in-depth but is not our only CSRF boundary.
+                origin = request.headers.get("origin")
+                if origin and not _origin_allowed(origin):
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Ungueltiger Anfrage-Ursprung."},
+                    )
             if (
                 request.method in _WRITE_METHODS
                 and identity.role == "viewer"
