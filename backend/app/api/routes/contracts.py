@@ -27,6 +27,7 @@ from sqlalchemy import select
 from app.core.scope_context import current_scope_context
 from app.database.scope_queries import intersect_ids, scoped_contract_ids
 
+from app.auth.context import reviewer_name
 from app.contracts.overrides.keys import (
     OVERRIDE_KEY_TAX_BASIS,
     OVERRIDE_KEY_TAX_RATE_PERCENT,
@@ -325,6 +326,7 @@ def contract_detail(
 
 @router.post("/{contract_id}/fact-reviews", response_model=ContractDetailResponse)
 def contract_fact_review(
+    request: Request,
     organization_slug: str,
     contract_id: str,
     payload: FactReviewRequest,
@@ -362,7 +364,9 @@ def contract_fact_review(
                 contract_id=cid,
                 fact_key=payload.fact_key,
                 action=payload.action,
-                reviewer_display_name=payload.reviewer_display_name,
+                reviewer_display_name=reviewer_name(
+                    request, payload.reviewer_display_name
+                ),
                 note=payload.note,
                 system_value=system_value,
                 corrected_value=payload.corrected_value,
@@ -387,6 +391,7 @@ def contract_fact_review(
 
 @router.post("/{contract_id}/review/start", response_model=ContractDetailResponse)
 def contract_review_start(
+    request: Request,
     organization_slug: str,
     contract_id: str,
     payload: ReviewLifecycleRequest,
@@ -407,7 +412,9 @@ def contract_review_start(
                 session,
                 organization_id=org.id,
                 contract_id=cid,
-                reviewer_display_name=payload.reviewer_display_name,
+                reviewer_display_name=reviewer_name(
+                    request, payload.reviewer_display_name
+                ),
                 note=payload.note,
             )
             session.commit()
@@ -421,6 +428,7 @@ def contract_review_start(
 
 @router.post("/{contract_id}/review/complete", response_model=ContractDetailResponse)
 def contract_review_complete(
+    request: Request,
     organization_slug: str,
     contract_id: str,
     payload: ReviewLifecycleRequest,
@@ -456,7 +464,9 @@ def contract_review_complete(
                 session,
                 organization_id=org.id,
                 contract_id=cid,
-                reviewer_display_name=payload.reviewer_display_name,
+                reviewer_display_name=reviewer_name(
+                    request, payload.reviewer_display_name
+                ),
                 note=payload.note,
                 acknowledge_unreviewed=payload.acknowledge_unreviewed,
                 relevant_count=summary["relevant_count"],
