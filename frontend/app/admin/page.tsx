@@ -11,6 +11,7 @@ import { listUsers } from "@/lib/domain-api/users";
 import { getDashboardOverview } from "@/lib/domain-api/dashboard";
 import { listActivity, type ActivityDto } from "@/lib/domain-api/activity";
 import { downloadContractsCsv } from "@/lib/domain-api/operations";
+import { listIntelligenceEvents, type IntelligenceEventItem } from "@/lib/domain-api/intelligence";
 import styles from "./admin.module.css";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -33,6 +34,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<ManagedUserDto[]>([]);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [activity, setActivity] = useState<ActivityDto[]>([]);
+  const [intelligenceEvents, setIntelligenceEvents] = useState<IntelligenceEventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -41,12 +43,16 @@ export default function AdminPage() {
     if (role !== "admin" || !membership) return;
     setLoading(true); setError(null);
     try {
-      const [userResult, dashboardResult, activityResult] = await Promise.all([
+      const [userResult, dashboardResult, activityResult, intelligenceResult] = await Promise.all([
         listUsers(membership.organization_slug),
         getDashboardOverview(membership.organization_slug, formatISODateOnly(new Date())),
         listActivity(membership.organization_slug, { limit: 8 }),
+        listIntelligenceEvents(membership.organization_slug, 8),
       ]);
-      setUsers(userResult.items); setOverview(dashboardResult); setActivity(activityResult.items);
+      setUsers(userResult.items);
+      setOverview(dashboardResult);
+      setActivity(activityResult.items);
+      setIntelligenceEvents(intelligenceResult.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Admin Dashboard konnte nicht geladen werden.");
     } finally { setLoading(false); }
@@ -96,7 +102,7 @@ export default function AdminPage() {
         <article><span>Offene Aufgaben</span><strong>{overview?.total_action_items ?? 0}</strong><small>priorisierte Handlungspunkte</small></article>
         <article><span>Manuelle Prüfungen</span><strong>{reviews}</strong><small>Angaben mit Prüfbedarf</small></article>
         <article><span>Benutzer</span><strong>{activeUsers}</strong><small>{users.length} Konten insgesamt</small></article>
-        <article><span>Arbeitsbereich</span><strong>{membership?.organization_name ?? "–"}</strong><small>{membership?.organization_slug}</small></article>
+        <article><span>Intelligence Events</span><strong>{intelligenceEvents.length}</strong><small>zuletzt sichtbare Ereignisse</small></article>
       </section>
 
       <section className={styles.actions} aria-label="Schnellzugriffe">
@@ -109,8 +115,12 @@ export default function AdminPage() {
 
       <div className={styles.columns}>
         <section className={styles.panel}>
-          <div className={styles.panelHead}><div><h2>Letzte Aktivitäten</h2><p>Aktuelle Änderungen in dieser Organisation</p></div><Link href="/audit">Alle anzeigen</Link></div>
+          <div className={styles.panelHead}><div><h2>Letzte Aktivitäten</h2><p>Authentifizierte Änderungen in dieser Organisation</p></div><Link href="/audit">Alle anzeigen</Link></div>
           <div className={styles.activityList}>{activity.length === 0 ? <p className={styles.empty}>Noch keine Aktivitäten vorhanden.</p> : activity.map((item) => <div className={styles.activityRow} key={item.id}><span className={styles.activityDot}/><div><strong>{EVENT_LABELS[item.event_name] ?? item.event_name}</strong><small>{item.display_name ?? "System"} · {item.object_type}</small></div><time>{item.created_at ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at)) : "–"}</time></div>)}</div>
+        </section>
+        <section className={styles.panel}>
+          <div className={styles.panelHead}><div><h2>Intelligence Events</h2><p>Backend-Ereignisse im aktuell sichtbaren Vertragsbereich</p></div></div>
+          <div className={styles.activityList}>{intelligenceEvents.length === 0 ? <p className={styles.empty}>Keine Intelligence Events vorhanden.</p> : intelligenceEvents.map((item) => <div className={styles.activityRow} key={item.id}><span className={styles.activityDot}/><div><strong>{item.event_type}</strong><small>{item.contract_id ? `Vertrag ${item.contract_id.slice(0, 8)}…` : "Organisationsereignis"}</small></div><time>{item.occurred_at ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.occurred_at)) : "–"}</time></div>)}</div>
         </section>
         <section className={styles.panel}>
           <div className={styles.panelHead}><div><h2>Benutzerübersicht</h2><p>Konten im aktuellen Arbeitsbereich</p></div><Link href="/settings/users">Verwalten</Link></div>
