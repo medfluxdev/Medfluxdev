@@ -439,7 +439,7 @@ It is the visual approval record and must remain linked from this document. Prod
 
 Canonical product assets:
 
-- `frontend/public/brand/medflux-main-logo.png` — the only full logo used in the application; 860 × 536 px, containing only the M and MedFlux
+- `frontend/public/brand/medflux-main-logo.png` — the only full logo used in the application; transparent background, containing only the M and MedFlux
 - `frontend/app/icon.png` — square favicon generated from Main Logo 01
 - `docs/visual-identity/assets/medflux-brand-identity-guidelines-v1.webp` — approval board
 
