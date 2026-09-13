@@ -3689,3 +3689,16 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ## Bekannte Grenzen
 - Keine harte Löschung von Krankenhäusern/Abteilungen in der Oberfläche; Deaktivierung bewahrt Vertrags- und Audit-Historie.
+
+---
+
+## Frontend development roadmap — 2026-09-13
+
+- Status: Planning complete; frontend implementation has not started.
+- Dedicated tracker: `docs/FRONTEND_PROJECT_PROGRESS.md` (English).
+- Implemented: Ten ordered frontend development steps with task checklists, acceptance criteria, verification, backend dependencies, and completion records.
+- Files: `docs/FRONTEND_PROJECT_PROGRESS.md`, `docs/PROJECT_PROGRESS.md`.
+- Verification: Documentation structure and initial step status checked; no application tests required for this documentation-only update.
+- Known issues: Full visual audit and baseline tests remain pending in FE-01.
+- Next step: Execute FE-01 — current-state audit and acceptance baseline.
+- Frontend progress: 0/10 (0%). Original MVP progress x/18 and percentage remain unchanged; no MVP implementation step was completed by this planning update.
