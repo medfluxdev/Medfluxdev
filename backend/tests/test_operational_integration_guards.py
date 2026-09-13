@@ -16,6 +16,7 @@ def test_main_registers_operational_routers():
         "reports.router",
         "work_queue_collaboration.router",
         "lifecycle.router",
+        "security_sessions.router",
     ):
         assert name in source
 
@@ -66,10 +67,15 @@ def test_security_and_readiness_are_registered():
     main = read("app/main.py")
     health = read("app/api/routes/health.py")
     security = read("app/security/request_context.py")
+    sessions = read("app/api/routes/security_sessions.py")
     assert "RequestIdMiddleware" in main
     assert "LoginRateLimitMiddleware" in main
+    assert "security_sessions.router" in main
     assert '@router.get("/ready")' in health
     assert "MAX_ATTEMPTS" in security
+    assert 'router = APIRouter(prefix="/api/auth"' in sessions
+    assert '@router.post("/logout-all")' in sessions
+    assert "LoginSession.revoked_at" in sessions
 
 
 def test_release_gate_runs_migrations_tests_frontend_and_packaging():
