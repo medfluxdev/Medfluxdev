@@ -169,13 +169,6 @@ a {
   max-width: 100%;
 }
 
-.auth-login-brand > p {
-  margin-top: 1.1rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
 
 .auth-card {
   border-color: rgba(255,255,255,0.86);
