@@ -57,29 +57,25 @@ async function renderWithData(data: WorkItemList) {
   return utils;
 }
 
-describe("Arbeitsliste (PR-4)", () => {
+describe("To-dos (PR-4)", () => {
   it("zeigt einen Ladezustand während des Ladens", () => {
     apiGetMock.mockImplementation(() => new Promise(() => {}));
     render(<WorkQueuePage />);
-    expect(screen.getByText("Arbeitspunkte werden geladen…")).toBeInTheDocument();
+    expect(screen.getByText("To-dos werden geladen…")).toBeInTheDocument();
   });
 
   it("zeigt einen generischen Fehlerzustand bei Backend-Fehler", async () => {
     apiGetMock.mockRejectedValue(new Error("boom"));
     render(<WorkQueuePage />);
     await waitFor(() =>
-      expect(
-        screen.getByText("Arbeitsliste konnte nicht geladen werden.")
-      ).toBeInTheDocument()
+      expect(screen.getByText("To-dos konnten nicht geladen werden.")).toBeInTheDocument()
     );
   });
 
-  it("zeigt 'keine offenen Punkte' bei leerer Liste", async () => {
-    const empty = list();
-    await renderWithData(empty);
-    expect(
-      screen.getByText("Derzeit keine offenen Arbeitspunkte.")
-    ).toBeInTheDocument();
+  it("zeigt 'keine offenen To-dos' bei leerer Liste", async () => {
+    await renderWithData(list());
+    expect(screen.getByText("Keine offenen To-dos")).toBeInTheDocument();
+    expect(screen.getByText("Aktuell sind keine offenen Aufgaben vorhanden.")).toBeInTheDocument();
   });
 
   it("zeigt die Arbeitsposition, ohne eine Geräte-Zeile zu erfinden", async () => {
@@ -88,28 +84,19 @@ describe("Arbeitsliste (PR-4)", () => {
   });
 
   it("zeigt die Geräte-Identität des betroffenen Equipments (UAT Wartung)", async () => {
-    await renderWithData(
-      list(
-        item({
-          equipment_device_name: "Accutron MR",
-          equipment_manufacturer: "MEDTRON",
-          equipment_model: "X-9000",
-          equipment_serial_number: "88024307",
-        })
-      )
-    );
-    expect(
-      screen.getByText(/Accutron MR · MEDTRON \(X-9000\) · Seriennr\. 88024307/)
-    ).toBeInTheDocument();
+    await renderWithData(list(item({
+      equipment_device_name: "Accutron MR",
+      equipment_manufacturer: "MEDTRON",
+      equipment_model: "X-9000",
+      equipment_serial_number: "88024307",
+    })));
+    expect(screen.getByText(/Accutron MR · MEDTRON \(X-9000\) · Seriennr\. 88024307/)).toBeInTheDocument();
   });
 
   it("zeigt offene Punkte mit Vertrags-Link und Status", async () => {
     await renderWithData(list(item()));
     expect(screen.getByText(/Kündigungsfrist: Kündigungsfrist nähert sich/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "CN-1" })).toHaveAttribute(
-      "href",
-      "/contracts/c-1"
-    );
+    expect(screen.getByRole("link", { name: "CN-1" })).toHaveAttribute("href", "/contracts/c-1");
     expect(screen.getByText("Offen")).toBeInTheDocument();
     expect(screen.getByText(/in 14 Tagen/)).toBeInTheDocument();
   });
@@ -119,12 +106,7 @@ describe("Arbeitsliste (PR-4)", () => {
     apiPatchMock.mockResolvedValue({ ...wi, status: "acknowledged" });
     await renderWithData(list(wi));
     await userEvent.click(screen.getByRole("button", { name: "In Bearbeitung" }));
-    await waitFor(() =>
-      expect(apiPatchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/api/work-queue/wi-1"),
-        { status: "acknowledged" }
-      )
-    );
+    await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith(expect.stringContaining("/api/work-queue/wi-1"), { status: "acknowledged" }));
     expect(screen.getByText("In Bearbeitung")).toBeInTheDocument();
   });
 
@@ -132,28 +114,15 @@ describe("Arbeitsliste (PR-4)", () => {
     apiPatchMock.mockResolvedValue({ ...item(), status: "resolved", active: false });
     await renderWithData(list(item()));
     await userEvent.click(screen.getByRole("button", { name: "Erledigt" }));
-    await waitFor(() =>
-      expect(apiPatchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/api/work-queue/wi-1"),
-        { status: "resolved" }
-      )
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByText("Derzeit keine offenen Arbeitspunkte.")
-      ).toBeInTheDocument()
-    );
+    await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith(expect.stringContaining("/api/work-queue/wi-1"), { status: "resolved" }));
+    await waitFor(() => expect(screen.getByText("Keine offenen To-dos")).toBeInTheDocument());
   });
 
   it("meldet einen Fehler, wenn die Status-Aktualisierung fehlschlägt", async () => {
     apiPatchMock.mockRejectedValue(new Error("Datenbankkonflikt beim Aktualisieren – bitte erneut versuchen."));
     await renderWithData(list(item()));
     await userEvent.click(screen.getByRole("button", { name: "Erledigt" }));
-    await waitFor(() =>
-      expect(
-        screen.getByText("Datenbankkonflikt beim Aktualisieren – bitte erneut versuchen.")
-      ).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText("Datenbankkonflikt beim Aktualisieren – bitte erneut versuchen.")).toBeInTheDocument());
   });
 
   it("hat keine automatisierten WCAG-A11y-Verstöße im normalen Zustand", async () => {
