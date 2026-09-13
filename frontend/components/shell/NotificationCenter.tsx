@@ -17,8 +17,16 @@ export default function NotificationCenter() {
       return;
     }
     listNotifications(organizationSlug, 40)
-      .then((response) => { if (active) { setItems(response.items); setError(false); } })
-      .catch(() => { if (active) setError(true); });
+      .then((response) => {
+        if (!active) return;
+        setItems(response?.items ?? []);
+        setError(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setItems([]);
+        setError(true);
+      });
     return () => { active = false; };
   }, [organizationSlug]);
 
