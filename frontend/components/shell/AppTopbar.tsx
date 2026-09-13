@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -73,7 +74,11 @@ export default function AppTopbar() {
         {account && role ? (
           <details ref={accountMenuRef} className="account-menu">
             <summary className="top-user" aria-label="Kontomenü öffnen">
-              <span className="top-user-avatar">{account.display_name.slice(0, 1).toUpperCase()}</span>
+              <span className="top-user-avatar">
+                {account.profile_photo_data_url ? (
+                  <Image src={account.profile_photo_data_url} alt="" width={40} height={40} unoptimized />
+                ) : account.display_name.slice(0, 1).toUpperCase()}
+              </span>
               <span className="top-user-copy"><strong>{account.display_name}</strong><small>{account.is_developer ? "Developer" : ROLE_LABELS[role]}</small></span>
             </summary>
             <div className="account-menu-panel">
