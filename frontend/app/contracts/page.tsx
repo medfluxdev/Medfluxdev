@@ -3,10 +3,11 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ContractTable from "@/components/contracts/ContractTable";
+import { useAuth } from "@/components/auth/AuthProvider";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
 import PageHeader from "@/components/ui/PageHeader";
-import { apiGet } from "@/lib/api";
+import { listContracts } from "@/lib/domain-api/contracts";
 import type {
   ContractListResponse,
   ContractsQuery,
@@ -18,7 +19,6 @@ import {
   formatDate,
 } from "@/lib/format";
 
-const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 const PAGE_SIZES = [25, 50, 100] as const;
 
 const DEFAULT_QUERY: ContractsQuery = {
@@ -136,6 +136,8 @@ function ContractsInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsStr = searchParams.toString();
+  const { organizationSlug } = useAuth();
+  const effectiveOrgSlug = organizationSlug ?? "krankenhaus";
 
   const [data, setData] = useState<ContractListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,16 +160,12 @@ function ContractsInner() {
     ? parseQuery(new URLSearchParams(searchParamsStr))
     : DEFAULT_QUERY;
 
-  // Fetch bei Aenderung der URL (deckt Eingaben, Filter, Back/Forward ab).
   useEffect(() => {
     const q = current;
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
-    const api = new URLSearchParams();
-    api.set("organization_slug", ORG_SLUG);
-    for (const [k, v] of buildParams(q)) api.append(k, v);
-    apiGet<ContractListResponse>(`/api/contracts?${api.toString()}`, undefined)
+    listContracts(effectiveOrgSlug, q)
       .then((res) => {
         if (requestId.current === id) setData(res);
       })
@@ -178,10 +176,10 @@ function ContractsInner() {
       .finally(() => {
         if (requestId.current === id) setLoading(false);
       });
+    // `current` is intentionally reconstructed from searchParamsStr.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParamsStr, reloadTick]);
+  }, [searchParamsStr, reloadTick, effectiveOrgSlug]);
 
-  // Debounce fuer die Freitext-Suche.
   const debounceRef = useRef<number | null>(null);
   const onSearchInput = useCallback(
     (value: string) => {
