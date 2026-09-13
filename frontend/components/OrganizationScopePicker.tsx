@@ -1,21 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { getOrganizationStructure, type OrganizationStructureDto } from "@/lib/domain-api/organizations";
 
-type Hospital = { id: string; name: string; code: string; is_active: boolean };
-type Department = { id: string; hospital_id: string; name: string; code: string; is_active: boolean };
-type Structure = { hospitals: Hospital[]; departments: Department[] };
-
-const EMPTY_STRUCTURE: Structure = { hospitals: [], departments: [] };
-
-function normalizeStructure(value: Partial<Structure> | null | undefined): Structure {
-  return {
-    hospitals: Array.isArray(value?.hospitals) ? value.hospitals : [],
-    departments: Array.isArray(value?.departments) ? value.departments : [],
-  };
-}
+const EMPTY_STRUCTURE: OrganizationStructureDto = { hospitals: [], departments: [] };
 
 function requestScopeChange(detail: Record<string, string>): boolean {
   return window.dispatchEvent(new CustomEvent("medflux:scope-change", { detail, cancelable: true }));
@@ -23,7 +12,7 @@ function requestScopeChange(detail: Record<string, string>): boolean {
 
 export default function OrganizationScopePicker() {
   const { membership, memberships, organizationSlug, role, selectOrganization } = useAuth();
-  const [structure, setStructure] = useState<Structure>(EMPTY_STRUCTURE);
+  const [structure, setStructure] = useState<OrganizationStructureDto>(EMPTY_STRUCTURE);
   const [hospitalId, setHospitalId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const isAdmin = role === "admin";
@@ -40,13 +29,11 @@ export default function OrganizationScopePicker() {
       if (assignedHospital) localStorage.setItem("medflux.hospitalId", assignedHospital); else localStorage.removeItem("medflux.hospitalId");
       if (assignedDepartment) localStorage.setItem("medflux.departmentId", assignedDepartment); else localStorage.removeItem("medflux.departmentId");
     }
-    const controller = new AbortController();
-    apiGet<Structure>(`/api/organization-structure?organization_slug=${encodeURIComponent(organizationSlug)}`, controller.signal)
-      .then((value) => setStructure(normalizeStructure(value)))
-      .catch((error) => {
-        if ((error as Error)?.name !== "AbortError") setStructure(EMPTY_STRUCTURE);
-      });
-    return () => controller.abort();
+    let active = true;
+    getOrganizationStructure(organizationSlug)
+      .then((value) => { if (active) setStructure(value); })
+      .catch(() => { if (active) setStructure(EMPTY_STRUCTURE); });
+    return () => { active = false; };
   }, [organizationSlug, membership, isAdmin]);
 
   const departments = useMemo(
