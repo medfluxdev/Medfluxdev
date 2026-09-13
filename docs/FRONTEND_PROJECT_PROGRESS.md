@@ -283,3 +283,10 @@ Run backend `pytest` only when backend behavior changes.
 - Replaced the dark login background with a light `#E6F4F8`-based brand gradient so the canonical teal/dark-blue logo remains fully legible.
 - Kept the logo transparent and unframed.
 - Reduced the login card shadow and border contrast for a calmer, integrated healthcare presentation.
+
+
+### Profile menu navigation fix — 2026-09-13
+
+- Replaced the account-menu profile link with an explicit client-side navigation action.
+- The action closes the native account menu before routing to `/profile`, avoiding the observed no-op click.
+- Added a focused shell test for navigation and menu closure.
