@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import MedFluxLogo from "@/components/brand/MedFluxLogo";
 
 function DocumentIcon() {
   return (
@@ -73,14 +74,13 @@ function LoginContent() {
     <main className="auth-page" id="main-content">
       <div className="auth-login-shell">
         <header className="auth-login-brand">
-          <span className="auth-login-logo"><DocumentIcon /></span>
-          <h1>Medflux</h1>
-          <p>Intelligentes Vertragsmanagement</p>
+          <MedFluxLogo showDescriptor />
+          <p>Connect · Analyze · Improve</p>
         </header>
 
         <section className="auth-card" aria-labelledby="login-title" aria-busy={busy}>
           <h2 id="login-title">Willkommen</h2>
-          <p className="auth-intro">Melden Sie sich bei Ihrem Medflux-Konto an.</p>
+          <p className="auth-intro">Melden Sie sich bei Ihrem MedFlux-Konto an.</p>
           <form className="auth-form" onSubmit={submit}>
             <label>
               E-Mail
@@ -98,7 +98,7 @@ function LoginContent() {
             {error ? <p className="auth-error" role="alert">{error}</p> : null}
             <button className="auth-submit" type="submit" disabled={busy}>{busy ? "Anmeldung läuft…" : "Anmelden"}</button>
           </form>
-          <div className="auth-benefits" aria-label="Medflux Vorteile">
+          <div className="auth-benefits" aria-label="MedFlux Vorteile">
             <div><ShieldIcon /><span>Sicher</span></div>
             <div><BoltIcon /><span>Schnell</span></div>
             <div><DocumentIcon /><span>Intelligent</span></div>
