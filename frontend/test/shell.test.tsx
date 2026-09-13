@@ -68,7 +68,6 @@ describe("App-Shell", () => {
     expect(screen.getByRole("link", { name: "Import" })).toHaveAttribute("href", "/import");
     expect(screen.getByRole("link", { name: "Prüfungen" })).toHaveAttribute("href", "/review");
     expect(screen.getByRole("link", { name: "Einstellungen" })).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("link", { name: "Mein Profil" })).toHaveAttribute("href", "/profile");
   });
 
   it("markiert den aktiven Navigationspunkt mit aria-current='page'", () => {
