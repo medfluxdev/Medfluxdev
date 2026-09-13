@@ -152,9 +152,14 @@ describe("Einstellungen: KI-Test error-path ehrlich und terminiert", () => {
   }
 
   it("zeigt beim Test-Fehler das ehrliche Fehler-Banner statt Dauerladen", async () => {
-    apiGetMock.mockResolvedValue(snapshotFixture());
+    apiGetMock.mockImplementation((path: string) =>
+      path === "/api/auth/me"
+        ? Promise.reject(new Error("development mode"))
+        : Promise.resolve(snapshotFixture())
+    );
     const user = userEvent.setup();
     render(<SettingsPage />);
+    await user.click(screen.getByRole("button", { name: "Lokale KI" }));
     await waitFor(() =>
       expect(screen.getByText("Nicht erreichbar")).toBeInTheDocument()
     );
@@ -181,9 +186,14 @@ describe("Einstellungen: KI-Test error-path ehrlich und terminiert", () => {
   });
 
   it("fuehrt bei Erfolg einen echten POST aus und zeigt Erfolgsbanner", async () => {
-    apiGetMock.mockResolvedValue(snapshotFixture());
+    apiGetMock.mockImplementation((path: string) =>
+      path === "/api/auth/me"
+        ? Promise.reject(new Error("development mode"))
+        : Promise.resolve(snapshotFixture())
+    );
     const user = userEvent.setup();
     render(<SettingsPage />);
+    await user.click(screen.getByRole("button", { name: "Lokale KI" }));
     await waitFor(() =>
       expect(screen.getByText("Nicht erreichbar")).toBeInTheDocument()
     );
