@@ -12,6 +12,10 @@ Develop Medflux into a consistent, accessible, reliable application for hospital
 
 This tracker complements `docs/PROJECT_PROGRESS.md`; the ten frontend steps do not replace the original MVP progress calculation.
 
+## Governing visual reference
+
+All new or modified frontend work must follow `docs/VISUAL_IDENTITY.md`. It is the authoritative reference for MedFlux naming, logo usage, color, typography, spacing, component language, accessibility, and visual pull-request review. Existing implementation files remain the technical source for reusable tokens and components, but must converge toward that reference when they conflict.
+
 ## Working rules
 1. Implement steps in order with one active step at a time.
 2. Inspect and reuse the current implementation before editing.
@@ -21,6 +25,7 @@ This tracker complements `docs/PROJECT_PROGRESS.md`; the ten frontend steps do n
 6. Keep product copy in German.
 7. Backend authorization remains authoritative.
 8. Facts come from extraction and sources; code calculates costs/deadlines; missing data is never invented or converted to zero.
+9. Review every visual change against `docs/VISUAL_IDENTITY.md`.
 
 Allowed statuses: PLANNED, IN PROGRESS, BLOCKED, COMPLETE.
 
