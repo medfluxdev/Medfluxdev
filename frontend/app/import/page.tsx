@@ -2,9 +2,9 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { apiPost, apiUpload } from "@/lib/api";
+import { importDocuments, retryDocument } from "@/lib/domain-api/documents";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { ImportBatchResponse, ImportFileResult, ImportStatus } from "@/lib/types";
+import { ImportFileResult, ImportStatus } from "@/lib/types";
 import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
 import PageHeader from "@/components/ui/PageHeader";
@@ -86,7 +86,7 @@ export default function ImportPage() {
     setError(null);
     setResults(null);
     try {
-      const res = await apiUpload<ImportBatchResponse>("/api/documents/import", selected, effectiveOrgSlug);
+      const res = await importDocuments(selected, effectiveOrgSlug);
       setResults(res.documents);
       setSelected([]);
       setRejectedSelection([]);
@@ -125,12 +125,7 @@ export default function ImportPage() {
     if (!r.document_version_id || retryingId) return;
     setRetryingId(r.document_version_id);
     try {
-      const res = await apiPost<{
-        status: string;
-        analysis_status: string | null;
-        message: string | null;
-        contract_id: string | null;
-      }>(`/api/documents/${encodeURIComponent(r.document_version_id)}/retry?organization_slug=${encodeURIComponent(effectiveOrgSlug)}`, {});
+      const res = await retryDocument(r.document_version_id, effectiveOrgSlug);
       setResults((prev) => prev ? prev.map((x) => x.document_version_id === r.document_version_id ? {
         ...x,
         status: res.status === "imported" || res.analysis_status === "success" ? "imported" : res.status === "analysis_failed" || res.analysis_status === "failed" ? "analysis_failed" : x.status,
@@ -163,7 +158,7 @@ export default function ImportPage() {
           <div className="import-scope-card" role="note" aria-label="Zielbereich des Imports">
             <strong>Zielbereich</strong>
             <span>{membership?.organization_name ?? effectiveOrgSlug}</span>
-            <span>Der aktuell in der Kopfzeile gewählte Krankenhaus-/Abteilungsbereich wird nach erfolgreichem Import dem Vertrag zugeordnet.</span>
+            <span>Der aktuell in der Kopfzeile gewählte Krankenhaus-/Abteilungsbereich wird serverseitig dem neu angelegten Vertrag zugeordnet.</span>
           </div>
 
           <div
