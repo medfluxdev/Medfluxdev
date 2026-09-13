@@ -144,15 +144,43 @@ a {
 
 /* Login */
 .auth-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 18% 14%, rgba(20, 184, 166, 0.32), transparent 28%),
-    radial-gradient(circle at 84% 82%, rgba(15, 76, 129, 0.42), transparent 30%),
-    linear-gradient(135deg, #092f51 0%, #0f4c81 54%, #0a777e 100%);
+    radial-gradient(circle at 12% 10%, rgba(20, 184, 166, 0.22), transparent 30%),
+    radial-gradient(circle at 88% 86%, rgba(15, 76, 129, 0.14), transparent 34%),
+    linear-gradient(135deg, #f9fdfe 0%, #e6f4f8 52%, #eefaf8 100%);
+}
+
+.auth-page::before,
+.auth-page::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  width: 34rem;
+  height: 34rem;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(2px);
+}
+
+.auth-page::before {
+  top: -22rem;
+  left: -12rem;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.auth-page::after {
+  right: -18rem;
+  bottom: -24rem;
+  background: rgba(15, 76, 129, 0.1);
 }
 
 .auth-login-brand {
   display: grid;
   justify-items: center;
+  margin-bottom: 28px;
 }
 
 .auth-login-brand .medflux-logo {
@@ -170,8 +198,8 @@ a {
 
 
 .auth-card {
-  border-color: rgba(255,255,255,0.86);
-  box-shadow: 0 24px 64px rgba(4, 27, 49, 0.22);
+  border-color: rgba(15, 76, 129, 0.12);
+  box-shadow: 0 24px 64px rgba(15, 76, 129, 0.13);
 }
 
 .auth-card h2,
