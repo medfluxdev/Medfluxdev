@@ -88,6 +88,14 @@ def _is_docx(units: list[ExtractionUnit]) -> bool:
     return not any(u.source_type == SourceType.PAGE for u in units)
 
 
+def _downgrade(ev: SourceEvidence, issues: list[str], message: str) -> None:
+    """Mark evidence as review-required without ever increasing confidence."""
+    issues.append(message)
+    ev.requires_review = True
+    if ev.confidence is None or ev.confidence > 0.5:
+        ev.confidence = 0.5
+
+
 def verify_evidence(
     evidence: Optional[SourceEvidence], units: list[ExtractionUnit], *, max_source_len: int = 140
 ) -> tuple[Optional[SourceEvidence], list[str]]:
@@ -105,6 +113,11 @@ def verify_evidence(
     docx = _is_docx(units)
     text = ev.source_text or ""
 
+    # A pointer alone is not evidence. Every accepted citation must carry a
+    # concrete excerpt that can be checked against the original extraction unit.
+    if not text.strip():
+        _downgrade(ev, issues, "Nachweis ohne source_text ist nicht verifizierbar")
+
     # DOCX: eine erfundene Seite ist ein klarer Verstoß
     if docx and ev.page is not None:
         issues.append("DOCX: Seite darf nicht gesetzt werden (page entfernt)")
@@ -116,10 +129,7 @@ def verify_evidence(
             # kein gültiger DOCX-Zeiger -> Ganztextsuche nachführen
             hit = _search_all_units(units, text) if text else None
             if hit is None:
-                issues.append("Nachweis ohne gültige DOCX-Position, source_text nicht belegt")
-                ev.requires_review = True
-                if ev.confidence is None or ev.confidence > 0.5:
-                    ev.confidence = 0.5
+                _downgrade(ev, issues, "Nachweis ohne gültige DOCX-Position, source_text nicht belegt")
             else:
                 ev.source_type = hit.source_type.value
                 if hit.source_type == SourceType.PARAGRAPH:
@@ -135,44 +145,31 @@ def verify_evidence(
             else:
                 unit = None
             if unit is None:
-                issues.append(
-                    f"Angegebene DOCX-Position ({ev.source_type} {ev.paragraph_index or ev.table_index}) existiert nicht"
+                _downgrade(
+                    ev,
+                    issues,
+                    f"Angegebene DOCX-Position ({ev.source_type} {ev.paragraph_index or ev.table_index}) existiert nicht",
                 )
-                ev.requires_review = True
-                if ev.confidence is None or ev.confidence > 0.5:
-                    ev.confidence = 0.5
             else:
                 if text and not _contains_evidence(unit, text):
-                    issues.append("source_text nicht in der zitierten Einheit gefunden")
-                    ev.requires_review = True
-                    if ev.confidence is None or ev.confidence > 0.5:
-                        ev.confidence = 0.5
+                    _downgrade(ev, issues, "source_text nicht in der zitierten Einheit gefunden")
                 _attach_navigation(ev, unit)
     else:
         # PDF
         if ev.page is None:
             hit = _search_all_units(units, text) if text else None
             if hit is None:
-                issues.append("PDF-Nachweis ohne Seite und source_text nicht belegt")
-                ev.requires_review = True
-                if ev.confidence is None or ev.confidence > 0.5:
-                    ev.confidence = 0.5
+                _downgrade(ev, issues, "PDF-Nachweis ohne Seite und source_text nicht belegt")
             else:
                 ev.page = hit.index
                 _attach_navigation(ev, hit)
         else:
             unit = _find_unit(units, SourceType.PAGE, ev.page)
             if unit is None:
-                issues.append(f"Angegebene Seite {ev.page} existiert nicht")
-                ev.requires_review = True
-                if ev.confidence is None or ev.confidence > 0.5:
-                    ev.confidence = 0.5
+                _downgrade(ev, issues, f"Angegebene Seite {ev.page} existiert nicht")
             else:
                 if text and not _contains_evidence(unit, text):
-                    issues.append("source_text nicht auf der zitierten Seite gefunden")
-                    ev.requires_review = True
-                    if ev.confidence is None or ev.confidence > 0.5:
-                        ev.confidence = 0.5
+                    _downgrade(ev, issues, "source_text nicht auf der zitierten Seite gefunden")
                 _attach_navigation(ev, unit)
 
     if ev.extraction_method != ExtractionMethod.AI:
