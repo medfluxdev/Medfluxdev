@@ -69,6 +69,50 @@ describe("Import (FE-08)", () => {
     expect(screen.getByText("Dokumentanalyse konnte nicht abgeschlossen werden.")).toBeInTheDocument();
   });
 
+  it("zeigt Teilanalyse ehrlich und verlinkt direkt auf die manuelle Prüfung", async () => {
+    const res: ImportBatchResponse = {
+      total: 1,
+      successful: 1,
+      failed: 0,
+      duplicates: 0,
+      documents: [{
+        original_filename: "teilweise.pdf",
+        document_version_id: "dv-partial",
+        contract_id: "contract-123",
+        status: "imported",
+        size: 4096,
+        analysis_status: "partial",
+        requires_review: true,
+        message: "Analyse abgeschlossen; Angaben prüfen.",
+      }],
+    };
+    apiUploadMock.mockResolvedValue(res);
+    const utils = render(<ImportPage />);
+    const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, await selectedFile("teilweise.pdf"));
+    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await waitFor(() => expect(screen.getByText("Teilanalyse – Prüfung erforderlich")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "Zur manuellen Prüfung" })).toHaveAttribute("href", "/contracts/contract-123?tab=documents&subtab=review");
+  });
+
+  it("kennzeichnet Duplikate ohne eine erneute Analyse vorzutäuschen", async () => {
+    const res: ImportBatchResponse = {
+      total: 1,
+      successful: 0,
+      failed: 0,
+      duplicates: 1,
+      documents: [{ original_filename: "doppelt.pdf", status: "duplicate", size: 1024, analysis_status: null, message: "Dokument wurde bereits verarbeitet." }],
+    };
+    apiUploadMock.mockResolvedValue(res);
+    const utils = render(<ImportPage />);
+    const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, await selectedFile("doppelt.pdf"));
+    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await waitFor(() => expect(screen.getByText("Duplikat")).toBeInTheDocument());
+    expect(screen.getByText("Nicht erneut analysiert")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyse erneut starten" })).not.toBeInTheDocument();
+  });
+
   it("bietet für fehlgeschlagene Analysen Retry über die gespeicherte Dokumentversion", async () => {
     const res: ImportBatchResponse = {
       total: 1,
