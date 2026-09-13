@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.core.scope_context import current_scope_context
 from app.database.models import (
     ActionProposalRecord,
+    Contract,
     ContractObligationRecord,
     ContractRelationRecord,
     IntelligenceEvent,
@@ -44,6 +45,15 @@ def _visible_contract_ids(session, organization_id: UUID) -> set[UUID] | None:
 
 
 def _require_visible_contract(session, organization_id: UUID, contract_id: UUID) -> set[UUID] | None:
+    exists = session.scalar(
+        select(Contract.id).where(
+            (Contract.id == contract_id)
+            & (Contract.organization_id == organization_id)
+            & (Contract.lifecycle_state == "active")
+        )
+    )
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
     visible = _visible_contract_ids(session, organization_id)
     if visible is not None and contract_id not in visible:
         raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
