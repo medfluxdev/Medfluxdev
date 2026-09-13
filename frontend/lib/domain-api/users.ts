@@ -8,6 +8,15 @@ export interface UserScopeDto {
   is_default: boolean;
 }
 
+export interface CreateUserPayload {
+  email: string;
+  display_name: string;
+  password: string;
+  role: AccountRole;
+  hospital_id?: string | null;
+  department_id?: string | null;
+}
+
 function orgQuery(organizationSlug: string) {
   return `organization_slug=${encodeURIComponent(organizationSlug)}`;
 }
@@ -16,10 +25,7 @@ export function listUsers(organizationSlug: string) {
   return apiGet<{ items: ManagedUserDto[] }>(`/api/users?${orgQuery(organizationSlug)}`);
 }
 
-export function createUser(
-  organizationSlug: string,
-  payload: { email: string; display_name: string; password: string; role: AccountRole },
-) {
+export function createUser(organizationSlug: string, payload: CreateUserPayload) {
   return apiPost<ManagedUserDto>(`/api/users?${orgQuery(organizationSlug)}`, payload);
 }
 
