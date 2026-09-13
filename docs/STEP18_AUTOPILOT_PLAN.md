@@ -1,45 +1,53 @@
 # STEP 18 Autopilot Plan
 
-Status snapshot after Big Pickle quota exhaustion. Static/GitHub work continues; runtime claims remain unverified until the local gate is executed.
+Status: **all currently actionable GitHub/static work completed; local runtime closure pending**.
 
-## Completed statically on JAMAL
+The rule for STEP 18 is fail-closed: schema-valid model output is never enough to trust a critical hospital-contract fact.
 
-- [x] Make unsupported semantic-verifier decisions fail closed even when section-level evidence is absent.
-- [x] Count actual verifier problems instead of counting every verifier decision as an issue.
-- [x] Surface multi-chunk extraction conflicts instead of silently keeping the first value.
-- [x] Fail closed when the verifier returns no usable decisions.
-- [x] Require a verifier decision for every present sensitive claim; missing decisions force review.
-- [x] Treat `payment.billing_interval=other` as an unknown/default, not a factual claim.
-- [x] Require concrete `source_text` for evidence; a page/paragraph/table pointer alone is not proof.
-- [x] Add targeted regression tests for verifier fail-closed behavior, completeness, merge conflicts, and evidence source text.
-- [x] Add a DB-free PowerShell safety gate: `scripts/step18_safety_gate.ps1`.
-- [x] Inventory all contract-model critical fields and document verifier/evidence coverage in `docs/STEP18_CRITICAL_FIELD_AUDIT.md`.
-- [x] Confirm central auth middleware binds requested `organization_slug` to the signed identity when auth is enabled; mismatches fail as 404 and viewers cannot mutate domain data.
+## Static/GitHub work completed
 
-## Static implementation backlog
+- [x] Unsupported and missing semantic-verifier decisions fail closed.
+- [x] Verifier outages/invalid response shapes fail closed.
+- [x] Multi-chunk scalar conflicts are surfaced.
+- [x] Evidence requires concrete source text.
+- [x] Critical claims are centrally inventoried.
+- [x] Scalar verifier coverage expanded to parties, money/payment, service booleans and SLA.
+- [x] Per-equipment evidence is independently verified.
+- [x] Equipment identity/coverage and duplicate-device conflicts are checked.
+- [x] Included/excluded service list items are checked individually.
+- [x] Residual critical clauses, remaining service booleans, service hours, scheduled prices and variable charges have deterministic gates.
+- [x] Adversarial critical-claim tests added.
+- [x] Tenant/auth route and service boundaries statically audited.
+- [x] Pilot/production auth configuration hardened.
+- [x] Authenticated reviewer provenance is server-bound.
+- [x] Contract review cannot be completed while critical facts remain unreviewed.
+- [x] Contract 360 and Human Review UI distinguish unverified/review-required evidence explicitly.
+- [x] Review-list copy no longer overstates human review completion.
+- [x] CSV spreadsheet-formula injection is neutralized.
+- [x] Focused benchmark harness preserves field-evidence units and can select one contract with a perfect-score exit gate.
+- [x] DB-free safety gate expanded to cover all new safety regressions.
+- [x] One-command local runtime closure gate added: `scripts/step18_runtime_gate.ps1`.
 
-- [ ] Verify each `equipment[].evidence` object in GroupPipeline; current section evidence loop covers identity/dates/termination/costs/payment/services/SLA but not per-equipment evidence.
-- [ ] Replace the ad-hoc `SENSITIVE_FIELDS` tuple with a centralized critical-claim policy describing severity, unknown/default semantics, evidence strategy and verifier requirement.
-- [ ] Add party-role verification for supplier/customer/contractor.
-- [ ] Add equipment identity/coverage verification for device/model/serial/inventory/coverage/service scope.
-- [ ] Add services/SLA verification with strict tri-state boolean semantics.
-- [ ] Expand financial verification to the remaining extracted money/payment fields without deriving or aggregating values.
-- [ ] Add adversarial tests for conflicting parties, devices, inclusion/exclusion, SLA and money.
-- [ ] Review all contract/document/equipment/intelligence routes for tenant binding and direct-object authorization.
-- [ ] Review Contract 360 and Human Review UI so unverified/unsupported claims cannot look verified.
+## Local runtime closure
 
-## Runtime gate when local model quota is available
+The next meaningful action now requires the user's machine/environment.
 
-- [ ] Run `scripts/step18_safety_gate.ps1` with `MEDFLUX_UNIT_ONLY=1`.
-- [ ] Run one production Accutron extraction at temperature 0.
-- [ ] Assert canonical 27/27 benchmark fields.
-- [ ] Verify `dates.minimum_duration` is supported from field-scoped evidence containing `Mindestvertragslaufzeit (2 Jahre)`.
-- [ ] Verify `payment.billing_interval=other` is excluded from semantic verification.
-- [ ] Verify no invented contract number / dates / costs / cancellation / renewal facts.
-- [ ] Verify unsupported or missing sensitive verifier decisions always produce PARTIAL / NEEDS_REVIEW.
-- [ ] Verify multi-chunk contradictory critical values produce review instead of silent first-value acceptance.
-- [ ] If targeted gate passes, run the full backend regression suite once.
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\step18_runtime_gate.ps1
+```
+
+The runtime gate performs, in order:
+
+1. DB-free STEP 18 safety tests.
+2. DB-backed auth/tenant tests.
+3. Frontend TypeScript, tests, lint and production build.
+4. One focused Accutron production benchmark at `AI_TEMPERATURE=0`, selected by filename and requiring perfect ground-truth score.
+5. Full backend regression only after all earlier gates pass.
+
+The script exits on the first failure and prints `STEP18_RUNTIME_GATE_PASS` only when all stages pass.
 
 ## Closure rule
 
-STEP 18 is not closed by static review alone and not closed by the Accutron benchmark alone. Closure requires the targeted safety gate, the real benchmark gate, and a final full backend regression with no newly introduced failures.
+STEP 18 is **not closed** until the runtime gate passes. Static review is complete, but no local pytest/frontend/Ollama/Accutron result is being claimed without execution evidence.
