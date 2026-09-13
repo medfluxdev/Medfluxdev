@@ -16,6 +16,7 @@ import "./design-system.css";
 import "./shell.css";
 import "./contracts-list.css";
 import "./import-enhancements.css";
+import "./work-queue.css";
 
 export const metadata: Metadata = {
   title: {
