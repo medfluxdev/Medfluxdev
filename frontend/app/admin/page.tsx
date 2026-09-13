@@ -3,41 +3,48 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { apiGet } from "@/lib/api";
 import type { ManagedUserDto } from "@/lib/auth-types";
 import { ROLE_LABELS } from "@/lib/auth-types";
 import type { DashboardOverview } from "@/lib/dashboard-types";
 import { formatISODateOnly } from "@/lib/format";
+import { listUsers } from "@/lib/domain-api/users";
+import { getDashboardOverview } from "@/lib/domain-api/dashboard";
+import { listActivity, type ActivityDto } from "@/lib/domain-api/activity";
+import { downloadContractsCsv } from "@/lib/domain-api/operations";
 import styles from "./admin.module.css";
-
-type ActivityItem = { id: string; display_name: string | null; event_name: string; object_type: string; created_at: string | null };
 
 const EVENT_LABELS: Record<string, string> = {
   "account.created": "Benutzer angelegt",
   "account.updated": "Benutzer geändert",
+  "account.scope_updated": "Benutzerbereich geändert",
   "contract.archived": "Vertrag archiviert",
   "contract.unarchived": "Vertrag wiederhergestellt",
+  "contract.ownership_updated": "Vertragszuordnung geändert",
+  "equipment.ownership_updated": "Gerätezuordnung geändert",
   "override.set": "Vertragsangabe geändert",
-  "override.remove": "Manuelle Änderung entfernt",
+  "override.void": "Manuelle Änderung entfernt",
+  "work_item.acknowledged": "Aufgabe übernommen",
+  "work_item.resolved": "Aufgabe erledigt",
+  "contracts.exported": "Verträge exportiert",
 };
 
 export default function AdminPage() {
   const { account, membership, role } = useAuth();
   const [users, setUsers] = useState<ManagedUserDto[]>([]);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activity, setActivity] = useState<ActivityDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     if (role !== "admin" || !membership) return;
     setLoading(true); setError(null);
-    const slug = encodeURIComponent(membership.organization_slug);
     try {
       const [userResult, dashboardResult, activityResult] = await Promise.all([
-        apiGet<{ items: ManagedUserDto[] }>(`/api/users?organization_slug=${slug}`),
-        apiGet<DashboardOverview>(`/api/dashboard/overview?organization_slug=${slug}&as_of_date=${formatISODateOnly(new Date())}`),
-        apiGet<{ items: ActivityItem[] }>(`/api/activity?organization_slug=${slug}&limit=8`),
+        listUsers(membership.organization_slug),
+        getDashboardOverview(membership.organization_slug, formatISODateOnly(new Date())),
+        listActivity(membership.organization_slug, { limit: 8 }),
       ]);
       setUsers(userResult.items); setOverview(dashboardResult); setActivity(activityResult.items);
     } catch (err) {
@@ -48,6 +55,28 @@ export default function AdminPage() {
   useEffect(() => { void load(); }, [load]);
   const activeUsers = useMemo(() => users.filter((user) => user.is_active).length, [users]);
   const reviews = overview?.data_quality.reduce((sum, item) => sum + item.count, 0) ?? 0;
+
+  const exportContracts = useCallback(async () => {
+    if (!membership || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const { blob, filename } = await downloadContractsCsv(membership.organization_slug, true);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename ?? `medflux-vertraege-${membership.organization_slug}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export konnte nicht erstellt werden.");
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, load, membership]);
 
   if (role !== "admin" || !membership) {
     return <div className={styles.page}><section className={styles.denied}><h1>Keine Berechtigung</h1><p>Bitte wählen Sie zuerst eine Organisation mit Administratorzugriff aus.</p><Link href={account?.is_developer ? "/developer" : "/"}>Zur Übersicht</Link></section></div>;
@@ -75,6 +104,7 @@ export default function AdminPage() {
         <Link href="/work-queue"><div><strong>Aufgaben bearbeiten</strong><small>Fristen, Risiken und offene Entscheidungen</small></div><span>→</span></Link>
         <Link href="/settings/users"><div><strong>Benutzer & Rollen</strong><small>Konten und Zugriffsbereiche verwalten</small></div><span>→</span></Link>
         <Link href="/audit"><div><strong>Audit öffnen</strong><small>Änderungen nachvollziehen</small></div><span>→</span></Link>
+        <button type="button" onClick={() => void exportContracts()} disabled={exporting}><div><strong>Verträge exportieren</strong><small>Scope-gefilterte CSV mit aktuellem Vertragsbestand</small></div><span>{exporting ? "…" : "↓"}</span></button>
       </section>
 
       <div className={styles.columns}>
