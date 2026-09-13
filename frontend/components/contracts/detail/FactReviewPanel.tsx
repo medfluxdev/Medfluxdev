@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
 import { ROLE_LABELS } from "@/lib/auth-types";
 import type { ContractDetailResponse, EvidenceRef, FactReviewStateDto, FactReviewDto } from "@/lib/contract-detail-types";
+import ValueOriginBadge, { type ValueOriginKind } from "./ValueOriginBadge";
 
 interface Props {
   data: ContractDetailResponse;
@@ -23,6 +24,19 @@ function valueText(v: unknown): string {
   const text = JSON.stringify(v);
   if (!text) return "–";
   return text.length > 120 ? `${text.slice(0, 120)}…` : text;
+}
+
+function hasValue(v: unknown): boolean {
+  return !(v == null || v === "");
+}
+
+function originKind(state: FactReviewStateDto, target: "original" | "effective"): ValueOriginKind {
+  const value = target === "original" ? state.original_value : state.effective_value;
+  if (!hasValue(value)) return "missing";
+  if (target === "effective" && state.state === "corrected") return "corrected";
+  if (target === "effective" && state.state === "confirmed") return "reviewed";
+  if (state.evidence_count > 0) return "extracted";
+  return "system";
 }
 
 function stampTime(iso: string | null | undefined): string {
@@ -245,13 +259,16 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
       </div>
 
       {states.length === 0 ? <p className="muted">Keine Angaben vorhanden.</p> : view === "table" ? (
-        <div className="fr-table-wrap"><table className="fr-table"><thead><tr><th>Angabe</th><th>Original</th><th>Wirksam</th><th>Quelle</th><th>Status</th>{canReview ? <th>Aktion</th> : null}</tr></thead><tbody>{states.map((s) => <tr key={s.fact_key}><td><button className="fr-table-name" onClick={() => selectFact(s.fact_key)}>{s.label_de}</button>{s.is_critical && <small>kritisch</small>}</td><td>{valueText(s.original_value)}</td><td><strong>{valueText(s.effective_value)}</strong></td><td><EvidenceButtons s={s} /></td><td><span className={`fact-review${tone(s.state)}`}>{RESULT_VERB[s.state] ?? s.state_label_de}</span></td>{canReview ? <td><div className="fr-table-actions"><button title="Bestätigen" onClick={() => void confirmFact(s.fact_key)} disabled={busy}>✓</button><button title="Korrigieren" onClick={() => { setActiveFact(s.fact_key); setEditFact(s.fact_key); setView("focus"); }} disabled={busy}>✎</button><button title="Historie" onClick={() => { setActiveFact(s.fact_key); setHistoryFact(s.fact_key); setView("focus"); }}>◷</button></div></td> : null}</tr>)}</tbody></table></div>
+        <div className="fr-table-wrap"><table className="fr-table"><thead><tr><th>Angabe</th><th>Original</th><th>Wirksam</th><th>Quelle</th><th>Status</th>{canReview ? <th>Aktion</th> : null}</tr></thead><tbody>{states.map((s) => <tr key={s.fact_key}><td><button className="fr-table-name" onClick={() => selectFact(s.fact_key)}>{s.label_de}</button>{s.is_critical && <small>kritisch</small>}</td><td><span className="fr-value-with-origin">{valueText(s.original_value)}<ValueOriginBadge kind={originKind(s, "original")} /></span></td><td><span className="fr-value-with-origin"><strong>{valueText(s.effective_value)}</strong><ValueOriginBadge kind={originKind(s, "effective")} /></span></td><td><EvidenceButtons s={s} /></td><td><span className={`fact-review${tone(s.state)}`}>{RESULT_VERB[s.state] ?? s.state_label_de}</span></td>{canReview ? <td><div className="fr-table-actions"><button title="Bestätigen" onClick={() => void confirmFact(s.fact_key)} disabled={busy}>✓</button><button title="Korrigieren" onClick={() => { setActiveFact(s.fact_key); setEditFact(s.fact_key); setView("focus"); }} disabled={busy}>✎</button><button title="Historie" onClick={() => { setActiveFact(s.fact_key); setHistoryFact(s.fact_key); setView("focus"); }}>◷</button></div></td> : null}</tr>)}</tbody></table></div>
       ) : (
         <div className="fr-focus-layout">
           <nav className="fr-fact-nav" aria-label="Materiale Angaben"><div className="fr-nav-head"><strong>Angaben</strong><span>{states.length}</span></div>{states.map((s, i) => <button key={s.fact_key} type="button" className={selected?.fact_key === s.fact_key ? "active" : ""} onClick={() => selectFact(s.fact_key)}><span className="fr-nav-index">{i + 1}</span><span><strong>{s.label_de}</strong><small>{s.is_critical ? "Kritisch" : "Standard"}</small></span><i className={`fr-status-dot${tone(s.state)}`} aria-hidden="true" /></button>)}</nav>
           {selected && <article className="fr-fact-detail">
             <div className="fr-detail-head"><div><span className="fr-step">Angabe {selectedIndex + 1} von {states.length}</span><h3>{selected.label_de}</h3>{selected.is_critical && <span className="fr-critical-label">Kritische Angabe</span>}</div><span className={`fact-review${tone(selected.state)}`}>{RESULT_VERB[selected.state] ?? selected.state_label_de}</span></div>
-            <div className="fr-value-grid"><div><label>Original aus Dokument</label><div className="fr-value-box">{valueText(selected.original_value)}</div></div><div><label>Wirksam im System</label><div className="fr-value-box effective">{valueText(selected.effective_value)}</div></div></div>
+            <div className="fr-value-grid">
+              <div><label>Original aus Dokument <ValueOriginBadge kind={originKind(selected, "original")} /></label><div className="fr-value-box">{valueText(selected.original_value)}</div></div>
+              <div><label>Wirksam im System <ValueOriginBadge kind={originKind(selected, "effective")} /></label><div className="fr-value-box effective">{valueText(selected.effective_value)}</div></div>
+            </div>
             <div className="fr-source-block"><strong>Quellen-Beleg</strong><EvidenceButtons s={selected} /></div>
             {selected.reviewed_at && <p className="fr-reviewed"><strong>{RESULT_VERB[selected.state] ?? "Geprüft"}</strong> · {selected.reviewer_display_name ?? "–"} · {stampTime(selected.reviewed_at)}</p>}
             {canReview ? <div className="fr-detail-actions"><button type="button" className="fr-confirm" onClick={() => void confirmFact(selected.fact_key)} disabled={busy}>✓ Bestätigen</button><button type="button" className="btn btn-sm" onClick={() => setEditFact(editFact === selected.fact_key ? null : selected.fact_key)} disabled={busy}>✎ Korrigieren</button>{selected.state !== "unreviewed" && <button type="button" className="btn-link" onClick={() => reopenFact(selected.fact_key)} disabled={busy}>Erneut öffnen</button>}<button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div> : <div className="fr-detail-actions"><button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div>}
