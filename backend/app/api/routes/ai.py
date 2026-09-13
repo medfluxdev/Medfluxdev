@@ -7,7 +7,7 @@ NUR validiert und persistiert; an der Auswahl wird nie inferiert.
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.ai.providers import discovery
 from app.ai.providers.registry import (
@@ -24,6 +24,7 @@ from app.ai.schemas import (
 )
 from app.ai.selection import build_selection
 from app.ai.service import AIService
+from app.auth.context import require_identity
 from app.core.config import settings
 from app.database.ai_selection import set_ai_selection
 
@@ -66,12 +67,20 @@ async def ai_test(payload: AITestRequest) -> AITestResponse:
 
 
 @router.put("/selection", response_model=AISnapshot)
-async def ai_set_selection(payload: SelectionUpdate) -> AISnapshot:
+async def ai_set_selection(payload: SelectionUpdate, request: Request) -> AISnapshot:
     """Persistiert die aktive KI-Auswahl – validiert, ohne zu inferieren.
 
     Fehlschläge liefern 400 mit deutscher Meldung; Erfolg liefert den frischen
     Snapshot (identischer kanonischer Zustand wie GET /api/ai/snapshot).
     """
+    if settings.auth_enabled:
+        identity = require_identity(request)
+        if identity.role != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Nur Administratoren duerfen die KI-Auswahl aendern.",
+            )
+
     provider_id = payload.provider_id.strip()
     model_id = payload.model_id.strip()
 
