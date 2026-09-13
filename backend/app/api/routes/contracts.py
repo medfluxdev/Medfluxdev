@@ -59,6 +59,7 @@ from app.contracts.review.service import (
 )
 from app.demo.workspace import workspace_contract_ids
 from app.documents.status import build_import_state
+from app.database.models.activity_log import ActivityLog
 from app.database.models import (
     Contract,
     DocumentFile,
@@ -121,6 +122,34 @@ def _build_augmented_detail(session, *, organization_id, contract_id):
         session, organization_id=organization_id, contract_id=contract_id, detail=data
     )
     return data
+
+
+def _record_account_activity(
+    session,
+    request: Request,
+    event_name: str,
+    contract_id: UUID,
+    context_data: dict | None = None,
+) -> None:
+    """Mirror authenticated Ahmad account actions into its activity stream."""
+    actor = getattr(request.state, "actor", None)
+    if actor is None:
+        return
+    scope = current_scope_context()
+    session.add(
+        ActivityLog(
+            organization_id=actor.organization_id,
+            hospital_id=scope.hospital_id,
+            department_id=scope.department_id,
+            account_id=actor.account_id,
+            display_name_snapshot=actor.display_name,
+            role_snapshot=actor.role,
+            event_name=event_name,
+            object_type="contract",
+            object_id=contract_id,
+            context_data=context_data,
+        )
+    )
 
 
 def _workspace_denies(session, organization_id, contract_id: UUID) -> bool:
@@ -372,6 +401,13 @@ def contract_fact_review(
                 corrected_value=payload.corrected_value,
                 evidence_ref=payload.evidence_ref,
             )
+            _record_account_activity(
+                session,
+                request,
+                f"fact_review.{payload.action}",
+                cid,
+                {"fact_key": payload.fact_key},
+            )
             session.commit()
         except ReviewError as exc:
             session.rollback()
@@ -416,6 +452,9 @@ def contract_review_start(
                     request, payload.reviewer_display_name
                 ),
                 note=payload.note,
+            )
+            _record_account_activity(
+                session, request, "contract_review.started", cid
             )
             session.commit()
         except ReviewError as exc:
@@ -473,6 +512,17 @@ def contract_review_complete(
                 reviewed_count=summary["reviewed_count"],
                 critical_unreviewed_count=summary["critical_unreviewed_count"],
             )
+            _record_account_activity(
+                session,
+                request,
+                "contract_review.completed",
+                cid,
+                {
+                    "acknowledge_unreviewed": bool(
+                        payload.acknowledge_unreviewed
+                    )
+                },
+            )
             session.commit()
         except ReviewError as exc:
             session.rollback()
@@ -517,6 +567,7 @@ def _set_archived(session, organization_id, contract_id, archived: bool) -> None
 
 @router.post("/{contract_id}/archive", response_model=ContractDetailResponse)
 def contract_archive(
+    request: Request,
     organization_slug: str,
     contract_id: str,
 ) -> ContractDetailResponse:
@@ -542,6 +593,9 @@ def contract_archive(
         if existing is None:
             raise _not_found()
         _set_archived(session, org.id, cid, True)
+        _record_account_activity(
+            session, request, "contract.archived", cid
+        )
         session.commit()
         return _augmented_detail_response(session, org.id, cid)
     finally:
@@ -550,6 +604,7 @@ def contract_archive(
 
 @router.post("/{contract_id}/unarchive", response_model=ContractDetailResponse)
 def contract_unarchive(
+    request: Request,
     organization_slug: str,
     contract_id: str,
 ) -> ContractDetailResponse:
@@ -575,6 +630,9 @@ def contract_unarchive(
         if existing is None:
             raise _not_found()
         _set_archived(session, org.id, cid, False)
+        _record_account_activity(
+            session, request, "contract.unarchived", cid
+        )
         session.commit()
         return _augmented_detail_response(session, org.id, cid)
     finally:
@@ -583,6 +641,7 @@ def contract_unarchive(
 
 @router.post("/{contract_id}/overrides", response_model=ContractDetailResponse)
 def contract_override(
+    request: Request,
     organization_slug: str,
     contract_id: str,
     payload: OverrideRequest,
@@ -617,6 +676,13 @@ def contract_override(
                 value=value,
                 fact_ref=payload.fact_ref,
                 note=payload.note,
+            )
+            _record_account_activity(
+                session,
+                request,
+                f"override.{payload.action}",
+                cid,
+                {"key": payload.key, "fact_ref": payload.fact_ref},
             )
             session.commit()
         except OverrideError as exc:
