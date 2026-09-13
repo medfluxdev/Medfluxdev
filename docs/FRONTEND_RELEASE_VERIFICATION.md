@@ -8,11 +8,10 @@ Scope: FE-10 release gate
 Run from `frontend/`:
 
 ```bash
-npm run test
-npm run build
+npm run verify
 ```
 
-Release is blocked by any failing test, TypeScript error, lint error, prerender error or unresolved production-build warning introduced by the application code.
+`verify` runs lint, the full Vitest suite, and the production build in sequence. Release is blocked by any failing test, TypeScript error, lint error, prerender error or unresolved production-build warning introduced by application code.
 
 Backend `pytest` is required whenever backend behavior or API contracts change. FE-09/FE-10 changes in the current batch are frontend-only.
 
@@ -27,6 +26,7 @@ Verify with keyboard and pointer input:
 5. To-dos -> status/severity/type filter -> contract -> manual review -> acknowledge/resolve supported task.
 6. Settings -> organization/users as admin; verify viewer/reviewer cannot reach admin-only actions.
 7. Scope switch -> organization/hospital/department -> stale requests canceled and unsaved review draft can block the switch.
+8. Account menu -> open with keyboard -> Escape closes the menu and restores focus to the trigger.
 
 ## Responsive/reflow matrix
 
@@ -45,8 +45,10 @@ Target: WCAG 2.2 AA for the supported frontend journeys.
 - All interactive controls reachable by keyboard.
 - Visible `:focus-visible` state on links, buttons, form fields, tabs and custom focusable regions.
 - Skip link reaches the unique `#main-content` region.
+- Main page content owns the semantic `h1`; the persistent top bar route label is visual context only and does not create a duplicate top-level heading.
 - Forms have programmatic labels; errors use `role=alert`; background/status updates use `role=status` where appropriate.
 - Information is never conveyed by color alone: severity, review, deadline and provenance states include text.
+- Menus/dialog-like interactions support predictable dismissal/focus return where custom behavior is required.
 - Dialog-like/browser confirmation paths preserve user edits or explicitly ask before discarding.
 - Reduced-motion preference disables nonessential transitions/animations.
 - Automated axe coverage remains green on dashboard, import, work queue and other existing covered pages.
@@ -56,7 +58,7 @@ Target: WCAG 2.2 AA for the supported frontend journeys.
 Current product constraints:
 
 - No external fonts, analytics or external AI calls.
-- PDF rendering is a heavy feature and should only execute when the source workspace is active.
+- PDF rendering is a heavy feature and executes only when the source workspace is active; `pdfjs-dist` is loaded by dynamic import inside the viewer.
 - Do not add client-side libraries for functionality already available from platform/React/Next.js.
 
 Budget targets for production build review:
@@ -75,12 +77,22 @@ Budget targets for production build review:
 - Import success and analysis success are distinct states.
 - Unsupported backend features (bulk export/actions, task assignment, notifications, durable import jobs) remain absent instead of simulated.
 
+## Implemented FE-10 safeguards
+
+- Global focus-visible fallback for links, buttons, fields and custom focusable elements.
+- Reduced-motion fallback for transitions and animations.
+- 390/320 px reflow safeguards and local horizontal scrolling for dense table regions.
+- Account menu closes on Escape and returns focus to its trigger.
+- Persistent topbar route title no longer creates a duplicate `h1`.
+- Profile image uses `next/image` and remains unoptimized/local for data URLs.
+- PDF.js remains route/feature-lazy through dynamic import.
+- `npm run verify` provides one reproducible release command.
+
 ## Release decision
 
 Mark FE-10 COMPLETE only after:
 
-- full frontend tests pass,
-- production build passes without release-blocking warnings,
+- `npm run verify` passes,
 - representative 1440/1280/768/390/320 reflow checks pass,
 - keyboard/focus checks pass for the core journeys,
 - no new external runtime dependency is present,
