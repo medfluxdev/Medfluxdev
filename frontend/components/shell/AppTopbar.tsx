@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import OrganizationScopePicker from "@/components/OrganizationScopePicker";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -32,7 +32,23 @@ export default function AppTopbar() {
   const router = useRouter();
   const { account, membership, role, logout } = useAuth();
   const [query, setQuery] = useState("");
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const showTitle = pathname !== "/";
+
+  useEffect(() => {
+    const menu = accountMenuRef.current;
+    if (!menu) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !menu.open) return;
+      event.preventDefault();
+      menu.open = false;
+      menu.querySelector<HTMLElement>("summary")?.focus();
+    };
+
+    menu.addEventListener("keydown", onKeyDown);
+    return () => menu.removeEventListener("keydown", onKeyDown);
+  }, [account?.id]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -50,7 +66,7 @@ export default function AppTopbar() {
           <input id="global-contract-search" type="search" placeholder="Vertragsnummer …" value={query} onChange={(event) => setQuery(event.target.value)} />
         </form>
         {account && role ? (
-          <details className="account-menu">
+          <details ref={accountMenuRef} className="account-menu">
             <summary className="top-user" aria-label="Kontomenü öffnen">
               <span className="top-user-avatar">{account.display_name.slice(0, 1).toUpperCase()}</span>
               <span className="top-user-copy"><strong>{account.display_name}</strong><small>{account.is_developer ? "Developer" : ROLE_LABELS[role]}</small></span>
