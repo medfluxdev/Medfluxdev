@@ -61,11 +61,12 @@ The logo retains the flowing **M** concept as a symbol of medical workflows, con
 
 Only **01 — Main Logo** from the approved identity board is authorized for the current product.
 
-- Use the complete stacked logo: flowing M, MedFlux wordmark, `Healthcare Intelligence Platform`, divider, and `Connect · Analyze · Improve`.
+- Use the clean production logo containing only the flowing M and the `MedFlux` wordmark.
 - Use the same asset in the sidebar, login, organization selection, and branded product surfaces.
 - Do not substitute the horizontal, stacked variation, icon-only, dark-background, mockup, or reconstructed code-drawn versions.
 - Scaling is allowed only with the original aspect ratio preserved.
-- The favicon is derived from the same Main Logo 01 artwork because browser icons require a square container.
+- Do not place a descriptor, divider, tagline, or slogan underneath the production logo.
+- The favicon is derived from the same clean logo artwork because browser icons require a square container.
 - Source asset: `frontend/public/brand/medflux-main-logo.png`.
 
 ### Wordmark
@@ -438,7 +439,7 @@ It is the visual approval record and must remain linked from this document. Prod
 
 Canonical product assets:
 
-- `frontend/public/brand/medflux-main-logo.png` — the only full logo used in the application
+- `frontend/public/brand/medflux-main-logo.png` — the only full logo used in the application; 860 × 536 px, containing only the M and MedFlux
 - `frontend/app/icon.png` — square favicon generated from Main Logo 01
 - `docs/visual-identity/assets/medflux-brand-identity-guidelines-v1.webp` — approval board
 
