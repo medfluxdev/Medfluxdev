@@ -9,12 +9,13 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.scope_context import current_scope_context
 from app.database.models import WorkItem
+from app.database.models.activity_log import ActivityLog
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import PersistenceError, get_organization
 from app.database.session import create_session
@@ -55,13 +56,12 @@ def work_queue_list(
         if v not in WORKITEM_TYPE_ALLOWED:
             raise HTTPException(status_code=422, detail=f"Ungueltiger item_type: {v!r}")
 
-    items = []
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
-        scope = dict(
+        raw = list_work_items_dto(
             session=session,
             organization_id=org.id,
             active_only=active,
@@ -70,7 +70,6 @@ def work_queue_list(
             item_types=item_type or None,
             limit=limit,
         )
-        raw = list_work_items_dto(**scope)
         request_scope = current_scope_context()
         allowed = scoped_contract_ids(
             session,
@@ -91,13 +90,20 @@ def work_queue_list(
 
 @router.patch("/{work_item_id}", response_model=WorkItemSummary)
 def work_item_status_update(
-    organization_slug: str, work_item_id: UUID, body: WorkItemStatusUpdate
+    request: Request,
+    organization_slug: str,
+    work_item_id: UUID,
+    body: WorkItemStatusUpdate,
 ) -> WorkItemSummary:
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        row = session.get(WorkItem, work_item_id)
+        if row is None or row.organization_id != org.id:
+            raise HTTPException(status_code=404, detail="Arbeitselement nicht gefunden.")
+
         request_scope = current_scope_context()
         allowed = scoped_contract_ids(
             session,
@@ -105,20 +111,15 @@ def work_item_status_update(
             request_scope.hospital_id,
             request_scope.department_id,
         )
-        if allowed is not None:
-            row = session.get(WorkItem, work_item_id)
-            if (
-                row is None
-                or row.organization_id != org.id
-                or row.contract_id not in allowed
-            ):
-                raise HTTPException(
-                    status_code=404,
-                    detail="Arbeitselement nicht gefunden.",
-                )
+        if allowed is not None and row.contract_id not in allowed:
+            raise HTTPException(status_code=404, detail="Arbeitselement nicht gefunden.")
+
+        previous_status = row.status
         try:
             _ = set_work_item_status(
-                session, organization_id=org.id, work_item_id=work_item_id,
+                session,
+                organization_id=org.id,
+                work_item_id=work_item_id,
                 status=body.status,
             )
             dto = get_work_item_dto(
@@ -127,14 +128,33 @@ def work_item_status_update(
             if dto is None:
                 raise HTTPException(status_code=404, detail="Arbeitselement nicht gefunden.")
             response = WorkItemSummary(**dto)
+
+            actor = getattr(request.state, "actor", None)
+            if actor is not None and previous_status != body.status:
+                session.add(
+                    ActivityLog(
+                        organization_id=actor.organization_id,
+                        hospital_id=request_scope.hospital_id,
+                        department_id=request_scope.department_id,
+                        account_id=actor.account_id,
+                        display_name_snapshot=actor.display_name,
+                        role_snapshot="developer" if actor.is_developer else actor.role,
+                        event_name=f"work_item.{body.status}",
+                        object_type="contract",
+                        object_id=row.contract_id,
+                        context_data={
+                            "work_item_id": str(row.id),
+                            "item_type": row.item_type,
+                            "previous_status": previous_status,
+                            "status": body.status,
+                        },
+                    )
+                )
             session.commit()
         except PersistenceError as exc:
             session.rollback()
             raise HTTPException(status_code=422, detail=str(exc))
         except SQLAlchemyError as exc:
-            # Persistenz-/Commit-Fehler (z. B. transienter DB-Konflikt) ehrlich
-            # zurueckgeben statt eines nackten 500 – der Client kann den Grund
-            # anzeigen und erneut versuchen.
             session.rollback()
             raise HTTPException(
                 status_code=503,
