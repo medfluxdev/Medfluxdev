@@ -69,13 +69,12 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     return () => { active = false; };
   }, [pathname, refresh, router]);
 
-  const memberships = account?.memberships ?? [];
+  const memberships = useMemo(() => account?.memberships ?? [], [account?.memberships]);
   const isDeveloper = Boolean(account?.is_developer);
   const isAdminAccount = isDeveloper || memberships.some((item) => item.role === "admin");
 
   useEffect(() => {
-    if (!account) return;
-    if (memberships.length === 0) return;
+    if (!account || memberships.length === 0) return;
     const selectedIsValid = selectedSlug && memberships.some((item) => item.organization_slug === selectedSlug);
 
     if (!isAdminAccount) {
