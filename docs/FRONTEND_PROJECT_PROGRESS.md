@@ -5,7 +5,7 @@ Last updated: 2026-09-13
 Status: IN PROGRESS
 Progress: 5/10 development steps complete (50%)
 Active step: FE-06 — Contract detail and source review workspace
-Next action: Verify the current FE-06 provenance/source batch, then continue calculated-value clarity and remaining workspace acceptance checks.
+Next action: Run the full frontend test/build verification for the completed FE-06 implementation batches; if green, finish the acceptance checklist and advance to FE-07.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -123,33 +123,38 @@ Existing foundation already present:
 - Source navigation to document version/page/highlight.
 - Evidence, fact review, override and history views.
 
-Implemented in current FE-06 batches:
+Implemented in FE-06:
 - [x] Correction workflow requires a reason and sends it through the verified backend `note` field.
 - [x] Previous/effective values and correction reason remain visible in review history.
 - [x] Unsaved correction drafts trigger browser navigation protection.
 - [x] Organization/hospital/department scope changes are cancelable before local scope is mutated, allowing review drafts to block accidental context switches.
 - [x] PDF source loading distinguishes forbidden, missing version/document, server error and timeout states with a real retry action.
 - [x] PDF/source refinement requests are cancellable; previous PDF documents/render tasks are cleaned up when switching.
-- [x] Fact review now labels actual backend-supported provenance as `Extrahiert`, `Geprüft`, `Korrigiert`, `Fehlt` or `Systemwert`; labels are not guessed from UI state.
+- [x] Fact review labels actual backend-supported provenance as `Extrahiert`, `Geprüft`, `Korrigiert`, `Fehlt` or `Systemwert`; labels are not guessed from UI state.
 - [x] Evidence confidence is shown only for finite values within 0..1; invalid confidence is suppressed instead of presented as meaningful.
 - [x] Evidence precision wording distinguishes exact, approximate, page-only and missing-position source states.
-- [x] Review/source workspace receives a stacked small-screen layout with non-sticky evidence/PDF panels and touch-friendly document switching.
-- [x] Added targeted tests for correction reason, provenance labels and evidence confidence/precision presentation.
+- [x] Small-screen review/source workspace stacks evidence and PDF panels and makes document switching usable without sticky desktop assumptions.
+- [x] Deterministic dates/costs now receive explicit `Berechnet` provenance only when the backend supplies a real `CalcBasis`; missing basis falls back to `Systemwert` rather than claiming a calculation.
+- [x] Calculation explanations and backend-supplied inputs are displayed in dedicated calculation-basis cards with an explicit statement that the frontend does not perform AI calculation.
+- [x] Evidence/PDF split workspace is adjustable on desktop and vertically adjustable on narrower screens without changing source-navigation semantics.
+- [x] Added targeted tests for correction reason, provenance labels, evidence confidence/precision, and deterministic calculation-basis rendering.
 
-Remaining FE-06 scope:
-- [ ] Add explicit `Berechnet` provenance to deterministic calculated dates/costs where the backend DTO identifies the value as calculated.
-- [ ] Continue review/edit audit clarity and verify all previous-value/reason paths.
-- [ ] Explain calculated costs and deadlines from deterministic backend/code inputs, never AI calculation.
-- [ ] Evaluate adjustable desktop split workspace without regressing source navigation.
-- [ ] Reverify missing-document/PDF recovery, document versions, source geometry and keyboard source navigation after the current batch.
+Acceptance verification still required before marking COMPLETE:
+- [ ] Full frontend test suite after the latest ContractWorkspace/calculation changes.
+- [ ] Production build/type-check after the latest ContractWorkspace/calculation changes.
+- [ ] Confirm existing document-version/source-geometry/detail-navigation tests remain green.
+- [ ] Confirm missing-document/PDF retry paths remain green.
 
-Key files in current batches:
+Key files:
+- `frontend/components/contracts/detail/ContractWorkspace.tsx`
+- `frontend/components/contracts/detail/CalculationBasisPanel.tsx`
 - `frontend/components/contracts/detail/FactReviewPanel.tsx`
 - `frontend/components/contracts/detail/ValueOriginBadge.tsx`
 - `frontend/components/contracts/detail/EvidencePane.tsx`
 - `frontend/components/contracts/detail/PdfViewer.tsx`
 - `frontend/components/OrganizationScopePicker.tsx`
 - `frontend/app/contract-workspace-enhancements.css`
+- `frontend/test/calculation-basis.test.tsx`
 - `frontend/test/fact-confirm-reviewer.test.tsx`
 - `frontend/test/value-origin-badge.test.tsx`
 - `frontend/test/evidence-pane-presentation.test.tsx`
