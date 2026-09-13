@@ -38,7 +38,9 @@ const nav: NavState = {
 
 vi.mock("next/navigation", () => ({
   useParams: () => nav.params,
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => `/contracts/${nav.params["contract-id"]}`,
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
 }));
 
 function detailFixture(overrides: Partial<ContractDetailResponse> = {}): ContractDetailResponse {
@@ -269,28 +271,23 @@ describe("Vertrags-Detail + Quellenanzeige (STEP 14)", () => {
 
   it("(PR-2) klickbarer Fakt öffnet die Quelle im Original", async () => {
     await renderWithData(detailFixture());
-    // "Beginn" ist belegt durch dates.start_date (pdf_points bbox, Seite 2).
     const beginBtn = screen.getByRole("button", { name: "Beginn — Quelle öffnen" });
     await userEvent.click(beginBtn);
     await waitFor(() =>
       expect(screen.getByText(/Seitenbereich\) hervorgehoben/)).toBeInTheDocument()
     );
     expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument();
-    // Der Wert ist als "Positionsbestimmt" (nicht erfunden) markiert.
     expect(screen.getAllByText("Seite 2 (Seitenbereich)").length).toBeGreaterThanOrEqual(1);
   });
 
   it("(PR-2) Fakt mit Quelle ohne Seitenangabe springt den Viewer NICHT (keine erfundene Hervorhebung)", async () => {
     await renderWithData(detailFixture());
-    // "Jährlich wiederkehrend" ist belegt durch costs.annual_cost mit page=null.
     const annualBtn = screen.getByRole("button", {
       name: "Jährlich wiederkehrend — Quelle öffnen",
     });
     await userEvent.click(annualBtn);
-    // Viewer nicht gesprungen, kein Highlight-Banner.
     expect(screen.getByText(/Seite 1 \/ 3/)).toBeInTheDocument();
     expect(screen.queryByText(/hervorgehoben/)).not.toBeInTheDocument();
-    // Die Quelle ist im Panel dennoch ausgewaehlt (als nicht lokalisierbar markiert).
     const pane = screen.getByRole("region", { name: "Quellenangaben" });
     expect(
       within(pane).getByText(/Ohne Positionsangabe/)
@@ -304,13 +301,11 @@ describe("Vertrags-Detail + Quellenanzeige (STEP 14)", () => {
     });
     await userEvent.click(endurance);
     await waitFor(() => expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument());
-    // Wechsel zu einem anderen belegten Fakt im selben Workspace.
     const endBtn = screen.getByRole("button", {
       name: "Berechnetes Ende — Quelle öffnen",
     });
     expect(endBtn).toBeInTheDocument();
     await userEvent.click(endBtn);
-    // Kontext bleibt: Ueberschrift + Warnungen weiterhin sichtbar.
     expect(
       screen.getByRole("heading", { name: "MRT Wartungsvertrag" })
     ).toBeInTheDocument();
