@@ -22,6 +22,13 @@ from app.database.session import create_session
 
 router = APIRouter(prefix="/api/operations", tags=["operations"])
 
+# Spreadsheet applications may execute cells beginning with these characters as
+# formulas. Contract data is untrusted document content, so neutralize it before
+# export while preserving the visible value. Leading whitespace/control
+# characters are included because spreadsheet parsers can ignore them before
+# interpreting a formula marker.
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
 
 def _fmt(value) -> str:
     if value is None:
@@ -29,6 +36,16 @@ def _fmt(value) -> str:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def _csv_safe(value) -> str:
+    text = _fmt(value)
+    if not text:
+        return text
+    candidate = text.lstrip(" \t\r\n")
+    if candidate.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
 
 
 @router.get("/contracts.csv")
@@ -85,16 +102,16 @@ def export_contracts_csv(
         for row in rows:
             writer.writerow(
                 [
-                    str(row.id),
-                    row.supplier or "",
-                    row.contract_number or "",
-                    _fmt(row.start_date),
-                    _fmt(row.end_date),
-                    row.status or "",
-                    row.risk_level or "",
+                    _csv_safe(row.id),
+                    _csv_safe(row.supplier),
+                    _csv_safe(row.contract_number),
+                    _csv_safe(row.start_date),
+                    _csv_safe(row.end_date),
+                    _csv_safe(row.status),
+                    _csv_safe(row.risk_level),
                     "true" if row.is_archived else "false",
-                    _fmt(row.archived_at),
-                    _fmt(row.updated_at),
+                    _csv_safe(row.archived_at),
+                    _csv_safe(row.updated_at),
                 ]
             )
 
