@@ -241,7 +241,11 @@ export default function ImportPage() {
                     </div>
                     {r.message && <span className="result-msg">{r.message}</span>}
                     {canRetry(r) && <Button size="sm" disabled={retryingId === r.document_version_id} onClick={() => void retryAnalysis(r)}>{retryingId === r.document_version_id ? "Wird erneut verarbeitet…" : "Analyse erneut starten"}</Button>}
-                    {r.contract_id && <Link href={`/contracts/${r.contract_id}`} className="result-link">Vertrag ansehen</Link>}
+                    {r.contract_id && r.requires_review ? (
+                      <Link href={`/contracts/${r.contract_id}?tab=documents&subtab=review`} className="result-link">Zur manuellen Prüfung</Link>
+                    ) : r.contract_id ? (
+                      <Link href={`/contracts/${r.contract_id}`} className="result-link">Vertrag ansehen</Link>
+                    ) : null}
                   </div>
                 ))}
               </div>
