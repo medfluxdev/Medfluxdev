@@ -98,9 +98,12 @@ class ContractReview(Base):
     reviewer_identity_type: Mapped[str] = mapped_column(
         String(32), default="manual_unverified", nullable=False
     )
+    # Unified provenance: this UUID may reference either legacy app_user or
+    # the newer account identity store. A single database FK would make one of
+    # those authenticated identity types invalid, so the actor type + snapshots
+    # carry the explicit provenance discriminator.
     authenticated_actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("app_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     actor_role_snapshot: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
