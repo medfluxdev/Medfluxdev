@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
@@ -207,6 +208,9 @@ export default function SettingsPage() {
           className="settings-nav"
           aria-label="Einstellungsbereiche"
         >
+          <Link className="settings-nav-item" href="/profile">
+            Mein Profil
+          </Link>
           {SETTINGS_SECTIONS.map((item) => {
             const selected = activeSection === item.id;
             return (

@@ -3583,120 +3583,218 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ---
 
-# PR-6 / Contract Intelligence V3 – PHASE 3 Implementation
+# UAT-Befund 4 – Referenznahes helles Krankenhaus-Design (PR-5 Re-Test)
 
-**Status:** IMPLEMENTIERT (Fortschritt bleibt 15/18 – kein neuer Hauptschritt; PR-6-Arbeit)
-
-**Datum:** 10.09.2026
-
-## Ausgangslage / freigegebene Entscheidungen
-- V3 wird NICHT sofort Produktionsdefault; `harness_engine="v2"` (v2.1) bleibt Default, V3 läuft hinter expliziter, konfigurierbarer Engineselektion. Nach bestandenen Real-Benchmarks (ABIOMED/Accutron) kann V3 Default werden.
-- Atomic-OCR/-Geometrie (RapidOCR) ist reiner Perception-/Evidence-Helfer, NIEMALS ein Pflicht-Semantik-Gateway; bei OCR-Fehler/low quality laufen Qwen-Vision und kanonische visuelle Evidenz weiter.
-- Qwen (nicht deterministischer Code) entscheidet semantische Anwendbarkeit: Selektion vs. Alternative, Tabellen-Spalten-Anwendbarkeit, Vertragsnummer vs. PO/Referenz, Dokument-/Anhang-/E-Mail-Authorität/Präzedenz, cross-page/cross-clause Bedeutung. Deterministischer Code validiert Evidence-Grounding, Schema/Integrität, schließt als alternative/superseded klassifizierte Fakten von Berechnung aus, rechnet/berechnet Fristen/Datum/Währung/Lebenszyklus.
-- Keine Guard-TOP/Accutron/ABIOMED-spezifischen Businessregeln (generalisiert); keine zweite konkurrierende Extractionsarchitektur (Evolution von `app/ai/harness`); SectionUnderstanding = provisorisches VISUAL COMPUTE, nur Global-Stage etabliert Vertrags-Verständnis; Reanalyse-Lebenszyklus unangetastet; keine destruktiven DB-/Git-Operationen.
-
-## Implementiertes (Backend)
-- `app/core/config.py`: `harness_engine` ("v2"|"v3", Default "v2"), `harness_vision_pages_per_batch` (4), `harness_vision_batch_scale` (1600), `harness_vision_min_pages_for_batch` (2), `document_intelligence_atomic_geometry` (False), `document_intelligence_atomic_geometry_dpi` (200).
-- `app/ai/harness/models.py`: V3-Datacontracts `SectionUnderstanding`, `GlobalContractUnderstanding`, `ApplicabilityDecision/Batch`, `SelectionRelation`, `NumberRole`, `PrecedenceRule`, `OptionCluster/OptionItem`, `VisualRegionReference`; `FactCandidate.applicability` + `authority_note`; `ContractMap` um selections/number_roles/precedence/unresolved_references erweitert.
-- `app/ai/harness/document.py`: `pages_blocks`, `visual_pages`, `is_image_heavy` (Routing, nie Bedeutung).
-- `app/ai/harness/vision.py`: `page_image()` – begrenztes Vollseiten-Rendering für Page-Batch-Visual-Compute.
-- `app/ai/harness/__init__.py`: `get_harness_class(settings)` – explizite Engineselektion (Default v2.1).
-- `app/ai/harness/v3_perception.py` (NEU): deterministische, provider-neutrale Perception (Option-/Preiscluster, Kontrollregionen, Selection-Hints) – nur Evidenzkarte für Qwen-Stages, wirft nie, entscheidet nie Semantik.
-- `app/ai/harness/v3.py` (NEU): `HarnessV3` – Stage-Orchestrierung Perception → Vision → Sections (Visual Compute) → Global Understanding (einzige Instanz) → ContractMap (Segment-Union + Synthese) → Cross-Clause/Applicability (Qwen) → Fact Resolution (applicability-gelabelte Kandidaten) → Evidence-Binding/Geometry → deterministischer Handoff; deterministische Ausschlussregeln (alternative/superseded nie ins Contract-Modell; Referenznummer nie als Vertragsnummer); nutzt wiederverwendete Helfer (ContextPlanner, Block, field_types, strict_value, _find_quote, _coalesce_batch). Pro-Stage-Diagnose (purpose, pages, provider, model, Token-Schätzung, Latenz, response_sha256, failure_reason).
-- `app/ai/harness/pipeline.py`: `HarnessV2.analyze` + optionaler `page_image_loader`-Parameter (Signatur-Parität, kein Verhaltenswechsel).
-- `app/documents/processing.py`: `get_harness_class`-Wiring (Default bleibt v2.1); `page_image`-Loader für v3; optionale, nie blockende RapidOCR-Geometrie-Augmentierung in `_build_canonical` (nur bei `document_intelligence_atomic_geometry=True`).
-
-## Implementiertes (Tests)
-- `tests/test_harness_v3.py` (NEU): 15 fokussierte Mock-Tests – Engineselektion; keine Business-Konstanten im Quelltext (Guard TOP/ABIOMED/Accutron/1650); Perception-Cluster + Kontrollregionen + Hints; `_merge_maps_v3`-Union; Vollpfad Native Verträge (Stages + Diagnose); Scan-Dokument → Section-Batches (Pages [[1,2],[3,4]], gerenderte Seitenliste); Bild-dominant ohne Vision degradiert ehrlich (requires_review, Vertrag bleibt); alternative/superseded-Kandidaten werden NICHT ins Contract-Modell geschrieben; Referenznummer nicht als Vertragsnummer; keine Grounded-Truth → contract=None + HarnessFailure; Call-Budget hart; Page-Rendering nur innerhalb Budget; deterministischer Turm (field_types/_coalesce_batch) wiederverwendet.
-
-## Tests / Ergebnis
-- Fokussiert: `test_harness_v3.py` 15 passed, `test_harness_v2.py` 15 passed in 1.77 s; Engine-Selektion (v2 Default / v3 explizit) verifiziert; `test_work_queue_state_machine.py` (Defect-A-Erweiterungen) grün bis auf vorbestehenden Test.
-- Gesamtlauf Backend: **626 passed, 28 failed**. Alle 28 Fehler sind VORBESTEHEND (im HEAD-Vergleich `a670f98` reproduziert): `contract_equipment.extraction_id NOT NULL` / `PersistenceError equipment requires an extraction run` (test_database_persistence, test_pr4_equipment_work_item), `ProgramingError` (test_contract_search), PDF-Produktions-Flow, test_fresh_install, work_queue `test_sibling_duplicates_collapse_active_items`, UAT `TestCostAvailability`-Wording – Schema-Drift in der Freund-Review-Snapshot-Basis, NICHT durch V3 verursacht. Keine Fixes an unabhängigen Stellen (Entscheidung 5).
-- Kein Git-Commit, kein Reset, keine Datenmutation an Produkt-DB; Tests laufen im isolierten Test-Schema.
-
-## Bekannte Grenzen / nächste Schritte
-- Modulare/gemockte Tests belegen ARCHITEKTUR und Kontrollfluss; KEINE ABIOMED/Accutron-Korrektheit (Entscheidung 10): Real-Benchmark gegen Ollama/qwen3:8b (unverändert) mit ABIOMED- und Accutron-PDF nötig; danach entscheiden, ob `harness_engine="v3"` zum Default wird.
-- Defect B (Settings-Navigation im Frontend) weiter offen; Defect-A-Route-Level-Tests (503-detail/200-legacy-references über TestClient) noch ausstehend.
-- `document_intelligence_atomic_geometry` ist in Default/`.env` False; Enable als Diagnose-/Benchmark-Schritt nach Real-Modell-Lauf.
-
----
-
-# PR-6 / Contract Intelligence V3 – Real-Model Validation (Benchmark)
-
-**Status:** DURCHGEFÜHRT – V3 NICHT BESTANDEN (Fortschritt bleibt 15/18 – kein neuer Hauptschritt)
+**Status:** ABGESCHLOSSEN (visuelle Frontend-Anpassung umgesetzt und verifiziert; Fortschritt bleibt 15/18 – kein neuer Hauptschritt)
 
 **Datum:** 10.09.2026
 
-## Durchführung
-- Echte gescannte Verträge über den AKTUELLEN Produktions-Analysepfad (`DocumentProcessingService._build_canonical` + exakt dieselbe Harness-Invokation wie `_process_stored`), Modell `qwen3-vl:8b-instruct`, Engine `harness_engine=v3` (Default-Konfiguration), danach eine Budget-Sensitivitätsprobe (`HARNESS_CONTEXT_TOKENS=65536`, `HARNESS_MAX_CALLS=96`). **Read-only:** kein Persist/Accept, keine DB-Mutation, Schema unverändert, akzeptierte v2.1-Baseline (Datenbank) unangetastet.
-- Vergleich: erhaltene akzeptierte v2.1-Extraktionen (identisches Modell, `status=partial`, `requires_review=True`, 32 Calls, 746 s Accutron / 1.298 s ABIOMED).
+## Ausgangslage / Anforderung
+- Die Oberfläche sollte optisch näher an die bereitgestellte helle Referenz rücken: weißer horizontaler Header, Krankenhaus-/Vertragsverwaltungs-Wording, Blau-/Türkis-/Grün-Palette, Hero-Bereich und saubere weiße Karten.
+- Die Änderung sollte bestehende Funktionalität und Tests nicht brechen.
 
-## Ergebnis (Default-Konfiguration)
-- **ABIOMED (9 Seiten, 123 Blöcke, Volltext ≈ 9.819 est. Tokens):** `status=partial`, `validation=unknown`, `requires_review=True`, **kein Vertrag / keine Grounded Truth** (HarnessFailure no_grounded_facts), 31 Calls, 940,8 s, 0 Evidence, 0 Selections/Applicability. Perception fand korrekt die Staffelung (1.Jahr 0 EUR, 2.Jahr 8.000 EUR …). Section-Verstehen nur für Seite 9; 8 Family-Resolver liefen, produzierten aber NUR leere/None-Werte.
-- **ACCUTRON (5 Seiten, 99 Blöcke, ≈ 7.270 est. Tokens):** `partial/unknown/review`, kein Vertrag, 19 Calls, 373,3 s, 81× ContextOverflow, 0 Evidence/Selections/Applicability. Perception fand korrekt die Guard-ALTERNATIVEN (350 € / 1.250 € / 1.075 €). Deterministischer Number-Role-Guard lief: „Bestellung 452664“ → `order_number`, `identity.contract_number` blieb None (Korrekt, aber ohne Semantik außen herum).
-- **Budget-Probe (65536/96):** Ollama-`/api/chat`-Server trennte mid-run (Provider crashte, `AIUnavailableError`). `ollama ps`: qwen3-vl:8b-instruct läuft mit **num_ctx=8192, 6,9 GB, CPU/GPU 20/80** (RTX 3070 8GB). Erzwungene Prompts (bis 14.555 est. Tokens) → stilles Ollama-Truncation an der Hardware-Context-Grenze → leere Kandidaten; danach Server-Outage.
+## Implementiertes
+- `frontend/components/ClientNav.tsx`: Branding angepasst auf „Krankenhaus Wartungsverträge" und „Verwaltungssystem für Wartungsverträge"; Navigation bleibt testkompatibel, insbesondere `/import` weiterhin mit Label „Import".
+- `frontend/app/page.tsx`: Dashboard um einen neuen Welcome-Hero mit CTA „Neuen Vertrag hinzufügen" ergänzt, Ziel `/import`.
+- `frontend/app/globals.css`: helle Referenz-Theming-Schicht ergänzt: horizontale Top-Navigation, weiße Flächen, blau/türkis/grüne Design-Tokens, überarbeitete Cards/KPIs, Hero-Gradient, responsive Header-/Hero-Regeln und Inter-orientierte Typografie.
 
-## Root-Cause-Klassifikation
-- **Klasse: call budget / context / performance (primär).** `ContextPlanner` (configured=8192, input_budget=5.880) lehnt ab: Default-Lauf 45 (ABIOMED) bzw. 79 (ACCUTRON) `abstain_overflow`-Entscheidungen. Ursache Konstruktion: Segment-/Recovery-Prompts injizieren VOLLDOKUMENT-Kontexte mehrfach (komplette ContractMap-Observations, gesamte `sections_context()` erneut je Segment, `cross_clause_context`, `clusters`), sodass kleine Blöcke trotz Segmentierung den Budget-Test überschreiten.
-- Zweitbefund: `10. Real-GPU`: num_ctx=8192 ist die HARDWARE-Grenze (8 GB VRAM); jeder Budget-Wechsel über die Hardware hinaus erzeugt stille Truncation/Absturz statt ehrlichem Fehler.
-- Drittbefund: Wenn Calls trotzdem liefen (ABIOMED), gaben Resolve-Stufen Kandidaten mit `None`-Werten zurück → 0 Grounding/Evidence → `no_grounded_facts`. Keine Applicability, keine Selections.
-- NICHT die Ursache: Perception (funktionierte korrekt), Schema/Modelle, DB/Persistenz, deterministische Berechnung (nie erreicht).
+## Dateien
+- `frontend/components/ClientNav.tsx`
+- `frontend/app/page.tsx`
+- `frontend/app/globals.css`
+- `docs/PROJECT_PROGRESS.md`
 
-## Konsequenz
-- V3 ist NICHT für Produktions-Default geeignet. Abgeschlossene Tasks: v2.1 bleibt Default (Entscheidung 1) – die erhaltene akzeptierte v2.1-Wahrheit ist noch schlechter (identity/costs/equipment leer), aber stabil und unersetzt.
-- Benchmark-Driver: `C:\Users\JAMAL\AppData\Local\Temp\opencode\v3_benchmark.py` (Temp), Ergebnisse `bench_{accutron,abiomed}_v3.json` (Temp).
-- Keine Code-Änderung am Produkt (kein Patch während Benchmark); empfohlener nächster Change in Abschnitt „G" des Berichts.
+## Tests / Ergebnis
+- `npx vitest run` → **119 passed / 22 Dateien**.
+- `npx tsc --noEmit` → grün.
+- `npx next lint --no-cache` → 0 Warnings/Errors.
+- `npm run build` → erfolgreicher Next-Production-Build, 13 Routen erzeugt.
+- Bekannte nicht-blockierende Testumgebungs-Hinweise bleiben unverändert: jsdom kann `HTMLCanvasElement.prototype.getContext` ohne Canvas-Package nicht implementieren; einzelne React-`act(...)`-Warnings in bestehenden Tests. Beide verhindern den erfolgreichen Testlauf nicht.
+
+## Bekannte Grenzen / Hinweise
+- Keine Backend-, Datenbank-, KI- oder OCR-Änderungen.
+- Keine neue Navigation oder Feature-Logik; der Import-Link bleibt funktional und testkompatibel.
+- `C:\Users\almba\Medflux` ist aktuell kein Git-Repository, daher kein Git-Status/Commit in dieser Sitzung.
 
 ## Nächster Schritt
-- Empfohlener Fix (NOCH NICHT implementiert): (1) Segment-/Recovery-Prompts auf NUR sektionalen Kontext begrenzen (keine Doppel-Injektion von Volltext/sections_context in jeden Call) und (2) Budget-Probe/Fehler ehrlich gegen die Hardware-num_ctx (8192) fahren – bei Überschreitung saubere Stage-Degradation statt stiller Ollama-Truncation. Danach Benchmark-Wiederholung. Defect B + Defect-A-Route-Tests bleiben vorgezogen.
+- Manuelle visuelle UAT-Rückschau im Browser. Falls das helle Referenzdesign akzeptiert ist, danach in Abstimmung Schritt 16 – Benutzer/Login & Audit Minimalversion.
+
 
 ---
 
-# PR-6 / Contract Intelligence V3 – Approved Context-Plumbing Fix (implementiert, r6) + offizieller GitHub-Migration-Snapshot
+# Rollenbasierte Dashboards – Admin & Developer
 
-**Status:** FIX IMPLEMENTIERT – VALIDIERUNG NOCH OFFEN (Accutron r6: kein Vertrag, Budget ausgeschöpft; Fortschritt bleibt 15/18)
+**Status:** IMPLEMENTIERT
 
-**Datum:** 10.09.2026
+**Datum:** 13.09.2026
 
-## Implementiertes (v3.py + context.py, Zustand r6)
-- Reserved `1024 * len(images)` in `call()`; dynamisches Section-Batch-Shrinking (halbieren → einzeln) bei Input-Overflow UND bei Output-Truncation (`provider.last_done_reason in {length, max_tokens}`).
-- Per-Segment lokaler Kontext: `sections_context_pages` + `assemble_bounded`; compacte `semantic_state`/`compact_sections`/`compact_items`; compacte Applicability; Recovery lokal + bounded.
-- `context.py`: `segments(..., extra_reserve)` und `pack_ranked(..., extra_reserve)`.
-- Crash behoben: `compact_sections` serialisierte pydantic `NumberRole` (TypeError) → `model_dump`.
+## Ziel
+- Organisationsadministration und technische Systemverwaltung klar trennen.
+- Admins sehen operative Organisationsdaten; Developer sehen systemweite Technik und Organisationen.
+- Nach Login erfolgt eine rollenabhängige Weiterleitung.
 
-## Tests / Ergebnis
-- Fokussiert: `test_harness_v3.py` + `test_harness_v2.py` = **30 passed** (wiederholt grün).
-- Real-Benchmark Accutron (Default 8192/1800/32, `qwen3-vl:8b-instruct`, read-only): r2-Crash behoben, resolve/identity lief erstmals (9 Segmente/18 Calls, Seiten 1–4 versorgt), aber **ContractMap-Wholesale-Rejection** (ein ungültiger Source-Ref ⇒ ganze Map verworfen) + **Budget-Exhaustion nach 32 Calls** ⇒ weiterhin kein Vertrag. ABIOMED bewusst nicht erneut nach Accutron-Fehler.
-- Kompletter Engineering-Handoff inkl. Blocker-Klassifikation (A tolerante Map-Refs / B Familie-Reserve+Priorisierung / C Benchmark-Budget), Ground Truth, HW-Grenzen (§7): **`docs/HARNESS_V3_ENGINEERING_HANDOFF.md`**.
+## Implementiert
+- Admin Dashboard: offene Aufgaben, Prüfbedarf, aktive Benutzer, Arbeitsbereich, Schnellzugriffe, letzte Aktivitäten und Benutzerübersicht.
+- Developer Dashboard: echter API-/PostgreSQL-/Authentifizierungsstatus, lokaler KI-Status, Organisationsverwaltung und technische Werkzeuge.
+- Neuer geschützter Endpoint `GET /api/system/organizations/status` nur für Developer.
+- Developer sieht keinen Link zum Admin Dashboard mehr.
+- Rollenrouting nach Login: Developer → `/developer`, Admin → `/admin`, andere Rollen → `/`.
+- Responsive CSS-Module für beide Dashboards.
 
-## Konsequenz / Migration
-- Kein Git-Commit, keine DB-/Datenmutation während der Benchmarks; v2 bleibt Default; keine Schemaänderung.
-- Offizieller GitHub-Migration-Snapshot: **`MedFlux official repository baseline`** → `origin = https://github.com/jamallionjan-dev/medflux.git` (main no-force); Review-Remote als Backup-Remote umbenannt beibehalten. Lokaler Pfad `C:\Users\JAMAL\Desktop\Medflux` unverändert.
+## Dateien
+- `backend/app/api/routes/system_organizations.py`
+- `frontend/app/admin/page.tsx`
+- `frontend/app/admin/admin.module.css`
+- `frontend/app/developer/page.tsx`
+- `frontend/app/developer/developer.module.css`
+- `frontend/app/login/page.tsx`
+- `frontend/components/ClientNav.tsx`
 
-## Nächster Schritt
-- Nach ausdrücklicher Freigabe: A (tolerante Invalid-Ref-Behandlung), B (Familie-Packing/Reserve-Tuning), C (nur Benchmark-Budget höher) in dieser Reihenfolge; danach Accutron erneut, dann ABIOMED. Blocker-Details und Ground-Truth in `docs/HARNESS_V3_ENGINEERING_HANDOFF.md`.
+## Verifikation
+- Rollen- und Endpoint-Logik statisch geprüft.
+- Vollständiger lokaler Testlauf ist nach `git pull origin Ahmad` auf der Windows-Installation auszuführen.
+
+
+## Korrektur – Developer-Zugriff auf Admin Dashboard
+- Developer bleibt standardmäßig im Developer Dashboard.
+- Nach Auswahl einer Organisation darf der Developer deren Admin Dashboard öffnen.
+- Dadurch kann er organisationsbezogene Ansichten entwickeln, prüfen und Fehler beheben.
+- Ohne ausgewählte Organisation bleibt der Zugriff auf das Admin Dashboard gesperrt.
+
 
 ---
 
-# PR-7 / Harness V3 – Robustheit A–G (implementiert, fokussierte Tests grün, Review-PR)
+# Multi-Hospital-Struktur & systemweiter Developer-Zugriff
 
-**Status:** IMPLEMENTIERT (Branch `v3-robustness-abc`) – Real-Benchmark-VALIDIERUNG NOCH OFFEN (Fortschritt bleibt 15/18 bis Accutron erneut bestanden)
+**Status:** IMPLEMENTIERT
 
-**Datum:** 11.09.2026
+**Datum:** 13.09.2026
 
-## Implementiertes (A–G, gemäß Handoff-Blocker)
-- **A** Invalid-Ref-Toleranz: `sanitize_contract_map`/`sanitize_applicability` quarantänen NUR ungültige Einträge (Beobachtung/Selektion/Nummer-Rolle/Precedence/Applicability) statt Whole-Map-Rejection; niemals remappen/raten; Diagnose `dropped_refs` (stage/item_type/invalid_refs/action/requires_review) ohne Vertragsinhalt; Review-Issue + Planner-Decision pro Drop.
-- **B** Dynamisches Familien-Packing: `segments()`/`pack_ranked()` mit `per_block_cost(block)` (tatsächliche visuelle Observations-Zeilen); Budget aus echten Prompt-Komponenten abgeleitet (`sections_bound_tokens()` aus dem Compactor-Garantiewert + `_PACK_SAFETY_MARGIN=64`) statt statischer Magic-Reverse (1100/1300 entfernt); `planner.check()` validiert den final assemblierten Prompt vor jedem Call; `assemble_bounded` entfernt (ganze Blöcke, keine Tail-Clipping mehr).
-- **C** Call-Budget-Semantik: `CallBudgetExhausted` (kein `ContextOverflow`/`ValueError`-Subtyp) an ~11 Call-Sites + äußerer Handler; `failure_categories` inkl. `call_budget_exhausted` (nie als `context_overflow` gezählt); Produktions-Default `harness_max_calls=32` unverändert; Benchmark-Override 64 bleibt möglich.
-- **D** Section-Kompaktierung fair: `_fair_token_allocation` (Equal-Share + Round-Robin-Wasserfüllung), `compact_sections` erhält ALLE Sections (erste UND letzte überleben), Seiten-/Section-Identität bleibt; deterministisches Clipping nur.
-- **E** Output-Truncation: nie still akzeptiert (`done_reason in {length, max_tokens}`); ein einziger gemessener Retry (`measured_output_budget`, Stufen `resolve:`/`ground:`/`recover:`/`recovery:`, ≤2800, nur bei echter Marge) statt stiller Ollama-Truncation; keine 65536-Experimente.
-- **F** Vision entkoppelt: `harness_vision_max_calls=16` (neu) begrenzt Vision-Region-Calls unabhängig von `harness_max_calls` (32→64 verdoppelt keine Vision-Calls); `deferred_by_visual_call_budget`.
-- **G** Qwen-Semantik-Autorität: Kommentar + Test-Doppelbeweis, dass Nummern-Rollen NUR aus dem Qwen-Ergebnis stammen; deterministischer Code erzwingt nur (kein Keyword-Guard, keine Inferenz).
+## Implementiert
+- Eine Organisation kann mehrere Krankenhäuser enthalten; jedes Krankenhaus besitzt eigene Abteilungen und Kostenstellen.
+- Organisations-Admins und Developer können Krankenhäuser, Abteilungen und Kostenstellen anlegen, bearbeiten, aktivieren und deaktivieren.
+- Der Scope-Picker unterstützt Organisation → Krankenhaus → Abteilung sowie die Gesamtansicht über alle Krankenhäuser.
+- Benutzer können auf Krankenhaus und optional Abteilung eingeschränkt werden; Admin und Developer dürfen organisationsweit arbeiten.
+- Developer erhalten systemweiten Zugriff auf alle aktiven Organisationen und darin die effektive Admin-Rolle, ohne einzelne Memberships pflegen zu müssen.
+- Strukturänderungen werden mit Benutzer, effektiver Rolle, Organisation, Krankenhaus/Abteilung und Kontext im Activity Log protokolliert; Developer erscheinen ausdrücklich als `developer`.
 
-## Tests / Ergebnis
-- Fokussiert: `test_harness_v3.py` + `test_harness_v2.py` = **54 passed** (30 Alt + 24 neue A–G).
-- Umgebungstests einmalig: `test_ai*`, `test_contract_extraction`, `test_document_intelligence` = **83 passed** (keine Regressionen).
-- Keine DB-/Datenmutation; v2 bleibt Default; Test-Schema-Isolation unverändert.
+## Dateien
+- `backend/app/api/routes/organization_structure.py`
+- `backend/tests/test_developer_authorization.py`
+- vorhandene Multi-Hospital-Basis: Models, Migrationen, Scope-Middleware und Organisationsstruktur-UI
 
-## Nächster Schritt
-- Commit/Push `v3-robustness-abc` + Review-PR gegen `main` (kein Merge) mit Root-Cause/Änderungen/Testergebnissen/Risiken. Nach Freigabe: Accutron erneut (V3, `qwen3-vl:8b-instruct`, num_ctx 8192, Benchmark-only max_calls 64, read-only), bei allen Kern-Semantik-Steps grün → ABIOMED einmal; sonst STOPP + exakter Stage-Bericht.
+## Verifikation
+- Autorisierungsregeln durch fokussierte Unit-Tests abgesichert: Developer-Bypass und unveränderte Einschränkung normaler Rollen.
+- Vollständiger lokaler Backend-/Frontend-Testlauf ist nach `git pull origin Ahmad` auf der Windows-Installation auszuführen.
+
+## Bekannte Grenzen
+- Keine harte Löschung von Krankenhäusern/Abteilungen in der Oberfläche; Deaktivierung bewahrt Vertrags- und Audit-Historie.
+
+---
+
+## Frontend development roadmap — 2026-09-13
+
+- Status: Planning complete; frontend implementation has not started.
+- Dedicated tracker: `docs/FRONTEND_PROJECT_PROGRESS.md` (English).
+- Implemented: Ten ordered frontend development steps with task checklists, acceptance criteria, verification, backend dependencies, and completion records.
+- Files: `docs/FRONTEND_PROJECT_PROGRESS.md`, `docs/PROJECT_PROGRESS.md`.
+- Verification: Documentation structure and initial step status checked; no application tests required for this documentation-only update.
+- Known issues: Full visual audit and baseline tests remain pending in FE-01.
+- Next step: Execute FE-01 — current-state audit and acceptance baseline.
+- Frontend progress: 0/10 (0%). Original MVP progress x/18 and percentage remain unchanged; no MVP implementation step was completed by this planning update.
+
+
+---
+
+## Visual identity v1.0 integration — 2026-09-13
+
+**Status:** IMPLEMENTED
+
+### Scope
+- Applied the approved MedFlux identity from `docs/VISUAL_IDENTITY.md` to the product shell and authentication entry points.
+- Added a reusable, accessible logo component with full and compact variants.
+- Added an SVG application icon/favicon.
+- Added a final global identity layer that maps the approved palette to existing semantic tokens without changing business-state meanings.
+- Updated visible product naming from `Medflux` to `MedFlux` in the shell, login, organization selector, page metadata, and fallback title.
+- Branded the dashboard hero, navigation selection, primary actions, cards, and login surface.
+- Kept Poppins as the approved font with the existing local/system stack as fallback until self-hosted Poppins files are added.
+
+### Files
+- `frontend/components/brand/MedFluxLogo.tsx`
+- `frontend/app/brand-identity.css`
+- `frontend/app/icon.svg`
+- `frontend/components/shell/AppSidebar.tsx`
+- `frontend/components/shell/AppTopbar.tsx`
+- `frontend/components/ClientNav.tsx`
+- `frontend/app/login/page.tsx`
+- `frontend/app/select-organization/page.tsx`
+- `frontend/app/layout.tsx`
+- `frontend/test/visual-identity.test.tsx`
+- `docs/VISUAL_IDENTITY.md`
+
+### Verification
+- Static repository verification completed for imports, asset paths, metadata, approved naming, and token values.
+- Added focused component tests for full and compact logo variants.
+- Full `npm run verify` must be run after pulling branch `Ahmad` to the local Windows installation.
+
+### Known limit
+- Poppins is declared as the approved font but is not fetched remotely. The application intentionally falls back to its local/system font stack until licensed font files are self-hosted in the repository.
+
+
+### Correction — canonical Main Logo 01 only
+
+- Replaced the reconstructed SVG/wordmark implementation with the exact cropped `01 — Main Logo` artwork from the approved identity board.
+- The single canonical application asset is `frontend/public/brand/medflux-main-logo.png`.
+- Sidebar, login, and organization selection use that same asset; no horizontal, icon-only, or code-drawn alternative is rendered.
+- Removed `frontend/app/icon.svg`; `frontend/app/icon.png` is derived from Main Logo 01 for the required square browser icon.
+- Updated `frontend/test/visual-identity.test.tsx` to require the canonical PNG and reject inline SVG logo rendering.
+
+
+### Logo refinement — clean MedFlux-only HD asset
+
+- Updated the canonical logo to contain only the flowing M and the `MedFlux` wordmark.
+- Removed `Healthcare Intelligence Platform`, the divider, and `Connect · Analyze · Improve` from the production logo.
+- Replaced the application asset with an enhanced 860 × 536 px PNG and regenerated the favicon from the same clean artwork.
+- Removed the separate login tagline so no text is rendered beneath the logo.
+
+
+### Logo refinement — transparent integration
+
+- Removed the raster logo's white background and preserved alpha transparency.
+- Removed the login logo container's white background, border, padding, and shadow.
+- The MedFlux logo now renders directly on its surrounding surface without a visible frame.
+
+
+### Login contrast correction — primary logo on light identity background
+
+- Replaced the dark login background with a light `#E6F4F8`-based brand gradient so the canonical teal/dark-blue logo remains fully legible.
+- Kept the logo transparent and unframed.
+- Reduced the login card shadow and border contrast for a calmer, integrated healthcare presentation.
+
+
+---
+
+## Profile editing database fix — 2026-09-13
+
+**Status:** IMPLEMENTED
+
+### Problem
+- The `Mein Profil` UI and `/api/profile` endpoint already supported editable profile data, but local setup and container startup did not execute Alembic migrations.
+- Existing installations could therefore run application code against a database that did not yet contain the profile columns, causing profile loading or saving to fail.
+
+### Resolution
+- `scripts/setup.ps1` now runs `python -m alembic upgrade head` after installing backend dependencies.
+- The backend container now copies Alembic configuration/migrations and upgrades the database before starting Uvicorn.
+- Backend setup documentation now explicitly requires the migration after pulls.
+
+### Verification
+- Confirmed that the profile model, API route, frontend form, and migration `f9a3b4c5d6e7` agree on the editable fields.
+- Static verification completed for the Windows and Docker startup commands.
+- Local runtime verification requires the configured database service.
+
+
+### Profile authentication correction — 2026-09-13
+
+- Runtime logs showed `GET /api/me` returning 200 while `GET /api/profile` returned 401 for the same browser session.
+- The profile route now resolves the authenticated account directly from the configured login-session cookie, matching the proven `/api/me` behavior.
+- Added a regression test preventing the profile route from returning to fragile `request.state.account_id` authentication.

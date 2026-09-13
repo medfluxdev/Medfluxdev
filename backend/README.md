@@ -25,7 +25,10 @@ backend/
 python -m venv .venv
 # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
+python -m alembic upgrade head
 ```
+
+Die Migration ist auch nach jedem Pull auszuführen, damit neue Funktionen (zum Beispiel die editierbaren Profilfelder) die benötigten Datenbankspalten besitzen. `scripts/setup.ps1` erledigt diesen Schritt automatisch.
 
 ## Starten
 

@@ -2,7 +2,6 @@ import Image from "next/image";
 
 type MedFluxLogoProps = {
   compact?: boolean;
-  showDescriptor?: boolean;
   className?: string;
   priority?: boolean;
 };
@@ -21,9 +20,9 @@ export default function MedFluxLogo({
       <Image
         className="medflux-logo__image"
         src="/brand/medflux-main-logo.png"
-        width={430}
-        height={355}
-        alt="MedFlux — Healthcare Intelligence Platform"
+        width={733}
+        height={499}
+        alt="MedFlux"
         priority={priority}
       />
     </span>

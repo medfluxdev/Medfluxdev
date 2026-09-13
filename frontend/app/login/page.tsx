@@ -75,7 +75,6 @@ function LoginContent() {
       <div className="auth-login-shell">
         <header className="auth-login-brand">
           <MedFluxLogo priority />
-          <p>Connect · Analyze · Improve</p>
         </header>
 
         <section className="auth-card" aria-labelledby="login-title" aria-busy={busy}>

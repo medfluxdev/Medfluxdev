@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import AppTopbar from "@/components/shell/AppTopbar";
 
 const pushMock = vi.fn();
@@ -21,6 +21,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({
       display_name: "Max Mustermann",
       email: "max@example.test",
       is_developer: false,
+      profile_photo_data_url: "data:image/png;base64,bWVkaWNhbC1sb2dv",
     },
     membership: {
       organization_slug: "krankenhaus",
@@ -32,16 +33,41 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 }));
 
 describe("Application shell accessibility", () => {
+  beforeEach(() => {
+    pushMock.mockClear();
+  });
+
+  it("shows the saved profile photo in the account trigger", () => {
+    const { container } = render(<AppTopbar />);
+    expect(container.querySelector(".top-user-avatar img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("data:image/png;base64,bWVkaWNhbC1sb2dv")
+    );
+  });
+
+  it("opens Mein Profil directly and closes the account menu", async () => {
+    const user = userEvent.setup();
+    render(<AppTopbar />);
+
+    const summary = screen.getByLabelText("Kontomenü öffnen");
+    await user.click(summary);
+    const profileButton = screen.getByRole("button", { name: "Mein Profil" });
+    await user.click(profileButton);
+
+    expect(pushMock).toHaveBeenCalledWith("/profile");
+    expect((summary.closest("details") as HTMLDetailsElement).open).toBe(false);
+  });
+
   it("closes the account menu with Escape and restores focus to its summary", async () => {
     const user = userEvent.setup();
     render(<AppTopbar />);
 
     const summary = screen.getByLabelText("Kontomenü öffnen");
     await user.click(summary);
-    expect(screen.getByRole("link", { name: "Mein Profil" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Mein Profil" })).toBeVisible();
 
-    const profileLink = screen.getByRole("link", { name: "Mein Profil" });
-    profileLink.focus();
+    const profileButton = screen.getByRole("button", { name: "Mein Profil" });
+    profileButton.focus();
     await user.keyboard("{Escape}");
 
     const details = summary.closest("details") as HTMLDetailsElement;

@@ -86,29 +86,6 @@ export default function DashboardPage() {
             {" · "}<FreshnessState freshness={data.freshness} />
           </section>
 
-          <div className="dash-grid dashboard-card-grid dashboard-priority-grid">
-            <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="handlungsbedarf">
-              <div className="panel-head dashboard-feature-head">
-                <div className="dashboard-feature-title">
-                  <PanelIcon tone="amber">!</PanelIcon>
-                  <div><h2 id="handlungsbedarf">Handlungsbedarf</h2><p>Kritische Aufgaben und Prüfungen zuerst</p></div>
-                </div>
-                <span className="dashboard-count-pill"><strong>{data.total_action_items}</strong>offene {data.total_action_items === 1 ? "Punkt" : "Punkte"}</span>
-              </div>
-              <ActionList items={data.action_items} total={data.total_action_items} />
-            </section>
-
-            <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="fristen">
-              <div className="panel-head dashboard-feature-head">
-                <div className="dashboard-feature-title">
-                  <PanelIcon tone="blue">◷</PanelIcon>
-                  <div><h2 id="fristen">Fristenübersicht</h2><p>Kündigungsfristen getrennt von Vertragsenden</p></div>
-                </div>
-              </div>
-              <DeadlineDistribution buckets={data.deadlines} />
-            </section>
-          </div>
-
           <section className="intel-strip dashboard-kpi-strip" aria-label="Kennzahlen">
             {Object.entries(data.kpis)
               .filter(([, card]) => card.label_de !== "Gesamtvertragswert")
@@ -141,6 +118,29 @@ export default function DashboardPage() {
               {data.data_quality.length > 0 && <div className="dashboard-card-footer"><Link href="/contracts?requires_review=true">Verträge mit Prüfbedarf anzeigen →</Link></div>}
             </section>
           </div>
+          <div className="dash-grid dashboard-card-grid dashboard-priority-grid">
+            <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="handlungsbedarf">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="amber">!</PanelIcon>
+                  <div><h2 id="handlungsbedarf">Handlungsbedarf</h2><p>Kritische Aufgaben und Prüfungen zuerst</p></div>
+                </div>
+                <span className="dashboard-count-pill"><strong>{data.total_action_items}</strong>offene {data.total_action_items === 1 ? "Punkt" : "Punkte"}</span>
+              </div>
+              <ActionList items={data.action_items} total={data.total_action_items} />
+            </section>
+
+            <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="fristen">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="blue">◷</PanelIcon>
+                  <div><h2 id="fristen">Fristenübersicht</h2><p>Kündigungsfristen getrennt von Vertragsenden</p></div>
+                </div>
+              </div>
+              <DeadlineDistribution buckets={data.deadlines} />
+            </section>
+          </div>
+
         </div>
       )}
 

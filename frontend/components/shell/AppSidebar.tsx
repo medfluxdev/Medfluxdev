@@ -60,12 +60,6 @@ export default function AppSidebar() {
   const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
   const [statusCheckedAt, setStatusCheckedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem("medflux.sidebarCollapsed") === "true");
-  }, []);
-
   useEffect(() => {
     let mounted = true;
     let controller: AbortController | null = null;
@@ -108,14 +102,6 @@ export default function AppSidebar() {
     [role]
   );
 
-  function toggleCollapsed() {
-    setCollapsed((current) => {
-      const next = !current;
-      localStorage.setItem("medflux.sidebarCollapsed", String(next));
-      return next;
-    });
-  }
-
   const statusStale = statusCheckedAt !== null && now - statusCheckedAt > STATUS_STALE_MS;
   const aiReady = Boolean(aiStatus?.available && aiStatus?.model_available);
   const apiLabel = statusStale ? "API Status veraltet" : apiHealthy === null ? "API unbekannt" : apiHealthy ? "API verfügbar" : "API offline";
@@ -123,12 +109,11 @@ export default function AppSidebar() {
   const statusTitle = `API: ${statusStale ? "veraltet" : apiHealthy === null ? "unbekannt" : apiHealthy ? "verfügbar" : "offline"} · KI: ${statusStale ? "veraltet" : aiStatus === null ? "unbekannt" : aiReady ? "bereit" : "nicht bereit"}`;
 
   return (
-    <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
+    <aside className="sidebar">
       <div className="sidebar-head">
         <Link href="/" className="brand" aria-label="MedFlux Startseite">
-          <MedFluxLogo compact={collapsed} priority />
+          <MedFluxLogo priority />
         </Link>
-        <button className="sidebar-collapse-button" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"} aria-pressed={collapsed}>{collapsed ? "›" : "‹"}</button>
       </div>
 
       <nav className="side-nav-root" aria-label="Hauptnavigation">
@@ -137,13 +122,13 @@ export default function AppSidebar() {
             <div className="nav-label sidebar-label-copy">{group.label}</div>
             <div className="side-nav">
               {group.items.map((item) => (
-                <Link key={item.href} href={item.href} className={`nav-item${isActive(pathname, item.href) ? " active" : ""}`} aria-current={isActive(pathname, item.href) ? "page" : undefined} title={collapsed ? item.label : undefined}>
+                <Link key={item.href} href={item.href} className={`nav-item${isActive(pathname, item.href) ? " active" : ""}`} aria-current={isActive(pathname, item.href) ? "page" : undefined}>
                   <span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{icons[item.icon]}</svg></span>
                   <span className="sidebar-label-copy">{item.label}</span>
                 </Link>
               ))}
               {group.label === "Administration" && account?.is_developer ? (
-                <Link href="/developer" className={`nav-item${isActive(pathname, "/developer") || isActive(pathname, "/system/organizations") ? " active" : ""}`} aria-current={isActive(pathname, "/developer") ? "page" : undefined} title={collapsed ? "Developer Dashboard" : undefined}>
+                <Link href="/developer" className={`nav-item${isActive(pathname, "/developer") || isActive(pathname, "/system/organizations") ? " active" : ""}`} aria-current={isActive(pathname, "/developer") ? "page" : undefined}>
                   <span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{icons.admin}</svg></span>
                   <span className="sidebar-label-copy">Developer Dashboard</span>
                 </Link>
@@ -155,10 +140,10 @@ export default function AppSidebar() {
 
       <div className="side-bottom">
         <div className="side-ai" title={statusTitle} aria-live="polite">
-          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{collapsed ? "" : apiLabel}</div></div>
+          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{apiLabel}</div></div>
           <p className="sidebar-label-copy">KI: {aiLabel}</p>
         </div>
-        <div className="org-card" title={collapsed ? membership?.organization_name ?? "Krankenhaus" : undefined}>
+        <div className="org-card">
           <span className="org-avatar">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "M"}</span>
           <div className="sidebar-label-copy"><b>{membership?.organization_name ?? (account?.is_developer ? "Systemverwaltung" : "Krankenhaus")}</b><small>{membership ? `Arbeitsbereich ${membership.organization_slug}` : account?.is_developer ? "Developer" : "Arbeitsbereich"}</small></div>
         </div>

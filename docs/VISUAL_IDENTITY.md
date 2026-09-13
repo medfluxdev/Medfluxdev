@@ -57,15 +57,17 @@ Never use invented business data to make a screen appear complete. Render real b
 
 The logo retains the flowing **M** concept as a symbol of medical workflows, connected systems, and continuous information flow. The mark must be simplified into a clean, balanced form suitable for enterprise healthcare software.
 
-### Required logo set
+### Canonical product logo
 
-Future final assets must include:
+Only **01 — Main Logo** from the approved identity board is authorized for the current product.
 
-1. **Primary horizontal logo** — symbol plus `MedFlux` wordmark
-2. **Compact logo** — symbol plus shortened wordmark treatment for narrow navigation
-3. **Symbol-only mark** — application icon, favicon, avatar, and collapsed sidebar
-4. **Monochrome light version** — for dark or photographic backgrounds
-5. **Monochrome dark version** — for single-color printing and restricted contexts
+- Use the clean production logo containing only the flowing M and the `MedFlux` wordmark.
+- Use the same asset in the sidebar, login, organization selection, and branded product surfaces.
+- Do not substitute the horizontal, stacked variation, icon-only, dark-background, mockup, or reconstructed code-drawn versions.
+- Scaling is allowed only with the original aspect ratio preserved.
+- Do not place a descriptor, divider, tagline, or slogan underneath the production logo.
+- The favicon is derived from the same clean logo artwork because browser icons require a square container.
+- Source asset: `frontend/public/brand/medflux-main-logo.png`.
 
 ### Wordmark
 
@@ -435,15 +437,10 @@ The approved identity board is stored at:
 
 It is the visual approval record and must remain linked from this document. Production-ready standalone logo exports remain a separate deliverable.
 
-Required next assets:
+Canonical product assets:
 
-- Master logo in SVG
-- Horizontal logo in SVG
-- Monochrome light and dark SVG versions
-- Symbol-only SVG
-- Favicon set
-- App icon set
-- Social/document preview image
-- Logo usage preview on light and navy backgrounds
+- `frontend/public/brand/medflux-main-logo.png` — the only full logo used in the application; transparent background, containing only the M and MedFlux
+- `frontend/app/icon.png` — square favicon generated from Main Logo 01
+- `docs/visual-identity/assets/medflux-brand-identity-guidelines-v1.webp` — approval board
 
-Until these assets are approved, use a text-based `MedFlux` wordmark in production UI and treat all concept artwork as non-production reference.
+Do not introduce another logo asset without an explicit identity decision and an update to this document.

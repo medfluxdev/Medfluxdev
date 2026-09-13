@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.auth.service import account_from_selector
+from app.core.config import settings
 from app.database.models import Account
 from app.database.session import create_session
 
@@ -32,10 +34,11 @@ def serialize(account: Account) -> dict:
 
 
 def current_account(request: Request, session) -> Account:
-    account_id = getattr(request.state, "account_id", None)
-    if account_id is None:
-        raise HTTPException(status_code=401, detail="Bitte anmelden.")
-    account = session.get(Account, account_id)
+    # Resolve the account from the same session cookie as /api/me. Depending only
+    # on request.state made this route fragile across middleware boundaries and
+    # caused a false 401 even while /api/me confirmed an active login.
+    selector = request.cookies.get(settings.auth_cookie_name, "")
+    account = account_from_selector(session, selector)
     if account is None:
         raise HTTPException(status_code=401, detail="Bitte anmelden.")
     return account

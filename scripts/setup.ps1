@@ -1,5 +1,6 @@
 # Einmalige Initialisierung für Medflux (Windows / PowerShell)
-# Legt .env an, erstellt das Backend-venv und installiert Abhängigkeiten.
+# Legt .env an, erstellt das Backend-venv, installiert Abhängigkeiten
+# und bringt die Datenbank auf den aktuellen Schema-Stand.
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -27,6 +28,10 @@ if (-not (Test-Path $venv)) {
 Write-Host "[..] Installiere Backend-Abhängigkeiten ..."
 Push-Location (Join-Path $root "backend")
 & ".\.venv\Scripts\pip.exe" install -r requirements.txt
+
+Write-Host "[..] Aktualisiere Datenbankschema ..."
+& ".\.venv\Scripts\python.exe" -m alembic upgrade head
+Write-Host "[OK] Datenbankschema ist aktuell."
 Pop-Location
 
 Write-Host "[..] Installiere Frontend-Abhängigkeiten ..."
@@ -36,5 +41,5 @@ Pop-Location
 
 Write-Host ""
 Write-Host "Setup abgeschlossen."
-Write-Host "Backend starten : .\backend\.venv\Scripts\activate; uvicorn app.main:app --reload --port 8000"
+Write-Host "Backend starten : cd backend; .\.venv\Scripts\activate; uvicorn app.main:app --reload --port 8000"
 Write-Host "Frontend starten: cd frontend; npm run dev"

@@ -252,3 +252,41 @@ Run backend `pytest` only when backend behavior changes.
 
 ### Known limit
 - Poppins is declared as the approved font but is not fetched remotely. The application intentionally falls back to its local/system font stack until licensed font files are self-hosted in the repository.
+
+
+### Correction — canonical Main Logo 01 only
+
+- Replaced the reconstructed SVG/wordmark implementation with the exact cropped `01 — Main Logo` artwork from the approved identity board.
+- The single canonical application asset is `frontend/public/brand/medflux-main-logo.png`.
+- Sidebar, login, and organization selection use that same asset; no horizontal, icon-only, or code-drawn alternative is rendered.
+- Removed `frontend/app/icon.svg`; `frontend/app/icon.png` is derived from Main Logo 01 for the required square browser icon.
+- Updated `frontend/test/visual-identity.test.tsx` to require the canonical PNG and reject inline SVG logo rendering.
+
+
+### Logo refinement — clean MedFlux-only HD asset
+
+- Updated the canonical logo to contain only the flowing M and the `MedFlux` wordmark.
+- Removed `Healthcare Intelligence Platform`, the divider, and `Connect · Analyze · Improve` from the production logo.
+- Replaced the application asset with an enhanced 860 × 536 px PNG and regenerated the favicon from the same clean artwork.
+- Removed the separate login tagline so no text is rendered beneath the logo.
+
+
+### Logo refinement — transparent integration
+
+- Removed the raster logo's white background and preserved alpha transparency.
+- Removed the login logo container's white background, border, padding, and shadow.
+- The MedFlux logo now renders directly on its surrounding surface without a visible frame.
+
+
+### Login contrast correction — primary logo on light identity background
+
+- Replaced the dark login background with a light `#E6F4F8`-based brand gradient so the canonical teal/dark-blue logo remains fully legible.
+- Kept the logo transparent and unframed.
+- Reduced the login card shadow and border contrast for a calmer, integrated healthcare presentation.
+
+
+### Profile menu navigation fix — 2026-09-13
+
+- Replaced the account-menu profile link with an explicit client-side navigation action.
+- The action closes the native account menu before routing to `/profile`, avoiding the observed no-op click.
+- Added a focused shell test for navigation and menu closure.
