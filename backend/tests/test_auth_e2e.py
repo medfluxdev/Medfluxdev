@@ -192,3 +192,21 @@ def test_viewer_write_block_and_reviewer_write_allow(auth_fixture: dict[str, str
         assert payload["total"] == 0
         assert payload["successful"] == 0
         assert payload["failed"] == 0
+
+
+def test_reviewer_cannot_change_global_ai_selection(auth_fixture: dict[str, str]) -> None:
+    with TestClient(app) as client:
+        login = _login(
+            client,
+            org_slug=auth_fixture["org_slug"],
+            username="reviewer",
+            password=auth_fixture["password"],
+        )
+        assert login.status_code == 200
+
+        response = client.put(
+            "/api/ai/selection",
+            json={"provider_id": "ollama", "model_id": "qwen3:8b"},
+        )
+        assert response.status_code == 403
+        assert "Administratoren" in response.json()["detail"]
