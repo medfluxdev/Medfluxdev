@@ -239,6 +239,32 @@ def _contains_money_value(text: str, value: Any) -> bool:
     )
 
 
+def _date_candidates(value: Any) -> tuple[set[str], Optional[str]]:
+    formatted = _fmt(value)
+    if not isinstance(formatted, dict):
+        return ({str(formatted)} if formatted else set()), None
+    raw_date = formatted.get("date")
+    condition = formatted.get("condition")
+    candidates: set[str] = set()
+    if raw_date:
+        raw = str(raw_date)
+        candidates.add(raw)
+        try:
+            parsed = date.fromisoformat(raw)
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            candidates.update(
+                {
+                    parsed.strftime("%d.%m.%Y"),
+                    f"{parsed.day}.{parsed.month}.{parsed.year}",
+                    parsed.strftime("%d/%m/%Y"),
+                    f"{parsed.day}/{parsed.month}/{parsed.year}",
+                }
+            )
+    return candidates, str(condition).strip() if condition else None
+
+
 def _contains_time_value(text: str, value: Any) -> bool:
     formatted = _fmt(value)
     if not isinstance(formatted, dict):
@@ -362,15 +388,13 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
 
     if field in {"dates.start_date", "dates.end_date"}:
         label_re = _FIELD_LABELS[field]
-        formatted = _fmt(value)
-        date_value = formatted.get("date") if isinstance(formatted, dict) else formatted
-        condition = formatted.get("condition") if isinstance(formatted, dict) else None
+        date_values, condition = _date_candidates(value)
         for text in texts:
             if not (m := label_re.search(text)):
                 continue
-            if date_value and str(date_value) in text:
+            if any(candidate in text for candidate in date_values):
                 return _short_excerpt(text, m.start(), m.end())
-            if condition and str(condition).casefold() in text.casefold():
+            if condition and condition.casefold() in text.casefold():
                 return _short_excerpt(text, m.start(), m.end())
         return None
 
