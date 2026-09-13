@@ -41,7 +41,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(params.get("error") === "organization" ? "Ihr Benutzer hat keinen Zugriff auf diesen Arbeitsbereich." : null);
 
   useEffect(() => {
-    if (account) router.replace("/");
+    if (account) router.replace(account.is_developer ? "/developer" : account.memberships.some((item) => item.role === "admin") ? "/admin" : "/");
   }, [account, router]);
 
   async function submit(event: FormEvent) {
