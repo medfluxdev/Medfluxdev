@@ -613,6 +613,8 @@ def accept_extraction(
     run = session.get(ContractExtraction, extraction_id)
     if run is None:
         raise PersistenceError("extraction run nicht gefunden")
+    if run.organization_id != contract.organization_id:
+        raise PersistenceError("extraction/contract organisation mismatch")
     contract.accepted_extraction_id = extraction_id
     session.flush()
     return contract
@@ -627,6 +629,8 @@ def accept_calculation(
     run = session.get(CalculationRun, calculation_run_id)
     if run is None:
         raise PersistenceError("calculation run nicht gefunden")
+    if run.organization_id != contract.organization_id:
+        raise PersistenceError("calculation/contract organisation mismatch")
     contract.accepted_calculation_run_id = calculation_run_id
     session.flush()
     return contract
@@ -643,6 +647,15 @@ def link_document(
 
     if role is not None:
         _assert_status(role, CONTRACT_DOCUMENT_ROLE_ALLOWED, "role")
+    contract = session.get(Contract, contract_id)
+    if contract is None:
+        raise PersistenceError("contract nicht gefunden")
+    version = session.get(DocumentVersion, document_version_id)
+    if version is None:
+        raise PersistenceError("document version nicht gefunden")
+    if version.organization_id != contract.organization_id:
+        raise PersistenceError("document/contract organisation mismatch")
+
     existing = session.scalars(
         select(ContractDocument).where(
             (ContractDocument.contract_id == contract_id)
@@ -652,7 +665,7 @@ def link_document(
     if existing is not None:
         return existing  # idempotent
     link = ContractDocument(
-        organization_id=session.get(Contract, contract_id).organization_id,
+        organization_id=contract.organization_id,
         contract_id=contract_id,
         document_version_id=document_version_id,
         role=role,
