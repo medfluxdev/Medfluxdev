@@ -76,3 +76,45 @@ def test_coverage_date_requires_coverage_semantics():
         contract, [_unit("Accutron MR Abdeckung ab 01.01.2026")]
     )
     assert not any("coverage_start" in issue for issue in issues)
+
+
+def test_same_serial_with_conflicting_models_is_never_silently_accepted():
+    contract = Contract(
+        equipment=[
+            Equipment(
+                device_name="Scanner",
+                model="Model A",
+                serial_number="SN-77",
+                evidence=SourceEvidence(source_text="Scanner Model A Seriennummer SN-77"),
+            ),
+            Equipment(
+                device_name="Scanner",
+                model="Model B",
+                serial_number="SN-77",
+                evidence=SourceEvidence(source_text="Scanner Model B Seriennummer SN-77"),
+            ),
+        ]
+    )
+    units = [
+        _unit("Scanner Model A Seriennummer SN-77", 1),
+        _unit("Scanner Model B Seriennummer SN-77", 2),
+    ]
+    issues = verify_equipment_claims(contract, units)
+    assert any("gleiche Geräteidentität" in issue and "model" in issue for issue in issues)
+    assert contract.equipment[0].evidence.requires_review is True
+    assert contract.equipment[1].evidence.requires_review is True
+
+
+def test_two_same_named_devices_with_distinct_serials_are_not_false_conflict():
+    contract = Contract(
+        equipment=[
+            Equipment(device_name="Pump", model="X", serial_number="SN-1"),
+            Equipment(device_name="Pump", model="X", serial_number="SN-2"),
+        ]
+    )
+    units = [
+        _unit("Pump X Seriennummer SN-1", 1),
+        _unit("Pump X Seriennummer SN-2", 2),
+    ]
+    issues = verify_equipment_claims(contract, units)
+    assert not any("gleiche Geräteidentität" in issue for issue in issues)
