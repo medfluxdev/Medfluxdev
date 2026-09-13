@@ -68,7 +68,7 @@ export default function ReviewPage() {
               <div className="state-icon">✓</div>
               <h3>Keine offenen Prüfungen</h3>
               <p>
-                Alle aktiven Verträge sind geprüft – es liegt kein manueller
+                Für die aktuell geladenen Verträge liegt kein offener manueller
                 Prüfbedarf vor.
               </p>
             </div>
