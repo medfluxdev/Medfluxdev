@@ -34,6 +34,13 @@ _MONEY_LABELS = {
 
 _SERVICE_HOURS_RE = re.compile(r"servicezeit|servicezeiten|geschäftszeit|geschaeftszeit|erreichbar|supportzeiten", re.I)
 
+_CURRENCY_MARKERS = {
+    "EUR": ("eur", "€", "euro"),
+    "USD": ("usd", "$", "us-dollar", "us dollar"),
+    "CHF": ("chf", "fr.", "franken"),
+    "GBP": ("gbp", "£", "pound"),
+}
+
 
 def _norm(value: Any) -> str:
     return " ".join(str(value or "").strip().casefold().split())
@@ -116,6 +123,18 @@ def _time_supported(texts: list[str], value: Any, label: re.Pattern[str]) -> boo
     return False
 
 
+def _currency_supported(texts: list[str], currency: Any) -> bool:
+    code = str(currency or "").strip().upper()
+    if not code:
+        return True
+    markers = _CURRENCY_MARKERS.get(code, (code.casefold(),))
+    for text in texts:
+        low = text.casefold()
+        if any(marker.casefold() in low for marker in markers):
+            return True
+    return False
+
+
 def _mark_section(section: Any) -> None:
     ev = getattr(section, "evidence", None)
     if ev is not None:
@@ -136,6 +155,13 @@ def _check_exact(issues: list[str], texts: list[str], field: str, value: Any, se
 def verify_residual_critical_claims(contract: Contract, units: Iterable[object]) -> list[str]:
     texts = _texts(units)
     issues: list[str] = []
+
+    if contract.costs.default_currency:
+        if not _currency_supported(texts, contract.costs.default_currency):
+            _mark_section(contract.costs)
+            issues.append(
+                "costs.default_currency: Währung nicht in der Quelle gestützt"
+            )
 
     # Event/termination/payment clauses: exact text is safer than fuzzy semantic
     # inference. If normalization changed the wording enough to lose the source,
