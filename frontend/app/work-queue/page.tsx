@@ -7,11 +7,11 @@ import LoadingState from "@/components/ui/LoadingState";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
-import { apiGet, apiPatch } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate, formatDaysRemaining } from "@/lib/format";
-import type { WorkItemList, WorkItemSummary } from "@/lib/pr4-types";
+import { listWorkItems, setWorkItemStatus } from "@/lib/domain-api/workQueue";
+import type { WorkItemSummary } from "@/lib/pr4-types";
 import {
   severityLabel,
   workItemStatusLabel,
@@ -76,11 +76,12 @@ export default function WorkQueuePage() {
     setLoading(true);
     setError(false);
     setActionError(null);
-    const params = new URLSearchParams({ organization_slug: effectiveOrgSlug, active: "true" });
-    if (status) params.append("status", status);
-    if (severity) params.append("severity", severity);
-    if (itemType) params.append("item_type", itemType);
-    apiGet<WorkItemList>(`/api/work-queue?${params.toString()}`)
+    listWorkItems(effectiveOrgSlug, {
+      active: true,
+      status: status ? [status] : [],
+      severity: severity ? [severity] : [],
+      item_type: itemType ? [itemType] : [],
+    })
       .then((res) => setItems(res.items ?? []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -94,7 +95,7 @@ export default function WorkQueuePage() {
     setBusyId(item.id);
     setActionError(null);
     try {
-      await apiPatch<WorkItemSummary>(`/api/work-queue/${encodeURIComponent(item.id)}?organization_slug=${encodeURIComponent(effectiveOrgSlug)}`, { status: nextStatus });
+      await setWorkItemStatus(item.id, effectiveOrgSlug, nextStatus);
       if (nextStatus === "resolved") setItems((prev) => prev.filter((x) => x.id !== item.id));
       else setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: nextStatus } : x)));
       toast(nextStatus === "resolved" ? "Aufgabe als erledigt markiert." : "Aufgabe in Bearbeitung übernommen.", "success");
