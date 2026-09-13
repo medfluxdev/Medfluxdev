@@ -3618,3 +3618,38 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ## Nächster Schritt
 - Manuelle visuelle UAT-Rückschau im Browser. Falls das helle Referenzdesign akzeptiert ist, danach in Abstimmung Schritt 16 – Benutzer/Login & Audit Minimalversion.
+
+
+---
+
+# Rollenbasierte Dashboards – Admin & Developer
+
+**Status:** IMPLEMENTIERT
+
+**Datum:** 13.09.2026
+
+## Ziel
+- Organisationsadministration und technische Systemverwaltung klar trennen.
+- Admins sehen operative Organisationsdaten; Developer sehen systemweite Technik und Organisationen.
+- Nach Login erfolgt eine rollenabhängige Weiterleitung.
+
+## Implementiert
+- Admin Dashboard: offene Aufgaben, Prüfbedarf, aktive Benutzer, Arbeitsbereich, Schnellzugriffe, letzte Aktivitäten und Benutzerübersicht.
+- Developer Dashboard: echter API-/PostgreSQL-/Authentifizierungsstatus, lokaler KI-Status, Organisationsverwaltung und technische Werkzeuge.
+- Neuer geschützter Endpoint `GET /api/system/organizations/status` nur für Developer.
+- Developer sieht keinen Link zum Admin Dashboard mehr.
+- Rollenrouting nach Login: Developer → `/developer`, Admin → `/admin`, andere Rollen → `/`.
+- Responsive CSS-Module für beide Dashboards.
+
+## Dateien
+- `backend/app/api/routes/system_organizations.py`
+- `frontend/app/admin/page.tsx`
+- `frontend/app/admin/admin.module.css`
+- `frontend/app/developer/page.tsx`
+- `frontend/app/developer/developer.module.css`
+- `frontend/app/login/page.tsx`
+- `frontend/components/ClientNav.tsx`
+
+## Verifikation
+- Rollen- und Endpoint-Logik statisch geprüft.
+- Vollständiger lokaler Testlauf ist nach `git pull origin Ahmad` auf der Windows-Installation auszuführen.

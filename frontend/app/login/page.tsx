@@ -55,7 +55,7 @@ export default function LoginPage() {
         setError("Anmeldung war erfolgreich, die Sitzung konnte aber nicht geladen werden.");
         return;
       }
-      router.replace("/");
+      router.replace(current.is_developer ? "/developer" : current.memberships.some((item) => item.role === "admin") ? "/admin" : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen.");
     } finally {

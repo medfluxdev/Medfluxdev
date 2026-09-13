@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from app.auth.service import account_from_selector
 from app.core.config import settings
@@ -61,6 +61,27 @@ def create_organization(payload: OrganizationCreate, request: Request):
         session.commit()
         session.refresh(row)
         return {"id": str(row.id), "name": row.name, "slug": row.slug}
+    finally:
+        session.close()
+
+
+@router.get("/status")
+def system_status(request: Request):
+    session = create_session()
+    try:
+        _require_developer(request, session)
+        organization_count = session.scalar(
+            select(func.count()).select_from(Organization).where(text("organization.is_active = true"))
+        ) or 0
+        return {
+            "app_name": settings.app_name,
+            "app_version": settings.app_version,
+            "api": "online",
+            "database": "online",
+            "database_engine": session.bind.dialect.name if session.bind is not None else "unknown",
+            "authentication": settings.auth_enabled,
+            "organization_count": organization_count,
+        }
     finally:
         session.close()
 
