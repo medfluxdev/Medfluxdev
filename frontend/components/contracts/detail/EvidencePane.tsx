@@ -36,7 +36,6 @@ function isCoarseBbox(ref: EvidenceRef): boolean {
 
 function precisionLabel(ref: EvidenceRef): string {
   if (ref.bbox && ref.page != null) {
-    // UAT Defect D: Seitenfuellung darf keine exakte Position suggerieren.
     return isCoarseBbox(ref) ? "Ungefähre Lage" : "Positionsbestimmt";
   }
   if (ref.page != null) return "Seite, ohne Position";
@@ -74,8 +73,8 @@ export default function EvidencePane({
             >
               <span className="evidence-head">
                 <span className="evidence-field">{fieldLabel(ref.field_ref)}</span>
-                <span className={`evidence-pill${navigable ? " ok" : ""}`}>
-                  {precisionLabel(ref)}
+                <span className={`evidence-pill${navigable && !ref.requires_review ? " ok" : ""}`}>
+                  {ref.requires_review ? "Unbestätigt" : precisionLabel(ref)}
                 </span>
               </span>
               {evidenceGroupLabel(ref.field_ref?.split(".")[0] ?? null) && (
@@ -100,7 +99,9 @@ export default function EvidencePane({
                 </span>
               )}
               {ref.requires_review && (
-                <span className="evidence-review">Manuelle Prüfung empfohlen</span>
+                <span className="evidence-review">
+                  Unbestätigt · Menschliche Prüfung erforderlich
+                </span>
               )}
               {!navigable && ref.page != null && (
                 <span className="evidence-note">
