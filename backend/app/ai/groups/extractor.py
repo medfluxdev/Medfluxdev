@@ -23,12 +23,17 @@ from pydantic import ValidationError
 from app.ai.groups.evidence import verify_evidence
 from app.ai.groups.normalize import ground_source_identity, run_normalization
 from app.ai.groups.schema import GroupSpec, group_order, group_specs
-from app.ai.groups.verifier import SENSITIVE_FIELDS, run_verifier, unsupported_fields
+from app.ai.groups.verifier import (
+    _collect_sensitive_values,
+    _is_sensitive_relevant,
+    run_verifier,
+    unsupported_fields,
+)
 from app.ai.service import AIService
 from app.core.config import Settings
 from app.documents.extraction.schemas import ExtractionUnit
 from app.models.contract import Contract
-from app.models.enums import BillingInterval, ReviewFlag, ReviewStatus
+from app.models.enums import ReviewFlag, ReviewStatus
 
 logger = logging.getLogger(__name__)
 
@@ -188,24 +193,29 @@ class GroupPipeline:
         return "\n".join(c.text for c in chunks)[:6000]
 
     def _expected_verifier_fields(self, contract: Contract) -> set[str]:
-        """Return every non-default sensitive claim that requires a decision."""
-        expected: set[str] = set()
-        for field in SENSITIVE_FIELDS:
-            section_name, attr_name = field.split(".", 1)
-            section = getattr(contract, section_name, None)
-            if section is None:
-                continue
-            value = getattr(section, attr_name, None)
-            if value is None:
-                continue
-            if field == "payment.billing_interval" and value in (
-                BillingInterval.OTHER,
-                BillingInterval.OTHER.value,
-                "other",
-            ):
-                continue
-            expected.add(field)
-        return expected
+        """Mirror verifier relevance rules from the same central policy path."""
+        return {
+            item.field
+            for item in _collect_sensitive_values(contract)
+            if _is_sensitive_relevant(item)
+        }
+
+    @staticmethod
+    def _equipment_has_critical_claim(equipment) -> bool:
+        return any(
+            getattr(equipment, name, None) not in (None, "", [])
+            for name in (
+                "device_name",
+                "model",
+                "serial_number",
+                "inventory_number",
+                "coverage_start",
+                "coverage_end",
+                "service_scope",
+                "included_services",
+                "excluded_services",
+            )
+        )
 
     def _scan_evidence_review(self, contract: Contract) -> list[str]:
         issues: list[str] = []
@@ -222,6 +232,10 @@ class GroupPipeline:
             ev = getattr(sec, "evidence", None)
             if ev is not None and ev.requires_review:
                 issues.append(f"{type(sec).__name__}: Nachweis erfordert manuelle Prüfung")
+        for index, equipment in enumerate(contract.equipment):
+            ev = getattr(equipment, "evidence", None)
+            if ev is not None and ev.requires_review:
+                issues.append(f"Equipment[{index}]: Nachweis erfordert manuelle Prüfung")
         return issues
 
     def _verify_evidence_on_contract(
@@ -250,17 +264,30 @@ class GroupPipeline:
                 issues.append(f"{type(sec).__name__}: {issue}")
             if verified.requires_review:
                 issues.append(f"{type(sec).__name__}: Nachweis erfordert Prüfung")
+
+        # Equipment evidence is item-scoped. A device identity/coverage claim may
+        # never inherit the broad identity section's evidence.
+        for index, equipment in enumerate(contract.equipment):
+            ev = getattr(equipment, "evidence", None)
+            if ev is None:
+                if self._equipment_has_critical_claim(equipment):
+                    issues.append(
+                        f"Equipment[{index}]: kritische Geräteangabe ohne eigenen Nachweis"
+                    )
+                continue
+            verified, ev_issues = verify_evidence(ev, units)
+            if verified is None:
+                issues.append(f"Equipment[{index}]: Nachweis entfernt (nicht belegt)")
+                continue
+            equipment.evidence = verified
+            for issue in ev_issues:
+                issues.append(f"Equipment[{index}]: {issue}")
+            if verified.requires_review:
+                issues.append(f"Equipment[{index}]: Nachweis erfordert Prüfung")
         return issues
 
     def _apply_verifier(self, contract: Contract, result) -> list[str]:
-        """Fail closed for every unsupported sensitive field.
-
-        Section-level evidence is still downgraded when present, but manual
-        review no longer depends on a section carrying evidence. Field-scoped
-        verifier evidence can legitimately exist while ``section.evidence`` is
-        absent; an unsupported critical claim must still reach the final review
-        state and diagnostics in that case.
-        """
+        """Fail closed for every unsupported critical field."""
         unsup = unsupported_fields(result)
         if not unsup:
             return []
@@ -276,24 +303,16 @@ class GroupPipeline:
             "termination": contract.termination,
             "costs": contract.costs,
             "payment": contract.payment,
-        }
-        prefix_map = {
-            "identity.": "identity",
-            "dates.": "dates",
-            "termination.": "termination",
-            "costs.": "costs",
-            "payment.": "payment",
+            "services": contract.services,
+            "sla": contract.sla,
         }
         flagged: set[str] = set()
         for field in unsup:
-            for prefix, secname in prefix_map.items():
-                if field.startswith(prefix):
-                    flagged.add(secname)
-                    break
+            section_name = field.split(".", 1)[0]
+            if section_name in sections:
+                flagged.add(section_name)
         for secname in flagged:
-            sec = sections.get(secname)
-            if sec is None:
-                continue
+            sec = sections[secname]
             ev = getattr(sec, "evidence", None)
             if ev is not None:
                 ev.requires_review = True
