@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiUpload } from "@/lib/api";
 
 // Interaktions-Audit: Ladezustände müssen IMMER terminieren. Der API-Layer
 // bekommt pro Request ein Standard-Timeout; haengt der Server, endet der
@@ -8,6 +8,27 @@ import { apiGet } from "@/lib/api";
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+
+  it("bricht auch haengende Uploads ueber ihren Timeout ab", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit): Promise<Response> =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError"))
+            );
+          })
+      )
+    );
+    vi.useFakeTimers();
+    const file = new File(["x"], "contract.pdf", { type: "application/pdf" });
+    const p = apiUpload<unknown>("/api/documents/import", [file], "hospital", 500);
+    p.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(600);
+    await expect(p).rejects.toThrow();
+  });
+
 });
 
 function stubFetch(promiseFor: (init: RequestInit) => Promise<Response>) {
