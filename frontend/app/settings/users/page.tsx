@@ -21,6 +21,24 @@ import {
 
 const ROLES: AccountRole[] = ["admin", "contract_manager", "reviewer", "viewer"];
 
+type UserForm = {
+  email: string;
+  display_name: string;
+  password: string;
+  role: AccountRole;
+  hospital_id: string;
+  department_id: string;
+};
+
+const EMPTY_FORM: UserForm = {
+  email: "",
+  display_name: "",
+  password: "",
+  role: "viewer",
+  hospital_id: "",
+  department_id: "",
+};
+
 export default function UsersPage() {
   const { role, account, organizationSlug } = useAuth();
   const [items, setItems] = useState<ManagedUserDto[]>([]);
@@ -30,7 +48,7 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [message, setMessage] = useState<{ error: boolean; text: string } | null>(null);
-  const [form, setForm] = useState({ email: "", display_name: "", password: "", role: "viewer" as AccountRole });
+  const [form, setForm] = useState<UserForm>(EMPTY_FORM);
   const [edit, setEdit] = useState({ display_name: "", role: "viewer" as AccountRole, password: "", hospital_id: "", department_id: "" });
 
   const load = useCallback(async () => {
@@ -57,15 +75,36 @@ export default function UsersPage() {
     else setLoading(false);
   }, [role, organizationSlug, load]);
 
+  const createDepartments = useMemo(
+    () => structure.departments.filter((item) => item.is_active && item.hospital_id === form.hospital_id),
+    [structure.departments, form.hospital_id],
+  );
+
+  const editDepartments = useMemo(
+    () => structure.departments.filter((item) => item.is_active && (!edit.hospital_id || item.hospital_id === edit.hospital_id)),
+    [structure.departments, edit.hospital_id],
+  );
+
   async function createManagedUser(event: FormEvent) {
     event.preventDefault();
     if (!organizationSlug) return;
+    if (form.role !== "admin" && !form.hospital_id) {
+      setMessage({ error: true, text: "Für normale Benutzer muss ein Krankenhaus ausgewählt werden." });
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
-      await createUser(organizationSlug, form);
-      setForm({ email: "", display_name: "", password: "", role: "viewer" });
-      setMessage({ error: false, text: "Benutzer wurde angelegt. Bitte anschließend Krankenhaus und Abteilung zuweisen." });
+      await createUser(organizationSlug, {
+        email: form.email,
+        display_name: form.display_name,
+        password: form.password,
+        role: form.role,
+        hospital_id: form.hospital_id || null,
+        department_id: form.department_id || null,
+      });
+      setForm(EMPTY_FORM);
+      setMessage({ error: false, text: "Benutzer wurde mit seinem Arbeitsbereich angelegt." });
       await load();
     } catch (err) {
       setMessage({ error: true, text: err instanceof Error ? err.message : "Benutzer konnte nicht angelegt werden." });
@@ -80,26 +119,35 @@ export default function UsersPage() {
     setEdit({ display_name: user.display_name, role: user.role, password: "", hospital_id: scope?.hospital_id ?? "", department_id: scope?.department_id ?? "" });
   }
 
-  const editDepartments = useMemo(
-    () => structure.departments.filter((item) => item.is_active && (!edit.hospital_id || item.hospital_id === edit.hospital_id)),
-    [structure.departments, edit.hospital_id],
-  );
-
   async function saveUser(user: ManagedUserDto) {
     if (!organizationSlug) return;
+    if (edit.role !== "admin" && !edit.hospital_id) {
+      setMessage({ error: true, text: "Für normale Benutzer muss ein Krankenhaus ausgewählt werden." });
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
-      await updateUser(organizationSlug, user.id, {
-        display_name: edit.display_name,
-        role: edit.role,
-        password: edit.password || undefined,
-      });
-      await updateUserScope(organizationSlug, user.id, {
+      const scopePayload = {
         hospital_id: edit.hospital_id || null,
         department_id: edit.department_id || null,
         is_default: true,
-      });
+      };
+      const userPayload = {
+        display_name: edit.display_name,
+        role: edit.role,
+        password: edit.password || undefined,
+      };
+
+      // Admin -> scoped role must persist scope first, because the backend
+      // deliberately refuses an organization-wide non-admin transition.
+      if (user.role === "admin" && edit.role !== "admin") {
+        await updateUserScope(organizationSlug, user.id, scopePayload);
+        await updateUser(organizationSlug, user.id, userPayload);
+      } else {
+        await updateUser(organizationSlug, user.id, userPayload);
+        await updateUserScope(organizationSlug, user.id, scopePayload);
+      }
       setEditing(null);
       setMessage({ error: false, text: "Benutzer und Arbeitsbereich wurden aktualisiert." });
       await load();
@@ -135,7 +183,9 @@ export default function UsersPage() {
       <label>Name<input value={form.display_name} onChange={(e) => setForm((v) => ({ ...v, display_name: e.target.value }))} required /></label>
       <label>E-Mail<input type="email" value={form.email} onChange={(e) => setForm((v) => ({ ...v, email: e.target.value }))} required /></label>
       <label>Initiales Passwort<input type="password" minLength={10} value={form.password} onChange={(e) => setForm((v) => ({ ...v, password: e.target.value }))} required /></label>
-      <label>Rolle<select value={form.role} onChange={(e) => setForm((v) => ({ ...v, role: e.target.value as AccountRole }))}>{ROLES.map((item) => <option value={item} key={item}>{ROLE_LABELS[item]}</option>)}</select></label>
+      <label>Rolle<select value={form.role} onChange={(e) => setForm((v) => ({ ...v, role: e.target.value as AccountRole, hospital_id: e.target.value === "admin" ? "" : v.hospital_id, department_id: e.target.value === "admin" ? "" : v.department_id }))}>{ROLES.map((item) => <option value={item} key={item}>{ROLE_LABELS[item]}</option>)}</select></label>
+      <label>Krankenhaus<select value={form.hospital_id} required={form.role !== "admin"} onChange={(e) => setForm((v) => ({ ...v, hospital_id: e.target.value, department_id: "" }))}><option value="">{form.role === "admin" ? "Organisationsweit" : "Krankenhaus wählen"}</option>{structure.hospitals.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label>Abteilung<select value={form.department_id} disabled={!form.hospital_id} onChange={(e) => setForm((v) => ({ ...v, department_id: e.target.value }))}><option value="">Alle Abteilungen</option>{createDepartments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <button type="submit" disabled={busy}>+ Benutzer hinzufügen</button>
     </form>
     <section className="user-list" aria-label="Benutzer">
@@ -147,14 +197,14 @@ export default function UsersPage() {
         const departmentName = structure.departments.find((item: DepartmentDto) => item.id === scope?.department_id)?.name;
         return <article className="user-row" key={user.id}>
           <div><strong>{user.display_name}</strong><small>{user.id === account?.id ? "Aktueller Benutzer" : "Benutzer"}</small></div>
-          <div>{user.email}<small>{hospitalName ? ` · ${hospitalName}${departmentName ? ` / ${departmentName}` : ""}` : user.role === "admin" ? " · Organisationsweit" : " · Noch nicht zugewiesen"}</small></div>
+          <div>{user.email}<small>{hospitalName ? ` · ${hospitalName}${departmentName ? ` / ${departmentName}` : ""}` : user.role === "admin" ? " · Organisationsweit" : " · Nicht freigeschaltet"}</small></div>
           <div className="user-role">{ROLE_LABELS[user.role]}</div>
           <span className={`user-status${user.is_active ? "" : " off"}`}>{user.is_active ? "Aktiv" : "Inaktiv"}</span>
           <div>{user.last_login_at ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(user.last_login_at)) : "Noch nie"}</div>
           <button className="user-action" type="button" onClick={() => beginEdit(user)}>Bearbeiten</button>
           {editing === user.id ? <div className="user-edit-row">
             <input aria-label="Name" value={edit.display_name} onChange={(e) => setEdit((v) => ({ ...v, display_name: e.target.value }))} />
-            <select aria-label="Rolle" value={edit.role} onChange={(e) => setEdit((v) => ({ ...v, role: e.target.value as AccountRole }))}>{ROLES.map((item) => <option value={item} key={item}>{ROLE_LABELS[item]}</option>)}</select>
+            <select aria-label="Rolle" value={edit.role} onChange={(e) => setEdit((v) => ({ ...v, role: e.target.value as AccountRole, hospital_id: e.target.value === "admin" ? "" : v.hospital_id, department_id: e.target.value === "admin" ? "" : v.department_id }))}>{ROLES.map((item) => <option value={item} key={item}>{ROLE_LABELS[item]}</option>)}</select>
             <select aria-label="Krankenhaus" value={edit.hospital_id} onChange={(e) => setEdit((v) => ({ ...v, hospital_id: e.target.value, department_id: "" }))}><option value="">{edit.role === "admin" ? "Organisationsweit" : "Krankenhaus wählen"}</option>{structure.hospitals.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
             <select aria-label="Abteilung" value={edit.department_id} disabled={!edit.hospital_id} onChange={(e) => setEdit((v) => ({ ...v, department_id: e.target.value }))}><option value="">Alle Abteilungen</option>{editDepartments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
             <input type="password" minLength={10} placeholder="Neues Passwort (optional)" value={edit.password} onChange={(e) => setEdit((v) => ({ ...v, password: e.target.value }))} />
