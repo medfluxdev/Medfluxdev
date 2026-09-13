@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.auth.dependencies import current_actor
+from app.core.scope_context import current_scope_context
 from app.database.models import Department, Hospital, Organization
 from app.database.models.activity_log import ActivityLog
 from app.database.models.organization_structure import CostCenter
@@ -35,11 +36,18 @@ def list_items(request: Request, organization_slug: str):
         organization = _organization(session, organization_slug)
         if organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
-        rows = session.scalars(
-            select(CostCenter)
-            .where(CostCenter.organization_id == organization.id)
-            .order_by(CostCenter.code.asc())
-        ).all()
+        stmt = select(CostCenter).where(CostCenter.organization_id == organization.id)
+        if actor.role != "admin" and not actor.is_developer:
+            scope = current_scope_context()
+            if scope.hospital_id is None:
+                return {"items": []}
+            stmt = stmt.where(CostCenter.hospital_id == scope.hospital_id)
+            if scope.department_id is not None:
+                stmt = stmt.where(
+                    (CostCenter.department_id.is_(None))
+                    | (CostCenter.department_id == scope.department_id)
+                )
+        rows = session.scalars(stmt.order_by(CostCenter.code.asc())).all()
         return {
             "items": [
                 {
