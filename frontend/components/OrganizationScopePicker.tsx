@@ -17,6 +17,10 @@ function normalizeStructure(value: Partial<Structure> | null | undefined): Struc
   };
 }
 
+function requestScopeChange(detail: Record<string, string>): boolean {
+  return window.dispatchEvent(new CustomEvent("medflux:scope-change", { detail, cancelable: true }));
+}
+
 export default function OrganizationScopePicker() {
   const { membership, memberships, organizationSlug, role, selectOrganization } = useAuth();
   const [structure, setStructure] = useState<Structure>(EMPTY_STRUCTURE);
@@ -36,9 +40,13 @@ export default function OrganizationScopePicker() {
       if (assignedHospital) localStorage.setItem("medflux.hospitalId", assignedHospital); else localStorage.removeItem("medflux.hospitalId");
       if (assignedDepartment) localStorage.setItem("medflux.departmentId", assignedDepartment); else localStorage.removeItem("medflux.departmentId");
     }
-    apiGet<Structure>(`/api/organization-structure?organization_slug=${encodeURIComponent(organizationSlug)}`)
+    const controller = new AbortController();
+    apiGet<Structure>(`/api/organization-structure?organization_slug=${encodeURIComponent(organizationSlug)}`, controller.signal)
       .then((value) => setStructure(normalizeStructure(value)))
-      .catch(() => setStructure(EMPTY_STRUCTURE));
+      .catch((error) => {
+        if ((error as Error)?.name !== "AbortError") setStructure(EMPTY_STRUCTURE);
+      });
+    return () => controller.abort();
   }, [organizationSlug, membership, isAdmin]);
 
   const departments = useMemo(
@@ -47,6 +55,7 @@ export default function OrganizationScopePicker() {
   );
 
   function changeOrganization(slug: string) {
+    if (!requestScopeChange({ organizationSlug: slug, hospitalId: "", departmentId: "" })) return;
     selectOrganization(slug);
     localStorage.removeItem("medflux.hospitalId");
     localStorage.removeItem("medflux.departmentId");
@@ -55,19 +64,19 @@ export default function OrganizationScopePicker() {
 
   function chooseHospital(value: string) {
     if (!isAdmin) return;
+    if (!requestScopeChange({ hospitalId: value, departmentId: "" })) return;
     if (value) localStorage.setItem("medflux.hospitalId", value); else localStorage.removeItem("medflux.hospitalId");
     localStorage.removeItem("medflux.departmentId");
     setHospitalId(value);
     setDepartmentId("");
-    window.dispatchEvent(new CustomEvent("medflux:scope-change", { detail: { hospitalId: value, departmentId: "" } }));
     window.location.reload();
   }
 
   function chooseDepartment(value: string) {
     if (!isAdmin) return;
+    if (!requestScopeChange({ hospitalId, departmentId: value })) return;
     if (value) localStorage.setItem("medflux.departmentId", value); else localStorage.removeItem("medflux.departmentId");
     setDepartmentId(value);
-    window.dispatchEvent(new CustomEvent("medflux:scope-change", { detail: { hospitalId, departmentId: value } }));
     window.location.reload();
   }
 
