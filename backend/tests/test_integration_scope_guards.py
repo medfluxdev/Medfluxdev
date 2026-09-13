@@ -24,11 +24,13 @@ def test_intelligence_events_are_scope_filtered():
     assert "IntelligenceEvent.contract_id.in_(visible)" in source
 
 
-def test_contract_csv_export_is_scope_filtered():
+def test_contract_csv_export_is_scope_filtered_and_role_restricted():
     source = _source("app/api/routes/operations.py")
     assert "current_scope_context" in source
     assert "scoped_contract_ids" in source
     assert "Contract.id.in_(visible_ids)" in source
+    assert 'identity.role not in {"admin", "contract_manager"}' in source
+    assert 'event_name="contracts.exported"' in source
 
 
 def test_document_routes_fail_closed_for_scoped_access():
@@ -54,3 +56,17 @@ def test_activity_feed_respects_current_scope():
     assert "intersect_ids" in source
     assert "row.department_id == scope.department_id" in source
     assert "row.hospital_id == scope.hospital_id" in source
+
+
+def test_ownership_routes_enforce_scope_and_audit_changes():
+    source = _source("app/api/routes/ownership.py")
+    assert "_ensure_contract_visible" in source
+    assert "scoped_contract_ids" in source
+    assert "_ensure_equipment_visible" in source
+    assert 'event_name="contract.ownership_updated"' in source
+    assert 'event_name="equipment.ownership_updated"' in source
+
+
+def test_user_scope_changes_are_audited():
+    source = _source("app/api/routes/user_scopes.py")
+    assert 'event_name="account.scope_updated"' in source
