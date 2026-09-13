@@ -1,23 +1,28 @@
 """Production document-import route (STEP 4-15).
 
 Every browser import is delegated to the single `DocumentProcessingService`
-orchestrator.  The old manifest-only import and standalone extract/analyze HTTP
+orchestrator. The old manifest-only import and standalone extract/analyze HTTP
 routes are intentionally not exposed: they bypass accepted persistence state and
 would form a second production processing architecture.
 """
+
+from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.database.models import DocumentFile, DocumentVersion
+from app.core.scope_context import current_scope_context
+from app.database.models import Contract, ContractDocument, DocumentFile, DocumentVersion
+from app.database.scope_queries import scoped_contract_ids
+from app.database.services import get_organization
+from app.database.session import create_session
 from app.documents.persistence import DocumentPersistenceService, StorageError
 from app.documents.processing import DocumentProcessingService
 from app.documents.schemas import ImportBatchResponse, ImportFileResult, ImportStatus
 from app.documents.source_region import resolve_narrowest_region
-from app.database.services import get_organization
-from app.database.session import create_session
+from app.ownership.service import OwnershipError, assign_contract_ownership
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -42,21 +47,118 @@ class RetryDocumentResponse(BaseModel):
     contract_id: str | None = None
 
 
+def _not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="Dokument nicht gefunden.")
+
+
+def _parse_version_id(value: str) -> UUID:
+    try:
+        return UUID(value)
+    except ValueError:
+        raise _not_found()
+
+
+def _linked_contract_ids(session, organization_id: UUID, document_version_id: UUID) -> set[UUID]:
+    return set(
+        session.scalars(
+            select(ContractDocument.contract_id).where(
+                (ContractDocument.organization_id == organization_id)
+                & (ContractDocument.document_version_id == document_version_id)
+            )
+        ).all()
+    )
+
+
+def _ensure_document_visible(session, organization_id: UUID, document_version_id: UUID) -> None:
+    """Fail closed for hospital/department scoped users.
+
+    A document is visible when at least one linked contract is visible in the
+    active scope. Unlinked documents remain accessible only in organization-wide
+    scope because they cannot be safely attributed to a hospital/department yet.
+    """
+    scope = current_scope_context()
+    visible = scoped_contract_ids(
+        session, organization_id, scope.hospital_id, scope.department_id
+    )
+    if visible is None:
+        return
+    linked = _linked_contract_ids(session, organization_id, document_version_id)
+    if not linked or linked.isdisjoint(visible):
+        raise _not_found()
+
+
+def _preflight_document(organization_slug: str, document_version_id: str) -> UUID:
+    vid = _parse_version_id(document_version_id)
+    with create_session() as session:
+        org = get_organization(session, organization_slug)
+        if org is None:
+            raise _not_found()
+        version = session.scalars(
+            select(DocumentVersion).where(
+                (DocumentVersion.id == vid)
+                & (DocumentVersion.organization_id == org.id)
+            )
+        ).first()
+        if version is None:
+            raise _not_found()
+        _ensure_document_visible(session, org.id, vid)
+    return vid
+
+
+def _assign_import_scope(organization_slug: str, contract_id: str | None, status: str) -> None:
+    """Persist the current hospital/department scope on newly imported contracts.
+
+    This replaces the former client-side follow-up PATCH and keeps ownership a
+    backend responsibility. Duplicate imports never reassign an existing contract.
+    """
+    if not contract_id or status != "imported":
+        return
+    scope = current_scope_context()
+    if scope.hospital_id is None and scope.department_id is None:
+        return
+    try:
+        cid = UUID(contract_id)
+    except ValueError:
+        return
+
+    with create_session() as session:
+        org = get_organization(session, organization_slug)
+        if org is None:
+            raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        contract = session.scalars(
+            select(Contract).where(
+                (Contract.id == cid) & (Contract.organization_id == org.id)
+            )
+        ).first()
+        if contract is None:
+            raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
+        try:
+            assign_contract_ownership(
+                session,
+                contract=contract,
+                hospital_id=scope.hospital_id,
+                department_ids=[scope.department_id] if scope.department_id else [],
+                cost_center_id=None,
+            )
+            session.commit()
+        except OwnershipError as exc:
+            session.rollback()
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.post("/{document_version_id}/retry", response_model=RetryDocumentResponse)
 async def retry_document(
     document_version_id: str,
     organization_slug: str = Query(min_length=1),
 ) -> RetryDocumentResponse:
-    """Fehlgeschlagene/nicht abgeschlossene Verarbeitung erneut ausfuehren.
-
-    Resume by opaque DocumentVersion-ID (kein erneuter Upload). Die Original-
-    Bytes und der Storage-Key werden serverseitig aufgeloest.
-    """
+    """Fehlgeschlagene/nicht abgeschlossene Verarbeitung erneut ausfuehren."""
+    _preflight_document(organization_slug, document_version_id)
     processed = await run_in_threadpool(
         _processing_service.resume_document,
         organization_slug=organization_slug,
         document_version_id=document_version_id,
     )
+    _assign_import_scope(organization_slug, processed.contract_id, str(processed.status))
     return RetryDocumentResponse(
         document_id=processed.document_id or None,
         document_version_id=processed.document_version_id or None,
@@ -76,12 +178,8 @@ async def reanalyze_document(
     document_version_id: str,
     organization_slug: str = Query(min_length=1),
 ) -> RetryDocumentResponse:
-    """Explizite Reanalyse eines bereits akzeptierten Vertrags.
-
-    Anders als `/retry` wird der vorhandene Accepted Contract bewusst erneut durch
-    Harness/Qwen analysiert. Die bisherige akzeptierte Wahrheit bleibt bei Fehlern
-    unverändert und wird nur nach vollständigem Erfolg atomar ersetzt.
-    """
+    """Explizite Reanalyse eines bereits akzeptierten Vertrags."""
+    _preflight_document(organization_slug, document_version_id)
     processed = await run_in_threadpool(
         _processing_service.reanalyze_document,
         organization_slug=organization_slug,
@@ -107,7 +205,6 @@ async def import_documents(
     organization_slug: str = Query(min_length=1),
 ) -> ImportBatchResponse:
     """Imports PDF/DOCX files through the persisted production orchestrator."""
-
     if not files:
         return ImportBatchResponse(
             total=0, successful=0, failed=0, duplicates=0, documents=[]
@@ -123,6 +220,12 @@ async def import_documents(
             content_type=uploaded.content_type or "",
             content=raw,
         )
+        processed_status = str(processed.status)
+        _assign_import_scope(
+            organization_slug,
+            processed.contract_id,
+            processed_status,
+        )
         results.append(
             ImportFileResult(
                 document_id=processed.document_id or None,
@@ -131,8 +234,6 @@ async def import_documents(
                 status=ImportStatus(processed.status),
                 size=len(raw),
                 sha256=processed.sha256 or None,
-                # Never fall back to ProcessedDocument.error: it intentionally
-                # contains protected provider/DB/exception diagnostics.
                 message=(
                     processed.message
                     or _SAFE_FALLBACK_MESSAGES.get(processed.status)
@@ -175,25 +276,13 @@ def document_source_region(
     snippet: str = Query(min_length=2, max_length=500),
     page: int | None = Query(default=None, ge=1),
 ) -> dict:
-    """Narrowest trustworthy PDF region for a fact snippet (PR-5 UAT D).
-
-    Ehrlich: nur Regionen, in denen der Text nachweisbar steht (Text-Layer
-    bzw. validierte atomare Zellen). `status` ist `exact`, `coarse` oder
-    `none` – nie erfundene Koordinaten. Auch `page` ist facetten-co,
-    damit der PdfViewer nur nachladen kann, wenn er bereits dieselbe Seite
-    zeigt.
-    """
-    import uuid
-
-    try:
-        vid = uuid.UUID(document_version_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Dokument nicht gefunden.")
+    """Narrowest trustworthy PDF region for a fact snippet (PR-5 UAT D)."""
+    vid = _parse_version_id(document_version_id)
 
     with create_session() as session:
         org = get_organization(session, organization_slug)
         if org is None:
-            raise HTTPException(status_code=404, detail="Dokument nicht gefunden.")
+            raise _not_found()
         version = session.scalars(
             select(DocumentVersion).where(
                 (DocumentVersion.id == vid)
@@ -201,7 +290,8 @@ def document_source_region(
             )
         ).first()
         if version is None:
-            raise HTTPException(status_code=404, detail="Dokument nicht gefunden.")
+            raise _not_found()
+        _ensure_document_visible(session, org.id, vid)
 
         doc_file = None
         if version.document_file_id is not None:
@@ -220,7 +310,7 @@ def document_source_region(
                 document_version_id=vid,
             )
         except StorageError:
-            raise HTTPException(status_code=404, detail="Dokument nicht gefunden.")
+            raise _not_found()
         canonical = svc.resolve_canonical_for_version(
             session,
             organization_id=org.id,
