@@ -28,17 +28,14 @@ if !errorlevel! equ 0 (
             exit /b 1
         )
     )
-    set "DOCKER_READY=0"
+    set "DOCKER_READY="
     for /L %%I in (1,1,90) do (
-        docker info >nul 2>&1
-        if !errorlevel! equ 0 (
-            set "DOCKER_READY=1"
-            goto :docker_ready
+        if not defined DOCKER_READY (
+            docker info >nul 2>&1
+            if !errorlevel! equ 0 (set "DOCKER_READY=1") else (timeout /t 1 /nobreak >nul)
         )
-        timeout /t 1 /nobreak >nul
     )
-    :docker_ready
-    if "!DOCKER_READY!" neq "1" (
+    if not defined DOCKER_READY (
         echo [ERROR] Docker Engine did not become ready.
         pause
         exit /b 1
@@ -50,17 +47,14 @@ if !errorlevel! equ 0 (
         exit /b 1
     )
     echo       Waiting for PostgreSQL...
-    set "DATABASE_READY=0"
+    set "DATABASE_READY="
     for /L %%I in (1,1,60) do (
-        docker inspect --format "{{.State.Health.Status}}" "%DATABASE_CONTAINER%" 2>nul | findstr /x "healthy" >nul
-        if !errorlevel! equ 0 (
-            set "DATABASE_READY=1"
-            goto :database_ready
+        if not defined DATABASE_READY (
+            docker inspect --format "{{.State.Health.Status}}" "%DATABASE_CONTAINER%" 2>nul | findstr /x "healthy" >nul
+            if !errorlevel! equ 0 (set "DATABASE_READY=1") else (timeout /t 1 /nobreak >nul)
         )
-        timeout /t 1 /nobreak >nul
     )
-    :database_ready
-    if "!DATABASE_READY!" neq "1" (
+    if not defined DATABASE_READY (
         echo [ERROR] PostgreSQL did not become healthy.
         pause
         exit /b 1
