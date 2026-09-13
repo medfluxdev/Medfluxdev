@@ -46,7 +46,7 @@ export default function EquipmentPage() {
       {!loading && !error && items.length === 0 && (
         <div className="state-box">
           <div className="state-icon">∅</div>
-          <h3>Keine Geräte vorhanden</h3>
+          <h3>Noch keine Geräte vorhanden</h3>
           <p>Im aktuellen Krankenhaus-/Abteilungsbereich sind noch keine Geräte sichtbar.</p>
         </div>
       )}
