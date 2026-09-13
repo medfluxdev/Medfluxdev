@@ -78,3 +78,10 @@ def test_work_queue_updates_are_scope_checked_and_audited():
     assert "row.contract_id not in allowed" in source
     assert 'event_name=f"work_item.{body.status}"' in source
     assert 'object_type="contract"' in source
+
+
+def test_unassigned_non_admin_membership_is_fail_closed():
+    source = _source("app/core/scope_context.py")
+    assert "_NO_SCOPE_HOSPITAL = UUID(int=0)" in source
+    assert "membership.hospital_id or _NO_SCOPE_HOSPITAL" in source
+    assert "actor.role != \"admin\"" in source
