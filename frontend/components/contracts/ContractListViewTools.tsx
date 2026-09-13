@@ -41,7 +41,6 @@ export default function ContractListViewTools() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const query = searchParams.toString();
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState("");
 
@@ -64,7 +63,7 @@ export default function ContractListViewTools() {
       entries.push({ key, value, index, label: LABELS[key] ?? key });
     }
     return entries;
-  }, [query, searchParams]);
+  }, [searchParams]);
 
   function navigate(params: URLSearchParams) {
     params.delete("page");
