@@ -6,91 +6,43 @@ import ContractTable from "@/components/contracts/ContractTable";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
 import PageHeader from "@/components/ui/PageHeader";
-import { apiGet } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { listContracts } from "@/lib/domain-api/contracts";
 import type { ContractListResponse } from "@/lib/contract-types";
 
-const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
-
 export default function ReviewPage() {
+  const { organizationSlug } = useAuth();
   const [data, setData] = useState<ContractListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!organizationSlug) return;
     setLoading(true);
     setError(null);
     try {
-      const p = new URLSearchParams({
-        organization_slug: ORG_SLUG,
-        requires_review: "true",
-        page_size: "100",
-      });
-      const res = await apiGet<ContractListResponse>(
-        `/api/contracts?${p.toString()}`
-      );
-      setData(res);
+      setData(await listContracts(organizationSlug, { requires_review: true, page_size: 100 }));
     } catch {
       setError("Prüfungsliste konnte nicht geladen werden.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [organizationSlug]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   return (
     <div className="page">
-      <PageHeader
-        title="Prüfungen"
-        description="Manuelle Prüfung materialer Vertragsangaben und faktengenauer Quellenbelege."
-      />
-
-      {error && (
-        <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>
-          {error}
-        </InlineAlert>
-      )}
-
+      <PageHeader title="Prüfungen" description="Manuelle Prüfung materialer Vertragsangaben und faktengenauer Quellenbelege." />
+      {error && <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>{error}</InlineAlert>}
       {loading && <LoadingState>Prüfungsliste wird geladen…</LoadingState>}
-
       {!loading && !error && data && (
         <section className="panel" aria-labelledby="review-heading">
-          <div className="panel-head">
-            <div>
-              <h2 id="review-heading">Zu prüfende Verträge</h2>
-              <p>
-                {data.total_count}{" "}
-                {data.total_count === 1 ? "Vertrag" : "Verträge"} benötigen
-                eine manuelle Prüfung der extrahierten Fakten.
-              </p>
-            </div>
-          </div>
+          <div className="panel-head"><div><h2 id="review-heading">Zu prüfende Verträge</h2><p>{data.total_count} {data.total_count === 1 ? "Vertrag" : "Verträge"} benötigen eine manuelle Prüfung der extrahierten Fakten.</p></div></div>
           {data.items.length === 0 ? (
-            <div className="state-box">
-              <div className="state-icon">✓</div>
-              <h3>Keine offenen Prüfungen</h3>
-              <p>
-                Alle aktiven Verträge sind geprüft – es liegt kein manueller
-                Prüfbedarf vor.
-              </p>
-            </div>
+            <div className="state-box"><div className="state-icon">✓</div><h3>Keine offenen Prüfungen</h3><p>Alle aktiven Verträge sind geprüft – es liegt kein manueller Prüfbedarf vor.</p></div>
           ) : (
-            <div className="table-wrap">
-              <ContractTable
-                items={data.items}
-                extraHeader="Prüfung"
-                extra={(item) => (
-                  <Link
-                    className="btn btn-sm btn-primary"
-                    href={`/contracts/${item.contract_id}`}
-                  >
-                    Prüfen
-                  </Link>
-                )}
-              />
-            </div>
+            <div className="table-wrap"><ContractTable items={data.items} extraHeader="Prüfung" extra={(item) => <Link className="btn btn-sm btn-primary" href={`/contracts/${item.contract_id}?tab=documents&subtab=review`}>Prüfen</Link>} /></div>
           )}
         </section>
       )}
