@@ -1,8 +1,8 @@
 """Deterministische Normalisierung + Quell-Grounding (STEP 8B-Semantik).
 
 Reine Code-Logik (keine KI): normalisiert strukturierte Werte, verwirft klar
-fehlklassifizierte Identifikatoren und groundet kritische Identitätsfelder nur
-bei starken, direkt aus dem Quelldokument ableitbaren Signalen.
+fehlklassifizierte Identifikatoren und groundet kritische Identitäts-/Leistungsfelder
+nur bei starken, direkt aus dem Quelldokument ableitbaren Signalen.
 """
 
 from __future__ import annotations
@@ -156,11 +156,18 @@ def _ground_contract_number(contract: Contract, texts: list[str]) -> list[str]:
     return []
 
 
+def _strip_party_qualifiers(value: str) -> str:
+    """Remove model-added contact/role suffixes without changing the legal name."""
+    cleaned = " ".join(str(value or "").split())
+    cleaned = re.sub(r"\s*\([^()]{2,120}\)\s*$", "", cleaned).strip()
+    return cleaned
+
+
 def _split_org_candidates(text: str) -> list[str]:
     raw_parts = re.split(r"[\n|;/]+", text)
     candidates: list[str] = []
     for raw in raw_parts:
-        part = " ".join(raw.strip().split())
+        part = _strip_party_qualifiers(raw.strip())
         if not (4 <= len(part) <= 100):
             continue
         if not _ORG_HINT_RE.search(part):
@@ -190,9 +197,9 @@ def _name_quality(value: str) -> float:
 def _table_role_anchor(texts: list[str], role: str) -> Optional[str]:
     """Read a party cell only when a pipe-serialized table gives an explicit role column.
 
-    This deliberately refuses free-text guesses. For a header such as
-    ``Auftraggeber | Auftragnehmer`` it selects the same column from a following
-    row, preserving even OCR-damaged text as an anchor for later canonicalization.
+    Table cells may contain embedded line breaks. Therefore after an explicit
+    role header we inspect the first six subsequent *pipe rows*, not merely a
+    fixed number of physical lines.
     """
     aliases = {
         "customer": ("auftraggeber", "kunde"),
@@ -212,13 +219,17 @@ def _table_role_anchor(texts: list[str], role: str) -> Optional[str]:
             if len(positions) != 1:
                 continue
             col = positions[0]
-            for row in lines[idx + 1: idx + 5]:
+            pipe_rows_seen = 0
+            for row in lines[idx + 1:]:
                 if "|" not in row:
                     continue
+                pipe_rows_seen += 1
+                if pipe_rows_seen > 6:
+                    break
                 cells = [cell.strip() for cell in row.split("|")]
                 if col >= len(cells):
                     continue
-                value = " ".join(cells[col].split())
+                value = _strip_party_qualifiers(cells[col])
                 if value and not any(alias in value.lower() for alias in wanted):
                     return value
     return None
@@ -233,14 +244,16 @@ def _canonicalize_party_name(
     if not value and not role_anchor:
         return value, False
 
-    current = " ".join((value or role_anchor or "").split())
-    anchor = " ".join((role_anchor or current).split())
+    current = _strip_party_qualifiers(value or role_anchor or "")
+    anchor = _strip_party_qualifiers(role_anchor or current)
     anchor_norm = _fuzzy_norm(anchor)
     anchor_quality = _name_quality(anchor)
 
-    # A model may concatenate several legal entities. Never treat that whole
-    # string as one organization; compare each segment to the role-grounded cell.
-    model_segments = [" ".join(p.split()) for p in re.split(r"[;\n|]+", current) if p.strip()]
+    model_segments = [
+        _strip_party_qualifiers(p)
+        for p in re.split(r"[;\n|]+", value or current)
+        if p.strip()
+    ]
     source_candidates: list[str] = []
     for text in texts:
         source_candidates.extend(_split_org_candidates(text))
@@ -249,12 +262,11 @@ def _canonicalize_party_name(
     best = current
     best_score = -1.0
     for candidate in source_candidates:
+        candidate = _strip_party_qualifiers(candidate)
         score = SequenceMatcher(None, anchor_norm, _fuzzy_norm(candidate)).ratio()
         quality = _name_quality(candidate)
         if score < 0.72:
             continue
-        # OCR canonicalization must improve quality unless the candidate is a
-        # clean exact representation of the role anchor itself.
         if quality + 0.02 < anchor_quality:
             continue
         weighted = score + max(0.0, min(0.2, quality - anchor_quality))
@@ -264,7 +276,7 @@ def _canonicalize_party_name(
 
     if best_score < 0:
         return value, False
-    return best, best != current
+    return best, best != " ".join((value or "").split())
 
 
 def _source_contract_title(texts: list[str]) -> Optional[str]:
@@ -295,27 +307,22 @@ def _contract_type_from_title(title: Optional[str]) -> Optional[ContractType]:
 
 
 def ground_source_identity(contract: Contract, units: Iterable[object]) -> list[str]:
-    """Evidence-first post-processing for critical identity fields.
-
-    Only strong source structures are allowed to fill missing data: explicit
-    headings and explicit role columns. Ambiguous free text remains unverified.
-    """
+    """Evidence-first post-processing for critical identity fields."""
     texts = _iter_source_texts(units)
     issues = _ground_contract_number(contract, texts)
 
     title = (contract.identity.contract_title or "").strip()
     source_title = _source_contract_title(texts)
-    if not title and source_title:
+    if source_title and title != source_title:
         contract.identity.contract_title = source_title
         title = source_title
-        issues.append("identity.contract_title: explizite Vertragsüberschrift aus Quelle übernommen")
+        issues.append("identity.contract_title: explizite Vertragsüberschrift aus Quelle priorisiert")
 
     current_type = contract.identity.contract_type
-    if current_type in (None, ContractType.UNKNOWN, "unknown", ""):
-        grounded_type = _contract_type_from_title(title or source_title)
-        if grounded_type is not None:
-            contract.identity.contract_type = grounded_type
-            issues.append("identity.contract_type: aus expliziter Vertragsüberschrift abgeleitet")
+    grounded_type = _contract_type_from_title(source_title or title)
+    if grounded_type is not None and current_type != grounded_type:
+        contract.identity.contract_type = grounded_type
+        issues.append("identity.contract_type: aus expliziter Vertragsüberschrift abgeleitet")
 
     customer_anchor = _table_role_anchor(texts, "customer")
     supplier_anchor = _table_role_anchor(texts, "supplier")
@@ -331,8 +338,41 @@ def ground_source_identity(contract: Contract, units: Iterable[object]) -> list[
             setattr(contract.identity, field_name, new)
             issues.append(f"identity.{field_name}: Rollenbeleg/OCR-Schreibweise aus Quelle kanonisiert")
         elif not old and anchor:
-            setattr(contract.identity, field_name, anchor)
+            setattr(contract.identity, field_name, _strip_party_qualifiers(anchor))
             issues.append(f"identity.{field_name}: explizite Tabellenrolle aus Quelle übernommen")
+    return issues
+
+
+def _source_contains(texts: list[str], *needles: str) -> bool:
+    haystack = "\n".join(texts).casefold()
+    return any(needle.casefold() in haystack for needle in needles)
+
+
+def _included_contains(contract: Contract, *needles: str) -> bool:
+    joined = "\n".join(contract.services.included_services).casefold()
+    return any(needle.casefold() in joined for needle in needles)
+
+
+def ground_source_services(contract: Contract, units: Iterable[object]) -> list[str]:
+    """Stabilize high-value service booleans from already extracted service rows.
+
+    We only promote null -> true when both the structured included_services list
+    and the original source text independently contain the corresponding service
+    concept. Absence never becomes false.
+    """
+    texts = _iter_source_texts(units)
+    issues: list[str] = []
+    rules = (
+        ("maintenance", ("wartung",), ("wartung",)),
+        ("repair", ("reparatur", "reparaturen"), ("reparatur", "reparaturen")),
+        ("software_updates", ("software-update", "software update"), ("software-update", "software update")),
+    )
+    for field_name, included_needles, source_needles in rules:
+        if getattr(contract.services, field_name) is not None:
+            continue
+        if _included_contains(contract, *included_needles) and _source_contains(texts, *source_needles):
+            setattr(contract.services, field_name, True)
+            issues.append(f"services.{field_name}: aus belegter included_services-Zeile groundet")
     return issues
 
 
