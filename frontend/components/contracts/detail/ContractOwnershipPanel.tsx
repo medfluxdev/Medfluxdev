@@ -28,19 +28,25 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     if (!editable) return;
     const q = encodeURIComponent(orgSlug);
     Promise.all([
-      apiGet<{ hospitals: Item[]; departments: Department[] }>(`/api/organization-structure?organization_slug=${q}`),
-      apiGet<{ items: Center[] }>(`/api/cost-centers?organization_slug=${q}`),
-      apiGet<{ items: Assignee[] }>(`/api/ownership/assignees?organization_slug=${q}`),
-      apiGet<Assignment>(`/api/ownership/contracts/${contractId}?organization_slug=${q}`),
+      apiGet<{ hospitals?: Item[]; departments?: Department[] }>(`/api/organization-structure?organization_slug=${q}`),
+      apiGet<{ items?: Center[] }>(`/api/cost-centers?organization_slug=${q}`),
+      apiGet<{ items?: Assignee[] }>(`/api/ownership/assignees?organization_slug=${q}`),
+      apiGet<Partial<Assignment>>(`/api/ownership/contracts/${contractId}?organization_slug=${q}`),
     ]).then(([structure, costCenters, users, assignment]) => {
-      setHospitals(structure.hospitals); setDepartments(structure.departments); setCenters(costCenters.items); setAssignees(users.items);
-      setHospitalId(assignment.hospital_id ?? ""); setDepartmentIds(assignment.department_ids ?? []); setCenterId(assignment.cost_center_id ?? ""); setResponsibleId(assignment.responsible_account_id ?? "");
+      setHospitals(structure?.hospitals ?? []);
+      setDepartments(structure?.departments ?? []);
+      setCenters(costCenters?.items ?? []);
+      setAssignees(users?.items ?? []);
+      setHospitalId(assignment?.hospital_id ?? "");
+      setDepartmentIds(assignment?.department_ids ?? []);
+      setCenterId(assignment?.cost_center_id ?? "");
+      setResponsibleId(assignment?.responsible_account_id ?? "");
     }).catch(() => setMessage("Zuordnung konnte nicht geladen werden."));
   }, [contractId, editable, orgSlug]);
 
-  const visibleDepartments = useMemo(() => departments.filter((x) => x.is_active && x.hospital_id === hospitalId), [departments, hospitalId]);
-  const visibleCenters = useMemo(() => centers.filter((x) => x.is_active && x.hospital_id === hospitalId && (!x.department_id || departmentIds.length === 0 || departmentIds.includes(x.department_id))), [centers, hospitalId, departmentIds]);
-  const visibleAssignees = useMemo(() => assignees.filter((x) => (!x.hospital_id || x.hospital_id === hospitalId) && (departmentIds.length === 0 || !x.department_id || departmentIds.includes(x.department_id))), [assignees, hospitalId, departmentIds]);
+  const visibleDepartments = useMemo(() => (departments ?? []).filter((x) => x.is_active && x.hospital_id === hospitalId), [departments, hospitalId]);
+  const visibleCenters = useMemo(() => (centers ?? []).filter((x) => x.is_active && x.hospital_id === hospitalId && (!x.department_id || departmentIds.length === 0 || departmentIds.includes(x.department_id))), [centers, hospitalId, departmentIds]);
+  const visibleAssignees = useMemo(() => (assignees ?? []).filter((x) => (!x.hospital_id || x.hospital_id === hospitalId) && (departmentIds.length === 0 || !x.department_id || departmentIds.includes(x.department_id))), [assignees, hospitalId, departmentIds]);
 
   function toggleDepartment(id: string) { setDepartmentIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]); setCenterId(""); }
 
@@ -55,7 +61,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
 
   if (!editable) return null;
   return <section className="cw-section cw-ownership-section"><div className="cw-section-head"><div><h2>Organisation & Verantwortlichkeit</h2><p>Vertrag organisatorisch zuordnen und eine verantwortliche Person festlegen.</p></div></div><div className="cw-ownership-grid">
-    <label><span>Krankenhaus</span><select value={hospitalId} onChange={(e) => { setHospitalId(e.target.value); setDepartmentIds([]); setCenterId(""); }}><option value="">Organisationsweit</option>{hospitals.filter((x) => x.is_active).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+    <label><span>Krankenhaus</span><select value={hospitalId} onChange={(e) => { setHospitalId(e.target.value); setDepartmentIds([]); setCenterId(""); }}><option value="">Organisationsweit</option>{(hospitals ?? []).filter((x) => x.is_active).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
     <div className="cw-ownership-field"><span>Abteilungen</span><div className="cw-ownership-checks">{visibleDepartments.map((x) => <label key={x.id} className="cw-ownership-check"><input type="checkbox" checked={departmentIds.includes(x.id)} onChange={() => toggleDepartment(x.id)} /><span>{x.name}</span></label>)}</div></div>
     <label><span>Kostenstelle</span><select value={centerId} onChange={(e) => setCenterId(e.target.value)} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{visibleCenters.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}</select></label>
     <label><span>Verantwortlich</span><select value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)}><option value="">Nicht zugewiesen</option>{visibleAssignees.map((x) => <option key={x.id} value={x.id}>{x.display_name}</option>)}</select></label>
