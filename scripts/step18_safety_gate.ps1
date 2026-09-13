@@ -23,6 +23,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host "[STEP18] Targeted fail-closed tests..."
 python -m pytest -q `
     tests/test_ai_critical_policy.py `
+    tests/test_ai_critical_verifier_expansion.py `
     tests/test_ai_evidence_fail_closed.py `
     tests/test_ai_verifier_safety.py `
     tests/test_ai_verifier_fail_closed.py `
