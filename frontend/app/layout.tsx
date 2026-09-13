@@ -12,6 +12,7 @@ import "./profile.css";
 import "./organization.css";
 import "./ownership.css";
 import "./design-system.css";
+import "./shell.css";
 
 export const metadata: Metadata = {
   title: {
