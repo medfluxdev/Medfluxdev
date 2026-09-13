@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -95,7 +96,7 @@ export default function ProfilePage() {
         <aside className="profile-photo-card">
           <div className="profile-photo-wrap">
             {profile.profile_photo_data_url ? (
-              <img src={profile.profile_photo_data_url} alt="Profilbild" />
+              <Image src={profile.profile_photo_data_url} alt="Profilbild" width={160} height={160} unoptimized />
             ) : (
               <span>{profile.display_name?.slice(0, 1).toUpperCase() || "M"}</span>
             )}
