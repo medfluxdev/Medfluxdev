@@ -552,3 +552,57 @@ def test_extraction_cascade_delete_to_evidence(db):
         select(ExtractionEvidence).where(ExtractionEvidence.extraction_id == ext.id)
     ).all()
     assert gone == []
+
+
+def test_accept_extraction_rejects_cross_organization(db):
+    org_a, ver_a, ext_a = _extraction(db)
+    org_b = _org(db)
+    contract_b = create_contract(db, organization_id=org_b.id)
+    db.flush()
+
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        accept_extraction(db, contract_id=contract_b.id, extraction_id=ext_a.id)
+
+
+def test_accept_calculation_rejects_cross_organization(db):
+    org_a, ver_a, ext_a = _extraction(db)
+    calc_a = save_calculation(
+        db,
+        organization_id=org_a.id,
+        extraction_id=ext_a.id,
+        as_of_date=date(2026, 1, 1),
+        result_snapshot={},
+    )
+    org_b = _org(db)
+    contract_b = create_contract(db, organization_id=org_b.id)
+    db.flush()
+
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        accept_calculation(
+            db,
+            contract_id=contract_b.id,
+            calculation_run_id=calc_a.id,
+        )
+
+
+def test_link_document_rejects_cross_organization(db):
+    org_a, doc_a = _doc(db)
+    version_a = create_document_version(
+        db,
+        organization_id=org_a.id,
+        document_file_id=doc_a.id,
+        version_no=1,
+        sha256=_sha(),
+        storage_key="cross-org/original.pdf",
+    )
+    org_b = _org(db)
+    contract_b = create_contract(db, organization_id=org_b.id)
+    db.flush()
+
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        link_document(
+            db,
+            contract_id=contract_b.id,
+            document_version_id=version_a.id,
+            role="main",
+        )
