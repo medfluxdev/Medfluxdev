@@ -411,8 +411,9 @@ def contract_review_complete(
 ) -> ContractDetailResponse:
     """Expliziter menschlicher Abschluss des Vertragsreviews.
 
-    Bei verbleibenden ungeprüften Angaben ist `acknowledge_unreviewed` + Notiz
-    erforderlich – sonst 422 (kein unbemerktes „Durchwinken").
+    Kritische ungeprüfte Angaben blockieren den Abschluss immer. Nur verbleibende
+    nicht-kritische Angaben dürfen mit `acknowledge_unreviewed` + Notiz quittiert
+    werden – sonst 422 (kein unbemerktes „Durchwinken").
     """
     try:
         cid = UUID(contract_id)
@@ -444,6 +445,7 @@ def contract_review_complete(
                 acknowledge_unreviewed=payload.acknowledge_unreviewed,
                 relevant_count=summary["relevant_count"],
                 reviewed_count=summary["reviewed_count"],
+                critical_unreviewed_count=summary["critical_unreviewed_count"],
             )
             session.commit()
         except ReviewError as exc:
