@@ -16,6 +16,7 @@ from app.api.routes import (
     health,
     intelligence,
     intelligence_actions,
+    intelligence_analytics,
     lifecycle,
     notifications,
     operations,
@@ -94,6 +95,7 @@ app.include_router(work_queue.router)
 app.include_router(work_queue_collaboration.router)
 app.include_router(intelligence.router)
 app.include_router(intelligence_actions.router)
+app.include_router(intelligence_analytics.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(operations.router)
