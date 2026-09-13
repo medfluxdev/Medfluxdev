@@ -1,13 +1,13 @@
 """KI-Routen (Schritt 6/6B): Status, Snapshot, Test- und Auswahl-Endpunkte.
 
 Dünne API-Schicht – alle Logik liegt im AIService bzw. in Discovery/Selection.
-Enthält KEINE Vertrags-Extraktion (das folgt in Schritt 7). Die Auswahl wird
-NUR validiert und persistiert; an der Auswahl wird nie inferiert.
+Die globale Provider-/Modellauswahl darf nur von Administrator/Developer
+verändert oder aktiv getestet werden.
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.ai.providers import discovery
 from app.ai.providers.registry import (
@@ -34,8 +34,19 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 _ai_service = AIService(settings)
 
 
+def _require_ai_admin(request: Request) -> None:
+    if getattr(request.state, "is_developer", False):
+        return
+    actor = getattr(request.state, "actor", None)
+    if actor is not None and actor.role == "admin":
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Nur Administratoren oder der Developer dürfen die lokale KI konfigurieren.",
+    )
+
+
 async def build_snapshot() -> AISnapshot:
-    """Ein kanonischer Schnappschuss: Provider + Modelle + aktive Auswahl."""
     providers = await discovery.discover_providers(settings)
     selection = build_selection(settings, providers)
     return AISnapshot(
@@ -49,60 +60,42 @@ async def build_snapshot() -> AISnapshot:
 
 @router.get("/status", response_model=AIStatus)
 async def ai_status() -> AIStatus:
-    """Liefert den aktuellen Status der lokalen KI (kanonischer Zustand)."""
     return await _ai_service.status()
 
 
 @router.get("/snapshot", response_model=AISnapshot)
 async def ai_snapshot() -> AISnapshot:
-    """Einstellungen-Schnappschuss: erkannte Provider, Modelle, Auswahl."""
     return await build_snapshot()
 
 
 @router.post("/test", response_model=AITestResponse)
-async def ai_test(payload: AITestRequest) -> AITestResponse:
-    """Test-/Entwicklungs-Endpunkt: sendet Text an das lokale Modell."""
+async def ai_test(request: Request, payload: AITestRequest) -> AITestResponse:
+    _require_ai_admin(request)
     return await _ai_service.generate_test(payload.text)
 
 
 @router.put("/selection", response_model=AISnapshot)
-async def ai_set_selection(payload: SelectionUpdate) -> AISnapshot:
-    """Persistiert die aktive KI-Auswahl – validiert, ohne zu inferieren.
-
-    Fehlschläge liefern 400 mit deutscher Meldung; Erfolg liefert den frischen
-    Snapshot (identischer kanonischer Zustand wie GET /api/ai/snapshot).
-    """
+async def ai_set_selection(request: Request, payload: SelectionUpdate) -> AISnapshot:
+    _require_ai_admin(request)
     provider_id = payload.provider_id.strip()
     model_id = payload.model_id.strip()
 
     spec = get_provider_spec(provider_id)
     if spec is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Provider '{provider_id}' wird nicht unterstützt.",
-        )
+        raise HTTPException(status_code=400, detail=f"Provider '{provider_id}' wird nicht unterstützt.")
 
     is_generic = provider_id == "generic-openai"
     endpoint = payload.endpoint.strip() if payload.endpoint else ""
     if is_generic and not endpoint:
-        raise HTTPException(
-            status_code=400,
-            detail="Für den OpenAI-kompatiblen Anbieter ist ein Endpunkt erforderlich.",
-        )
+        raise HTTPException(status_code=400, detail="Für den OpenAI-kompatiblen Anbieter ist ein Endpunkt erforderlich.")
     if is_generic:
         if not endpoint.startswith("http://127.0.0.1:") and not endpoint.startswith("http://localhost:"):
-            raise HTTPException(
-                status_code=400,
-                detail="Nur lokale Endpunkte (localhost) sind erlaubt.",
-            )
+            raise HTTPException(status_code=400, detail="Nur lokale Endpunkte (localhost) sind erlaubt.")
         probe_base = endpoint
     else:
         configured = spec.endpoint(settings).strip()
         if not configured:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Der Endpunkt für '{provider_display_name(provider_id)}' ist nicht konfiguriert.",
-            )
+            raise HTTPException(status_code=400, detail=f"Der Endpunkt für '{provider_display_name(provider_id)}' ist nicht konfiguriert.")
         probe_base = configured
 
     reachable = await discovery.probe_provider_reachable(
@@ -111,10 +104,7 @@ async def ai_set_selection(payload: SelectionUpdate) -> AISnapshot:
     if not reachable:
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Provider '{provider_display_name(provider_id)}' ist nicht erreichbar "
-                "und kann nicht ausgewählt werden."
-            ),
+            detail=f"Provider '{provider_display_name(provider_id)}' ist nicht erreichbar und kann nicht ausgewählt werden.",
         )
 
     adapter = build_provider(
@@ -124,7 +114,7 @@ async def ai_set_selection(payload: SelectionUpdate) -> AISnapshot:
     )
     try:
         models = await adapter.discover_models()
-    except Exception as exc:  # noqa: BLE001 - ehrliche deutsche Meldung
+    except Exception as exc:
         logger.warning("Modellliste für Auswahl %s fehlgeschlagen: %s", provider_id, exc)
         raise HTTPException(
             status_code=400,
@@ -133,10 +123,7 @@ async def ai_set_selection(payload: SelectionUpdate) -> AISnapshot:
     if not any(m.model_id == model_id for m in models):
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Das Modell '{model_id}' ist bei '{provider_display_name(provider_id)}' "
-                "nicht (mehr) verfügbar."
-            ),
+            detail=f"Das Modell '{model_id}' ist bei '{provider_display_name(provider_id)}' nicht (mehr) verfügbar.",
         )
 
     set_ai_selection(
