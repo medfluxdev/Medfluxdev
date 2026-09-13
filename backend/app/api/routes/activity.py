@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
+from app.auth.dependencies import current_actor
 from app.auth.service import require_role
 from app.database.models.activity_log import ActivityLog
 from app.database.session import create_session
@@ -15,9 +16,7 @@ router = APIRouter(prefix="/api/activity", tags=["activity"])
 
 @router.get("")
 def list_activity(request: Request, organization_slug: str, object_id: str | None = None, limit: int = 200):
-    actor = getattr(request.state, "actor", None)
-    if actor is None:
-        raise HTTPException(status_code=401, detail="Bitte anmelden.")
+    actor = current_actor(request, organization_slug)
     try:
         require_role(actor, "admin", "contract_manager")
     except PermissionError as exc:

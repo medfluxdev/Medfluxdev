@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.auth.dependencies import current_actor
 from app.database.models.activity_log import ActivityLog
 from app.database.models.organization import Organization
 from app.database.models.organization_structure import Department, Hospital
@@ -44,9 +45,9 @@ def _organization(session, organization_slug: str):
     return organization
 
 
-def _admin(request: Request):
-    actor = getattr(request.state, "actor", None)
-    if actor is None or (actor.role != "admin" and not getattr(actor, "is_developer", False)):
+def _admin(request: Request, organization_slug: str):
+    actor = current_actor(request, organization_slug)
+    if actor.role != "admin" and not actor.is_developer:
         raise HTTPException(status_code=403, detail="Nur Administratoren dürfen die Organisationsstruktur ändern.")
     return actor
 
@@ -83,7 +84,7 @@ def structure(organization_slug: str):
 
 @router.post("/hospitals")
 def add_hospital(payload: HospitalCreate, request: Request, organization_slug: str):
-    actor = _admin(request)
+    actor = _admin(request, organization_slug)
     session = create_session()
     try:
         organization = _organization(session, organization_slug)
@@ -101,7 +102,7 @@ def add_hospital(payload: HospitalCreate, request: Request, organization_slug: s
 
 @router.patch("/hospitals/{hospital_id}")
 def update_hospital(hospital_id: UUID, payload: HospitalUpdate, request: Request, organization_slug: str):
-    actor = _admin(request)
+    actor = _admin(request, organization_slug)
     session = create_session()
     try:
         organization = _organization(session, organization_slug)
@@ -121,7 +122,7 @@ def update_hospital(hospital_id: UUID, payload: HospitalUpdate, request: Request
 
 @router.post("/departments")
 def add_department(payload: DepartmentCreate, request: Request, organization_slug: str):
-    actor = _admin(request)
+    actor = _admin(request, organization_slug)
     session = create_session()
     try:
         organization = _organization(session, organization_slug)
@@ -140,7 +141,7 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
 
 @router.patch("/departments/{department_id}")
 def update_department(department_id: UUID, payload: DepartmentUpdate, request: Request, organization_slug: str):
-    actor = _admin(request)
+    actor = _admin(request, organization_slug)
     session = create_session()
     try:
         organization = _organization(session, organization_slug)
