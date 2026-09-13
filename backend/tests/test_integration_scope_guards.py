@@ -49,6 +49,15 @@ def test_import_scope_is_persisted_server_side():
     assert "scope.hospital_id" in source
 
 
+def test_import_scope_is_validated_before_processing():
+    source = _source("app/api/routes/documents.py")
+    assert "_validate_import_scope" in source
+    assert "hospital.organization_id != org.id" in source
+    assert "department.hospital_id != hospital.id" in source
+    assert "_validate_import_scope(organization_slug)" in source
+    assert source.index("_validate_import_scope(organization_slug)") < source.index("_processing_service.process,")
+
+
 def test_activity_feed_respects_current_scope():
     source = _source("app/api/routes/activity.py")
     assert "current_scope_context" in source
@@ -109,3 +118,10 @@ def test_ai_selection_and_test_require_admin_or_developer():
     assert 'getattr(request.state, "is_developer", False)' in source
     assert 'actor is not None and actor.role == "admin"' in source
     assert "_require_ai_admin(request)" in source
+
+
+def test_demo_workspace_is_developer_only():
+    source = _source("app/api/routes/demo.py")
+    assert "_require_developer" in source
+    assert 'getattr(request.state, "is_developer", False)' in source
+    assert "_require_developer(request)" in source
