@@ -18,6 +18,7 @@ from app.auth.context import enforce_org, optional_identity
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import Contract
+from app.database.models.activity_log import ActivityLog
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -52,11 +53,14 @@ def export_contracts_csv(
     include_archived: bool = Query(default=True),
 ) -> Response:
     """Exportiert das sichtbare Vertragsportfolio als UTF-8 CSV."""
+    identity = None
     if settings.auth_enabled:
         identity = optional_identity(request)
         if identity is None:
             raise HTTPException(status_code=401, detail="Anmeldung erforderlich.")
         enforce_org(identity, organization_slug)
+        if identity.role not in {"admin", "contract_manager"} and not getattr(identity, "is_developer", False):
+            raise HTTPException(status_code=403, detail="Keine Berechtigung für Vertrags-Exporte.")
 
     session = create_session()
     try:
@@ -113,6 +117,23 @@ def export_contracts_csv(
                 _csv_safe(row.archived_at),
                 _csv_safe(row.updated_at),
             ])
+
+        if identity is not None:
+            session.add(
+                ActivityLog(
+                    organization_id=org.id,
+                    hospital_id=scope.hospital_id,
+                    department_id=scope.department_id,
+                    account_id=getattr(identity, "account_id", None),
+                    display_name_snapshot=identity.display_name,
+                    role_snapshot="developer" if getattr(identity, "is_developer", False) else identity.role,
+                    event_name="contracts.exported",
+                    object_type="organization",
+                    object_id=org.id,
+                    context_data={"row_count": len(rows), "include_archived": include_archived},
+                )
+            )
+            session.commit()
 
         filename = f"medflux-vertraege-{organization_slug}-{date.today().isoformat()}.csv"
         return Response(
