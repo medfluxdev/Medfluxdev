@@ -52,7 +52,7 @@ if (-not $SkipBenchmark) {
     $env:AI_TEMPERATURE = "0"
     Push-Location $repoRoot
     try {
-        & $py scripts/benchmark_groups.py --file-contains "Accutorn" --runs 1 --require-perfect --report "data/benchmark/report_step18_accutron.json"
+        & $py scripts/benchmark_groups.py --file-contains "Accutorn" --runs 1 --require-perfect --require-safe --report "data/benchmark/report_step18_accutron.json"
         Assert-LastExit "Accutron benchmark"
     }
     finally { Pop-Location }
