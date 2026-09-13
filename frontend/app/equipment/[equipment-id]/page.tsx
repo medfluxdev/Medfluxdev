@@ -8,33 +8,32 @@ import LoadingState from "@/components/ui/LoadingState";
 import SectionCard from "@/components/ui/SectionCard";
 import StatusBadge from "@/components/ui/StatusBadge";
 import DefinitionList from "@/components/ui/DefinitionList";
-import { apiGet } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { getEquipment } from "@/lib/domain-api/equipment";
 import type { EquipmentDetail } from "@/lib/pr4-types";
 import {
   identificationQualityLabel,
   relationshipQualityLabel,
 } from "@/lib/pr4-types";
 
-const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
-
 export default function EquipmentDetailPage() {
   const params = useParams<{ "equipment-id": string }>();
   const equipmentId = params?.["equipment-id"] ?? "";
+  const { organizationSlug } = useAuth();
 
   const [data, setData] = useState<EquipmentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const load = useCallback(() => {
+    if (!equipmentId || !organizationSlug) return;
     setLoading(true);
     setError(false);
-    apiGet<EquipmentDetail>(
-      `/api/equipment/${encodeURIComponent(equipmentId)}?organization_slug=${encodeURIComponent(ORG_SLUG)}`
-    )
+    getEquipment(equipmentId, organizationSlug)
       .then((res) => setData(res))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [equipmentId]);
+  }, [equipmentId, organizationSlug]);
 
   useEffect(load, [load]);
 
@@ -59,17 +58,10 @@ export default function EquipmentDetailPage() {
           <header className="entity-header">
             <h1>{data.device_name ?? "Gerät"}</h1>
             <div className="badge-row">
-              <StatusBadge
-                label={identificationQualityLabel(data.identification_quality)}
-                tone={data.identification_quality === "exact" ? "success" : "review"}
-              />
+              <StatusBadge label={identificationQualityLabel(data.identification_quality)} tone={data.identification_quality === "exact" ? "success" : "review"} />
               <StatusBadge label={`${data.contract_count} Verträge`} tone="neutral" />
             </div>
-            <p className="page-sub">
-              {[data.manufacturer, data.model, data.equipment_category]
-                .filter(Boolean)
-                .join(" · ") || "Keine weiteren Angaben"}
-            </p>
+            <p className="page-sub">{[data.manufacturer, data.model, data.equipment_category].filter(Boolean).join(" · ") || "Keine weiteren Angaben"}</p>
           </header>
 
           <div className="detail-grid">
@@ -90,28 +82,18 @@ export default function EquipmentDetailPage() {
             </SectionCard>
 
             <SectionCard title="Verbundene Verträge">
-              {data.contracts.length === 0 && (
-                <p className="muted">Keine Verträge verknüpft.</p>
-              )}
+              {data.contracts.length === 0 && <p className="muted">Keine Verträge verknüpft.</p>}
               <ul className="link-list">
                 {data.contracts.map((c) => (
                   <li key={c.contract_id} className="link-item">
                     <Link className="table-link" href={`/contracts/${c.contract_id}`}>
-                      {c.contract_number ?? c.supplier ?? "Vertrag"}
-                      {c.supplier ? ` · ${c.supplier}` : ""}
+                      {c.contract_number ?? c.supplier ?? "Vertrag"}{c.supplier ? ` · ${c.supplier}` : ""}
                     </Link>
                     <div className="badge-row">
-                      <StatusBadge
-                        label={relationshipQualityLabel(c.relationship_quality)}
-                        tone={c.requires_review ? "review" : "success"}
-                      />
-                      {c.requires_review && (
-                        <StatusBadge label="Zu prüfen" tone="review" />
-                      )}
+                      <StatusBadge label={relationshipQualityLabel(c.relationship_quality)} tone={c.requires_review ? "review" : "success"} />
+                      {c.requires_review && <StatusBadge label="Zu prüfen" tone="review" />}
                     </div>
-                    {c.service_scope && (
-                      <p className="muted">{c.service_scope}</p>
-                    )}
+                    {c.service_scope && <p className="muted">{c.service_scope}</p>}
                   </li>
                 ))}
               </ul>
