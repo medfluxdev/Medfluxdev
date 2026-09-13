@@ -57,7 +57,7 @@ async function renderWithData(data: WorkItemList) {
   return utils;
 }
 
-describe("To-dos (PR-4)", () => {
+describe("To-dos (PR-4 / FE-09)", () => {
   it("zeigt einen Ladezustand während des Ladens", () => {
     apiGetMock.mockImplementation(() => new Promise(() => {}));
     render(<WorkQueuePage />);
@@ -67,9 +67,7 @@ describe("To-dos (PR-4)", () => {
   it("zeigt einen generischen Fehlerzustand bei Backend-Fehler", async () => {
     apiGetMock.mockRejectedValue(new Error("boom"));
     render(<WorkQueuePage />);
-    await waitFor(() =>
-      expect(screen.getByText("To-dos konnten nicht geladen werden.")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText("To-dos konnten nicht geladen werden.")).toBeInTheDocument());
   });
 
   it("zeigt 'keine offenen To-dos' bei leerer Liste", async () => {
@@ -83,22 +81,41 @@ describe("To-dos (PR-4)", () => {
     expect(screen.queryByText(/Gerät/)).not.toBeInTheDocument();
   });
 
-  it("zeigt die Geräte-Identität des betroffenen Equipments (UAT Wartung)", async () => {
-    await renderWithData(list(item({
-      equipment_device_name: "Accutron MR",
-      equipment_manufacturer: "MEDTRON",
-      equipment_model: "X-9000",
-      equipment_serial_number: "88024307",
-    })));
+  it("zeigt die Geräte-Identität des betroffenen Equipments", async () => {
+    await renderWithData(list(item({ equipment_device_name: "Accutron MR", equipment_manufacturer: "MEDTRON", equipment_model: "X-9000", equipment_serial_number: "88024307" })));
     expect(screen.getByText(/Accutron MR · MEDTRON \(X-9000\) · Seriennr\. 88024307/)).toBeInTheDocument();
   });
 
-  it("zeigt offene Punkte mit Vertrags-Link und Status", async () => {
+  it("zeigt Vertrags-Link, Status, Terminart und nächsten Schritt", async () => {
     await renderWithData(list(item()));
     expect(screen.getByText(/Kündigungsfrist: Kündigungsfrist nähert sich/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "CN-1" })).toHaveAttribute("href", "/contracts/c-1");
     expect(screen.getByText("Offen")).toBeInTheDocument();
     expect(screen.getByText(/in 14 Tagen/)).toBeInTheDocument();
+    expect(screen.getByText("Kündigungsfrist", { selector: ".work-deadline-kind" })).toBeInTheDocument();
+    expect(screen.getByText(/Nächster Schritt:/)).toBeInTheDocument();
+    expect(screen.getByText(/Kündigung prüfen/)).toBeInTheDocument();
+  });
+
+  it("öffnet bei Prüfbedarf direkt die Vertragsprüfung", async () => {
+    await renderWithData(list(item({ requires_review: true, item_type: "manual_review" })));
+    expect(screen.getByRole("link", { name: "Prüfung öffnen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=review");
+  });
+
+  it("sendet unterstützte Filter an die Work-Queue-API", async () => {
+    apiGetMock.mockResolvedValue(list(item()));
+    render(<WorkQueuePage />);
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalled());
+    await userEvent.selectOptions(screen.getByLabelText("Priorität filtern"), "high");
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith(expect.stringContaining("severity=high")));
+    await userEvent.selectOptions(screen.getByLabelText("Aufgabentyp filtern"), "cancellation_deadline");
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith(expect.stringContaining("item_type=cancellation_deadline")));
+  });
+
+  it("unterscheidet Kündigungsfrist und Vertragsende textuell", async () => {
+    await renderWithData(list(item(), item({ id: "wi-2", item_type: "contract_expiry", title_de: "Vertragsende nähert sich" })));
+    expect(screen.getAllByText("Kündigungsfrist").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Vertragsende").length).toBeGreaterThan(0);
   });
 
   it("übernimmt einen offenen Punkt (acknowledged) per PATCH", async () => {
