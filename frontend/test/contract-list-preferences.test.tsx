@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractTable from "@/components/contracts/ContractTable";
@@ -67,8 +67,9 @@ describe("Vertragsliste – Arbeitsansicht", () => {
     render(<ContractTable items={[contract]} />);
 
     await user.click(screen.getByRole("button", { name: /Wartungsvertrag MRT in Schnellansicht öffnen/ }));
-    expect(screen.getByRole("complementary", { name: "Vertrag Schnellansicht" })).toBeInTheDocument();
-    expect(screen.getByText("12.000,00 €")).toBeInTheDocument();
+    const preview = screen.getByRole("complementary", { name: "Vertrag Schnellansicht" });
+    expect(preview).toBeInTheDocument();
+    expect(within(preview).getByText((content) => content.replace(/\s/g, " ").includes("12.000,00") && content.includes("€"))).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
   });
 
