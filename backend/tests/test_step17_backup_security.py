@@ -178,3 +178,40 @@ def test_restore_recreates_canonical_storage_key(monkeypatch, tmp_path: Path):
     )
 
     assert (target / storage_key).read_bytes() == b"pdf-bytes"
+
+
+class _FakeScalarResult:
+    def __init__(self, items):
+        self._items = items
+
+    def all(self):
+        return list(self._items)
+
+
+class _FakeSession:
+    def __init__(self, organizations):
+        self._organizations = organizations
+
+    def scalars(self, _stmt):
+        return _FakeScalarResult(self._organizations)
+
+
+def test_organization_backup_rejects_multi_tenant_database():
+    backup = _load("medflux_backup_scope_test", "scripts/backup_medflux.py")
+    session = _FakeSession(
+        [
+            SimpleNamespace(slug="hospital-a"),
+            SimpleNamespace(slug="hospital-b"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="genau einer Organisation"):
+        backup._assert_single_org_backup_scope(session, "hospital-a")
+
+
+def test_organization_backup_accepts_matching_single_tenant_database():
+    backup = _load("medflux_backup_scope_single_test", "scripts/backup_medflux.py")
+    org = SimpleNamespace(slug="hospital-a")
+    session = _FakeSession([org])
+
+    assert backup._assert_single_org_backup_scope(session, "hospital-a") is org
