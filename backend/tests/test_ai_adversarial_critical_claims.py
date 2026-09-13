@@ -164,3 +164,36 @@ def test_negation_from_neighbor_clause_cannot_flip_service_bool():
         "services.repair",
     )
     assert claim.evidence_scope == "field"
+
+
+def test_annual_billing_interval_does_not_match_semi_annual():
+    contract = Contract()
+    contract.payment.billing_interval = BillingInterval.ANNUAL
+    claim = _field(
+        contract,
+        [_unit("Billing interval: semi-annual")],
+        "payment.billing_interval",
+    )
+    assert claim.evidence is None
+
+
+def test_annual_cost_does_not_match_semi_annual_label():
+    contract = Contract()
+    contract.costs.annual_cost = Money(amount=1200, currency="EUR", period="annual")
+    claim = _field(
+        contract,
+        [_unit("Semi-annual fee: 1.200 EUR")],
+        "costs.annual_cost",
+    )
+    assert claim.evidence is None
+
+
+def test_tax_basis_net_does_not_match_internet_substring():
+    contract = Contract()
+    contract.costs.tax_basis = "net"
+    claim = _field(
+        contract,
+        [_unit("Internet service surcharge: 19 EUR")],
+        "costs.tax_basis",
+    )
+    assert claim.evidence is None
