@@ -1,0 +1,51 @@
+.fr-edit-stack {
+  display: grid;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.fr-edit-stack label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.fr-edit-stack input {
+  width: 100%;
+}
+
+.fr-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.pdf-status.pdf-error {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
+  padding: 1rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  border-radius: 0.75rem;
+}
+
+.pdf-status.pdf-error strong {
+  font-size: 0.95rem;
+}
+
+.pdf-status.pdf-error span {
+  max-width: 60ch;
+}
+
+@media (max-width: 720px) {
+  .fr-edit-actions {
+    align-items: stretch;
+  }
+
+  .fr-edit-actions .btn,
+  .fr-edit-actions .btn-link {
+    width: 100%;
+    justify-content: center;
+  }
+}
