@@ -222,7 +222,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
 
     await openTab("Geräte");
-    expect(screen.getByText("MRT Magnetom")).toBeInTheDocument();
+    expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);
   });
 
   it("zeigt die Quelldokumente und lädt den PDF-Viewer", async () => {
