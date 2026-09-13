@@ -16,17 +16,14 @@ from sqlalchemy import select
 
 from app.auth.context import enforce_org, optional_identity
 from app.core.config import settings
+from app.core.scope_context import current_scope_context
 from app.database.models import Contract
+from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
 
 router = APIRouter(prefix="/api/operations", tags=["operations"])
 
-# Spreadsheet applications may execute cells beginning with these characters as
-# formulas. Contract data is untrusted document content, so neutralize it before
-# export while preserving the visible value. Leading whitespace/control
-# characters are included because spreadsheet parsers can ignore them before
-# interpreting a formula marker.
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
@@ -54,11 +51,7 @@ def export_contracts_csv(
     organization_slug: str,
     include_archived: bool = Query(default=True),
 ) -> Response:
-    """Exportiert das organisationsgebundene Vertragsportfolio als UTF-8 CSV.
-
-    Bei aktivierter Authentifizierung ist die signierte Session die
-    Autoritaetsquelle; ein abweichender Query-Slug wird abgewiesen.
-    """
+    """Exportiert das sichtbare Vertragsportfolio als UTF-8 CSV."""
     if settings.auth_enabled:
         identity = optional_identity(request)
         if identity is None:
@@ -71,49 +64,55 @@ def export_contracts_csv(
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
 
-        stmt = (
-            select(Contract)
-            .where(
-                (Contract.organization_id == org.id)
-                & (Contract.lifecycle_state == "active")
-            )
-            .order_by(Contract.supplier.asc().nullslast(), Contract.contract_number.asc().nullslast(), Contract.id)
+        stmt = select(Contract).where(
+            (Contract.organization_id == org.id)
+            & (Contract.lifecycle_state == "active")
         )
+        scope = current_scope_context()
+        visible_ids = scoped_contract_ids(
+            session,
+            org.id,
+            scope.hospital_id,
+            scope.department_id,
+        )
+        if visible_ids is not None:
+            stmt = stmt.where(Contract.id.in_(visible_ids))
         if not include_archived:
             stmt = stmt.where(Contract.is_archived.is_(False))
+        stmt = stmt.order_by(
+            Contract.supplier.asc().nullslast(),
+            Contract.contract_number.asc().nullslast(),
+            Contract.id,
+        )
         rows = session.scalars(stmt).all()
 
         out = io.StringIO(newline="")
         writer = csv.writer(out, delimiter=";", lineterminator="\n")
-        writer.writerow(
-            [
-                "contract_id",
-                "supplier",
-                "contract_number",
-                "start_date",
-                "end_date",
-                "status",
-                "risk_level",
-                "is_archived",
-                "archived_at",
-                "updated_at",
-            ]
-        )
+        writer.writerow([
+            "contract_id",
+            "supplier",
+            "contract_number",
+            "start_date",
+            "end_date",
+            "status",
+            "risk_level",
+            "is_archived",
+            "archived_at",
+            "updated_at",
+        ])
         for row in rows:
-            writer.writerow(
-                [
-                    _csv_safe(row.id),
-                    _csv_safe(row.supplier),
-                    _csv_safe(row.contract_number),
-                    _csv_safe(row.start_date),
-                    _csv_safe(row.end_date),
-                    _csv_safe(row.status),
-                    _csv_safe(row.risk_level),
-                    "true" if row.is_archived else "false",
-                    _csv_safe(row.archived_at),
-                    _csv_safe(row.updated_at),
-                ]
-            )
+            writer.writerow([
+                _csv_safe(row.id),
+                _csv_safe(row.supplier),
+                _csv_safe(row.contract_number),
+                _csv_safe(row.start_date),
+                _csv_safe(row.end_date),
+                _csv_safe(row.status),
+                _csv_safe(row.risk_level),
+                "true" if row.is_archived else "false",
+                _csv_safe(row.archived_at),
+                _csv_safe(row.updated_at),
+            ])
 
         filename = f"medflux-vertraege-{organization_slug}-{date.today().isoformat()}.csv"
         return Response(
