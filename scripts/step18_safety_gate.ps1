@@ -2,8 +2,8 @@ $ErrorActionPreference = "Stop"
 
 # STEP 18 targeted safety gate.
 # This gate is intentionally DB-free so it can run without touching PostgreSQL.
-# It validates only the verifier/evidence/source-grounding changes accumulated
-# while the local Big Pickle quota is unavailable.
+# It validates verifier/evidence/source-grounding and static export-safety changes
+# accumulated while the local Big Pickle quota is unavailable.
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $backend = Join-Path $repoRoot "backend"
@@ -16,7 +16,8 @@ python -m py_compile `
     app/ai/groups/critical_policy.py `
     app/ai/groups/evidence.py `
     app/ai/groups/extractor.py `
-    app/ai/groups/verifier.py
+    app/ai/groups/verifier.py `
+    app/api/routes/operations.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "[STEP18] Targeted fail-closed tests..."
@@ -27,7 +28,8 @@ python -m pytest -q `
     tests/test_ai_verifier_fail_closed.py `
     tests/test_ai_verifier_completeness.py `
     tests/test_ai_source_grounding.py `
-    tests/test_ai_structured.py
+    tests/test_ai_structured.py `
+    tests/test_operations_csv_safety.py
 
 $code = $LASTEXITCODE
 if ($code -eq 0) {
