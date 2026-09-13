@@ -2,7 +2,6 @@ import Image from "next/image";
 
 type MedFluxLogoProps = {
   compact?: boolean;
-  showDescriptor?: boolean;
   className?: string;
   priority?: boolean;
 };
