@@ -106,6 +106,7 @@ describe("Einstellungen (STEP 6B, Anbieter-unabhängig)", () => {
     expect(
       screen.getByRole("heading", { name: "Einstellungen" })
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mein Profil" })).toHaveAttribute("href", "/profile");
     expect(screen.getByText("Bereit")).toBeInTheDocument();
     expect(screen.getByText("Die lokale KI ist betriebsbereit.")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /qwen3:8b-q4/ })).toBeInTheDocument();
