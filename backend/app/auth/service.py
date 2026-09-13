@@ -10,9 +10,14 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.security import verify_password
+from app.auth.security import hash_password, verify_password
 from app.database.models.auth import AuditEvent, User
 from app.database.models.organization import Organization
+
+
+# Failed logins for unknown users still perform the same expensive password
+# verification work as known users, reducing username/organization timing leaks.
+_DUMMY_PASSWORD_HASH = hash_password("medflux-dummy-auth-password")
 
 
 @dataclass(frozen=True)
@@ -44,6 +49,7 @@ def authenticate_user(
     )
     row = session.execute(stmt).first()
     if row is None:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
         return None
     user, org = row
     if not verify_password(password, user.password_hash):
