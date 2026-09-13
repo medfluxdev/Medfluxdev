@@ -135,3 +135,27 @@ async def test_unexpected_verifier_field_fails_closed_to_empty_result():
     result, calls = await run_verifier(ai, contract, "Vertragsnummer: V-123", units=units)
     assert calls == 1
     assert result.decisions == []
+
+
+class _MustNotRunAI:
+    async def generate_structured(self, *args, **kwargs):
+        raise AssertionError("AI must not be called for evidence-less critical claims")
+
+
+@pytest.mark.asyncio
+async def test_context_cannot_rescue_evidence_less_critical_claim():
+    contract = Contract()
+    contract.identity.contract_number = "V-999"
+
+    result, calls = await run_verifier(
+        _MustNotRunAI(),
+        contract,
+        "Vertragsnummer: V-999",
+        units=[_unit("Bestellnummer V-999")],
+    )
+
+    assert calls == 0
+    assert len(result.decisions) == 1
+    assert result.decisions[0].field == "identity.contract_number"
+    assert result.decisions[0].supported is False
+    assert "Kein feldspezifischer Quellenbeleg" in (result.decisions[0].reason or "")
