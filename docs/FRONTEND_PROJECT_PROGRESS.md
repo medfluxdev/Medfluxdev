@@ -5,7 +5,7 @@ Last updated: 2026-09-13
 Status: IN PROGRESS
 Progress: 6/10 development steps complete (60%)
 Active step: FE-07 — Action-oriented dashboards
-Next action: Prioritize urgent actions/cancellation deadlines, make KPI cards actionable, and improve missing-data/scope clarity without inventing unsupported backend data.
+Next action: Verify the first FE-07 batch, then finish partial/empty states and role/scope clarity using only DTO-supported data.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -139,15 +139,22 @@ Verified backend foundation:
 - Action items expose warning type, severity, review/action flags and optional reliable annual cost.
 - Current DTO does not expose a contract ID on action items, so direct per-contract links must not be invented.
 
-Implementation scope:
-- [ ] Put urgent actions and cancellation deadlines before lower-priority summaries.
-- [ ] Make supported KPI indicators link to corresponding filtered contract views.
-- [ ] Keep KPI/financial scope and period/freshness visible.
-- [ ] Make missing-data coverage explicit; unknown/unreliable cost must never appear as zero.
-- [ ] Keep currencies separate without an approved conversion basis.
-- [ ] Improve deadline presentation while preserving cancellation vs contract-end distinction.
-- [ ] Use meaningful partial/empty states.
-- [ ] Do not add unsupported per-contract links or role-specific data that the DTO cannot identify reliably.
+Implemented in first FE-07 batch:
+- [x] Urgent `Handlungsbedarf` and deadline panels are placed before lower-priority KPI/financial summaries.
+- [x] Supported KPI cards link to real contract filters: active contracts, approaching contract end and critical cancellation deadlines.
+- [x] Cancellation deadlines are summarized separately from contract ends and critical cancellation opens the corresponding filtered list.
+- [x] Action rows expose `Aktion erforderlich` / `Prüfung erforderlich` textually; unsupported per-contract chevrons/links are removed because the DTO has no contract ID.
+- [x] Financial coverage explicitly reports unreliable/missing annual cost and total-value counts; unknown values are never rendered as 0 €.
+- [x] Multi-currency behavior remains separate with no invented conversion.
+- [x] Data-quality and cost-coverage panels link to the supported `requires_review=true` contract filter.
+- [x] Data date and freshness remain visible near the top of the dashboard.
+- [x] Added focused tests for filtered KPI links, cancellation-vs-end separation and missing-cost coverage.
+
+Remaining FE-07 scope:
+- [ ] Verify the new dashboard batch with the full frontend suite and production build.
+- [ ] Review meaningful partial states when some dashboard sections are empty while others contain data.
+- [ ] Confirm that current role/scope presentation does not imply data the DTO cannot prove.
+- [ ] Re-run accessibility coverage after the new links and priority layout.
 
 ## FE-08 — Import and analysis experience
 Status: PLANNED
