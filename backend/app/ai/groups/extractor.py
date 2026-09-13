@@ -151,8 +151,9 @@ class GroupPipeline:
                 units=units,
             )
             diag.ai_calls += calls
-            diag.verifier_issues += len(verifier_result.decisions)
-            self._apply_verifier(contract, verifier_result)
+            verifier_issues = self._apply_verifier(contract, verifier_result)
+            diag.verifier_issues += len(verifier_issues)
+            messages.extend(verifier_issues)
 
         messages.extend(self._scan_evidence_review(contract))
         self._finalize(contract, messages)
@@ -217,10 +218,19 @@ class GroupPipeline:
                 issues.append(f"{type(sec).__name__}: Nachweis erfordert Prüfung")
         return issues
 
-    def _apply_verifier(self, contract: Contract, result) -> None:
+    def _apply_verifier(self, contract: Contract, result) -> list[str]:
+        """Fail closed for every unsupported sensitive field.
+
+        Section-level evidence is still downgraded when present, but manual
+        review no longer depends on a section carrying evidence. Field-scoped
+        verifier evidence can legitimately exist while ``section.evidence`` is
+        absent; an unsupported critical claim must still reach the final review
+        state and diagnostics in that case.
+        """
         unsup = unsupported_fields(result)
         if not unsup:
-            return
+            return []
+
         logger.info(
             "Verifier: %d nicht gestützte sensible Felder: %s",
             len(unsup),
@@ -255,6 +265,20 @@ class GroupPipeline:
                 ev.requires_review = True
                 if ev.confidence is None or ev.confidence > 0.5:
                     ev.confidence = 0.5
+
+        reasons = {
+            decision.field: decision.reason
+            for decision in getattr(result, "decisions", [])
+            if decision.field in unsup and decision.reason
+        }
+        issues: list[str] = []
+        for field in sorted(unsup):
+            reason = reasons.get(field)
+            if reason:
+                issues.append(f"Verifier: {field} nicht gestützt ({reason})")
+            else:
+                issues.append(f"Verifier: {field} nicht gestützt")
+        return issues
 
     def _finalize(self, contract: Contract, messages: list[str]) -> None:
         if not messages:
