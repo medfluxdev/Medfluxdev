@@ -8,6 +8,21 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { apiGet } from "@/lib/api";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 
+function normalizeContractDetail(res: ContractDetailResponse): ContractDetailResponse {
+  return {
+    ...res,
+    equipment: res.equipment ?? [],
+    warnings: res.warnings ?? [],
+    work_items: res.work_items ?? [],
+    documents: res.documents ?? [],
+    evidence: res.evidence ?? [],
+    overrides: res.overrides ?? [],
+    audit_log: res.audit_log ?? [],
+    fact_review_states: res.fact_review_states ?? [],
+    fact_reviews: res.fact_reviews ?? [],
+  };
+}
+
 export default function ContractDetailPage() {
   const params = useParams<{ "contract-id": string }>();
   const contractId = params?.["contract-id"] ?? "";
@@ -24,7 +39,7 @@ export default function ContractDetailPage() {
     apiGet<ContractDetailResponse>(
       `/api/contracts/${encodeURIComponent(contractId)}?organization_slug=${encodeURIComponent(organizationSlug)}`
     )
-      .then((res) => setData(res))
+      .then((res) => setData(normalizeContractDetail(res)))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [contractId, organizationSlug]);
