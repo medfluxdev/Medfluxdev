@@ -34,11 +34,16 @@ function LoginContent() {
   const router = useRouter();
   const params = useSearchParams();
   const { account, refresh } = useAuth();
+  const initialError = params.get("error") === "organization"
+    ? "Ihr Benutzer hat keinen Zugriff auf diesen Arbeitsbereich."
+    : params.get("error") === "session"
+      ? "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an."
+      : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(params.get("error") === "organization" ? "Ihr Benutzer hat keinen Zugriff auf diesen Arbeitsbereich." : null);
+  const [error, setError] = useState<string | null>(initialError);
 
   useEffect(() => {
     if (account) router.replace(account.is_developer ? "/developer" : account.memberships.some((item) => item.role === "admin") ? "/admin" : "/");
@@ -46,6 +51,7 @@ function LoginContent() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -72,19 +78,19 @@ function LoginContent() {
           <p>Intelligentes Vertragsmanagement</p>
         </header>
 
-        <section className="auth-card" aria-labelledby="login-title">
+        <section className="auth-card" aria-labelledby="login-title" aria-busy={busy}>
           <h2 id="login-title">Willkommen</h2>
           <p className="auth-intro">Melden Sie sich bei Ihrem Medflux-Konto an.</p>
           <form className="auth-form" onSubmit={submit}>
             <label>
               E-Mail
-              <input type="email" autoComplete="username" placeholder="E-Mail-Adresse eingeben" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus />
+              <input type="email" autoComplete="username" inputMode="email" placeholder="E-Mail-Adresse eingeben" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus disabled={busy} />
             </label>
             <label>
               Passwort
               <span className="auth-password-field">
-                <input type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Passwort eingeben" value={password} onChange={(event) => setPassword(event.target.value)} required />
-                <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Passwort ausblenden" : "Passwort anzeigen"} aria-pressed={showPassword}>
+                <input type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Passwort eingeben" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} />
+                <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Passwort ausblenden" : "Passwort anzeigen"} aria-pressed={showPassword} disabled={busy}>
                   <EyeIcon hidden={showPassword} />
                 </button>
               </span>
@@ -105,7 +111,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="auth-loading">Anmeldung wird geladen…</div>}>
+    <Suspense fallback={<div className="auth-loading" role="status">Anmeldung wird geladen…</div>}>
       <LoginContent />
     </Suspense>
   );
