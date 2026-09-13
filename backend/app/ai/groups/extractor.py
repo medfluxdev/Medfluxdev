@@ -20,7 +20,9 @@ from typing import Any, Optional
 
 from pydantic import ValidationError
 
+from app.ai.groups.equipment_verifier import verify_equipment_claims
 from app.ai.groups.evidence import verify_evidence
+from app.ai.groups.list_claim_verifier import verify_service_list_claims
 from app.ai.groups.normalize import ground_source_identity, run_normalization
 from app.ai.groups.schema import GroupSpec, group_order, group_specs
 from app.ai.groups.verifier import (
@@ -131,9 +133,6 @@ class GroupPipeline:
         if not any(v is not None for v in merged_groups.values()):
             return None, diag, [MSG_GROUP_VALIDATION]
 
-        # Deterministic source grounding is a successful correction path, not a
-        # review condition. Keep its notes in diagnostics/logging only. Review
-        # flags are reserved for actual evidence/verifier/normalization problems.
         source_notes = ground_source_identity(contract, units)
         diag.normalization_issues += len(source_notes)
         if source_notes:
@@ -144,8 +143,11 @@ class GroupPipeline:
             )
 
         evidence_issues = self._verify_evidence_on_contract(contract, units)
-        diag.evidence_issues += len(evidence_issues)
-        messages.extend(evidence_issues)
+        equipment_issues = verify_equipment_claims(contract, units)
+        service_list_issues = verify_service_list_claims(contract, units)
+        all_evidence_issues = evidence_issues + equipment_issues + service_list_issues
+        diag.evidence_issues += len(all_evidence_issues)
+        messages.extend(all_evidence_issues)
 
         norm_issues = run_normalization(contract)
         diag.normalization_issues += len(norm_issues)
@@ -265,8 +267,6 @@ class GroupPipeline:
             if verified.requires_review:
                 issues.append(f"{type(sec).__name__}: Nachweis erfordert Prüfung")
 
-        # Equipment evidence is item-scoped. A device identity/coverage claim may
-        # never inherit the broad identity section's evidence.
         for index, equipment in enumerate(contract.equipment):
             ev = getattr(equipment, "evidence", None)
             if ev is None:
