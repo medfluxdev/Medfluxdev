@@ -1,8 +1,8 @@
 """Deterministische Normalisierung + Quell-Grounding (STEP 8B-Semantik).
 
 Reine Code-Logik (keine KI): normalisiert strukturierte Werte, verwirft klar
-fehlklassifizierte Identifikatoren und bevorzugt bei OCR-beschädigten
-Parteinamen eine sauber belegte Schreibweise aus demselben Dokument.
+fehlklassifizierte Identifikatoren und groundet kritische Identitätsfelder nur
+bei starken, direkt aus dem Quelldokument ableitbaren Signalen.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ _CONTRACT_TYPE_SYNONYMS = {
     "wartung": ContractType.MAINTENANCE,
     "maintenance": ContractType.MAINTENANCE,
     "servicevertrag": ContractType.SERVICE,
+    "servicevereinbarung": ContractType.SERVICE,
     "service": ContractType.SERVICE,
     "full service": ContractType.SERVICE,
     "wartungs- und servicevertrag": ContractType.SERVICE,
@@ -62,7 +63,7 @@ _TIMEUNIT_DE = {
 }
 
 _ORG_HINT_RE = re.compile(
-    r"\b(?:gmbh|ag|kg|mbh|krankenhaus|klinikum|klinik|hospital|stiftung|"
+    r"\b(?:gmbh|gmrh|ag|kg|mbh|krankenhaus|klinikum|klinik|hospital|stiftung|"
     r"universitätsklinikum|universitaetsklinikum|medical|medizintechnik)\b",
     re.IGNORECASE,
 )
@@ -76,6 +77,11 @@ _OFFER_NUMBER_LABEL_RE = re.compile(
 )
 _ORDER_NUMBER_LABEL_RE = re.compile(
     r"\b(?:bestellung|bestellnummer|bestell[- ]?nr\.?|purchase\s*order|po\s*(?:number|no\.?))\b",
+    re.IGNORECASE,
+)
+_CONTRACT_TITLE_RE = re.compile(
+    r"\b(?:servicevereinbarung|servicevertrag|wartungsvertrag|wartungs- und servicevertrag|"
+    r"service- und wartungsvertrag|mietvertrag|leasingvertrag|vertrag)\b",
     re.IGNORECASE,
 )
 
@@ -132,12 +138,6 @@ def _window_around(text: str, needle: str, radius: int = 90) -> list[str]:
 
 
 def _ground_contract_number(contract: Contract, texts: list[str]) -> list[str]:
-    """Reject an order number misclassified as a contract number.
-
-    Keep the extracted value if any occurrence is explicitly labelled as a
-    contract or offer number. Otherwise, if its evidenced occurrences are in
-    order/purchase-order context, clear it instead of guessing.
-    """
     value = (contract.identity.contract_number or "").strip()
     if not value:
         return []
@@ -187,43 +187,152 @@ def _name_quality(value: str) -> float:
     return ratio - penalty
 
 
-def _canonicalize_party_name(value: Optional[str], texts: list[str]) -> tuple[Optional[str], bool]:
-    if not value:
-        return value, False
+def _table_role_anchor(texts: list[str], role: str) -> Optional[str]:
+    """Read a party cell only when a pipe-serialized table gives an explicit role column.
 
-    current = " ".join(value.split())
-    current_norm = _fuzzy_norm(current)
-    current_quality = _name_quality(current)
-    best = current
-    best_score = 0.0
+    This deliberately refuses free-text guesses. For a header such as
+    ``Auftraggeber | Auftragnehmer`` it selects the same column from a following
+    row, preserving even OCR-damaged text as an anchor for later canonicalization.
+    """
+    aliases = {
+        "customer": ("auftraggeber", "kunde"),
+        "supplier": ("auftragnehmer", "lieferant", "dienstleister"),
+    }
+    wanted = aliases.get(role, ())
+    if not wanted:
+        return None
 
     for text in texts:
-        for candidate in _split_org_candidates(text):
-            if candidate.casefold() == current.casefold():
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for idx, line in enumerate(lines):
+            if "|" not in line:
                 continue
-            score = SequenceMatcher(None, current_norm, _fuzzy_norm(candidate)).ratio()
-            quality = _name_quality(candidate)
-            if score < 0.72 or quality < current_quality + 0.08:
+            headers = [cell.strip().lower() for cell in line.split("|")]
+            positions = [i for i, header in enumerate(headers) if any(alias in header for alias in wanted)]
+            if len(positions) != 1:
                 continue
-            weighted = score + min(0.2, quality - current_quality)
-            if weighted > best_score:
-                best = candidate
-                best_score = weighted
+            col = positions[0]
+            for row in lines[idx + 1: idx + 5]:
+                if "|" not in row:
+                    continue
+                cells = [cell.strip() for cell in row.split("|")]
+                if col >= len(cells):
+                    continue
+                value = " ".join(cells[col].split())
+                if value and not any(alias in value.lower() for alias in wanted):
+                    return value
+    return None
 
-    return (best, best != current)
+
+def _canonicalize_party_name(
+    value: Optional[str],
+    texts: list[str],
+    *,
+    role_anchor: Optional[str] = None,
+) -> tuple[Optional[str], bool]:
+    if not value and not role_anchor:
+        return value, False
+
+    current = " ".join((value or role_anchor or "").split())
+    anchor = " ".join((role_anchor or current).split())
+    anchor_norm = _fuzzy_norm(anchor)
+    anchor_quality = _name_quality(anchor)
+
+    # A model may concatenate several legal entities. Never treat that whole
+    # string as one organization; compare each segment to the role-grounded cell.
+    model_segments = [" ".join(p.split()) for p in re.split(r"[;\n|]+", current) if p.strip()]
+    source_candidates: list[str] = []
+    for text in texts:
+        source_candidates.extend(_split_org_candidates(text))
+    source_candidates.extend(model_segments)
+
+    best = current
+    best_score = -1.0
+    for candidate in source_candidates:
+        score = SequenceMatcher(None, anchor_norm, _fuzzy_norm(candidate)).ratio()
+        quality = _name_quality(candidate)
+        if score < 0.72:
+            continue
+        # OCR canonicalization must improve quality unless the candidate is a
+        # clean exact representation of the role anchor itself.
+        if quality + 0.02 < anchor_quality:
+            continue
+        weighted = score + max(0.0, min(0.2, quality - anchor_quality))
+        if weighted > best_score:
+            best = candidate
+            best_score = weighted
+
+    if best_score < 0:
+        return value, False
+    return best, best != current
+
+
+def _source_contract_title(texts: list[str]) -> Optional[str]:
+    """Return an explicit compact contract heading, never a prose inference."""
+    for text in texts[:12]:
+        for raw_line in text.splitlines():
+            line = " ".join(raw_line.split())
+            if not (6 <= len(line) <= 180):
+                continue
+            if _CONTRACT_TITLE_RE.search(line):
+                return line
+    return None
+
+
+def _contract_type_from_title(title: Optional[str]) -> Optional[ContractType]:
+    low = _norm(title or "")
+    if not low:
+        return None
+    if "servicevereinbarung" in low or "servicevertrag" in low or "service- und wartungsvertrag" in low or "wartungs- und servicevertrag" in low:
+        return ContractType.SERVICE
+    if "wartungsvertrag" in low:
+        return ContractType.MAINTENANCE
+    if "leasingvertrag" in low or "leasing" in low:
+        return ContractType.LEASE
+    if "mietvertrag" in low:
+        return ContractType.RENTAL
+    return None
 
 
 def ground_source_identity(contract: Contract, units: Iterable[object]) -> list[str]:
-    """Evidence-first post-processing for identity fields."""
+    """Evidence-first post-processing for critical identity fields.
+
+    Only strong source structures are allowed to fill missing data: explicit
+    headings and explicit role columns. Ambiguous free text remains unverified.
+    """
     texts = _iter_source_texts(units)
     issues = _ground_contract_number(contract, texts)
 
-    for field_name in ("customer", "supplier", "contractor"):
+    title = (contract.identity.contract_title or "").strip()
+    source_title = _source_contract_title(texts)
+    if not title and source_title:
+        contract.identity.contract_title = source_title
+        title = source_title
+        issues.append("identity.contract_title: explizite Vertragsüberschrift aus Quelle übernommen")
+
+    current_type = contract.identity.contract_type
+    if current_type in (None, ContractType.UNKNOWN, "unknown", ""):
+        grounded_type = _contract_type_from_title(title or source_title)
+        if grounded_type is not None:
+            contract.identity.contract_type = grounded_type
+            issues.append("identity.contract_type: aus expliziter Vertragsüberschrift abgeleitet")
+
+    customer_anchor = _table_role_anchor(texts, "customer")
+    supplier_anchor = _table_role_anchor(texts, "supplier")
+
+    for field_name, anchor in (
+        ("customer", customer_anchor),
+        ("supplier", supplier_anchor),
+        ("contractor", None),
+    ):
         old = getattr(contract.identity, field_name, None)
-        new, changed = _canonicalize_party_name(old, texts)
+        new, changed = _canonicalize_party_name(old, texts, role_anchor=anchor)
         if changed:
             setattr(contract.identity, field_name, new)
-            issues.append(f"identity.{field_name}: OCR-Schreibweise aus sauberem Quellbeleg kanonisiert")
+            issues.append(f"identity.{field_name}: Rollenbeleg/OCR-Schreibweise aus Quelle kanonisiert")
+        elif not old and anchor:
+            setattr(contract.identity, field_name, anchor)
+            issues.append(f"identity.{field_name}: explizite Tabellenrolle aus Quelle übernommen")
     return issues
 
 
