@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiGet, ApiError, userMessageForStatus } from "@/lib/api";
+import { apiGet, apiPost, ApiError, userMessageForStatus } from "@/lib/api";
 
 // Interaktions-Audit: Ladezustände müssen IMMER terminieren. Der API-Layer
 // bekommt pro Request ein Standard-Timeout; haengt der Server, endet der
@@ -85,5 +85,27 @@ describe("API-Schicht: garantierte Terminierung", () => {
     expect(userMessageForStatus(401)).toMatch(/Sitzung ist abgelaufen/);
     expect(userMessageForStatus(403)).toMatch(/keine Berechtigung/);
     expect(userMessageForStatus(404)).toMatch(/nicht gefunden/);
+  });
+
+  it("signalisiert eine abgelaufene Sitzung bei geschützten Requests", async () => {
+    const onExpired = vi.fn();
+    window.addEventListener("medflux:session-expired", onExpired);
+    stubFetch(async () => new Response("", { status: 401 }));
+
+    await expect(apiGet<unknown>("/api/contracts")).rejects.toThrow(/Sitzung ist abgelaufen/);
+    expect(onExpired).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener("medflux:session-expired", onExpired);
+  });
+
+  it("behandelt falsche Login-Daten als 401 ohne Session-Redirect-Signal", async () => {
+    const onExpired = vi.fn();
+    window.addEventListener("medflux:session-expired", onExpired);
+    stubFetch(async () => new Response("", { status: 401 }));
+
+    await expect(apiPost<unknown>("/api/auth/login", { email: "test@example.org", password: "falsch" })).rejects.toThrow(/Sitzung ist abgelaufen/);
+    expect(onExpired).not.toHaveBeenCalled();
+
+    window.removeEventListener("medflux:session-expired", onExpired);
   });
 });
