@@ -52,6 +52,8 @@ class ContractOverride(OrgOwnedMixin, Base):
         nullable=True,
     )
     actor_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    actor_display_name_snapshot: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    actor_role_snapshot: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     is_development: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
