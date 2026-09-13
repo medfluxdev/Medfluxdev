@@ -11,6 +11,7 @@ import "./auth.css";
 import "./profile.css";
 import "./organization.css";
 import "./ownership.css";
+import "./design-system.css";
 
 export const metadata: Metadata = {
   title: {
@@ -32,10 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <ToastProvider>
           <AuthProvider organizationSlug={ORG_SLUG}>
-            <ClientNav>
-              <div id="main-content" className="skip-target" tabIndex={-1} />
-              {children}
-            </ClientNav>
+            <ClientNav>{children}</ClientNav>
           </AuthProvider>
         </ToastProvider>
       </body>
