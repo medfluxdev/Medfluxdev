@@ -1,5 +1,7 @@
 """DB-free regression coverage for the expanded critical-claim verifier."""
 
+from datetime import date
+
 import json
 
 import pytest
@@ -13,7 +15,7 @@ from app.ai.groups.verifier import (
 )
 from app.documents.extraction.schemas import ExtractionUnit, SourceType
 from app.models.contract import Contract
-from app.models.values import Money, TimeValue
+from app.models.values import FlexibleDate, Money, TimeValue
 from app.models.enums import TimeUnit
 
 
@@ -169,3 +171,23 @@ def test_money_field_evidence_rejects_currency_mismatch():
         [_unit("Jährliche Gebühr: 1.200 USD")],
     )
     assert values["costs.annual_cost"].evidence is None
+
+
+def test_numeric_matching_does_not_accept_prefix_collision():
+    contract = Contract()
+    contract.costs.annual_cost = Money(amount=12, currency="EUR", period="annual")
+    values = _by_field(
+        contract,
+        [_unit("Jährliche Gebühr: 1.200 EUR")],
+    )
+    assert values["costs.annual_cost"].evidence is None
+
+
+def test_start_date_accepts_german_calendar_format():
+    contract = Contract()
+    contract.dates.start_date = FlexibleDate(date=date(2026, 2, 1))
+    values = _by_field(
+        contract,
+        [_unit("Vertragsbeginn: 01.02.2026")],
+    )
+    assert values["dates.start_date"].evidence_scope == "field"
