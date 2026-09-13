@@ -1,36 +1,29 @@
 """Feldgruppen-Extraktions-Pipeline (STEP 8B-Semantik).
 
 Pipeline je Dokument:
-  1. deterministisches Chunking (aus dem Extractor)
-  2. je Chunk je Gruppe: kleine, spezialisierte KI-Anfrage (eigenes JSON-Schema)
-  3. deterministisches Merging der Gruppenergebnisse über alle Chunks
-  4. Übernahme auf das Contract-Modell (group.apply)
-  5. Evidence-First-Verifikation gegen die echten Texteinheiten
-  6. deterministische Normalisierung + Widerspruchsprüfung
-  7. semantischer Verifier für sensible Felder (optional)
-  8. Review-Flags + Diagnose-Zähler (KI-Aufrufe, Gruppen, Verifikationsfehler)
-
-Keine Berechnungslage: späteste Kündigungsdaten, Kostenaggregation, Warnstufen
-bleiben STEP 9.
+  1. deterministisches Chunking
+  2. je Chunk je Gruppe: spezialisierte KI-Anfrage
+  3. deterministisches Merging
+  4. Übernahme auf Contract
+  5. Evidence-First-Verifikation
+  6. deterministisches Source-Grounding + Normalisierung
+  7. semantischer Verifier
+  8. Review-Flags + Diagnose
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from pydantic import ValidationError
 
 from app.ai.groups.evidence import verify_evidence
-from app.ai.groups.normalize import run_normalization
+from app.ai.groups.normalize import ground_source_identity, run_normalization
 from app.ai.groups.schema import GroupSpec, group_order, group_specs
-from app.ai.groups.verifier import (
-    SENSITIVE_FIELDS,
-    run_verifier,
-    unsupported_fields,
-)
+from app.ai.groups.verifier import run_verifier, unsupported_fields
 from app.ai.service import AIService
 from app.core.config import Settings
 from app.documents.extraction.schemas import ExtractionUnit
@@ -45,8 +38,6 @@ MSG_GROUP_VALIDATION = "Die extrahierten Daten konnten nicht vollständig validi
 
 @dataclass
 class PipelineDiagnostics:
-    """Diagnose-Zähler der Gruppen-Pipeline."""
-
     ai_calls: int = 0
     groups_processed: int = 0
     chunk_count: int = 0
@@ -61,8 +52,6 @@ class PipelineDiagnostics:
 
 
 class GroupPipeline:
-    """Führt die spezialisierte Feldgruppen-Extraktion aus."""
-
     def __init__(
         self,
         ai_service: AIService,
@@ -76,22 +65,15 @@ class GroupPipeline:
         self._run_verification = run_verification
         self._specs: dict[str, GroupSpec] = group_specs()
 
-    # ------------------------------------------------------------- API
-
     async def run(
         self,
         chunks: list[Any],
         units: list[ExtractionUnit],
     ) -> tuple[Optional[Contract], PipelineDiagnostics, list[str]]:
-        """Führt die Pipeline aus.
-
-        Liefert (contract_or_None, diagnostics, messages/errorliste).
-        """
         diag = PipelineDiagnostics(chunk_count=len(chunks))
         messages: list[str] = []
         order = group_order()
 
-        # 1) Gruppen je Chunk extrahieren
         per_chunk: dict[int, dict[str, Any]] = {}
         for chunk in chunks:
             per_opts: dict[str, Any] = {}
@@ -107,7 +89,6 @@ class GroupPipeline:
                 per_opts[name] = outcome
             per_chunk[chunk.index] = per_opts
 
-        # 2) Merge je Gruppe über Chunks
         merged_groups: dict[str, Any] = {}
         for name in order:
             results = [
@@ -123,17 +104,16 @@ class GroupPipeline:
                 spec.model, [r.model for r in results]
             )
 
-        # 3) Auf Contract übernehmen
         contract = Contract()
         any_group_failures = (
-            diag.parse_failures > 0 or diag.group_validation_failures > 0
+            diag.parse_failures > 0
+            or diag.group_validation_failures > 0
             or diag.timeouts > 0
         )
         for name in order:
             gm = merged_groups.get(name)
-            if gm is None:
-                continue
-            self._specs[name].apply(contract, gm)
+            if gm is not None:
+                self._specs[name].apply(contract, gm)
 
         if any_group_failures:
             messages.append(
@@ -143,17 +123,22 @@ class GroupPipeline:
         if not any(v is not None for v in merged_groups.values()):
             return None, diag, [MSG_GROUP_VALIDATION]
 
-        # 4) Evidence-First-Verifikation
+        # Deterministische Korrektur ausschließlich aus echten Texteinheiten:
+        # - Bestellnummern dürfen keine Vertragsnummer werden.
+        # - OCR-beschädigte Parteinamen dürfen auf eine sauber belegte Schreibweise
+        #   desselben Namens kanonisiert werden.
+        source_issues = ground_source_identity(contract, units)
+        diag.normalization_issues += len(source_issues)
+        messages.extend(source_issues)
+
         evidence_issues = self._verify_evidence_on_contract(contract, units)
         diag.evidence_issues += len(evidence_issues)
         messages.extend(evidence_issues)
 
-        # 5) Deterministische Normalisierung + Widersprüche
         norm_issues = run_normalization(contract)
         diag.normalization_issues += len(norm_issues)
         messages.extend(norm_issues)
 
-        # 6) Semantischer Verifier für sensible Felder
         if self._run_verification:
             verifier_result, calls = await run_verifier(
                 self._ai, contract, self._context_text(chunks)
@@ -162,18 +147,11 @@ class GroupPipeline:
             diag.verifier_issues += len(verifier_result.decisions)
             self._apply_verifier(contract, verifier_result)
 
-        # 7) Review-Flags aus allen Hinweisen
-        evidence_review = self._scan_evidence_review(contract)
-        for msg in evidence_review:
-            messages.append(msg)
+        messages.extend(self._scan_evidence_review(contract))
         self._finalize(contract, messages)
-
         return contract, diag, messages
 
-    # ------------------------------------------------------------- Felder
-
     def _field_evidence_paths(self):
-        """Flaches Mapping sensible-Section -> evidence aus den Gruppen."""
         return [
             ("identity", "identity_equipment"),
             ("dates", "dates_termination"),
@@ -188,17 +166,19 @@ class GroupPipeline:
         return "\n".join(c.text for c in chunks)[:6000]
 
     def _scan_evidence_review(self, contract: Contract) -> list[str]:
-        """Sammelt Review-Flags aus den Evidence-Objekten der Abschnitte."""
         issues: list[str] = []
         sections = [
-            contract.identity, contract.dates, contract.termination,
-            contract.costs, contract.payment, contract.services, contract.sla,
+            contract.identity,
+            contract.dates,
+            contract.termination,
+            contract.costs,
+            contract.payment,
+            contract.services,
+            contract.sla,
         ]
         for sec in sections:
             ev = getattr(sec, "evidence", None)
-            if ev is None:
-                continue
-            if ev.requires_review:
+            if ev is not None and ev.requires_review:
                 issues.append(f"{type(sec).__name__}: Nachweis erfordert manuelle Prüfung")
         return issues
 
@@ -207,8 +187,13 @@ class GroupPipeline:
     ) -> list[str]:
         issues: list[str] = []
         sections = [
-            contract.identity, contract.dates, contract.termination,
-            contract.costs, contract.payment, contract.services, contract.sla,
+            contract.identity,
+            contract.dates,
+            contract.termination,
+            contract.costs,
+            contract.payment,
+            contract.services,
+            contract.sla,
         ]
         for sec in sections:
             ev = getattr(sec, "evidence", None)
@@ -229,9 +214,11 @@ class GroupPipeline:
         unsup = unsupported_fields(result)
         if not unsup:
             return
-        logger.info("Verifier: %d nicht gestützte sensible Felder: %s",
-                    len(unsup), sorted(unsup))
-        # Niedrigere Confidence auf den betroffenen Sections markieren
+        logger.info(
+            "Verifier: %d nicht gestützte sensible Felder: %s",
+            len(unsup),
+            sorted(unsup),
+        )
         sections = {
             "identity": contract.identity,
             "dates": contract.dates,
@@ -240,14 +227,16 @@ class GroupPipeline:
             "payment": contract.payment,
         }
         prefix_map = {
-            "identity.": "identity", "dates.": "dates",
-            "termination.": "termination", "costs.": "costs",
+            "identity.": "identity",
+            "dates.": "dates",
+            "termination.": "termination",
+            "costs.": "costs",
             "payment.": "payment",
         }
         flagged: set[str] = set()
-        for f in unsup:
+        for field in unsup:
             for prefix, secname in prefix_map.items():
-                if f.startswith(prefix):
+                if field.startswith(prefix):
                     flagged.add(secname)
                     break
         for secname in flagged:
@@ -272,20 +261,17 @@ class GroupPipeline:
             f"{contract.review.risk_notes}; " if contract.review.risk_notes else ""
         ) + notes
 
-    # ------------------------------------------------------------- je Chunk je Gruppe
-
     async def _extract_group_for_chunk(self, chunk, name: str) -> "GroupOutcome":
         spec = self._specs[name]
         user_prompt = _build_group_prompt(chunk, name)
         outcome = GroupOutcome(name=name)
-        parsed_data: Optional[dict[str, Any]] = None
         attempts = 0
 
         for attempt in range(self._max_retries + 1):
             attempts = attempt + 1
             system_prompt = spec.prompt
             if attempt > 0:
-                system_prompt = system_prompt + _GROUP_RETRY_SUFFIX
+                system_prompt += _GROUP_RETRY_SUFFIX
             try:
                 raw = await self._ai.generate_structured(
                     user_prompt,
@@ -325,24 +311,21 @@ class GroupPipeline:
         outcome.retries = max(0, attempts - 1)
         return outcome
 
-    # ------------------------------------------------------------- Merge
-
     def _merge_models(self, model_type, models: list[Any]):
-        """Mergt mehrere Gruppen-Modelle deterministisch zu einem."""
         merged_data = models[0].model_dump(exclude_none=False)
-        for m in models[1:]:
+        for model in models[1:]:
             conflicts: list[str] = []
             merged_data = _deep_merge(
-                merged_data, m.model_dump(exclude_none=False), conflicts, "$"
+                merged_data,
+                model.model_dump(exclude_none=False),
+                conflicts,
+                "$",
             )
-        merged = model_type.model_validate(merged_data)
-        return merged
+        return model_type.model_validate(merged_data)
 
 
 @dataclass
 class GroupOutcome:
-    """Ergebnis einer Gruppen-Extraktion für einen Chunk."""
-
     name: str
     model: Any = None
     ai_calls: int = 0
@@ -378,6 +361,7 @@ def _parse_json(raw: str) -> Optional[dict[str, Any]]:
         return data if isinstance(data, dict) else None
     except json.JSONDecodeError:
         pass
+
     start = stripped.find("{")
     if start == -1:
         return None
@@ -410,7 +394,6 @@ def _parse_json(raw: str) -> Optional[dict[str, Any]]:
 
 
 def _deep_merge(old: Any, new: Any, conflicts: list[str], path: str) -> Any:
-    """Deterministisches Merge (siehe contract_extractor._deep_merge)."""
     if isinstance(old, dict) and isinstance(new, dict):
         out: dict[str, Any] = dict(old)
         for key, new_val in new.items():
@@ -437,10 +420,10 @@ def _merge_lists(old: list, new: list, conflicts: list[str], path: str) -> list:
         merged = list(old)
         seen = {_list_key(item) for item in old}
         for item in new:
-            k = _list_key(item)
-            if k not in seen:
+            key = _list_key(item)
+            if key not in seen:
                 merged.append(item)
-                seen.add(k)
+                seen.add(key)
         return merged
     merged = list(old)
     for item in new:
@@ -450,4 +433,4 @@ def _merge_lists(old: list, new: list, conflicts: list[str], path: str) -> list:
 
 
 def _list_key(item: dict) -> tuple:
-    return tuple(sorted((k, str(v)) for k, v in item.items()))
+    return tuple(sorted((key, str(value)) for key, value in item.items()))
