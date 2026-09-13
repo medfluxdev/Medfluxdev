@@ -41,14 +41,13 @@ def _flexible_date_supported(text: str, value: Any) -> bool:
         return True
     raw_date = getattr(value, "date", None)
     condition = getattr(value, "condition", None)
-    if raw_date is not None:
-        if isinstance(raw_date, date):
-            candidates = {
-                raw_date.isoformat(),
-                raw_date.strftime("%d.%m.%Y"),
-                raw_date.strftime("%-d.%-m.%Y") if hasattr(raw_date, "strftime") else raw_date.isoformat(),
-            }
-            return any(candidate in text for candidate in candidates)
+    if raw_date is not None and isinstance(raw_date, date):
+        candidates = {
+            raw_date.isoformat(),
+            raw_date.strftime("%d.%m.%Y"),
+            f"{raw_date.day}.{raw_date.month}.{raw_date.year}",
+        }
+        return any(candidate in text for candidate in candidates)
     if condition:
         return _contains_exactish(text, condition)
     return False
