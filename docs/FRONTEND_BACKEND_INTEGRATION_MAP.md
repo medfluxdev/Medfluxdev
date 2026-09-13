@@ -1,9 +1,9 @@
 # MedFlux Frontend/Backend Integration Map
 
-Status: integration baseline implemented (2026-09-13)
+Status: integrated baseline hardened and UI-wired (2026-09-13)
 
 ## Goal
-This document is the canonical map between backend capabilities and frontend consumers on `JAMAL-AHMAD-FULL-INTEGRATION`. It prevents duplicate business logic and naming collisions while Ahmad's frontend consumes Jamal's backend capabilities.
+This is the canonical map between backend capabilities and frontend consumers on `JAMAL-AHMAD-FULL-INTEGRATION`. It prevents duplicate business logic and naming collisions while Ahmad's frontend consumes Jamal's backend capabilities.
 
 ## Integration rules
 1. Backend remains authoritative for calculations, warnings, review state, intelligence, permissions, ownership and scope.
@@ -17,18 +17,19 @@ This document is the canonical map between backend capabilities and frontend con
 | Domain | Backend API | Frontend consumer | State |
 |---|---|---|---|
 | Authentication | `/api/auth/*`, `/api/me` | login + `AuthProvider` | Connected |
-| Dashboard | `/api/dashboard/overview` | dashboard through `domain-api/dashboard.ts` | Connected + auth scope aware |
-| Contracts | portfolio/detail/review/archive/overrides/document content | contract portfolio/detail/workspace | Connected; detail uses domain API |
-| Documents | import/retry/reanalyze/source-region | import + PDF/evidence | Connected through domain API; scope persisted server-side |
-| Equipment | list/detail | `/equipment`, detail route, contract/work queue links | Connected + dedicated master UI |
-| Work queue | list + status transition | `/work-queue` | Connected through domain API + audited transitions |
-| AI runtime | status/snapshot/test/selection | settings | Connected |
-| Contract intelligence | graph/obligations/policies/action proposals/events | Contract Intelligence panel | Connected read-only |
+| Dashboard | `/api/dashboard/overview` | dashboard through `domain-api/dashboard.ts` | Connected + scope aware |
+| Contracts | portfolio/detail/review/archive/overrides/document content | portfolio/detail/workspace | Connected; detail/review/archive use domain API |
+| Documents | import/retry/reanalyze/source-region | import + PDF/evidence | Connected; scope validated before processing and persisted server-side |
+| Equipment | list/detail | `/equipment`, detail route, contract/work-queue links | Connected + dedicated master UI |
+| Work queue | list + status transition | `/work-queue` | Connected + scoped + audited transitions |
+| AI runtime | status/snapshot/test/selection | settings/developer | Status readable; test/selection restricted to Admin/Developer |
+| Contract intelligence | graph/obligations/policies/action proposals/events | Contract Intelligence panel + Admin event feed | Connected read-only |
 | Operations | contract CSV export | Admin Dashboard export | Connected + role/scope protected + audited |
 | Activity/Audit | `/api/activity` + contract audit/review history | `/audit`, Admin Dashboard | Connected + scope aware |
 | Ownership | contract/equipment assignment + assignees | Contract Ownership panel | Connected + scope aware + audited |
-| Users/scopes | `/api/users`, `/api/user-scopes` | settings/users | Connected through domain API + scope changes audited |
-| Organization structure | hospitals/departments/cost centers | settings/organization | Connected through domain API manager |
+| Users/scopes | `/api/users`, `/api/user-scopes` | settings/users | Connected; non-admin creation is atomically scoped |
+| Organization structure | hospitals/departments/cost centers | scope picker + settings/organization | Connected + server-side read scoping |
+| Demo/UAT workspace | `/api/demo/workspace*` | developer tooling only | Developer-only global control |
 
 ## Semantic mapping / naming collisions
 
@@ -37,22 +38,17 @@ This document is the canonical map between backend capabilities and frontend con
 - `work_queue.items`: operational tasks with lifecycle (`open`, `acknowledged`, `resolved`).
 - `intelligence ActionProposalRecord`: system-generated proposed actions; may require human approval.
 
-They remain separate DTOs and separate UI semantics.
+They remain separate DTOs and UI semantics.
 
 ### Review concepts
 - `requires_review`: item/fact needs checking.
 - `requires_manual_review`: contract-level review state.
 - `requires_human_approval`: intelligence proposal cannot be treated as an automatically executable action.
 
-### Identifiers
-- Work Queue API uses `id` for a work item.
-- Contract detail may expose `work_item_id` in embedded projections.
-- Adapters normalize request construction, not domain meaning.
-
 ### Evidence concepts
-- Contract detail uses `EvidenceRef` with `evidence_id`, `field_ref`, optional page/bbox/document version.
-- Intelligence records use `evidence_refs` and sometimes `source_field_refs`.
-- Intelligence is currently displayed without inventing evidence geometry. Future source buttons must resolve those refs through canonical contract evidence before opening the viewer.
+- Contract detail uses canonical `EvidenceRef` objects with page/document/bbox provenance.
+- Intelligence records expose `evidence_refs` and `source_field_refs`.
+- The UI does not invent coordinates or source links. Intelligence source navigation must resolve against canonical Contract Detail evidence first.
 
 ## Scope/security state
 
@@ -63,22 +59,39 @@ The following product paths enforce organization plus hospital/department visibi
 - Work Queue reads and mutations.
 - Contract Intelligence contract reads and event filtering.
 - CSV export.
-- Document retry/reanalyze/source-region.
+- Document retry/reanalyze/source-region/import.
 - Activity feed.
 - Ownership reads/mutations and assignee selection.
+- Organization-structure and cost-center reads for non-admin users.
 
-New imports persist the current hospital/department ownership on the backend before the response returns. The frontend no longer performs a follow-up ownership PATCH.
+### Fail-closed provisioning
+A non-admin membership without a valid hospital assignment is not interpreted as organization-wide access. `ScopeContextMiddleware` assigns an impossible sentinel hospital scope until an administrator provisions the user correctly, causing scoped product queries to return no organizational data.
+
+Non-admin user creation requires a valid active hospital and optionally an active department belonging to that hospital. This scope is persisted in the same backend transaction as account/membership creation. An Admin cannot be downgraded to a normal role while remaining organization-wide.
+
+### Import ownership
+The backend validates the active hospital/department scope before any document processing starts. New accepted imports then persist that scope on the resulting contract before returning to the frontend. The old client-side ownership PATCH has been removed.
+
+### Global installation controls
+AI model/provider mutation and AI test execution are restricted to Admin or Developer. The installation-wide Demo/UAT workspace is Developer-only.
+
+### Audited mutations
+Authenticated activity is recorded for:
+- contract/equipment ownership changes;
+- user-scope changes;
+- hospital/department/cost-center administration;
+- work-item lifecycle transitions;
+- contract export;
+- existing contract review/override/archive activity.
 
 CSV exports require Admin/Contract Manager/Developer authorization when auth is enabled, include only visible contracts, neutralize spreadsheet formula prefixes, and create an audit event.
-
-Ownership changes, user-scope changes, cost-center creation and work-item transitions create authenticated activity entries.
 
 ## Canonical contract mutation router
 
 The stale unregistered duplicate `contract_actions_secure.py` was removed. `backend/app/api/routes/contracts.py` is the single canonical contract mutation/read router.
 
 Authorization is layered:
-- LocalAuthMiddleware blocks viewer writes.
+- `LocalAuthMiddleware` blocks viewer writes.
 - Reviewer writes are restricted to review/fact-review/work-queue flows.
 - Route-level identity logic provides authenticated reviewer names.
 - Ownership and administration routes apply explicit role checks.
@@ -108,47 +121,33 @@ Responsibilities:
 ## Main UI integration
 
 ### Contract 360
-Existing Contract Workspace remains the main accepted-truth view. A separate Contract Intelligence panel now exposes:
-- contract relations;
-- obligations;
-- policy decisions;
-- proposed actions and whether human approval is required.
-
-Action proposals are deliberately read-only until a canonical backend approval/execution lifecycle is validated; the frontend does not invent one.
+Existing Contract Workspace remains the accepted-truth view. Contract Intelligence now exposes relations, obligations, policy decisions and action proposals. Proposed actions remain read-only until a canonical backend approval/execution lifecycle exists.
 
 ### Equipment
-The equipment master is exposed in the sidebar and uses the current authenticated organization/hospital/department context for both list and detail routes.
+The equipment master is exposed in the sidebar and honors the authenticated organization/hospital/department scope for list and detail routes.
 
-### Audit
-Audit now recognizes ownership, user-scope, work-item and export events in addition to review/override/archive events.
+### Users and organization
+User creation/editing supports role plus hospital/department assignment. Organization settings use a shared domain-backed manager for hospitals, departments and cost centers. The top scope picker consumes the same organization API.
 
-### Administration
-Admin Dashboard uses domain APIs and provides a scope-filtered contract CSV export.
+### Audit and administration
+Audit surfaces authenticated activity alongside fact reviews and overrides. Admin Dashboard uses domain APIs, includes scoped CSV export, and shows scoped Intelligence Events.
 
-## Verification guards
+## Verification
 
-`backend/tests/test_integration_scope_guards.py` statically protects the integration invariants for:
-- Intelligence scope enforcement;
-- CSV export scope/role/audit requirements;
-- Document scope enforcement;
-- server-side import ownership assignment;
-- Activity scope filtering;
-- Ownership scope/auditing;
-- User-scope auditing;
-- Work Queue scope/auditing.
+`backend/tests/test_integration_scope_guards.py` statically protects integration invariants for Intelligence, exports, document preflight, import ownership, activity, ownership, user scopes, Work Queue, provisioning fail-closed behavior, organization metadata, AI mutations and Developer-only demo mode.
 
-`backend/tests/test_full_integration_static_guards.py` additionally protects multi-organization identity/account semantics.
+`backend/tests/test_full_integration_static_guards.py` protects multi-organization identity/account semantics and atomic scoped account provisioning.
+
+GitHub Actions workflow `.github/workflows/integration-check.yml` verifies backend Python syntax and runs the frontend `npm run verify` suite on the integration branch.
 
 ## Remaining non-blocking cleanup
 
-- The large contract portfolio page still has legacy local request construction. `frontend/lib/api.ts` overrides organization/hospital/department context centrally and the scope picker reloads on hospital/department changes, so visibility remains correct; migrating this page fully to `domain-api/contracts.ts` is a maintainability cleanup, not a security prerequisite.
-- Intelligence evidence references are displayed faithfully but are not yet turned into source-navigation buttons unless they resolve through the canonical Contract Detail evidence set.
+- The large contract portfolio page still contains legacy local request/query construction. Central `scopedPath()` overrides organization/hospital/department context and the scope picker reloads on scope changes, so authorization remains server-side. Full migration to `domain-api/contracts.ts` is maintainability cleanup.
+- Intelligence evidence refs are displayed faithfully but are not converted to viewer navigation unless they can be resolved through canonical Contract Detail evidence.
 - Intelligence action proposals remain read-only because no canonical approval/execution mutation contract has been accepted yet.
 
 ## Acceptance target
 
-The integrated runtime flow is:
-
 `authenticated scope -> document processing -> accepted contract truth -> deterministic calculations/warnings -> intelligence -> work queue/audit -> frontend domain API -> UI`
 
-No frontend component should create a second calculation, authorization, ownership or intelligence truth.
+No frontend component creates a second calculation, authorization, ownership or intelligence truth.
