@@ -13,6 +13,7 @@ import "./organization.css";
 import "./ownership.css";
 import "./design-system.css";
 import "./shell.css";
+import "./contracts-list.css";
 
 export const metadata: Metadata = {
   title: {
