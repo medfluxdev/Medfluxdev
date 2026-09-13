@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractDetail from "@/components/contracts/detail/ContractDetail";
 import type { ContractDetailResponse, EvidenceRef } from "@/lib/contract-detail-types";
 
+const apiGetMock = vi.fn();
 const apiPostMock = vi.fn();
 vi.mock("@/lib/api", () => ({
+  apiGet: (...args: unknown[]) => apiGetMock(...args),
   apiPost: (...args: unknown[]) => apiPostMock(...args),
   contentUrl: () => "http://test.local/content/x",
 }));
@@ -121,6 +123,8 @@ function detailFixture(): ContractDetailResponse {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  apiGetMock.mockReset();
+  apiGetMock.mockRejectedValue(new Error("development mode"));
 });
 
 describe("Contract 360 – unabhängige Scroll-Bereiche für Evidence und Quelle (PR-5)", () => {
