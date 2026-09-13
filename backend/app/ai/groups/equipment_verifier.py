@@ -58,7 +58,7 @@ def _find_support(field: str, value: Any, source_texts: list[str]) -> bool:
     if value in (None, "", []):
         return True
 
-    if field in {"device_name", "manufacturer", "model", "system_name", "service_scope"}:
+    if field in {"device_name", "manufacturer", "model", "system_name", "equipment_category", "equipment_type", "location", "department", "service_scope", "sla_notes"}:
         return any(_contains_exactish(text, value) for text in source_texts)
 
     if field == "serial_number":
@@ -184,7 +184,12 @@ def verify_equipment_claims(contract: Contract, units: Iterable[object]) -> list
         "serial_number",
         "inventory_number",
         "system_name",
+        "equipment_category",
+        "equipment_type",
+        "location",
+        "department",
         "service_scope",
+        "sla_notes",
         "included_services",
         "excluded_services",
         "coverage_start",
