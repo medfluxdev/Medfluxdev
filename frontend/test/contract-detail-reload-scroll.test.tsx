@@ -144,9 +144,16 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
   it("bleibt bei einem Reload gemountet – keine Voll-Ladeanzeige, Panel-Node stabil", async () => {
     const user = userEvent.setup();
     // Erster Aufruf: ungeprüft; erneuter Aufruf (via onReload): Nach-Reload-Stand.
-    apiGetMock
-      .mockResolvedValueOnce(fixture("Nicht geprüft", "unreviewed"))
-      .mockResolvedValueOnce(fixture("Geprüft (Aktualisiert)", "confirmed"));
+    const detailResponses = [
+      fixture("Nicht geprüft", "unreviewed"),
+      fixture("Geprüft (Aktualisiert)", "confirmed"),
+    ];
+    apiGetMock.mockImplementation((path: string) => {
+      if (path === "/api/auth/me") {
+        return Promise.reject(new Error("development mode"));
+      }
+      return Promise.resolve(detailResponses.shift());
+    });
     apiPostMock.mockResolvedValue({});
 
     const { container } = render(<ContractDetailPage />);
