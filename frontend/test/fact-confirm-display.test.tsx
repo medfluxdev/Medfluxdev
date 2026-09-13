@@ -5,7 +5,9 @@ import FactReviewPanel from "@/components/contracts/detail/FactReviewPanel";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 
 const apiPostMock = vi.fn();
+const apiGetMock = vi.fn();
 vi.mock("@/lib/api", () => ({
+  apiGet: (...args: unknown[]) => apiGetMock(...args),
   apiPost: (...args: unknown[]) => apiPostMock(...args),
 }));
 
@@ -160,6 +162,8 @@ function fixture(): ContractDetailResponse {
 beforeEach(() => {
   vi.clearAllMocks();
   apiPostMock.mockReset();
+  apiGetMock.mockReset();
+  apiGetMock.mockRejectedValue(new Error("development mode"));
 });
 
 function liFor(text: string): HTMLElement {
