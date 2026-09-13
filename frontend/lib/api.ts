@@ -144,20 +144,24 @@ export function contentUrl(
 export async function apiUpload<T>(
   path: string,
   files: File[],
-  slug?: string
+  slug?: string,
+  timeoutMs: number = 120000
 ): Promise<T> {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file);
   }
   const query = slug ? `?organization_slug=${encodeURIComponent(slug)}` : "";
-  const res = await fetch(`${API_BASE}${path}${query}`, {
-    method: "POST",
-    credentials: "include",
-    body: form,
-  });
+  const res = await fetchWithTimeout(
+    `${API_BASE}${path}${query}`,
+    {
+      method: "POST",
+      body: form,
+    },
+    timeoutMs
+  );
   if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+    throw new Error(await errorMessage(res));
   }
   return (await res.json()) as T;
 }
