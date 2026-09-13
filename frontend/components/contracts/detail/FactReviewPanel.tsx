@@ -307,6 +307,13 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
             {cr.status_label_de}
           </span>
         </p>
+        {cr.critical_unreviewed_count > 0 && (
+          <p className="form-error" role="alert">
+            Abschluss gesperrt: {cr.critical_unreviewed_count} kritische Angabe
+            {cr.critical_unreviewed_count === 1 ? "" : "n"} ist
+            {cr.critical_unreviewed_count === 1 ? "" : "en"} noch nicht einzeln geprüft.
+          </p>
+        )}
         {cr.status === "changed_after_review" && (
           <p className="muted small">
             Materiale Änderung nach Abschluss am{" "}
@@ -333,7 +340,7 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
               checked={ack}
               onChange={(e) => setAck(e.target.checked)}
             />{" "}
-            Verbleibende ungeprüfte Angaben akzeptieren
+            Verbleibende nicht-kritische ungeprüfte Angaben akzeptieren
           </label>
         </div>
         <div className="override-row">
@@ -348,11 +355,17 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
             type="button"
             className="btn btn-sm"
             onClick={() => void postLifecycle("complete")}
-            disabled={busy || (!ack && cr.unresolved_count > 0)}
+            disabled={
+              busy ||
+              cr.critical_unreviewed_count > 0 ||
+              (!ack && cr.unresolved_count > 0)
+            }
             title={
-              !ack && cr.unresolved_count > 0
-                ? "Bitte die ungeprüften Angaben quittieren"
-                : "Review abschließen"
+              cr.critical_unreviewed_count > 0
+                ? "Kritische Angaben müssen zuerst einzeln geprüft werden"
+                : !ack && cr.unresolved_count > 0
+                  ? "Bitte die nicht-kritischen ungeprüften Angaben quittieren"
+                  : "Review abschließen"
             }
           >
             Review abschließen
