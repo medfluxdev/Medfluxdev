@@ -1,8 +1,9 @@
-"""Deterministic verification for list-valued service claims.
+"""Deterministic verification for list-valued and residual critical claims.
 
-List claims need item-by-item evidence. Treating an entire services section as
-one proof would allow a single supported line to legitimize unrelated list
-entries, so every extracted service item is checked independently.
+Every extracted service-list item is checked independently. The same production
+hook also invokes the residual deterministic gate for critical claim shapes that
+cannot safely use the scalar semantic verifier (price schedules, variable
+charges, remaining tri-state services, service hours and exact-text clauses).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from app.ai.groups.residual_claim_verifier import verify_residual_critical_claims
 from app.models.contract import Contract
 
 
@@ -70,4 +72,6 @@ def verify_service_list_claims(contract: Contract, units: Iterable[object]) -> l
             ev.requires_review = True
             if ev.confidence is None or ev.confidence > 0.5:
                 ev.confidence = 0.5
+
+    issues.extend(verify_residual_critical_claims(contract, units))
     return issues
