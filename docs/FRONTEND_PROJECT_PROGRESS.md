@@ -261,3 +261,11 @@ Run backend `pytest` only when backend behavior changes.
 - Sidebar, login, and organization selection use that same asset; no horizontal, icon-only, or code-drawn alternative is rendered.
 - Removed `frontend/app/icon.svg`; `frontend/app/icon.png` is derived from Main Logo 01 for the required square browser icon.
 - Updated `frontend/test/visual-identity.test.tsx` to require the canonical PNG and reject inline SVG logo rendering.
+
+
+### Logo refinement — clean MedFlux-only HD asset
+
+- Updated the canonical logo to contain only the flowing M and the `MedFlux` wordmark.
+- Removed `Healthcare Intelligence Platform`, the divider, and `Connect · Analyze · Improve` from the production logo.
+- Replaced the application asset with an enhanced 860 × 536 px PNG and regenerated the favicon from the same clean artwork.
+- Removed the separate login tagline so no text is rendered beneath the logo.
