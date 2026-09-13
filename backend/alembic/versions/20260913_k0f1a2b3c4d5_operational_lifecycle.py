@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("actor_display_name", sa.String(length=255), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.CheckConstraint("decision IN ('monitor','negotiotiate','renew','terminate')".replace("negotiotiate", "renegotiate"), name="ck_contract_lifecycle_decision_decision"),
+        sa.CheckConstraint("decision IN ('monitor','renegotiate','renew','terminate')", name="ck_contract_lifecycle_decision_decision"),
         sa.CheckConstraint("status IN ('cancelled','completed','in_progress','planned')", name="ck_contract_lifecycle_decision_status"),
         sa.ForeignKeyConstraint(["organization_id"], ["organization.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["contract_id"], ["contract.id"], ondelete="CASCADE"),
