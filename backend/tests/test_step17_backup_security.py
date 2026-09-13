@@ -235,3 +235,49 @@ def test_restore_rejects_same_database_with_different_credentials_and_loopback_a
             target_database_url="postgresql://other:new@127.0.0.1:5432/medflux",
             target_documents_dir=tmp_path / "documents-restored",
         )
+
+
+def test_restore_storage_failure_happens_before_pg_restore(monkeypatch, tmp_path: Path):
+    _load("verify_backup", "scripts/verify_backup.py")
+    restore = _load("medflux_restore_backup_preflight_test", "scripts/restore_backup.py")
+    storage_key = f"{'c' * 32}/original.pdf"
+    (tmp_path / "database.dump").write_bytes(b"dump")
+    # Manifest points at a missing source; verify is stubbed so restore's own
+    # ordering is what this regression exercises.
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "format": "medflux-backup-v1",
+                "database": {"path": "database.dump", "sha256": "x", "size_bytes": 4},
+                "storage_objects": [
+                    {
+                        "storage_key": storage_key,
+                        "backup_path": f"storage/{storage_key}",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(restore, "verify_backup", lambda _path: {"ok": True})
+    monkeypatch.setattr(
+        restore.settings,
+        "database_url",
+        "postgresql+psycopg://u:p@127.0.0.1:5432/medflux",
+    )
+    called = {"pg_restore": False}
+
+    def fake_run(*args, **kwargs):
+        called["pg_restore"] = True
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(restore.subprocess, "run", fake_run)
+
+    with pytest.raises(FileNotFoundError):
+        restore.restore_backup(
+            backup=tmp_path,
+            target_database_url="postgresql://u:p@127.0.0.1:5432/medflux_restore_preflight",
+            target_documents_dir=tmp_path / "restored-storage",
+        )
+
+    assert called["pg_restore"] is False
