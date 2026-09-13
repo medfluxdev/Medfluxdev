@@ -1,0 +1,105 @@
+.contract-table-shell {
+  position: relative;
+}
+
+.contract-table-preferences {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.contract-density {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.contract-density .btn-ghost.active {
+  background: var(--surface-selected, rgba(59, 130, 246, 0.12));
+  border-color: var(--border-strong, rgba(148, 163, 184, 0.55));
+}
+
+.contract-column-menu {
+  position: relative;
+}
+
+.contract-column-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 220px;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+}
+
+.contract-column-popover label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.25rem;
+  cursor: pointer;
+}
+
+.contract-column-popover .btn-ghost {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.contract-table-scroll {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+}
+
+.contract-table-scroll:focus-visible {
+  outline: 3px solid var(--focus-ring, #2563eb);
+  outline-offset: 2px;
+}
+
+.contract-table-shell .contract-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface, #fff);
+}
+
+.contract-table-shell.density-compact .contract-table th,
+.contract-table-shell.density-compact .contract-table td {
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+
+.contract-table-shell.density-compact .contract-supplier,
+.contract-table-shell.density-compact .warning-title {
+  margin-top: 0.1rem;
+}
+
+@media (max-width: 720px) {
+  .contract-table-preferences {
+    align-items: stretch;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .contract-density {
+    flex: 1 1 auto;
+  }
+
+  .contract-density .btn-ghost {
+    flex: 1;
+  }
+
+  .contract-column-popover {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    top: auto;
+    bottom: 1rem;
+    max-height: 70vh;
+    overflow: auto;
+  }
+}
