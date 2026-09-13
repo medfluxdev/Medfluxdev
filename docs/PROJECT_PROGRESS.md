@@ -3700,3 +3700,32 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ## Nächster Schritt
 - Commit/Push `v3-robustness-abc` + Review-PR gegen `main` (kein Merge) mit Root-Cause/Änderungen/Testergebnissen/Risiken. Nach Freigabe: Accutron erneut (V3, `qwen3-vl:8b-instruct`, num_ctx 8192, Benchmark-only max_calls 64, read-only), bei allen Kern-Semantik-Steps grün → ABIOMED einmal; sonst STOPP + exakter Stage-Bericht.
+
+## Wartung 2026-09-13 – Harness-Hardening
+Status: CODE ABGESCHLOSSEN / RUNTIME AUSSTEHEND
+
+Implementiertes:
+- Residual-Critical-Claim-Verifier in die produktive GroupPipeline eingebunden.
+- Residual-Gates laufen auch bei deaktivierter semantischer KI-Verifikation.
+- Fehlende Entscheidungen des semantischen Verifiers degradieren nun den betroffenen Abschnittsnachweis auf manuelle Prüfung und Confidence <= 0.5.
+- Pipeline-Regression für Residual-Gate-Integration ergänzt.
+- STEP-18-Safety-Gate um die neue Regression erweitert.
+- Aufgaben- und Abschlussgrenze unter docs/HARNESS_HARDENING_TASKS.md dokumentiert.
+
+Geänderte Dateien:
+- backend/app/ai/groups/extractor.py
+- backend/tests/test_ai_verifier_completeness.py
+- backend/tests/test_ai_pipeline_residual_integration.py
+- scripts/step18_safety_gate.ps1
+- docs/HARNESS_HARDENING_TASKS.md
+- docs/PROJECT_PROGRESS.md
+
+Tests/Ergebnis:
+- Statische Codeänderungen und Regressionstests eingecheckt.
+- Kein Runtime-Pass behauptet: lokale Ausführung von scripts/step18_safety_gate.ps1 und scripts/step18_runtime_gate.ps1 steht noch aus.
+
+Bekannte Probleme:
+- Vollständige Laufzeitbestätigung benötigt die lokale isolierte PostgreSQL-/Frontend-/Benchmark-Umgebung.
+
+Nächster Schritt:
+- STEP-18 Runtime-Gate lokal ausführen und nur bei realem PASS die Runtime-Aufgabe schließen.
