@@ -7,6 +7,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
+import WorkItemCollaborationPanel from "@/components/work-queue/WorkItemCollaborationPanel";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
 import { formatDate, formatDaysRemaining } from "@/lib/format";
@@ -69,6 +70,7 @@ export default function WorkQueuePage() {
   const [status, setStatus] = useState("");
   const [severity, setSeverity] = useState("");
   const [itemType, setItemType] = useState("");
+  const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
   const toast = useToast();
   const effectiveOrgSlug = organizationSlug ?? "krankenhaus";
 
@@ -96,8 +98,12 @@ export default function WorkQueuePage() {
     setActionError(null);
     try {
       await setWorkItemStatus(item.id, effectiveOrgSlug, nextStatus);
-      if (nextStatus === "resolved") setItems((prev) => prev.filter((x) => x.id !== item.id));
-      else setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: nextStatus } : x)));
+      if (nextStatus === "resolved") {
+        setItems((prev) => prev.filter((x) => x.id !== item.id));
+        if (selectedWorkItemId === item.id) setSelectedWorkItemId(null);
+      } else {
+        setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: nextStatus } : x)));
+      }
       toast(nextStatus === "resolved" ? "Aufgabe als erledigt markiert." : "Aufgabe in Bearbeitung übernommen.", "success");
     } catch (err) {
       const reason = err instanceof Error && err.message ? err.message : "Status konnte nicht aktualisiert werden.";
@@ -106,7 +112,7 @@ export default function WorkQueuePage() {
     } finally {
       setBusyId(null);
     }
-  }, [effectiveOrgSlug, toast]);
+  }, [effectiveOrgSlug, selectedWorkItemId, toast]);
 
   function resetFilters() {
     setStatus("");
@@ -129,6 +135,8 @@ export default function WorkQueuePage() {
         <span><strong>Kündigungsfrist</strong> = letzter Termin für eine mögliche Kündigung</span>
         <span><strong>Vertragsende</strong> = dokumentiertes/berechnetes Ende des Vertrags</span>
       </div>
+
+      {selectedWorkItemId ? <WorkItemCollaborationPanel workItemId={selectedWorkItemId} onClose={() => setSelectedWorkItemId(null)} /> : null}
 
       {error && <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>To-dos konnten nicht geladen werden.</InlineAlert>}
       {actionError && <InlineAlert tone="warning" role="alert">{actionError}</InlineAlert>}
@@ -168,7 +176,7 @@ export default function WorkQueuePage() {
                         {item.target_date ? <><div>{formatDate(item.target_date)}</div><span className="muted">{formatDaysRemaining(item.days_remaining)}</span></> : <span className="muted">Kein Termin</span>}
                       </td>
                       <td><StatusBadge label={workItemStatusLabel(item.status)} tone="neutral" /></td>
-                      <td className="num"><div className="row-actions">{item.status === "open" && <Button size="sm" disabled={busyId === item.id} onClick={() => transition(item, "acknowledged")}>In Bearbeitung</Button>}<Button size="sm" variant="primary" disabled={busyId === item.id} onClick={() => transition(item, "resolved")}>Erledigt</Button></div></td>
+                      <td className="num"><div className="row-actions"><Button size="sm" onClick={() => setSelectedWorkItemId((current) => current === item.id ? null : item.id)}>Organisieren</Button>{item.status === "open" && <Button size="sm" disabled={busyId === item.id} onClick={() => transition(item, "acknowledged")}>In Bearbeitung</Button>}<Button size="sm" variant="primary" disabled={busyId === item.id} onClick={() => transition(item, "resolved")}>Erledigt</Button></div></td>
                     </tr>
                   );
                 })}
