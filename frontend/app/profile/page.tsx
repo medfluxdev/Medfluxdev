@@ -5,6 +5,7 @@ import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { apiGet, apiPatch } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS, type UserProfileDto } from "@/lib/auth-types";
+import { logoutAllSessions } from "@/lib/domain-api/security";
 
 const EMPTY: UserProfileDto = {
   id: "",
@@ -18,10 +19,11 @@ const EMPTY: UserProfileDto = {
 };
 
 export default function ProfilePage() {
-  const { role, refresh } = useAuth();
+  const { role, refresh, logout } = useAuth();
   const [profile, setProfile] = useState<UserProfileDto>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +81,21 @@ export default function ProfilePage() {
     }
   }
 
+  async function endAllSessions() {
+    setSessionBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await logoutAllSessions();
+      setMessage(`${result.revoked_sessions} Sitzung(en) wurden beendet. Sie werden abgemeldet.`);
+      await logout();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sitzungen konnten nicht beendet werden.");
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
   if (loading) return <div className="page profile-page"><p className="cw-muted">Profil wird geladen…</p></div>;
 
   return (
@@ -87,7 +104,7 @@ export default function ProfilePage() {
         <div>
           <span className="profile-kicker">Persönlicher Bereich</span>
           <h1>Mein Profil</h1>
-          <p>Persönliche Angaben und Profilbild verwalten.</p>
+          <p>Persönliche Angaben, Profilbild und Kontositzungen verwalten.</p>
         </div>
         <span className="profile-role-badge">{role ? ROLE_LABELS[role] : "Benutzer"}</span>
       </header>
@@ -127,6 +144,14 @@ export default function ProfilePage() {
           <div className="profile-actions">
             <button type="submit" disabled={saving}>{saving ? "Speichern…" : "Änderungen speichern"}</button>
           </div>
+
+          <section className="profile-security" aria-labelledby="profile-security-heading">
+            <h2 id="profile-security-heading">Sicherheit</h2>
+            <p>Beendet alle widerrufbaren Anmeldesitzungen dieses Kontos auf allen Geräten.</p>
+            <button type="button" className="profile-photo-remove" disabled={sessionBusy} onClick={() => void endAllSessions()}>
+              {sessionBusy ? "Sitzungen werden beendet…" : "Alle Sitzungen beenden"}
+            </button>
+          </section>
         </section>
       </form>
     </div>
