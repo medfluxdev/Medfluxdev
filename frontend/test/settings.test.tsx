@@ -81,12 +81,20 @@ beforeEach(() => {
 });
 
 async function renderWithSnapshot(snapshot: AISnapshot, provider = ToastProvider) {
-  apiGetMock.mockResolvedValue(snapshot);
+  apiGetMock.mockImplementation((path: string) =>
+    path === "/api/auth/me"
+      ? Promise.reject(new Error("Request failed: 503"))
+      : Promise.resolve(snapshot)
+  );
   const Provider = provider;
   const renderFn = (ui: React.ReactNode) =>
     Provider === ToastProvider ? <ToastProvider>{ui}</ToastProvider> : (ui as React.ReactElement);
   const utils = render(renderFn(<SettingsPage />));
-  await waitFor(() => expect(apiGetMock).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(apiGetMock).toHaveBeenCalledWith("/api/ai/snapshot", undefined, 40000)
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Lokale KI" }));
+  await waitFor(() => expect(screen.getByText("Aktive Auswahl")).toBeInTheDocument());
   return utils;
 }
 
