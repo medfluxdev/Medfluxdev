@@ -102,6 +102,8 @@ describe("Einstellungen (STEP 6B, Anbieter-unabhängig)", () => {
   it("zeigt Ladezustand und Fehler ehrlich an", async () => {
     apiGetMock.mockRejectedValue(new Error("boom"));
     render(<SettingsPage />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Lokale KI" }));
     await waitFor(() =>
       expect(
         screen.getByText("Einstellungen konnten nicht geladen werden.")
