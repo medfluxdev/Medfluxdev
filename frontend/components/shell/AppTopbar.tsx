@@ -56,6 +56,11 @@ export default function AppTopbar() {
     router.push(value ? `/contracts?q=${encodeURIComponent(value)}` : "/contracts");
   }
 
+  function openProfile() {
+    if (accountMenuRef.current) accountMenuRef.current.open = false;
+    router.push("/profile");
+  }
+
   return (
     <header className="topbar">
       <div className="page-title">{showTitle ? <span className="topbar-route-title" aria-hidden="true">{titleForPath(pathname)}</span> : null}</div>
@@ -76,7 +81,7 @@ export default function AppTopbar() {
                 <strong>{account.display_name}</strong>
                 <small>{account.email}</small>
               </div>
-              <Link href="/profile">Mein Profil</Link>
+              <button type="button" onClick={openProfile}>Mein Profil</button>
               {account.is_developer ? <Link href="/developer">Developer Dashboard</Link> : null}
               {account.is_developer ? <Link href="/developer/components">UI-Komponenten</Link> : null}
               {role === "admin" && membership ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
