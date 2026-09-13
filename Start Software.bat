@@ -132,7 +132,7 @@ if not exist "frontend" (
     exit /b 1
 )
 
-powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:3000 -TimeoutSec 2 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('localhost',3000); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
 if !errorlevel! equ 0 (
     echo [4/5] Frontend already running.
 ) else (
@@ -147,8 +147,8 @@ if !errorlevel! equ 0 (
 
 echo       Waiting for frontend...
 set "FRONTEND_READY=0"
-for /L %%I in (1,1,45) do (
-    powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:3000 -TimeoutSec 2 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+for /L %%I in (1,1,90) do (
+    powershell -NoProfile -Command "try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('localhost',3000); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
     if !errorlevel! equ 0 (
         set "FRONTEND_READY=1"
         goto :frontend_ready
