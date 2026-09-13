@@ -5,7 +5,7 @@ Last updated: 2026-09-13
 Status: IN PROGRESS
 Progress: 5/10 development steps complete (50%)
 Active step: FE-06 — Contract detail and source review workspace
-Next action: Verify the first FE-06 batch, then continue source-state clarity and workspace layout improvements.
+Next action: Verify the current FE-06 provenance/source batch, then continue calculated-value clarity and remaining workspace acceptance checks.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -123,29 +123,36 @@ Existing foundation already present:
 - Source navigation to document version/page/highlight.
 - Evidence, fact review, override and history views.
 
-Implemented in current FE-06 batch:
-- [x] Correction workflow now requires a reason and sends it through the verified backend `note` field.
+Implemented in current FE-06 batches:
+- [x] Correction workflow requires a reason and sends it through the verified backend `note` field.
 - [x] Previous/effective values and correction reason remain visible in review history.
 - [x] Unsaved correction drafts trigger browser navigation protection.
-- [x] Organization/hospital/department scope changes are now cancelable before local scope is mutated, allowing review drafts to block accidental context switches.
+- [x] Organization/hospital/department scope changes are cancelable before local scope is mutated, allowing review drafts to block accidental context switches.
 - [x] PDF source loading distinguishes forbidden, missing version/document, server error and timeout states with a real retry action.
 - [x] PDF/source refinement requests are cancellable; previous PDF documents/render tasks are cleaned up when switching.
-- [x] Added targeted correction-reason test coverage.
+- [x] Fact review now labels actual backend-supported provenance as `Extrahiert`, `Geprüft`, `Korrigiert`, `Fehlt` or `Systemwert`; labels are not guessed from UI state.
+- [x] Evidence confidence is shown only for finite values within 0..1; invalid confidence is suppressed instead of presented as meaningful.
+- [x] Evidence precision wording distinguishes exact, approximate, page-only and missing-position source states.
+- [x] Review/source workspace receives a stacked small-screen layout with non-sticky evidence/PDF panels and touch-friendly document switching.
+- [x] Added targeted tests for correction reason, provenance labels and evidence confidence/precision presentation.
 
 Remaining FE-06 scope:
-- [ ] Improve explicit visual distinction between extracted, manually reviewed, missing and calculated values across all detail sections.
-- [ ] Present confidence only when supplied and meaningful.
+- [ ] Add explicit `Berechnet` provenance to deterministic calculated dates/costs where the backend DTO identifies the value as calculated.
 - [ ] Continue review/edit audit clarity and verify all previous-value/reason paths.
 - [ ] Explain calculated costs and deadlines from deterministic backend/code inputs, never AI calculation.
-- [ ] Evaluate adjustable split workspace and small-screen document/review alternative without regressing source navigation.
-- [ ] Reverify missing-document/PDF recovery, document versions, source geometry and keyboard source navigation.
+- [ ] Evaluate adjustable desktop split workspace without regressing source navigation.
+- [ ] Reverify missing-document/PDF recovery, document versions, source geometry and keyboard source navigation after the current batch.
 
-Key files in current batch:
+Key files in current batches:
 - `frontend/components/contracts/detail/FactReviewPanel.tsx`
+- `frontend/components/contracts/detail/ValueOriginBadge.tsx`
+- `frontend/components/contracts/detail/EvidencePane.tsx`
 - `frontend/components/contracts/detail/PdfViewer.tsx`
 - `frontend/components/OrganizationScopePicker.tsx`
 - `frontend/app/contract-workspace-enhancements.css`
 - `frontend/test/fact-confirm-reviewer.test.tsx`
+- `frontend/test/value-origin-badge.test.tsx`
+- `frontend/test/evidence-pane-presentation.test.tsx`
 
 ## FE-07 — Action-oriented dashboards
 Status: PLANNED
