@@ -125,6 +125,19 @@ export async function apiPatch<T>(path: string, body: unknown, timeoutMs: number
   return (await res.json()) as T;
 }
 
+export async function apiDownload(
+  path: string,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<{ blob: Blob; filename: string | null }> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, {}, timeoutMs);
+  if (!res.ok) return throwForResponse(res, path);
+  const disposition = res.headers.get("content-disposition");
+  const encoded = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const simple = disposition?.match(/filename="?([^";]+)"?/i)?.[1];
+  const filename = encoded ? decodeURIComponent(encoded) : simple ?? null;
+  return { blob: await res.blob(), filename };
+}
+
 export function contentUrl(contractId: string, documentVersionId: string, orgSlug: string): string {
   const selected = typeof window !== "undefined" ? window.localStorage.getItem("medflux.organization_slug") : null;
   const q = new URLSearchParams({ organization_slug: selected || orgSlug });
