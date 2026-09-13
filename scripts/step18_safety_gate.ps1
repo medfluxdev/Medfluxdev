@@ -19,7 +19,8 @@ python -m py_compile `
     app/ai/groups/extractor.py `
     app/ai/groups/list_claim_verifier.py `
     app/ai/groups/verifier.py `
-    app/api/routes/operations.py
+    app/api/routes/operations.py `
+    app/core/config.py
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "[STEP18] Targeted fail-closed tests..."
@@ -35,7 +36,8 @@ python -m pytest -q `
     tests/test_ai_verifier_completeness.py `
     tests/test_ai_source_grounding.py `
     tests/test_ai_structured.py `
-    tests/test_operations_csv_safety.py
+    tests/test_operations_csv_safety.py `
+    tests/test_security_runtime_config.py
 
 $code = $LASTEXITCODE
 if ($code -eq 0) {
