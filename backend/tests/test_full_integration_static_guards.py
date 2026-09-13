@@ -1,0 +1,22 @@
+from pathlib import Path
+
+from app.database.models.fact_review import ContractReview, FactReview
+from app.database.models.override import ContractOverride
+
+
+def test_unified_actor_provenance_columns_do_not_point_only_to_app_user():
+    assert not FactReview.__table__.c.authenticated_actor_id.foreign_keys
+    assert not ContractReview.__table__.c.authenticated_actor_id.foreign_keys
+    assert not ContractOverride.__table__.c.actor_id.foreign_keys
+
+
+def test_organization_user_admin_does_not_toggle_global_account_active():
+    source = Path("app/api/routes/users.py").read_text(encoding="utf-8")
+    assert "account.is_active = payload.is_active" not in source
+    assert 'changes["membership_is_active"] = payload.is_active' in source
+
+
+def test_multi_org_global_identity_mutations_are_guarded():
+    source = Path("app/api/routes/users.py").read_text(encoding="utf-8")
+    assert "membership_count > 1 and not actor.is_developer" in source
+    assert "organisationsübergreifenden Kontos" in source
