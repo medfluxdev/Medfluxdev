@@ -15,10 +15,14 @@ from app.api.routes import (
     equipment,
     health,
     intelligence,
+    intelligence_actions,
+    notifications,
     operations,
     organization_structure,
     ownership,
+    processing_jobs,
     profile,
+    reports,
     system_organizations,
     user_scopes,
     users,
@@ -74,11 +78,15 @@ app.include_router(activity.router)
 # Existing JAMAL product APIs remain authoritative.
 app.include_router(ai.router)
 app.include_router(documents.router)
+app.include_router(processing_jobs.router)
 app.include_router(dashboard.router)
 app.include_router(contracts.router)
 app.include_router(equipment.router)
 app.include_router(work_queue.router)
 app.include_router(intelligence.router)
+app.include_router(intelligence_actions.router)
+app.include_router(notifications.router)
+app.include_router(reports.router)
 app.include_router(operations.router)
 app.include_router(demo.router)
 
