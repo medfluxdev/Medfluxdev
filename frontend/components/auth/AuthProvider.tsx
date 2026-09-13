@@ -22,6 +22,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function clearLocalScope() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem("medflux.hospitalId");
+  window.localStorage.removeItem("medflux.departmentId");
+}
+
 function persistAssignedScope(membership: ScopedMembership) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, membership.organization_slug);
@@ -53,6 +60,18 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     if (typeof window === "undefined") return;
     setSelectedSlug(window.localStorage.getItem(STORAGE_KEY));
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onSessionExpired = () => {
+      setAccount(null);
+      setSelectedSlug(null);
+      clearLocalScope();
+      if (pathname !== "/login") router.replace("/login?error=session");
+    };
+    window.addEventListener("medflux:session-expired", onSessionExpired);
+    return () => window.removeEventListener("medflux:session-expired", onSessionExpired);
+  }, [pathname, router]);
 
   useEffect(() => {
     let active = true;
@@ -134,11 +153,7 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     } finally {
       setAccount(null);
       setSelectedSlug(null);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(STORAGE_KEY);
-        window.localStorage.removeItem("medflux.hospitalId");
-        window.localStorage.removeItem("medflux.departmentId");
-      }
+      clearLocalScope();
       router.replace("/login");
     }
   }, [router]);
