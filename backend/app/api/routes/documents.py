@@ -14,7 +14,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.scope_context import current_scope_context
-from app.database.models import Contract, ContractDocument, DocumentFile, DocumentVersion
+from app.database.models import (
+    Contract,
+    ContractDocument,
+    Department,
+    DocumentFile,
+    DocumentVersion,
+    Hospital,
+)
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -70,12 +77,6 @@ def _linked_contract_ids(session, organization_id: UUID, document_version_id: UU
 
 
 def _ensure_document_visible(session, organization_id: UUID, document_version_id: UUID) -> None:
-    """Fail closed for hospital/department scoped users.
-
-    A document is visible when at least one linked contract is visible in the
-    active scope. Unlinked documents remain accessible only in organization-wide
-    scope because they cannot be safely attributed to a hospital/department yet.
-    """
     scope = current_scope_context()
     visible = scoped_contract_ids(
         session, organization_id, scope.hospital_id, scope.department_id
@@ -105,12 +106,37 @@ def _preflight_document(organization_slug: str, document_version_id: str) -> UUI
     return vid
 
 
-def _assign_import_scope(organization_slug: str, contract_id: str | None, status: str) -> None:
-    """Persist the current hospital/department scope on newly imported contracts.
+def _validate_import_scope(organization_slug: str) -> None:
+    """Reject invalid/unprovisioned scoped imports before any document is processed."""
+    scope = current_scope_context()
+    if scope.hospital_id is None and scope.department_id is None:
+        return
+    with create_session() as session:
+        org = get_organization(session, organization_slug)
+        if org is None:
+            raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        hospital = session.get(Hospital, scope.hospital_id) if scope.hospital_id else None
+        if hospital is None or hospital.organization_id != org.id or not hospital.is_active:
+            raise HTTPException(
+                status_code=403,
+                detail="Der Benutzer hat noch keinen gültigen Krankenhaus-Arbeitsbereich.",
+            )
+        if scope.department_id is not None:
+            department = session.get(Department, scope.department_id)
+            if (
+                department is None
+                or department.organization_id != org.id
+                or department.hospital_id != hospital.id
+                or not department.is_active
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Der Benutzer hat noch keinen gültigen Abteilungs-Arbeitsbereich.",
+                )
 
-    This replaces the former client-side follow-up PATCH and keeps ownership a
-    backend responsibility. Duplicate imports never reassign an existing contract.
-    """
+
+def _assign_import_scope(organization_slug: str, contract_id: str | None, status: str) -> None:
+    """Persist the current hospital/department scope on newly imported contracts."""
     if not contract_id or status != "imported":
         return
     scope = current_scope_context()
@@ -151,7 +177,6 @@ async def retry_document(
     document_version_id: str,
     organization_slug: str = Query(min_length=1),
 ) -> RetryDocumentResponse:
-    """Fehlgeschlagene/nicht abgeschlossene Verarbeitung erneut ausfuehren."""
     _preflight_document(organization_slug, document_version_id)
     processed = await run_in_threadpool(
         _processing_service.resume_document,
@@ -166,10 +191,7 @@ async def retry_document(
         analysis_status=processed.analysis_status,
         requires_review=processed.requires_review,
         contract_id=processed.contract_id,
-        message=(
-            processed.message
-            or _SAFE_FALLBACK_MESSAGES.get(str(processed.status), "")
-        ),
+        message=(processed.message or _SAFE_FALLBACK_MESSAGES.get(str(processed.status), "")),
     )
 
 
@@ -178,7 +200,6 @@ async def reanalyze_document(
     document_version_id: str,
     organization_slug: str = Query(min_length=1),
 ) -> RetryDocumentResponse:
-    """Explizite Reanalyse eines bereits akzeptierten Vertrags."""
     _preflight_document(organization_slug, document_version_id)
     processed = await run_in_threadpool(
         _processing_service.reanalyze_document,
@@ -192,10 +213,7 @@ async def reanalyze_document(
         analysis_status=processed.analysis_status,
         requires_review=processed.requires_review,
         contract_id=processed.contract_id,
-        message=(
-            processed.message
-            or _SAFE_FALLBACK_MESSAGES.get(str(processed.status), "")
-        ),
+        message=(processed.message or _SAFE_FALLBACK_MESSAGES.get(str(processed.status), "")),
     )
 
 
@@ -204,11 +222,10 @@ async def import_documents(
     files: list[UploadFile] = File(default=[]),
     organization_slug: str = Query(min_length=1),
 ) -> ImportBatchResponse:
-    """Imports PDF/DOCX files through the persisted production orchestrator."""
     if not files:
-        return ImportBatchResponse(
-            total=0, successful=0, failed=0, duplicates=0, documents=[]
-        )
+        return ImportBatchResponse(total=0, successful=0, failed=0, duplicates=0, documents=[])
+
+    _validate_import_scope(organization_slug)
 
     results: list[ImportFileResult] = []
     for uploaded in files:
@@ -221,11 +238,7 @@ async def import_documents(
             content=raw,
         )
         processed_status = str(processed.status)
-        _assign_import_scope(
-            organization_slug,
-            processed.contract_id,
-            processed_status,
-        )
+        _assign_import_scope(organization_slug, processed.contract_id, processed_status)
         results.append(
             ImportFileResult(
                 document_id=processed.document_id or None,
@@ -234,31 +247,19 @@ async def import_documents(
                 status=ImportStatus(processed.status),
                 size=len(raw),
                 sha256=processed.sha256 or None,
-                message=(
-                    processed.message
-                    or _SAFE_FALLBACK_MESSAGES.get(processed.status)
-                ),
+                message=(processed.message or _SAFE_FALLBACK_MESSAGES.get(processed.status)),
                 analysis_status=processed.analysis_status,
                 requires_review=processed.requires_review,
                 contract_id=processed.contract_id,
             )
         )
 
-    successful = sum(
-        1 for result in results if result.status == ImportStatus.IMPORTED
-    )
-    duplicates = sum(
-        1 for result in results if result.status == ImportStatus.DUPLICATE
-    )
+    successful = sum(1 for result in results if result.status == ImportStatus.IMPORTED)
+    duplicates = sum(1 for result in results if result.status == ImportStatus.DUPLICATE)
     failed = sum(
         1
         for result in results
-        if result.status
-        in {
-            ImportStatus.FAILED,
-            ImportStatus.REJECTED,
-            ImportStatus.ANALYSIS_FAILED,
-        }
+        if result.status in {ImportStatus.FAILED, ImportStatus.REJECTED, ImportStatus.ANALYSIS_FAILED}
     )
     return ImportBatchResponse(
         total=len(results),
@@ -276,7 +277,6 @@ def document_source_region(
     snippet: str = Query(min_length=2, max_length=500),
     page: int | None = Query(default=None, ge=1),
 ) -> dict:
-    """Narrowest trustworthy PDF region for a fact snippet (PR-5 UAT D)."""
     vid = _parse_version_id(document_version_id)
 
     with create_session() as session:
@@ -293,14 +293,10 @@ def document_source_region(
             raise _not_found()
         _ensure_document_visible(session, org.id, vid)
 
-        doc_file = None
-        if version.document_file_id is not None:
-            doc_file = session.get(DocumentFile, version.document_file_id)
+        doc_file = session.get(DocumentFile, version.document_file_id) if version.document_file_id is not None else None
         ext = (doc_file.file_extension or "").lower() if doc_file else ""
         if ext != "pdf":
-            raise HTTPException(
-                status_code=415, detail="Quell-Geometrie nur für PDF verfügbar."
-            )
+            raise HTTPException(status_code=415, detail="Quell-Geometrie nur für PDF verfügbar.")
 
         svc = DocumentPersistenceService()
         try:
