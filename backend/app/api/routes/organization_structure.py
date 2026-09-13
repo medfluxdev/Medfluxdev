@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.database.models.activity_log import ActivityLog
 from app.database.models.organization import Organization
 from app.database.models.organization_structure import Department, Hospital
 from app.database.session import create_session
@@ -45,9 +46,24 @@ def _organization(session, organization_slug: str):
 
 def _admin(request: Request):
     actor = getattr(request.state, "actor", None)
-    if actor is None or actor.role != "admin":
+    if actor is None or (actor.role != "admin" and not getattr(actor, "is_developer", False)):
         raise HTTPException(status_code=403, detail="Nur Administratoren dürfen die Organisationsstruktur ändern.")
     return actor
+
+
+def _record_activity(session, actor, *, event_name: str, object_type: str, object_id: UUID, hospital_id: UUID | None = None, department_id: UUID | None = None, context_data: dict | None = None) -> None:
+    session.add(ActivityLog(
+        organization_id=actor.organization_id,
+        hospital_id=hospital_id,
+        department_id=department_id,
+        account_id=actor.account_id,
+        display_name_snapshot=actor.display_name,
+        role_snapshot="developer" if getattr(actor, "is_developer", False) else actor.role,
+        event_name=event_name,
+        object_type=object_type,
+        object_id=object_id,
+        context_data=context_data,
+    ))
 
 
 @router.get("")
@@ -74,7 +90,10 @@ def add_hospital(payload: HospitalCreate, request: Request, organization_slug: s
         if organization.id != actor.organization_id:
             raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Organisation.")
         row = Hospital(organization_id=organization.id, name=payload.name.strip(), code=payload.code.strip().upper(), address=(payload.address or "").strip() or None, is_active=True)
-        session.add(row); session.commit()
+        session.add(row)
+        session.flush()
+        _record_activity(session, actor, event_name="hospital.created", object_type="hospital", object_id=row.id, hospital_id=row.id, context_data={"name": row.name, "code": row.code})
+        session.commit()
         return {"id": str(row.id), "name": row.name, "code": row.code}
     finally:
         session.close()
@@ -93,6 +112,7 @@ def update_hospital(hospital_id: UUID, payload: HospitalUpdate, request: Request
         if payload.code is not None: row.code = payload.code.strip().upper() or row.code
         if payload.address is not None: row.address = payload.address.strip() or None
         if payload.is_active is not None: row.is_active = payload.is_active
+        _record_activity(session, actor, event_name="hospital.updated", object_type="hospital", object_id=row.id, hospital_id=row.id, context_data={"name": row.name, "code": row.code, "is_active": row.is_active})
         session.commit()
         return {"id": str(row.id), "name": row.name, "code": row.code, "address": row.address, "is_active": row.is_active}
     finally:
@@ -109,7 +129,10 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         if hospital is None or hospital.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Krankenhaus nicht gefunden.")
         row = Department(organization_id=organization.id, hospital_id=hospital.id, name=payload.name.strip(), code=payload.code.strip().upper(), is_active=True)
-        session.add(row); session.commit()
+        session.add(row)
+        session.flush()
+        _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code})
+        session.commit()
         return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code}
     finally:
         session.close()
@@ -127,6 +150,7 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
         if payload.name is not None: row.name = payload.name.strip() or row.name
         if payload.code is not None: row.code = payload.code.strip().upper() or row.code
         if payload.is_active is not None: row.is_active = payload.is_active
+        _record_activity(session, actor, event_name="department.updated", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "is_active": row.is_active})
         session.commit()
         return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "is_active": row.is_active}
     finally:

@@ -3660,3 +3660,32 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 - Nach Auswahl einer Organisation darf der Developer deren Admin Dashboard öffnen.
 - Dadurch kann er organisationsbezogene Ansichten entwickeln, prüfen und Fehler beheben.
 - Ohne ausgewählte Organisation bleibt der Zugriff auf das Admin Dashboard gesperrt.
+
+
+---
+
+# Multi-Hospital-Struktur & systemweiter Developer-Zugriff
+
+**Status:** IMPLEMENTIERT
+
+**Datum:** 13.09.2026
+
+## Implementiert
+- Eine Organisation kann mehrere Krankenhäuser enthalten; jedes Krankenhaus besitzt eigene Abteilungen und Kostenstellen.
+- Organisations-Admins und Developer können Krankenhäuser, Abteilungen und Kostenstellen anlegen, bearbeiten, aktivieren und deaktivieren.
+- Der Scope-Picker unterstützt Organisation → Krankenhaus → Abteilung sowie die Gesamtansicht über alle Krankenhäuser.
+- Benutzer können auf Krankenhaus und optional Abteilung eingeschränkt werden; Admin und Developer dürfen organisationsweit arbeiten.
+- Developer erhalten systemweiten Zugriff auf alle aktiven Organisationen und darin die effektive Admin-Rolle, ohne einzelne Memberships pflegen zu müssen.
+- Strukturänderungen werden mit Benutzer, effektiver Rolle, Organisation, Krankenhaus/Abteilung und Kontext im Activity Log protokolliert; Developer erscheinen ausdrücklich als `developer`.
+
+## Dateien
+- `backend/app/api/routes/organization_structure.py`
+- `backend/tests/test_developer_authorization.py`
+- vorhandene Multi-Hospital-Basis: Models, Migrationen, Scope-Middleware und Organisationsstruktur-UI
+
+## Verifikation
+- Autorisierungsregeln durch fokussierte Unit-Tests abgesichert: Developer-Bypass und unveränderte Einschränkung normaler Rollen.
+- Vollständiger lokaler Backend-/Frontend-Testlauf ist nach `git pull origin Ahmad` auf der Windows-Installation auszuführen.
+
+## Bekannte Grenzen
+- Keine harte Löschung von Krankenhäusern/Abteilungen in der Oberfläche; Deaktivierung bewahrt Vertrags- und Audit-Historie.
