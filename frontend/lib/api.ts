@@ -23,6 +23,11 @@ export function userMessageForStatus(status: number): string {
   return "Die Anfrage konnte nicht abgeschlossen werden.";
 }
 
+function notifySessionExpired(path: string) {
+  if (typeof window === "undefined" || path === "/api/auth/login" || path === "/api/auth/logout") return;
+  window.dispatchEvent(new CustomEvent("medflux:session-expired"));
+}
+
 function scopedPath(path: string): string {
   if (typeof window === "undefined" || !path.startsWith("/api/")) return path;
   if (!path.includes("organization_slug=")) return path;
@@ -91,31 +96,32 @@ async function errorMessage(res: Response): Promise<string> {
   return userMessageForStatus(res.status);
 }
 
-async function throwForResponse(res: Response): Promise<never> {
+async function throwForResponse(res: Response, path: string): Promise<never> {
+  if (res.status === 401) notifySessionExpired(path);
   throw new ApiError(await errorMessage(res), { status: res.status, code: "http" });
 }
 
 export async function apiGet<T>(path: string, signal?: AbortSignal, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { signal }, timeoutMs);
-  if (!res.ok) return throwForResponse(res);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
 export async function apiPost<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
-  if (!res.ok) return throwForResponse(res);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
 export async function apiPut<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
-  if (!res.ok) return throwForResponse(res);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
 export async function apiPatch<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
-  if (!res.ok) return throwForResponse(res);
+  if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
 
@@ -142,7 +148,7 @@ export async function apiUpload<T>(path: string, files: File[], slug?: string): 
   if (d) q.set("department_id", d);
   const query = q.toString() ? `?${q.toString()}` : "";
   const res = await fetchWithTimeout(`${API_BASE}${path}${query}`, { method: "POST", body: form }, DEFAULT_TIMEOUT_MS);
-  if (!res.ok) return throwForResponse(res);
+  if (!res.ok) return throwForResponse(res, path);
   const data = (await res.json()) as T;
   if (path === "/api/documents/import" && effectiveSlug && (h || d)) {
     const documents = (data as { documents?: Array<{ contract_id?: string | null }> }).documents ?? [];
