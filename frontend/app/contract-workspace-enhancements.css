@@ -106,6 +106,35 @@
   max-width: 60ch;
 }
 
+/* FE-06: desktop source review behaves like an adjustable split workspace.
+   The evidence pane is the resize handle itself, so no JavaScript or fake
+   persistence is needed. The PDF pane always consumes the remaining width. */
+@media (min-width: 1201px) {
+  .cw-evidence-layout {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .cw-evidence-pane {
+    width: clamp(340px, 38vw, 620px);
+    min-width: 320px;
+    max-width: min(70vw, 760px);
+    resize: horizontal;
+    overflow: auto;
+    border-right: 3px solid #d7e3eb;
+    padding-right: 8px;
+  }
+
+  .cw-evidence-pane:focus-within,
+  .cw-evidence-pane:hover {
+    border-right-color: #0b86a8;
+  }
+
+  .cw-evidence-preview {
+    min-width: 0;
+  }
+}
+
 @media (max-width: 900px) {
   .cw-document-layout,
   .cw-evidence-layout {
@@ -131,7 +160,14 @@
   }
 
   .cw-evidence-pane {
+    width: auto;
+    max-width: none;
     max-height: 360px;
+    resize: vertical;
+    border-right: 0;
+    border-bottom: 3px solid #d7e3eb;
+    padding-right: 0;
+    padding-bottom: 8px;
   }
 
   .cw-evidence-preview,
