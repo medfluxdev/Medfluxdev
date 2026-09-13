@@ -74,7 +74,7 @@ function LoginContent() {
     <main className="auth-page" id="main-content">
       <div className="auth-login-shell">
         <header className="auth-login-brand">
-          <MedFluxLogo showDescriptor />
+          <MedFluxLogo priority />
           <p>Connect · Analyze · Improve</p>
         </header>
 
