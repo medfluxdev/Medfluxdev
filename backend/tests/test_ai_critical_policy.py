@@ -60,3 +60,44 @@ def test_contract_number_and_termination_are_critical() -> None:
     assert policy_for("identity.contract_number").criticality is Criticality.CRITICAL
     assert policy_for("termination.cancellation_period").criticality is Criticality.CRITICAL
     assert policy_for("termination.automatic_renewal").criticality is Criticality.CRITICAL
+
+
+def test_operational_equipment_and_residual_claims_are_in_policy():
+    required = {
+        "equipment[].device_name",
+        "equipment[].manufacturer",
+        "equipment[].model",
+        "equipment[].serial_number",
+        "equipment[].inventory_number",
+        "equipment[].system_name",
+        "equipment[].equipment_category",
+        "equipment[].equipment_type",
+        "equipment[].location",
+        "equipment[].department",
+        "equipment[].coverage_start",
+        "equipment[].coverage_end",
+        "equipment[].service_scope",
+        "equipment[].included_services",
+        "equipment[].excluded_services",
+        "equipment[].sla_notes",
+        "costs.default_currency",
+        "costs.scheduled_prices",
+        "costs.variable_charges",
+        "payment.payment_terms",
+        "services.inspection",
+        "services.calibration",
+        "services.remote_support",
+        "services.technical_support",
+        "services.consumables_included",
+        "sla.service_hours",
+        "sla.sla_notes",
+    }
+    owned = {
+        p.field
+        for p in (
+            CURRENT_VERIFIER_CLAIMS
+            + SPECIALIZED_CRITICAL_CLAIMS
+            + PENDING_CRITICAL_CLAIMS
+        )
+    }
+    assert required <= owned
