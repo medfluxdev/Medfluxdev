@@ -70,3 +70,11 @@ def test_ownership_routes_enforce_scope_and_audit_changes():
 def test_user_scope_changes_are_audited():
     source = _source("app/api/routes/user_scopes.py")
     assert 'event_name="account.scope_updated"' in source
+
+
+def test_work_queue_updates_are_scope_checked_and_audited():
+    source = _source("app/api/routes/work_queue.py")
+    assert "scoped_contract_ids" in source
+    assert "row.contract_id not in allowed" in source
+    assert 'event_name=f"work_item.{body.status}"' in source
+    assert 'object_type="contract"' in source
