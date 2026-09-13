@@ -119,8 +119,10 @@ def _verifier_recorder():
     captured = {"calls": 0, "decisions": None}
     original = groups_extractor.run_verifier
 
-    async def wrapped(ai_service, contract, context, max_tokens=1500):
-        res, calls = await original(ai_service, contract, context, max_tokens)
+    async def wrapped(ai_service, contract, context, max_tokens=2200, units=None):
+        res, calls = await original(
+            ai_service, contract, context, max_tokens=max_tokens, units=units
+        )
         captured["calls"] += 1
         captured["decisions"] = [
             {"field": d.field, "supported": d.supported, "reason": d.reason}
