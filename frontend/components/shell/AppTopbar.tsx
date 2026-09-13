@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import OrganizationScopePicker from "@/components/OrganizationScopePicker";
 import { useAuth } from "@/components/auth/AuthProvider";
+import NotificationCenter from "@/components/shell/NotificationCenter";
 import { ROLE_LABELS } from "@/lib/auth-types";
 
 function titleForPath(pathname: string) {
@@ -71,6 +72,7 @@ export default function AppTopbar() {
           <label className="visually-hidden" htmlFor="global-contract-search">Vertragsnummer suchen</label>
           <input id="global-contract-search" type="search" placeholder="Vertragsnummer …" value={query} onChange={(event) => setQuery(event.target.value)} />
         </form>
+        {account && membership ? <NotificationCenter /> : null}
         {account && role ? (
           <details ref={accountMenuRef} className="account-menu">
             <summary className="top-user" aria-label="Kontomenü öffnen">
