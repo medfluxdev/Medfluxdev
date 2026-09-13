@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import MedFluxLogo from "@/components/brand/MedFluxLogo";
 import { type AccountRole } from "@/lib/auth-types";
 import type { AIStatus } from "@/lib/ai-types";
 
