@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS } from "@/lib/auth-types";
+import MedFluxLogo from "@/components/brand/MedFluxLogo";
 
 export default function SelectOrganizationPage() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function SelectOrganizationPage() {
   return (
     <main className="workspace-select-page" id="main-content">
       <section className="workspace-select-card" aria-labelledby="workspace-title">
-        <div className="workspace-select-brand"><span className="logo" aria-hidden="true" /><strong>Medflux</strong></div>
+        <div className="workspace-select-brand"><MedFluxLogo showDescriptor /></div>
         <p className="workspace-select-kicker">Arbeitsbereich</p>
         <h1 id="workspace-title">Organisation auswählen</h1>
         <p className="workspace-select-intro">Wählen Sie die Organisation, in der Sie jetzt arbeiten möchten.</p>
