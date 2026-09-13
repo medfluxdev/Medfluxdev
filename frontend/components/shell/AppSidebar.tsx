@@ -1,0 +1,141 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { apiGet } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { type AccountRole } from "@/lib/auth-types";
+
+type Icon = React.ReactNode;
+type NavItem = { label: string; href: string; icon: keyof typeof icons; roles?: AccountRole[] };
+
+const icons: Record<string, Icon> = {
+  dashboard: <path d="M4 12h5l3-7 3 14 2-7h3" />,
+  admin: <><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 15v-3M12 15V8M16 15v-5"/></>,
+  contracts: <><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></>,
+  workQueue: <><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 13h5"/></>,
+  import: <path d="M12 3v18M3 12h18" />,
+  review: <><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></>,
+  evidence: <><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></>,
+  audit: <><path d="M5 20V4h14v16z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
+  archive: <><path d="M4 8h16v12H4z"/><path d="M7 8V4h10v4"/><path d="M9 12h6"/></>,
+  settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7-1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></>,
+};
+
+const EDITORS: AccountRole[] = ["admin", "contract_manager"];
+const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
+
+const GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Arbeitsbereich",
+    items: [
+      { label: "Übersicht", href: "/", icon: "dashboard" },
+      { label: "Verträge", href: "/contracts", icon: "contracts" },
+      { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
+    ],
+  },
+  {
+    label: "Dokumente & Prüfung",
+    items: [
+      { label: "Import", href: "/import", icon: "import", roles: EDITORS },
+      { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
+      { label: "Nachweise", href: "/nachweise", icon: "evidence" },
+      { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
+      { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
+      { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
+    ],
+  },
+];
+
+function isActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export default function AppSidebar() {
+  const pathname = usePathname();
+  const { account, membership, role } = useAuth();
+  const [healthy, setHealthy] = useState<boolean | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("medflux.sidebarCollapsed") === "true");
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    apiGet<{ status: string }>("/health")
+      .then((health) => mounted && setHealthy(health.status === "ok"))
+      .catch(() => mounted && setHealthy(false));
+    return () => { mounted = false; };
+  }, []);
+
+  const groups = useMemo(
+    () => GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.roles || (role ? item.roles.includes(role) : false)),
+    })).filter((group) => group.items.length),
+    [role]
+  );
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem("medflux.sidebarCollapsed", String(next));
+      return next;
+    });
+  }
+
+  return (
+    <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
+      <div className="sidebar-head">
+        <Link href="/" className="brand" aria-label="Medflux Startseite">
+          <span className="logo" />
+          <span className="sidebar-label-copy"><strong>Medflux</strong><small>Intelligentes Vertragsmanagement</small></span>
+        </Link>
+        <button className="sidebar-collapse-button" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"} aria-pressed={collapsed}>
+          {collapsed ? "›" : "‹"}
+        </button>
+      </div>
+
+      <nav className="side-nav-root" aria-label="Hauptnavigation">
+        {groups.map((group) => (
+          <div key={group.label} className="side-nav-group">
+            <div className="nav-label sidebar-label-copy">{group.label}</div>
+            <div className="side-nav">
+              {group.items.map((item) => (
+                <Link key={item.href} href={item.href} className={`nav-item${isActive(pathname, item.href) ? " active" : ""}`} aria-current={isActive(pathname, item.href) ? "page" : undefined} title={collapsed ? item.label : undefined}>
+                  <span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{icons[item.icon]}</svg></span>
+                  <span className="sidebar-label-copy">{item.label}</span>
+                </Link>
+              ))}
+              {group.label === "Administration" && account?.is_developer ? (
+                <Link href="/developer" className={`nav-item${isActive(pathname, "/developer") || isActive(pathname, "/system/organizations") ? " active" : ""}`} aria-current={isActive(pathname, "/developer") ? "page" : undefined} title={collapsed ? "Developer Dashboard" : undefined}>
+                  <span className="ico"><svg viewBox="0 0 24 24" aria-hidden="true">{icons.admin}</svg></span>
+                  <span className="sidebar-label-copy">Developer Dashboard</span>
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="side-bottom">
+        <div className="side-ai" title={collapsed ? `API: ${healthy === null ? "Prüfe" : healthy ? "Gesund" : "Offline"}` : undefined}>
+          <div className="side-ai-top"><b className="sidebar-label-copy">Systemstatus</b><div className="health"><span className="health-dot"/>{collapsed ? "" : healthy === null ? "Prüfe…" : healthy ? "API verfügbar" : "API offline"}</div></div>
+          <p className="sidebar-label-copy">Lokale Verarbeitung<br/>Keine externen Modellaufrufe</p>
+        </div>
+        <div className="org-card" title={collapsed ? membership?.organization_name ?? "Krankenhaus" : undefined}>
+          <span className="org-avatar">{membership?.organization_name?.slice(0, 1).toUpperCase() ?? "M"}</span>
+          <div className="sidebar-label-copy"><b>{membership?.organization_name ?? (account?.is_developer ? "Systemverwaltung" : "Krankenhaus")}</b><small>{membership ? `Arbeitsbereich ${membership.organization_slug}` : account?.is_developer ? "Developer" : "Arbeitsbereich"}</small></div>
+        </div>
+      </div>
+    </aside>
+  );
+}
