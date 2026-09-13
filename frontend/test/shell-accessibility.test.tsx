@@ -38,8 +38,8 @@ describe("Application shell accessibility", () => {
   });
 
   it("shows the saved profile photo in the account trigger", () => {
-    render(<AppTopbar />);
-    expect(screen.getByRole("img", { hidden: true })).toHaveAttribute(
+    const { container } = render(<AppTopbar />);
+    expect(container.querySelector(".top-user-avatar img")).toHaveAttribute(
       "src",
       expect.stringContaining("data:image/png;base64,bWVkaWNhbC1sb2dv")
     );
