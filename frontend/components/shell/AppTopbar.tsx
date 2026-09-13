@@ -58,7 +58,7 @@ export default function AppTopbar() {
 
   return (
     <header className="topbar">
-      <div className="page-title">{showTitle ? <h1>{titleForPath(pathname)}</h1> : null}</div>
+      <div className="page-title">{showTitle ? <span className="topbar-route-title" aria-hidden="true">{titleForPath(pathname)}</span> : null}</div>
       <div className="top-actions">
         {membership ? <OrganizationScopePicker /> : null}
         <form className="search" onSubmit={submit} role="search" aria-label="Verträge durchsuchen">
