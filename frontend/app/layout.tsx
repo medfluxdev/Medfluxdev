@@ -18,11 +18,12 @@ import "./contracts-list.css";
 import "./import-enhancements.css";
 import "./work-queue.css";
 import "./release-gate.css";
+import "./brand-identity.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Medflux",
-    template: "%s · Medflux",
+    default: "MedFlux",
+    template: "%s · MedFlux",
   },
   description:
     "Lokales KI-System für deutsche Krankenhäuser zur Analyse und Überwachung von Wartungs- und Serviceverträgen.",
