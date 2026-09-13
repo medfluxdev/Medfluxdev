@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.auth.dependencies import current_actor
+from app.core.scope_context import current_scope_context
 from app.database.models.activity_log import ActivityLog
 from app.database.models.organization import Organization
 from app.database.models.organization_structure import Department, Hospital
@@ -68,12 +69,28 @@ def _record_activity(session, actor, *, event_name: str, object_type: str, objec
 
 
 @router.get("")
-def structure(organization_slug: str):
+def structure(request: Request, organization_slug: str):
+    actor = current_actor(request, organization_slug)
     session = create_session()
     try:
         organization = _organization(session, organization_slug)
-        hospitals = session.scalars(select(Hospital).where(Hospital.organization_id == organization.id).order_by(Hospital.name.asc())).all()
-        departments = session.scalars(select(Department).where(Department.organization_id == organization.id).order_by(Department.name.asc())).all()
+        if organization.id != actor.organization_id:
+            raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+
+        hospital_stmt = select(Hospital).where(Hospital.organization_id == organization.id)
+        department_stmt = select(Department).where(Department.organization_id == organization.id)
+        if actor.role != "admin" and not actor.is_developer:
+            scope = current_scope_context()
+            if scope.hospital_id is None:
+                # Should not happen for provisioned non-admin accounts; fail closed.
+                return {"hospitals": [], "departments": []}
+            hospital_stmt = hospital_stmt.where(Hospital.id == scope.hospital_id)
+            department_stmt = department_stmt.where(Department.hospital_id == scope.hospital_id)
+            if scope.department_id is not None:
+                department_stmt = department_stmt.where(Department.id == scope.department_id)
+
+        hospitals = session.scalars(hospital_stmt.order_by(Hospital.name.asc())).all()
+        departments = session.scalars(department_stmt.order_by(Department.name.asc())).all()
         return {
             "hospitals": [{"id": str(row.id), "name": row.name, "code": row.code, "address": row.address, "is_active": row.is_active} for row in hospitals],
             "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "is_active": row.is_active} for row in departments],
