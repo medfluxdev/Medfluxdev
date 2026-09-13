@@ -157,7 +157,6 @@ def _ground_contract_number(contract: Contract, texts: list[str]) -> list[str]:
 
 
 def _strip_party_qualifiers(value: str) -> str:
-    """Remove model-added contact/role suffixes without changing the legal name."""
     cleaned = " ".join(str(value or "").split())
     cleaned = re.sub(r"\s*\([^()]{2,120}\)\s*$", "", cleaned).strip()
     return cleaned
@@ -195,12 +194,6 @@ def _name_quality(value: str) -> float:
 
 
 def _table_role_anchor(texts: list[str], role: str) -> Optional[str]:
-    """Read a party cell only when a pipe-serialized table gives an explicit role column.
-
-    Table cells may contain embedded line breaks. Therefore after an explicit
-    role header we inspect the first six subsequent *pipe rows*, not merely a
-    fixed number of physical lines.
-    """
     aliases = {
         "customer": ("auftraggeber", "kunde"),
         "supplier": ("auftragnehmer", "lieferant", "dienstleister"),
@@ -280,7 +273,6 @@ def _canonicalize_party_name(
 
 
 def _source_contract_title(texts: list[str]) -> Optional[str]:
-    """Return an explicit compact contract heading, never a prose inference."""
     for text in texts[:12]:
         for raw_line in text.splitlines():
             line = " ".join(raw_line.split())
@@ -306,8 +298,34 @@ def _contract_type_from_title(title: Optional[str]) -> Optional[ContractType]:
     return None
 
 
+def _source_contains(texts: list[str], *needles: str) -> bool:
+    haystack = "\n".join(texts).casefold()
+    return any(needle.casefold() in haystack for needle in needles)
+
+
+def _included_contains(contract: Contract, *needles: str) -> bool:
+    joined = "\n".join(contract.services.included_services).casefold()
+    return any(needle.casefold() in joined for needle in needles)
+
+
+def _ground_source_services_from_texts(contract: Contract, texts: list[str]) -> list[str]:
+    issues: list[str] = []
+    rules = (
+        ("maintenance", ("wartung",), ("wartung",)),
+        ("repair", ("reparatur", "reparaturen"), ("reparatur", "reparaturen")),
+        ("software_updates", ("software-update", "software update"), ("software-update", "software update")),
+    )
+    for field_name, included_needles, source_needles in rules:
+        if getattr(contract.services, field_name) is not None:
+            continue
+        if _included_contains(contract, *included_needles) and _source_contains(texts, *source_needles):
+            setattr(contract.services, field_name, True)
+            issues.append(f"services.{field_name}: aus belegter included_services-Zeile groundet")
+    return issues
+
+
 def ground_source_identity(contract: Contract, units: Iterable[object]) -> list[str]:
-    """Evidence-first post-processing for critical identity fields."""
+    """Evidence-first post-processing for critical identity and service facts."""
     texts = _iter_source_texts(units)
     issues = _ground_contract_number(contract, texts)
 
@@ -340,40 +358,14 @@ def ground_source_identity(contract: Contract, units: Iterable[object]) -> list[
         elif not old and anchor:
             setattr(contract.identity, field_name, _strip_party_qualifiers(anchor))
             issues.append(f"identity.{field_name}: explizite Tabellenrolle aus Quelle übernommen")
+
+    issues.extend(_ground_source_services_from_texts(contract, texts))
     return issues
-
-
-def _source_contains(texts: list[str], *needles: str) -> bool:
-    haystack = "\n".join(texts).casefold()
-    return any(needle.casefold() in haystack for needle in needles)
-
-
-def _included_contains(contract: Contract, *needles: str) -> bool:
-    joined = "\n".join(contract.services.included_services).casefold()
-    return any(needle.casefold() in joined for needle in needles)
 
 
 def ground_source_services(contract: Contract, units: Iterable[object]) -> list[str]:
-    """Stabilize high-value service booleans from already extracted service rows.
-
-    We only promote null -> true when both the structured included_services list
-    and the original source text independently contain the corresponding service
-    concept. Absence never becomes false.
-    """
-    texts = _iter_source_texts(units)
-    issues: list[str] = []
-    rules = (
-        ("maintenance", ("wartung",), ("wartung",)),
-        ("repair", ("reparatur", "reparaturen"), ("reparatur", "reparaturen")),
-        ("software_updates", ("software-update", "software update"), ("software-update", "software update")),
-    )
-    for field_name, included_needles, source_needles in rules:
-        if getattr(contract.services, field_name) is not None:
-            continue
-        if _included_contains(contract, *included_needles) and _source_contains(texts, *source_needles):
-            setattr(contract.services, field_name, True)
-            issues.append(f"services.{field_name}: aus belegter included_services-Zeile groundet")
-    return issues
+    """Public focused helper used by tests and future pipeline stages."""
+    return _ground_source_services_from_texts(contract, _iter_source_texts(units))
 
 
 CONTRADICTION_REVIEW = "logical contradiction"
