@@ -12,6 +12,7 @@ import { ROLE_LABELS } from "@/lib/auth-types";
 function titleForPath(pathname: string) {
   if (pathname.startsWith("/contracts/")) return "Vertrag 360";
   if (pathname === "/contracts") return "Verträge";
+  if (pathname === "/analysen") return "Analysen";
   if (pathname === "/work-queue") return "To-dos";
   if (pathname === "/import") return "Import";
   if (pathname === "/review") return "Prüfungen";
@@ -68,6 +69,7 @@ export default function AppTopbar() {
       <div className="page-title">{showTitle ? <span className="topbar-route-title" aria-hidden="true">{titleForPath(pathname)}</span> : null}</div>
       <div className="top-actions">
         {membership ? <OrganizationScopePicker /> : null}
+        {membership ? <Link href="/analysen" className="btn-ghost">Analysen</Link> : null}
         <form className="search" onSubmit={submit} role="search" aria-label="Verträge durchsuchen">
           <label className="visually-hidden" htmlFor="global-contract-search">Vertragsnummer suchen</label>
           <input id="global-contract-search" type="search" placeholder="Vertragsnummer …" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -89,6 +91,7 @@ export default function AppTopbar() {
                 <small>{account.email}</small>
               </div>
               <button type="button" onClick={openProfile}>Mein Profil</button>
+              <Link href="/analysen">Analysen</Link>
               {account.is_developer ? <Link href="/developer">Developer Dashboard</Link> : null}
               {account.is_developer ? <Link href="/developer/components">UI-Komponenten</Link> : null}
               {role === "admin" && membership ? <Link href="/settings/users">Benutzer verwalten</Link> : null}
