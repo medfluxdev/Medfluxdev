@@ -3653,3 +3653,10 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 ## Verifikation
 - Rollen- und Endpoint-Logik statisch geprüft.
 - Vollständiger lokaler Testlauf ist nach `git pull origin Ahmad` auf der Windows-Installation auszuführen.
+
+
+## Korrektur – Developer-Zugriff auf Admin Dashboard
+- Developer bleibt standardmäßig im Developer Dashboard.
+- Nach Auswahl einer Organisation darf der Developer deren Admin Dashboard öffnen.
+- Dadurch kann er organisationsbezogene Ansichten entwickeln, prüfen und Fehler beheben.
+- Ohne ausgewählte Organisation bleibt der Zugriff auf das Admin Dashboard gesperrt.
