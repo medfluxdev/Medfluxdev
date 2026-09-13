@@ -141,7 +141,16 @@ function Sidebar() {
       .catch(() => mounted && setHealthy(false));
     apiGet<AuthIdentity>("/api/auth/me")
       .then((me) => mounted && setIdentity(me))
-      .catch(() => mounted && setIdentity(null));
+      .catch((err) => {
+        if (!mounted) return;
+        setIdentity(null);
+        // AUTH_ENABLED=false returns 503 in development and must keep the
+        // local no-login workflow. A real 401 means the protected app has no
+        // valid session and should not leave the user on a broken shell.
+        if (err instanceof Error && err.message.includes("401")) {
+          router.replace("/login");
+        }
+      });
     return () => {
       mounted = false;
     };
