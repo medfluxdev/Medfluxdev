@@ -101,3 +101,11 @@ def test_cost_center_reads_are_scope_filtered():
     assert 'actor.role != "admin" and not actor.is_developer' in source
     assert "CostCenter.hospital_id == scope.hospital_id" in source
     assert "CostCenter.department_id == scope.department_id" in source
+
+
+def test_ai_selection_and_test_require_admin_or_developer():
+    source = _source("app/api/routes/ai.py")
+    assert "_require_ai_admin" in source
+    assert 'getattr(request.state, "is_developer", False)' in source
+    assert 'actor is not None and actor.role == "admin"' in source
+    assert "_require_ai_admin(request)" in source
