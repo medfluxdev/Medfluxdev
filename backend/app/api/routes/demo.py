@@ -1,7 +1,7 @@
 """Demo-/UAT-Arbeitsbereich – globaler Diagnosemodus.
 
-Der Modus beeinflusst die sichtbare Vertragsmenge installationsweit und darf
-therefore nicht von normalen Fachrollen umgeschaltet werden.
+Der Modus beeinflusst die sichtbare Vertragsmenge installationsweit und ist
+therefore ausschließlich ein Developer-/UAT-Werkzeug.
 """
 
 from __future__ import annotations
@@ -25,21 +25,18 @@ class WorkspaceToggleResponse(BaseModel):
     enabled: bool
 
 
-def _require_demo_admin(request: Request) -> None:
+def _require_developer(request: Request) -> None:
     if getattr(request.state, "is_developer", False):
-        return
-    actor = getattr(request.state, "actor", None)
-    if actor is not None and actor.role == "admin":
         return
     raise HTTPException(
         status_code=403,
-        detail="Nur Administratoren oder der Developer dürfen den Demo-Arbeitsbereich verwalten.",
+        detail="Der Demo-Arbeitsbereich ist ausschließlich für den Developer verfügbar.",
     )
 
 
 @router.get("/workspace", response_model=WorkspaceResponse)
 def get_workspace_status(request: Request) -> WorkspaceResponse:
-    _require_demo_admin(request)
+    _require_developer(request)
     session = create_session()
     try:
         return WorkspaceResponse(**workspace_status(session))
@@ -49,7 +46,7 @@ def get_workspace_status(request: Request) -> WorkspaceResponse:
 
 @router.post("/workspace/enable", response_model=WorkspaceToggleResponse)
 def enable_workspace(request: Request) -> WorkspaceToggleResponse:
-    _require_demo_admin(request)
+    _require_developer(request)
     session = create_session()
     try:
         set_workspace_enabled(session, enabled=True)
@@ -61,7 +58,7 @@ def enable_workspace(request: Request) -> WorkspaceToggleResponse:
 
 @router.post("/workspace/disable", response_model=WorkspaceToggleResponse)
 def disable_workspace(request: Request) -> WorkspaceToggleResponse:
-    _require_demo_admin(request)
+    _require_developer(request)
     session = create_session()
     try:
         set_workspace_enabled(session, enabled=False)
