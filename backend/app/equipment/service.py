@@ -23,9 +23,6 @@ def list_equipment(
     limit: int = 200,
 ) -> list[EquipmentSummary]:
     """Liste kanonischer Geräte einer Organisation mit Vertrags-Anzahl."""
-    # Eine contract_equipment-Zeile = genau eine Vertrags-Verknüpfung (Dedup).
-    # Korrelierte Zählung der Vertrags-Verknüpfungen pro Gerät (org-scoped).
-    # Archivierte Verträge zählen nicht in den aktiven Gerätebestand.
     contract_count = (
         select(func.count(ContractEquipment.id))
         .join(Contract, Contract.id == ContractEquipment.contract_id)
@@ -81,7 +78,7 @@ def get_equipment_detail(
     organization_id,
     equipment_id,
 ) -> Optional[EquipmentDetail]:
-    """Ein Gerät mit allen verknüpften Verträgen (n:m)."""
+    """Ein Gerät mit allen verknüpften Verträgen (n:m), strikt org-gebunden."""
     equip = session.scalars(
         select(Equipment).where(
             (Equipment.organization_id == organization_id)
@@ -96,6 +93,7 @@ def get_equipment_detail(
         .where(
             (ContractEquipment.organization_id == organization_id)
             & (ContractEquipment.equipment_id == equip.id)
+            & (Contract.organization_id == organization_id)
             & (Contract.lifecycle_state == "active")
             & (Contract.is_archived.is_(False))
         )
@@ -112,7 +110,7 @@ def get_equipment_detail(
         )
         for ce, c in rows
     ]
-    detail = EquipmentDetail(
+    return EquipmentDetail(
         id=str(equip.id),
         device_name=equip.device_name,
         manufacturer=equip.manufacturer,
@@ -127,4 +125,3 @@ def get_equipment_detail(
         contract_count=len(links),
         contracts=links,
     )
-    return detail
