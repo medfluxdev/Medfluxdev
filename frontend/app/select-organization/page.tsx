@@ -20,7 +20,7 @@ export default function SelectOrganizationPage() {
   return (
     <main className="workspace-select-page" id="main-content">
       <section className="workspace-select-card" aria-labelledby="workspace-title">
-        <div className="workspace-select-brand"><MedFluxLogo showDescriptor /></div>
+        <div className="workspace-select-brand"><MedFluxLogo priority /></div>
         <p className="workspace-select-kicker">Arbeitsbereich</p>
         <h1 id="workspace-title">Organisation auswählen</h1>
         <p className="workspace-select-intro">Wählen Sie die Organisation, in der Sie jetzt arbeiten möchten.</p>
