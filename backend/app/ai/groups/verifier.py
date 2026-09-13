@@ -73,7 +73,7 @@ _FIELD_LABELS: dict[str, re.Pattern[str]] = {
     "termination.automatic_renewal": re.compile(r"automatisch|verlänger|verlaenger|renewal", re.I),
     "dates.start_date": re.compile(r"vertragsbeginn|beginn|start(?:datum| date)?", re.I),
     "dates.end_date": re.compile(r"vertragsende|ende|end(?:datum| date)?", re.I),
-    "costs.annual_cost": re.compile(r"jährlich|jaehrlich|pro\s+jahr|jahres(?:preis|gebühr|gebuehr)|annual", re.I),
+    "costs.annual_cost": re.compile(r"jährlich|jaehrlich|pro\s+jahr|jahres(?:preis|gebühr|gebuehr)|(?<!semi[- ])\bannual\b", re.I),
     "costs.monthly_cost": re.compile(r"monatlich|pro\s+monat|monats(?:preis|gebühr|gebuehr)|monthly", re.I),
     "costs.quarterly_cost": re.compile(r"quartal|vierteljährlich|vierteljaehrlich|quarter", re.I),
     "costs.semi_annual_cost": re.compile(r"halbjährlich|halbjaehrlich|semi[- ]?annual", re.I),
@@ -441,13 +441,16 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
 
     if field == "costs.tax_basis":
         wanted = str(value).casefold()
-        words = ("netto", "net") if wanted == "net" else ("brutto", "gross") if wanted == "gross" else (wanted,)
+        pattern = (
+            re.compile(r"\b(?:netto|net)\b", re.I)
+            if wanted == "net"
+            else re.compile(r"\b(?:brutto|gross)\b", re.I)
+            if wanted == "gross"
+            else re.compile(rf"\b{re.escape(wanted)}\b", re.I)
+        )
         for text in texts:
-            low = text.casefold()
-            for word in words:
-                idx = low.find(word)
-                if idx >= 0:
-                    return _short_excerpt(text, idx, idx + len(word))
+            if (m := pattern.search(text)):
+                return _short_excerpt(text, m.start(), m.end())
         return None
 
     if field == "costs.tax_rate_percent":
@@ -473,19 +476,18 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
 
     if field == "payment.billing_interval":
         interval = value.value if isinstance(value, BillingInterval) else str(value)
-        words = {
-            "monthly": ("monatlich", "pro monat", "monthly"),
-            "quarterly": ("vierteljährlich", "vierteljaehrlich", "quartalsweise", "quarterly"),
-            "semi_annual": ("halbjährlich", "halbjaehrlich", "semi-annual", "semi annual"),
-            "annual": ("jährlich", "jaehrlich", "pro jahr", "annual"),
-            "once": ("einmalig", "once"),
-        }.get(interval, ())
+        pattern = {
+            "monthly": re.compile(r"\bmonatlich\b|\bpro\s+monat\b|\bmonthly\b", re.I),
+            "quarterly": re.compile(r"\bvierteljährlich\b|\bvierteljaehrlich\b|\bquartalsweise\b|\bquarterly\b", re.I),
+            "semi_annual": re.compile(r"\bhalbjährlich\b|\bhalbjaehrlich\b|\bsemi[- ]annual\b", re.I),
+            "annual": re.compile(r"\bjährlich\b|\bjaehrlich\b|\bpro\s+jahr\b|(?<!semi[- ])\bannual\b", re.I),
+            "once": re.compile(r"\beinmalig\b|\bonce\b", re.I),
+        }.get(interval)
+        if pattern is None:
+            return None
         for text in texts:
-            low = text.casefold()
-            for word in words:
-                idx = low.find(word.casefold())
-                if idx >= 0:
-                    return _short_excerpt(text, idx, idx + len(word))
+            if (m := pattern.search(text)):
+                return _short_excerpt(text, m.start(), m.end())
         return None
 
     if field in _SERVICE_TERMS:
