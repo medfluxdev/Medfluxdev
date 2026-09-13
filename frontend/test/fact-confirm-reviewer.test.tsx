@@ -71,4 +71,33 @@ describe("Faktprüfung – Bestätigen (authentifizierter Benutzer)", () => {
     expect(await screen.findByText("Prüf-Aktion gespeichert.")).toBeInTheDocument();
     expect(reload).toHaveBeenCalledTimes(1);
   });
+
+  it("Korrigieren verlangt eine Begründung und sendet alten Workflow nachvollziehbar mit note", async () => {
+    apiPostMock.mockResolvedValue({});
+    const reload = vi.fn();
+    const user = userEvent.setup();
+    render(<FactReviewPanel data={fixture()} orgSlug={ORG} onReload={reload} />);
+
+    const panel = within(reviewPanel());
+    await user.click(panel.getByRole("button", { name: /Korrigieren/ }));
+    await user.type(panel.getByLabelText("Korrigierter Wert"), "88024308");
+    await user.click(panel.getByRole("button", { name: "Korrektur speichern" }));
+
+    expect(apiPostMock).not.toHaveBeenCalled();
+    expect(panel.getByText("Bitte begründen Sie die Korrektur.")).toBeInTheDocument();
+
+    await user.type(panel.getByLabelText("Begründung der Korrektur"), "Seriennummer im Dokument geprüft");
+    await user.click(panel.getByRole("button", { name: "Korrektur speichern" }));
+
+    expect(apiPostMock).toHaveBeenCalledWith(
+      `/api/contracts/${CONTRACT_ID}/fact-reviews?organization_slug=${ORG}`,
+      {
+        fact_key: "equipment.serial",
+        action: "corrected",
+        corrected_value: "88024308",
+        note: "Seriennummer im Dokument geprüft",
+      }
+    );
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
 });
