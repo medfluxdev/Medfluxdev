@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.database.models import DocumentFile, DocumentVersion
+from app.core.config import settings
 from app.documents.persistence import DocumentPersistenceService, StorageError
 from app.documents.processing import DocumentProcessingService
 from app.documents.schemas import ImportBatchResponse, ImportFileResult, ImportStatus
@@ -22,6 +23,25 @@ from app.database.session import create_session
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 _processing_service = DocumentProcessingService()
+
+
+async def _read_upload_bounded(uploaded: UploadFile) -> bytes:
+    """Read one upload without allowing an oversized body to exhaust memory."""
+    limit = max(1, int(settings.max_upload_size_mb)) * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await uploaded.read(min(1024 * 1024, limit + 1 - total))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Datei ist groesser als das erlaubte Limit von {settings.max_upload_size_mb} MB.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 _SAFE_FALLBACK_MESSAGES = {
     "rejected": "Dokument wurde abgelehnt.",
@@ -115,7 +135,7 @@ async def import_documents(
 
     results: list[ImportFileResult] = []
     for uploaded in files:
-        raw = await uploaded.read()
+        raw = await _read_upload_bounded(uploaded)
         processed = await run_in_threadpool(
             _processing_service.process,
             organization_slug=organization_slug,
