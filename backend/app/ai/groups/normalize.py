@@ -67,15 +67,15 @@ _ORG_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 _CONTRACT_NUMBER_LABEL_RE = re.compile(
-    r"\b(?:vertrags?(?:nummer|[- ]?nr\.? )?|contract\s*(?:number|no\.?))\b",
+    r"\b(?:vertragsnummer|vertrags[- ]?nr\.?|vertrag[- ]?nr\.?|contract\s*(?:number|no\.?))\b",
     re.IGNORECASE,
 )
 _OFFER_NUMBER_LABEL_RE = re.compile(
-    r"\b(?:angebots?(?:nummer|[- ]?nr\.?))\b",
+    r"\b(?:angebotsnummer|angebots[- ]?nr\.?|angebot[- ]?nr\.?)\b",
     re.IGNORECASE,
 )
 _ORDER_NUMBER_LABEL_RE = re.compile(
-    r"\b(?:bestellung|bestell(?:nummer|[- ]?nr\.?)|purchase\s*order|po\s*(?:number|no\.?))\b",
+    r"\b(?:bestellung|bestellnummer|bestell[- ]?nr\.?|purchase\s*order|po\s*(?:number|no\.?))\b",
     re.IGNORECASE,
 )
 
@@ -132,11 +132,11 @@ def _window_around(text: str, needle: str, radius: int = 90) -> list[str]:
 
 
 def _ground_contract_number(contract: Contract, texts: list[str]) -> list[str]:
-    """Verwirft eine Bestellnummer, wenn sie fälschlich als Vertragsnummer kam.
+    """Reject an order number misclassified as a contract number.
 
-    Ein Wert bleibt erhalten, sobald derselbe Wert irgendwo im Dokument nahe einer
-    expliziten Vertrags-/Angebotsnummer-Markierung steht. Nur wenn alle belegten
-    Vorkommen ausschließlich Bestellkontext sind, wird auf None zurückgesetzt.
+    Keep the extracted value if any occurrence is explicitly labelled as a
+    contract or offer number. Otherwise, if its evidenced occurrences are in
+    order/purchase-order context, clear it instead of guessing.
     """
     value = (contract.identity.contract_number or "").strip()
     if not value:
@@ -157,9 +157,6 @@ def _ground_contract_number(contract: Contract, texts: list[str]) -> list[str]:
 
 
 def _split_org_candidates(text: str) -> list[str]:
-    # DOCX-Tabellen und Signaturen verwenden typischerweise Zeilen, Pipes oder
-    # Slash-Trenner. Kurze Segmente halten den Vergleich robust und vermeiden,
-    # dass eine komplette Signatur als Firmenname übernommen wird.
     raw_parts = re.split(r"[\n|;/]+", text)
     candidates: list[str] = []
     for raw in raw_parts:
@@ -168,7 +165,6 @@ def _split_org_candidates(text: str) -> list[str]:
             continue
         if not _ORG_HINT_RE.search(part):
             continue
-        # Adress-/E-Mail-Zeilen sind keine canonical organization names.
         low = part.lower()
         if "@" in part or re.search(r"\b\d{4,5}\b", part) or low.startswith(("email", "tel", "fax")):
             continue
@@ -186,7 +182,6 @@ def _name_quality(value: str) -> float:
         penalty += 0.15
     if any(ch in ";{}[]" for ch in value):
         penalty += 0.12
-    # Häufige OCR-Verwechslung bei deutscher Gesellschaftsform.
     if re.search(r"\bgmrh\b", value, re.IGNORECASE):
         penalty += 0.18
     return ratio - penalty
@@ -208,9 +203,6 @@ def _canonicalize_party_name(value: Optional[str], texts: list[str]) -> tuple[Op
                 continue
             score = SequenceMatcher(None, current_norm, _fuzzy_norm(candidate)).ratio()
             quality = _name_quality(candidate)
-            # Fuzzy-Match korrigiert nur offensichtliche OCR-Schreibweisen. Die
-            # hohe Schwelle + Qualitätsverbesserung verhindert einen Wechsel zu
-            # einer anderen Firma, nur weil beide z.B. "GmbH" enthalten.
             if score < 0.72 or quality < current_quality + 0.08:
                 continue
             weighted = score + min(0.2, quality - current_quality)
@@ -222,11 +214,7 @@ def _canonicalize_party_name(value: Optional[str], texts: list[str]) -> tuple[Op
 
 
 def ground_source_identity(contract: Contract, units: Iterable[object]) -> list[str]:
-    """Evidence-first Nachbearbeitung für Identitätsfelder.
-
-    Die Funktion ist absichtlich lieferantenunabhängig: sie nutzt ausschließlich
-    die im Dokument vorhandenen Texteinheiten und generische Rollen-/Nummerregeln.
-    """
+    """Evidence-first post-processing for identity fields."""
     texts = _iter_source_texts(units)
     issues = _ground_contract_number(contract, texts)
 
