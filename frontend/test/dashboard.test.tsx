@@ -146,6 +146,13 @@ describe("Dashboard Übersicht", () => {
     expect(screen.getByText("Manuelle Prüfung / Datenqualität")).toBeInTheDocument();
   });
 
+  it("zeigt die vier Kennzahlen vor den großen Detailtabellen", async () => {
+    await renderWithData(fixture());
+    const firstKpi = screen.getByText("Aktive Verträge");
+    const firstTable = screen.getByText("Handlungsbedarf");
+    expect(firstKpi.compareDocumentPosition(firstTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("formatiert Währungen und Datum deutsch (42.500,00 €)", async () => {
     await renderWithData(fixture());
     expect(screen.getByText(/Jährliche Kosten: 42\.500,00\s*€/)).toBeInTheDocument();
