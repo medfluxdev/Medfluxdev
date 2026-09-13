@@ -36,7 +36,7 @@ describe("Application shell accessibility", () => {
     const user = userEvent.setup();
     render(<AppTopbar />);
 
-    const summary = screen.getByText("Max Mustermann").closest("summary") as HTMLElement;
+    const summary = screen.getByLabelText("Kontomenü öffnen");
     await user.click(summary);
     expect(screen.getByRole("link", { name: "Mein Profil" })).toBeVisible();
 
