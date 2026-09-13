@@ -63,8 +63,8 @@ describe("Shell: Topbar-Eingaben", () => {
       return Promise.resolve({});
     });
     render(<ClientNav>Inhalt</ClientNav>);
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health"));
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status"));
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health", expect.any(AbortSignal)));
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status", expect.any(AbortSignal)));
     await waitFor(() => expect(screen.getByText("API verfügbar")).toBeInTheDocument());
     expect(screen.getByText(/KI: qwen bereit/)).toBeInTheDocument();
   });
