@@ -21,6 +21,7 @@ Scope: static review only. No runtime pass is claimed until the local PostgreSQL
 - Human-review provenance has server-side ORM hooks: when an authenticated identity is bound, client-supplied reviewer names are overwritten with signed user identity (`authenticated_local` + `app_user.id`). DB-free spoof-resistance tests were added.
 - Contract 360 now obtains `/api/auth/me` for review actions and displays the authenticated reviewer; unauthenticated development mode remains explicitly `manual_unverified`.
 - Review-required evidence is now presented as `Unbestätigt · Menschliche Prüfung erforderlich`, not as a merely recommended review.
+- Critical material facts cannot be blanket-waived at review completion: any `critical_unreviewed_count > 0` blocks the backend transition to `reviewed`; only non-critical unresolved facts can be explicitly acknowledged with a note. The Contract 360 UI mirrors this server rule.
 
 ## Negative regression coverage added
 
@@ -41,10 +42,9 @@ These tests are committed but are **runtime-pending** until the local isolated P
 
 ## Runtime-only closure checks
 
-1. Run DB-free `scripts/step18_safety_gate.ps1`.
-2. Run DB-backed auth/tenant regression tests, including `test_auth_route_boundary_e2e.py` and existing auth E2E.
-3. Run the full backend suite against the isolated test schema.
-4. Run frontend TypeScript/lint/build after the Contract 360 identity/evidence UI changes.
+1. Run the single local closure command `scripts/step18_runtime_gate.ps1`.
+2. That command first runs the DB-free safety gate, then DB-backed auth/tenant regressions.
+3. It runs frontend TypeScript/tests/lint/build, the focused real Accutron safety benchmark, and only then the full backend suite.
 
 ## Security invariant
 
