@@ -5,9 +5,10 @@ import { useParams } from "next/navigation";
 import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
 import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
 import ContractIntelligencePanel from "@/components/contracts/detail/ContractIntelligencePanel";
+import PdfViewer from "@/components/contracts/detail/PdfViewer";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getContract } from "@/lib/domain-api/contracts";
-import type { ContractDetailResponse } from "@/lib/contract-detail-types";
+import type { ContractDetailResponse, EvidenceRef, SourceNavigationTarget } from "@/lib/contract-detail-types";
 
 function normalizeContractDetail(res: ContractDetailResponse): ContractDetailResponse {
   const factReviewStates = res.fact_review_states ?? [];
@@ -59,6 +60,31 @@ function normalizeContractDetail(res: ContractDetailResponse): ContractDetailRes
   };
 }
 
+function sourceTarget(ref: EvidenceRef): SourceNavigationTarget {
+  return {
+    document_version_id: ref.document_version_id,
+    page: ref.page,
+    bbox: ref.bbox,
+    bbox_space: ref.bbox_space,
+    supports_exact_navigation: ref.supports_exact_navigation,
+    label: ref.snippet || ref.field_ref || "Quelle",
+    field_ref: ref.field_ref,
+    evidence_id: ref.evidence_id,
+  };
+}
+
+function resolveEvidence(data: ContractDetailResponse, refs: string[]): EvidenceRef | null {
+  for (const wanted of refs) {
+    const exact = data.evidence.find((ref) => ref.evidence_id === wanted || ref.field_ref === wanted);
+    if (exact) return exact;
+  }
+  for (const wanted of refs) {
+    const prefixed = data.evidence.find((ref) => ref.field_ref?.startsWith(`${wanted}.`) || wanted.startsWith(`${ref.field_ref}.`));
+    if (prefixed) return prefixed;
+  }
+  return null;
+}
+
 export default function ContractDetailPage() {
   const params = useParams<{ "contract-id": string }>();
   const contractId = params?.["contract-id"] ?? "";
@@ -67,6 +93,8 @@ export default function ContractDetailPage() {
   const [data, setData] = useState<ContractDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [intelligenceTarget, setIntelligenceTarget] = useState<SourceNavigationTarget | null>(null);
+  const [sourceUnavailable, setSourceUnavailable] = useState(false);
 
   const load = useCallback(() => {
     if (!contractId || !organizationSlug) return;
@@ -79,6 +107,25 @@ export default function ContractDetailPage() {
   }, [contractId, organizationSlug]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    function onEvidence(event: Event) {
+      if (!data) return;
+      const detail = (event as CustomEvent<{ refs?: string[] }>).detail;
+      const refs = Array.isArray(detail?.refs) ? detail.refs.filter((value): value is string => typeof value === "string") : [];
+      const evidence = resolveEvidence(data, refs);
+      if (!evidence?.document_version_id) {
+        setIntelligenceTarget(null);
+        setSourceUnavailable(true);
+        return;
+      }
+      setSourceUnavailable(false);
+      setIntelligenceTarget(sourceTarget(evidence));
+      window.setTimeout(() => document.getElementById("intelligence-source-viewer")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    }
+    window.addEventListener("medflux:intelligence-evidence", onEvidence);
+    return () => window.removeEventListener("medflux:intelligence-evidence", onEvidence);
+  }, [data]);
 
   return (
     <div className="page">
@@ -104,6 +151,26 @@ export default function ContractDetailPage() {
           <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />
           <ContractWorkspace data={data} orgSlug={organizationSlug} onReload={load} />
           <ContractIntelligencePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
+          {sourceUnavailable ? (
+            <div id="intelligence-source-viewer" className="alert" role="status">
+              Der Intelligence-Nachweis konnte keinem kanonischen Vertragsnachweis zugeordnet werden. Es wird keine Quelle erfunden.
+            </div>
+          ) : null}
+          {intelligenceTarget ? (
+            <section id="intelligence-source-viewer" className="cw-section" aria-label="Intelligence-Quelle">
+              <div className="cw-section-head">
+                <div><h2>Intelligence-Quelle</h2><p>{intelligenceTarget.label}</p></div>
+                <button type="button" className="btn-ghost" onClick={() => setIntelligenceTarget(null)}>Schließen</button>
+              </div>
+              <PdfViewer
+                contractId={data.contract_id}
+                orgSlug={organizationSlug}
+                documentVersionId={intelligenceTarget.document_version_id}
+                active={true}
+                navTarget={intelligenceTarget}
+              />
+            </section>
+          ) : null}
         </>
       ) : null}
     </div>
