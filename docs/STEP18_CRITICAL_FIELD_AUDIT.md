@@ -1,77 +1,83 @@
 # STEP 18 Critical Field Audit
 
-This audit is intentionally fail-closed. A field being present in the Pydantic schema does not mean it is safe to trust operationally.
+Status: **static implementation complete / runtime validation pending**.
 
-## Current verifier coverage
+This audit is fail-closed. A value being present in the Pydantic contract schema never makes it operationally trusted by itself.
 
-The semantic verifier currently covers:
+## Enforced scalar semantic verifier
 
-- identity.contract_number
-- dates.start_date / end_date / duration / minimum_duration
-- termination.cancellation_period / automatic_renewal / renewal_period
-- costs.annual_cost / monthly_cost / total_contract_value
-- payment.billing_interval (except `other`, which is an unknown/default and not a claim)
+The central policy in `backend/app/ai/groups/critical_policy.py` owns the scalar critical claims. The semantic verifier now covers:
 
-Field-scoped evidence routing exists for those fields. Missing verifier decisions and unsupported decisions are review conditions.
+- contract number;
+- supplier, customer and contractor with role-aware evidence;
+- start/end dates, total duration and minimum duration;
+- cancellation period, automatic renewal and renewal period;
+- recurring/one-time/maintenance/hourly/additional/total money claims currently assigned to the scalar verifier;
+- price-adjustment clause, tax basis and tax rate;
+- payment deadline, advance payment and billing interval (except `other`, which remains unknown/default);
+- critical service booleans such as maintenance, repair, software updates, spare parts and emergency service;
+- SLA response time, resolution time, emergency availability and 24/7 availability.
 
-## Critical claims not yet semantically verified
+Production verification with extraction units is field-evidence-first. Missing field evidence is not replaced with unrelated section evidence. Duplicate, incomplete or unexpected verifier decisions fail closed into manual review.
 
-These remain **runtime/architecture work**, not trusted claims merely because extraction succeeded:
+## Specialized deterministic critical gates
 
-### Parties
-- identity.supplier
-- identity.customer
-- identity.contractor
+Claims that cannot be safely represented as one scalar `section.field` are owned by specialized gates:
 
-Party names have deterministic source grounding/canonicalization, but they are not in `SENSITIVE_FIELDS`. Role mistakes are legally/operationally important and require a dedicated party-role verifier rather than generic fuzzy matching alone.
+- each equipment item is independently evidence-verified;
+- serial and inventory numbers require the correct identifier semantics;
+- equipment coverage dates require coverage semantics;
+- conflicting duplicate device identities are surfaced instead of silently merged;
+- included/excluded service-list members are checked individually;
+- excluded services require explicit negative semantics;
+- residual termination/payment clauses are traceable to source text;
+- remaining service tri-state booleans require explicit positive/negative support;
+- service hours and SLA notes are source-grounded;
+- setup/travel/material/spare-parts/discount money claims require matching semantic labels;
+- scheduled prices require amount + period context;
+- variable charges require amount + label/unit context.
 
-### Equipment coverage
-- equipment[].device_name / model / manufacturer
-- serial_number / inventory_number
-- service_scope
-- coverage_start / coverage_end
-- included_services / excluded_services
+The policy inventory explicitly owns these specialized claims and `PENDING_CRITICAL_CLAIMS` is empty. Runtime tests are still required before STEP 18 is closed.
 
-Each Equipment object has its own `SourceEvidence`, but the current GroupPipeline section evidence loop only verifies section-level evidence and does not iterate `contract.equipment`. This is a concrete coverage gap. Until fixed and runtime-tested, equipment coverage must not be treated as fully evidence-verified.
+## Human-review invariant
 
-### Services
-- services.included_services / excluded_services
-- maintenance / inspection / repair / calibration / software_updates
-- remote_support / technical_support
-- spare_parts_included / consumables_included / emergency_service
+A contract may not be marked reviewed while any **critical** material fact is still unreviewed. Blanket acknowledgement is allowed only for remaining non-critical items and still requires an explicit note.
 
-Tri-state bool prompting and deterministic grounding reduce hallucination risk, but these claims are not currently in the semantic verifier set.
+The Contract 360 review UI mirrors this rule: critical open facts disable review completion and are shown as a blocking condition.
 
-### SLA
-- response_time / resolution_time / service_hours / emergency_availability
-- availability_24_7
+## Evidence/UI invariant
 
-These can affect hospital operations and must eventually receive field-scoped evidence verification. `availability_24_7` must preserve tri-state semantics: absence is null, never false.
+- Evidence without concrete `source_text` is not proof.
+- Review-required evidence is displayed as **Unbestätigt · Menschliche Prüfung erforderlich**.
+- The review list no longer claims all active contracts were human-reviewed merely because no open review rows were returned.
+- Authenticated reviewer identity is server-bound; development/manual identity remains explicitly unverified.
 
-### Financial fields beyond current verifier
-- quarterly_cost / semi_annual_cost / one_time_cost
-- setup_installation_cost / maintenance_fee / hourly_rate
-- travel_cost / material_cost / spare_parts_cost / additional_costs
-- scheduled_prices / variable_charges / discounts
-- price_adjustment_clause / price_indexation
-- tax_basis / tax_rate_percent
-- payment_terms / payment_deadline_days / advance_payment
+## Static regression coverage
 
-No derived aggregation is allowed at extraction time. Conditional/variable charges must remain separate.
+The targeted safety gate includes regression tests for:
 
-## Required implementation order
+- critical-policy ownership/parity;
+- evidence fail-closed behavior;
+- semantic verifier completeness and outage handling;
+- party-role, service/SLA, money and adversarial field routing;
+- per-equipment evidence and equipment claim conflicts;
+- service list and residual critical claims;
+- multi-chunk conflicts;
+- auth reviewer provenance;
+- critical-review completion;
+- CSV formula-injection protection;
+- production security configuration.
 
-1. Verify per-equipment evidence objects deterministically in GroupPipeline.
-2. Add dedicated critical-claim inventory/policy rather than growing one ad-hoc tuple indefinitely.
-3. Add party-role semantic verification with field-scoped role evidence.
-4. Add equipment identity/coverage verification.
-5. Add services/SLA verification with tri-state bool rules.
-6. Expand financial verification without deriving values.
-7. Ensure every critical present claim is either VERIFIED/GROUNDED or forces NEEDS_REVIEW.
-8. Add adversarial tests for conflicting parties, devices, service inclusion/exclusion, SLA and money.
-9. Run DB-free targeted safety gate.
-10. Run one real Accutron benchmark and then the full backend regression.
+## Runtime closure still required
+
+1. Run `scripts/step18_safety_gate.ps1` with `MEDFLUX_UNIT_ONLY=1`.
+2. Run the real Accutron production extraction at temperature 0.
+3. Assert the canonical 27/27 benchmark and no invented critical facts.
+4. Verify minimum-duration field evidence and `billing_interval=other` exclusion in the real pipeline.
+5. Run DB-backed auth/tenant isolation gates.
+6. Run frontend TypeScript/lint/build.
+7. Run the full backend regression suite once targeted gates pass.
 
 ## Closure invariant
 
-A critical extracted value must never become operationally trusted solely because the LLM emitted valid JSON. It needs source grounding/evidence plus the applicable deterministic/semantic verification policy. Missing, contradictory, unsupported, or unverifiable evidence must fail closed to human review.
+No critical extracted value is operationally trusted solely because an LLM emitted schema-valid JSON. Missing, contradictory, unsupported or unverifiable evidence fails closed to human review.
