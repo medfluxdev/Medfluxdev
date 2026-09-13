@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -30,7 +30,7 @@ function EyeIcon({ hidden }: { hidden: boolean }) {
   );
 }
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const params = useSearchParams();
   const { account, refresh } = useAuth();
@@ -100,5 +100,13 @@ export default function LoginPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="auth-loading">Anmeldung wird geladen…</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }
