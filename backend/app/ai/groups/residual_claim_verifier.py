@@ -178,6 +178,8 @@ def verify_residual_critical_claims(contract: Contract, units: Iterable[object])
             _mark_section(contract.sla)
             issues.append("sla.service_hours: Zeitwert nicht feldspezifisch in der Quelle gestützt")
 
+    _check_exact(issues, texts, "sla.sla_notes", contract.sla.sla_notes, contract.sla)
+
     # Scheduled prices: each explicit amount must be tied to its period label in
     # at least one source unit. A bare repeated amount is not enough.
     for index, price in enumerate(contract.costs.scheduled_prices):
