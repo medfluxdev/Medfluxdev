@@ -80,11 +80,26 @@ def _contains_number(text: str, number: float | int) -> bool:
     return any(v.replace(" ", "") in compact for v in variants)
 
 
+def _currency_of(value: Any) -> str | None:
+    if value is None:
+        return None
+    currency = getattr(value, "currency", None)
+    if isinstance(value, dict):
+        currency = value.get("currency")
+    return str(currency).strip().upper() if currency else None
+
+
 def _money_supported(texts: list[str], value: Any, label: re.Pattern[str]) -> bool:
     amount = _amount(value)
     if amount is None:
         return False
-    return any(label.search(text) and _contains_number(text, amount) for text in texts)
+    currency = _currency_of(value)
+    return any(
+        label.search(text)
+        and _contains_number(text, amount)
+        and _currency_supported([text], currency)
+        for text in texts
+    )
 
 
 def _bool_supported(texts: list[str], terms: tuple[str, ...], expected: bool) -> bool:
@@ -213,8 +228,10 @@ def verify_residual_critical_claims(contract: Contract, units: Iterable[object])
         if amount is None:
             continue
         label = str(price.period_label or "").strip()
+        currency = _currency_of(price.amount)
         supported = any(
             _contains_number(text, amount)
+            and _currency_supported([text], currency)
             and (not label or _exactish(text, label))
             for text in texts
         )
@@ -232,8 +249,10 @@ def verify_residual_critical_claims(contract: Contract, units: Iterable[object])
             continue
         label = str(charge.label or "").strip()
         unit = str(charge.unit or "").strip()
+        currency = _currency_of(charge.amount)
         supported = any(
             _contains_number(text, amount)
+            and _currency_supported([text], currency)
             and (not label or _exactish(text, label))
             and (not unit or _exactish(text, unit))
             for text in texts
