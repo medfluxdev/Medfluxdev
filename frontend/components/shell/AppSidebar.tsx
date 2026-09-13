@@ -23,7 +23,6 @@ const icons: Record<string, Icon> = {
   audit: <><path d="M5 20V4h14v16z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
   archive: <><path d="M4 8h16v12H4z"/><path d="M7 8V4h10v4"/><path d="M9 12h6"/></>,
   settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7 1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></>,
-  profile: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
 };
 
 const EDITORS: AccountRole[] = ["admin", "contract_manager"];
@@ -42,9 +41,6 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS },
     { label: "Nachweise", href: "/nachweise", icon: "evidence" },
     { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
-  ]},
-  { label: "Persönlich", items: [
-    { label: "Mein Profil", href: "/profile", icon: "profile" },
   ]},
   { label: "Administration", items: [
     { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
