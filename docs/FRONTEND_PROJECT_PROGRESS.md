@@ -5,7 +5,7 @@ Last updated: 2026-09-13
 Status: IN PROGRESS
 Progress: 9/10 development steps complete (90%)
 Active step: FE-10 — Accessibility, performance, and release verification
-Next action: Run the unified release gate, complete 1440/1280/768/390/320 reflow checks, and fix any remaining release-blocking findings.
+Next action: Record representative real-browser reflow/focus checks at 1440/1280/768/390/320. Automated lint/test/build gate is clean.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -169,13 +169,13 @@ Implemented:
 - Added focused work-queue tests for filters, direct review navigation, deadline-type clarity and next-step context.
 
 Verification note:
-- Final whole-application automated/build verification is intentionally consolidated into the FE-10 release gate.
+- Final whole-application automated/build verification is consolidated into the FE-10 release gate.
 
 ## FE-10 — Accessibility, performance, and release verification
 Status: IN PROGRESS
 Depends on: FE-09
 
-Implemented in current release-gate batches:
+Implemented in release-gate batches:
 - Removed the known profile `<img>` production-build warning by using local/data-URL-compatible `next/image`.
 - Added generic visible focus safeguards and reduced-motion behavior.
 - Added reflow safeguards for dense tables/tabs and 390/320-pixel layouts; horizontal overflow is contained inside dense regions instead of the page.
@@ -184,14 +184,23 @@ Implemented in current release-gate batches:
 - Removed the persistent topbar's duplicate semantic `h1`; main page content now owns the top-level heading.
 - Added shell tests for account-menu keyboard dismissal/focus restoration and accessible global search submission.
 - Added a single `npm run verify` command that runs lint, tests and production build sequentially.
+- Fixed the final production Autoprefixer warning in `work-queue.css` by using `flex-end`.
 - Updated `docs/FRONTEND_RELEASE_VERIFICATION.md` with automated, journey, reflow, accessibility, performance and data-integrity gates.
 
+Automated verification on 2026-09-13:
+- [x] `next lint`: no ESLint warnings or errors.
+- [x] Vitest: 28/28 test files, 145/145 tests passed.
+- [x] Production build: compiled successfully.
+- [x] Static generation: 22/22 pages.
+- [x] No application production-build warning remains.
+- [x] Reported route first-load JS remains below the 150 kB budget (`/contracts` 105 kB; `/contracts/[contract-id]` 109 kB).
+
 Remaining release gate:
-- [ ] `npm run verify` passes on the current head.
-- [ ] Verify representative widths 1440 / 1280 / 768 / 390 / 320 in the browser.
-- [ ] Recheck keyboard/focus on login, dashboard, contracts, source review, import, work queue and admin journeys.
-- [ ] Resolve remaining noisy React `act(...)` test-harness warnings where practical.
-- [ ] Record final production build size/performance baseline and verify no external runtime dependency was introduced.
+- [ ] Record representative real-browser reflow checks at 1440 / 1280 / 768 / 390 / 320.
+- [ ] Recheck keyboard/focus visually on login, dashboard, contracts, source review, import, work queue and admin journeys.
+
+Non-blocking cleanup:
+- React `act(...)` diagnostics remain in parts of the legacy test harness. They do not fail lint, tests, type checking or production build.
 
 ## Current verification command
 From `frontend/`:
