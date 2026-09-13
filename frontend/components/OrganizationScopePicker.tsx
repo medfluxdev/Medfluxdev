@@ -16,6 +16,7 @@ export default function OrganizationScopePicker() {
   const [hospitalId, setHospitalId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const isAdmin = role === "admin";
+  const availableMemberships = memberships ?? [];
 
   useEffect(() => {
     if (!organizationSlug || !membership) return;
@@ -31,13 +32,16 @@ export default function OrganizationScopePicker() {
     }
     let active = true;
     getOrganizationStructure(organizationSlug)
-      .then((value) => { if (active) setStructure(value); })
+      .then((value) => {
+        if (!active) return;
+        setStructure({ hospitals: value?.hospitals ?? [], departments: value?.departments ?? [] });
+      })
       .catch(() => { if (active) setStructure(EMPTY_STRUCTURE); });
     return () => { active = false; };
   }, [organizationSlug, membership, isAdmin]);
 
   const departments = useMemo(
-    () => structure.departments.filter((item) => item.is_active && (!hospitalId || item.hospital_id === hospitalId)),
+    () => (structure.departments ?? []).filter((item) => item.is_active && (!hospitalId || item.hospital_id === hospitalId)),
     [structure.departments, hospitalId]
   );
 
@@ -68,14 +72,16 @@ export default function OrganizationScopePicker() {
   }
 
   if (!membership) return null;
+  const hospitals = structure.hospitals ?? [];
+  const allDepartments = structure.departments ?? [];
 
   return <div className="scope-picker" aria-label="Arbeitsbereich auswählen">
-    {isAdmin && memberships.length > 1 ? <select value={organizationSlug ?? ""} onChange={(event) => changeOrganization(event.target.value)} aria-label="Organisation">{memberships.filter((item) => item.role === "admin").map((item) => <option key={item.organization_id} value={item.organization_slug}>{item.organization_name}</option>)}</select> : null}
-    {structure.hospitals.length > 0 ? <select value={hospitalId} onChange={(event) => chooseHospital(event.target.value)} aria-label="Krankenhaus" disabled={!isAdmin}>
+    {isAdmin && availableMemberships.length > 1 ? <select value={organizationSlug ?? ""} onChange={(event) => changeOrganization(event.target.value)} aria-label="Organisation">{availableMemberships.filter((item) => item.role === "admin").map((item) => <option key={item.organization_id} value={item.organization_slug}>{item.organization_name}</option>)}</select> : null}
+    {hospitals.length > 0 ? <select value={hospitalId} onChange={(event) => chooseHospital(event.target.value)} aria-label="Krankenhaus" disabled={!isAdmin}>
       {isAdmin ? <option value="">Alle Krankenhäuser</option> : null}
-      {structure.hospitals.filter((item) => item.is_active && (isAdmin || item.id === membership.hospital_id)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+      {hospitals.filter((item) => item.is_active && (isAdmin || item.id === membership.hospital_id)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select> : null}
-    {hospitalId && structure.departments.length > 0 ? <select value={departmentId} onChange={(event) => chooseDepartment(event.target.value)} aria-label="Abteilung" disabled={!isAdmin}>
+    {hospitalId && allDepartments.length > 0 ? <select value={departmentId} onChange={(event) => chooseDepartment(event.target.value)} aria-label="Abteilung" disabled={!isAdmin}>
       {isAdmin || !membership.department_id ? <option value="">Alle Abteilungen</option> : null}
       {departments.filter((item) => isAdmin || !membership.department_id || item.id === membership.department_id).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select> : null}
