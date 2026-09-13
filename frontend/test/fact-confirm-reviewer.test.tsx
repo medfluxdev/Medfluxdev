@@ -191,4 +191,29 @@ describe("Faktprüfung – Bestätigen (UAT Defect, MEDTRON)", () => {
     ).toBeInTheDocument();
     expect(reload).toHaveBeenCalledTimes(1);
   });
+  it("sperrt Review-Abschluss solange ein kritischer Fakt ungeprüft ist", async () => {
+    const data = fixture();
+    data.contract_review.critical_count = 1;
+    data.contract_review.critical_reviewed_count = 0;
+    data.contract_review.critical_unreviewed_count = 1;
+    data.contract_review.unresolved_count = 1;
+    data.fact_review_states[0].is_critical = true;
+
+    const user = userEvent.setup();
+    render(<FactReviewPanel data={data} orgSlug={ORG} onReload={() => {}} />);
+
+    expect(
+      screen.getByText(/Abschluss gesperrt: 1 kritische Angabe/)
+    ).toBeInTheDocument();
+
+    const acknowledge = screen.getByLabelText(
+      /Verbleibende nicht-kritische ungeprüfte Angaben akzeptieren/
+    );
+    await user.click(acknowledge);
+
+    const complete = screen.getByRole("button", { name: "Review abschließen" });
+    expect(complete).toBeDisabled();
+    expect(apiPostMock).not.toHaveBeenCalled();
+  });
+
 });
