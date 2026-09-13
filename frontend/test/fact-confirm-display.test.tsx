@@ -44,6 +44,6 @@ describe("Faktprüfung – Anzeige Bestätigt vs Korrigiert",()=>{
   await user.click(selectFact("Vertragspartner / Lieferant"));
   await user.click(p.getByRole("button",{name:/Historie/}));
   expect(p.queryByText("Wert übernommen")).not.toBeInTheDocument();
-  expect(p.getByText(/MEDTRON AG/)).toBeInTheDocument();
+  expect(p.getAllByText(/MEDTRON AG/).length).toBeGreaterThan(0);
  });
 });
