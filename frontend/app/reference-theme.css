@@ -163,7 +163,7 @@ body {
   backdrop-filter: blur(10px);
 }
 
-.page-title h1 {
+.topbar-route-title {
   font-size: 18px;
   font-weight: 650;
 }
