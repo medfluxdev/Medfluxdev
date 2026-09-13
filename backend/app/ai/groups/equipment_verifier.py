@@ -18,6 +18,10 @@ from app.models.contract import Contract
 _SERIAL_LABEL = re.compile(r"serien(?:nummer|-?nr\.?|nummer)|serial\s*(?:number|no\.?|nr\.?)", re.I)
 _INVENTORY_LABEL = re.compile(r"inventar(?:nummer|-?nr\.?)|inventory\s*(?:number|no\.?|nr\.?)", re.I)
 _COVERAGE_LABEL = re.compile(r"abdeckung|leistungszeitraum|vertragsbeginn|vertragsende|gültig|gueltig|coverage", re.I)
+_NEGATION_RE = re.compile(
+    r"\b(?:nicht|kein(?:e|en|er)?|ohne|ausgeschlossen|nicht\s+enthalten|nicht\s+inklusive)\b",
+    re.I,
+)
 
 
 def _norm(value: Any) -> str:
@@ -54,6 +58,18 @@ def _flexible_date_supported(text: str, value: Any) -> bool:
     return False
 
 
+def _service_item_supported(text: str, item: str, *, excluded: bool) -> bool:
+    low = _norm(text)
+    needle = _norm(item)
+    idx = low.find(needle)
+    if not needle or idx < 0:
+        return False
+    start = max(0, idx - 100)
+    end = min(len(low), idx + len(needle) + 120)
+    negated = bool(_NEGATION_RE.search(low[start:end]))
+    return negated if excluded else not negated
+
+
 def _find_support(field: str, value: Any, source_texts: list[str]) -> bool:
     if value in (None, "", []):
         return True
@@ -79,9 +95,25 @@ def _find_support(field: str, value: Any, source_texts: list[str]) -> bool:
             for text in source_texts
         )
 
-    if field in {"included_services", "excluded_services"}:
+    if field == "included_services":
         values = list(value or [])
-        return all(any(_contains_exactish(text, item) for text in source_texts) for item in values)
+        return all(
+            any(
+                _service_item_supported(text, item, excluded=False)
+                for text in source_texts
+            )
+            for item in values
+        )
+
+    if field == "excluded_services":
+        values = list(value or [])
+        return all(
+            any(
+                _service_item_supported(text, item, excluded=True)
+                for text in source_texts
+            )
+            for item in values
+        )
 
     # Unknown equipment fields are never silently accepted. If the checked
     # field set is expanded without adding a verifier rule, fail closed.
