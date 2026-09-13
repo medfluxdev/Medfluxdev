@@ -143,6 +143,21 @@ def _money_supported(texts: list[str], value: Any, label: re.Pattern[str]) -> bo
     )
 
 
+def _local_clause(text: str, start: int, end: int) -> str:
+    separators = ".;|\n"
+    left = 0
+    for sep in separators:
+        pos = text.rfind(sep, 0, start)
+        if pos >= 0:
+            left = max(left, pos + 1)
+    right = len(text)
+    for sep in separators:
+        pos = text.find(sep, end)
+        if pos >= 0:
+            right = min(right, pos)
+    return text[left:right]
+
+
 def _bool_supported(texts: list[str], terms: tuple[str, ...], expected: bool) -> bool:
     for text in texts:
         low = text.casefold()
@@ -150,8 +165,13 @@ def _bool_supported(texts: list[str], terms: tuple[str, ...], expected: bool) ->
         if not positions:
             continue
         idx = min(positions)
-        window = text[max(0, idx - 90): min(len(text), idx + 160)]
-        negative = bool(_NEGATION_RE.search(window))
+        term_end = idx + max(
+            len(term)
+            for term in terms
+            if low.find(term.casefold()) == idx
+        )
+        clause = _local_clause(text, idx, term_end)
+        negative = bool(_NEGATION_RE.search(clause))
         if expected and not negative:
             return True
         if not expected and negative:
