@@ -8,9 +8,18 @@ type Hospital = { id: string; name: string; code: string; is_active: boolean };
 type Department = { id: string; hospital_id: string; name: string; code: string; is_active: boolean };
 type Structure = { hospitals: Hospital[]; departments: Department[] };
 
+const EMPTY_STRUCTURE: Structure = { hospitals: [], departments: [] };
+
+function normalizeStructure(value: Partial<Structure> | null | undefined): Structure {
+  return {
+    hospitals: Array.isArray(value?.hospitals) ? value.hospitals : [],
+    departments: Array.isArray(value?.departments) ? value.departments : [],
+  };
+}
+
 export default function OrganizationScopePicker() {
   const { membership, memberships, organizationSlug, role, selectOrganization } = useAuth();
-  const [structure, setStructure] = useState<Structure>({ hospitals: [], departments: [] });
+  const [structure, setStructure] = useState<Structure>(EMPTY_STRUCTURE);
   const [hospitalId, setHospitalId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const isAdmin = role === "admin";
@@ -28,8 +37,8 @@ export default function OrganizationScopePicker() {
       if (assignedDepartment) localStorage.setItem("medflux.departmentId", assignedDepartment); else localStorage.removeItem("medflux.departmentId");
     }
     apiGet<Structure>(`/api/organization-structure?organization_slug=${encodeURIComponent(organizationSlug)}`)
-      .then(setStructure)
-      .catch(() => setStructure({ hospitals: [], departments: [] }));
+      .then((value) => setStructure(normalizeStructure(value)))
+      .catch(() => setStructure(EMPTY_STRUCTURE));
   }, [organizationSlug, membership, isAdmin]);
 
   const departments = useMemo(
