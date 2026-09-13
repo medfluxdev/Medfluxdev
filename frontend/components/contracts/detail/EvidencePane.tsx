@@ -36,7 +36,6 @@ function isCoarseBbox(ref: EvidenceRef): boolean {
 
 function precisionLabel(ref: EvidenceRef): string {
   if (ref.bbox && ref.page != null) {
-    // UAT Defect D: Seitenfuellung darf keine exakte Position suggerieren.
     return isCoarseBbox(ref) ? "Ungefähre Lage" : "Positionsbestimmt";
   }
   if (ref.page != null) return "Seite, ohne Position";
@@ -50,11 +49,12 @@ function sourceLabel(ref: EvidenceRef): string {
   return "Quelle";
 }
 
-export default function EvidencePane({
-  evidence,
-  activeEvidenceId,
-  onNavigate,
-}: Props) {
+function confidenceLabel(value: number | null): string | null {
+  if (value == null || !Number.isFinite(value) || value < 0 || value > 1) return null;
+  return `Konfidenz ${Math.round(value * 100)}%`;
+}
+
+export default function EvidencePane({ evidence, activeEvidenceId, onNavigate }: Props) {
   if (evidence.length === 0) {
     return <p className="evidence-empty">Keine Quellenangaben vorhanden.</p>;
   }
@@ -63,7 +63,9 @@ export default function EvidencePane({
     <ul className="evidence-list">
       {evidence.map((ref) => {
         const active = ref.evidence_id === activeEvidenceId;
-        const navigable = ref.bbox != null && ref.page != null;
+        const exactPosition = Boolean(ref.bbox && ref.page != null && ref.supports_exact_navigation && !isCoarseBbox(ref));
+        const confidence = confidenceLabel(ref.confidence);
+        void toTarget;
         return (
           <li key={ref.evidence_id}>
             <button
@@ -74,7 +76,7 @@ export default function EvidencePane({
             >
               <span className="evidence-head">
                 <span className="evidence-field">{fieldLabel(ref.field_ref)}</span>
-                <span className={`evidence-pill${navigable ? " ok" : ""}`}>
+                <span className={`evidence-pill${exactPosition ? " ok" : ""}`}>
                   {precisionLabel(ref)}
                 </span>
               </span>
@@ -83,34 +85,23 @@ export default function EvidencePane({
                   {evidenceGroupLabel(ref.field_ref?.split(".")[0] ?? null)}
                 </span>
               )}
-              {(ref.page != null ||
-                ref.paragraph_index != null ||
-                ref.table_index != null) && (
+              {(ref.page != null || ref.paragraph_index != null || ref.table_index != null) && (
                 <span className="evidence-meta">
                   {sourceLabel(ref)}
                   {ref.source_type ? ` · ${ref.source_type}` : ""}
-                  {ref.confidence != null
-                    ? ` · Konfidenz ${Math.round(ref.confidence * 100)}%`
-                    : ""}
+                  {confidence ? ` · ${confidence}` : ""}
                 </span>
               )}
-              {ref.snippet && (
-                <span className="evidence-snippet">
-                  „{ref.snippet}&quot;
-                </span>
-              )}
-              {ref.requires_review && (
-                <span className="evidence-review">Manuelle Prüfung empfohlen</span>
-              )}
-              {!navigable && ref.page != null && (
+              {ref.snippet && <span className="evidence-snippet">„{ref.snippet}“</span>}
+              {ref.requires_review && <span className="evidence-review">Manuelle Prüfung empfohlen</span>}
+              {!exactPosition && ref.page != null && !isCoarseBbox(ref) && (
                 <span className="evidence-note">
-                  Quelle bei Seite {ref.page}, aber ohne exakte Position (keine Hervorhebung).
+                  Quelle auf Seite {ref.page}, aber ohne exakte Position (keine Wort-Hervorhebung).
                 </span>
               )}
-              {navigable && isCoarseBbox(ref) && (
+              {ref.page != null && isCoarseBbox(ref) && (
                 <span className="evidence-note">
-                  Seitenbereich grob markiert – die Quelle ist dort nur ungefähr
-                  lokalisiert (keine exakte Wort-Position).
+                  Seitenbereich grob markiert – die Quelle ist dort nur ungefähr lokalisiert (keine exakte Wort-Position).
                 </span>
               )}
               {ref.page == null && (
