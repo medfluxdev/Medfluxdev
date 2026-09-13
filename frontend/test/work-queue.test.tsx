@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,6 +57,10 @@ async function renderWithData(data: WorkItemList) {
   return utils;
 }
 
+function taskRow(contractNumber = "CN-1") {
+  return screen.getByRole("link", { name: contractNumber }).closest("tr") as HTMLTableRowElement;
+}
+
 describe("To-dos (PR-4 / FE-09)", () => {
   it("zeigt einen Ladezustand während des Ladens", () => {
     apiGetMock.mockImplementation(() => new Promise(() => {}));
@@ -78,7 +82,7 @@ describe("To-dos (PR-4 / FE-09)", () => {
 
   it("zeigt die Arbeitsposition, ohne eine Geräte-Zeile zu erfinden", async () => {
     await renderWithData(list(item()));
-    expect(screen.queryByText(/Gerät/)).not.toBeInTheDocument();
+    expect(within(taskRow()).queryByText(/Gerät/)).not.toBeInTheDocument();
   });
 
   it("zeigt die Geräte-Identität des betroffenen Equipments", async () => {
@@ -88,13 +92,14 @@ describe("To-dos (PR-4 / FE-09)", () => {
 
   it("zeigt Vertrags-Link, Status, Terminart und nächsten Schritt", async () => {
     await renderWithData(list(item()));
-    expect(screen.getByText(/Kündigungsfrist: Kündigungsfrist nähert sich/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "CN-1" })).toHaveAttribute("href", "/contracts/c-1");
-    expect(screen.getByText("Offen")).toBeInTheDocument();
-    expect(screen.getByText(/in 14 Tagen/)).toBeInTheDocument();
-    expect(screen.getByText("Kündigungsfrist", { selector: ".work-deadline-kind" })).toBeInTheDocument();
-    expect(screen.getByText(/Nächster Schritt:/)).toBeInTheDocument();
-    expect(screen.getByText(/Kündigung prüfen/)).toBeInTheDocument();
+    const row = taskRow();
+    expect(within(row).getByText(/Kündigungsfrist: Kündigungsfrist nähert sich/)).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "CN-1" })).toHaveAttribute("href", "/contracts/c-1");
+    expect(within(row).getByText("Offen")).toBeInTheDocument();
+    expect(within(row).getByText(/in 14 Tagen/)).toBeInTheDocument();
+    expect(within(row).getByText("Kündigungsfrist", { selector: ".work-deadline-kind" })).toBeInTheDocument();
+    expect(within(row).getByText(/Nächster Schritt:/)).toBeInTheDocument();
+    expect(within(row).getByText(/Kündigung prüfen/)).toBeInTheDocument();
   });
 
   it("öffnet bei Prüfbedarf direkt die Vertragsprüfung", async () => {
@@ -122,15 +127,15 @@ describe("To-dos (PR-4 / FE-09)", () => {
     const wi = item();
     apiPatchMock.mockResolvedValue({ ...wi, status: "acknowledged" });
     await renderWithData(list(wi));
-    await userEvent.click(screen.getByRole("button", { name: "In Bearbeitung" }));
+    await userEvent.click(within(taskRow()).getByRole("button", { name: "In Bearbeitung" }));
     await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith(expect.stringContaining("/api/work-queue/wi-1"), { status: "acknowledged" }));
-    expect(screen.getByText("In Bearbeitung")).toBeInTheDocument();
+    expect(within(taskRow()).getByText("In Bearbeitung")).toBeInTheDocument();
   });
 
   it("erledigt einen Punkt (resolved) per PATCH und entfernt ihn aus der aktiven Liste", async () => {
     apiPatchMock.mockResolvedValue({ ...item(), status: "resolved", active: false });
     await renderWithData(list(item()));
-    await userEvent.click(screen.getByRole("button", { name: "Erledigt" }));
+    await userEvent.click(within(taskRow()).getByRole("button", { name: "Erledigt" }));
     await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith(expect.stringContaining("/api/work-queue/wi-1"), { status: "resolved" }));
     await waitFor(() => expect(screen.getByText("Keine offenen To-dos")).toBeInTheDocument());
   });
@@ -138,7 +143,7 @@ describe("To-dos (PR-4 / FE-09)", () => {
   it("meldet einen Fehler, wenn die Status-Aktualisierung fehlschlägt", async () => {
     apiPatchMock.mockRejectedValue(new Error("Datenbankkonflikt beim Aktualisieren – bitte erneut versuchen."));
     await renderWithData(list(item()));
-    await userEvent.click(screen.getByRole("button", { name: "Erledigt" }));
+    await userEvent.click(within(taskRow()).getByRole("button", { name: "Erledigt" }));
     await waitFor(() => expect(screen.getByText("Datenbankkonflikt beim Aktualisieren – bitte erneut versuchen.")).toBeInTheDocument());
   });
 
