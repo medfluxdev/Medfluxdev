@@ -18,6 +18,7 @@ python -m py_compile `
     app/ai/groups/evidence.py `
     app/ai/groups/extractor.py `
     app/ai/groups/list_claim_verifier.py `
+    app/ai/groups/residual_claim_verifier.py `
     app/ai/groups/verifier.py `
     app/api/routes/operations.py `
     app/auth/provenance.py `
@@ -32,6 +33,7 @@ python -m pytest -q `
     tests/test_ai_equipment_claim_verifier.py `
     tests/test_ai_equipment_evidence.py `
     tests/test_ai_service_list_verifier.py `
+    tests/test_ai_residual_claim_verifier.py `
     tests/test_ai_evidence_fail_closed.py `
     tests/test_ai_verifier_safety.py `
     tests/test_ai_verifier_fail_closed.py `
