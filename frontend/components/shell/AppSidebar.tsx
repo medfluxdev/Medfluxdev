@@ -126,7 +126,7 @@ export default function AppSidebar() {
     <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
       <div className="sidebar-head">
         <Link href="/" className="brand" aria-label="MedFlux Startseite">
-          <MedFluxLogo compact={collapsed} showDescriptor={!collapsed} />
+          <MedFluxLogo compact={collapsed} priority />
         </Link>
         <button className="sidebar-collapse-button" type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Seitenleiste ausklappen" : "Seitenleiste einklappen"} aria-pressed={collapsed}>{collapsed ? "›" : "‹"}</button>
       </div>
