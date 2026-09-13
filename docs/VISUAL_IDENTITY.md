@@ -4,6 +4,10 @@
 **Applies to:** Product UI, product documentation, presentations, diagrams, and future brand assets  
 **Source of truth:** This document governs visual decisions for MedFlux. Existing implementations should converge toward it. New frontend work must follow it from the start.
 
+![Approved MedFlux brand identity board](visual-identity/assets/medflux-brand-identity-guidelines-v1.webp)
+
+The board above is the approved visual identity reference (version 1.0). The written rules below make its decisions implementable and accessible in the product.
+
 ---
 
 ## 1. Brand foundation
@@ -119,12 +123,12 @@ Color has a functional hierarchy. Institutional blue drives primary actions, tea
 
 | Role | Token | Hex | Usage |
 |---|---|---:|---|
-| Institutional Navy | `--brand-navy` | `#0F3654` | Wordmark, high-emphasis brand text, dark identity applications |
-| Healthcare Teal | `--brand-teal` | `#34C7C1` | `Med` wordmark, logo flow, restrained brand accents |
-| Product Blue | `--interactive` / `--accent` | `#006B9A` | Primary buttons, links, selected controls |
-| Product Blue Hover | `--interactive-hover` / `--accent-strong` | `#00557F` | Hover and pressed emphasis |
+| Secondary Dark Blue | `--brand-navy` | `#0F4C81` | Wordmark, high-emphasis brand text, dark identity applications |
+| Primary Teal | `--brand-teal` | `#14B8A6` | `Med` wordmark, logo flow, restrained brand accents |
+| Product Blue | `--interactive` / `--accent` | `#0F4C81` | Primary buttons, links, selected controls |
+| Product Blue Hover | `--interactive-hover` / `--accent-strong` | `#0B3D68` | Hover and pressed emphasis |
 | Focus Blue | `--focus-color` / `--focus-ring` | `#1A66C9` | Accessible keyboard focus |
-| Brand Soft | `--accent-soft` | `#E6F3F8` | Selected or highlighted low-emphasis surfaces |
+| Light Brand Background | `--accent-soft` | `#E6F4F8` | Selected or highlighted low-emphasis surfaces |
 
 ### Neutral colors
 
@@ -133,12 +137,12 @@ Color has a functional hierarchy. Institutional blue drives primary actions, tea
 | Canvas | `#FFFFFF` | Main application background |
 | Raised Surface | `#FFFFFF` | Cards, dialogs, menus |
 | Subtle Surface | `#F8FAFC` | Section separation, hover backgrounds |
-| Muted Surface | `#EEF4F8` | Secondary panels and disabled contexts |
+| Muted Surface | `#E6F4F8` | Secondary panels and disabled contexts |
 | Default Border | `#DFE7EF` | Standard dividers and card borders |
 | Strong Border | `#CBD8E4` | Inputs and emphasized boundaries |
-| Primary Text | `#0F172A` | Headings and primary body content |
-| Strong Text | `#020817` | Maximum-emphasis product text |
-| Secondary Text | `#64748B` | Metadata and supporting content |
+| Primary Text | `#1F2937` | Headings and primary body content |
+| Strong Text | `#172033` | Maximum-emphasis product text |
+| Secondary Text | `#6B7280` | Metadata and supporting content |
 
 ### Semantic colors
 
@@ -157,7 +161,7 @@ Use gradients only in identity-led areas such as the logo, sign-in hero, or a re
 Preferred direction:
 
 ```css
-background: linear-gradient(135deg, #34c7c1 0%, #006b9a 55%, #0f3654 100%);
+background: linear-gradient(135deg, #14b8a6 0%, #0f4c81 100%);
 ```
 
 Do not use the brand gradient for operational buttons, status badges, tables, or large application backgrounds.
@@ -174,14 +178,16 @@ Do not use the brand gradient for operational buttons, status badges, tables, or
 
 ## 4. Typography
 
-### Primary UI font
+### Primary brand and UI font
+
+The approved typeface is **Poppins** in Light, Regular, Medium, Semibold, and Bold. Product UI should normally use Regular through Semibold; Bold is reserved for high-emphasis headings and key figures.
 
 ```css
-font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+font-family: "Poppins", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
   Roboto, "Helvetica Neue", Arial, sans-serif;
 ```
 
-Use local or system fonts. Do not introduce a remote font dependency into the local-first product.
+Poppins must be self-hosted inside the repository before it becomes a required runtime dependency. Until local font files are added, the existing local/system stack remains the safe fallback. Never load fonts from an external CDN in the local-first product.
 
 ### Type scale
 
@@ -351,22 +357,22 @@ Use the existing frontend tokens before adding new values. The target baseline i
 
 ```css
 :root {
-  --brand-navy: #0f3654;
-  --brand-teal: #34c7c1;
+  --brand-navy: #0f4c81;
+  --brand-teal: #14b8a6;
 
   --surface-canvas: #ffffff;
   --surface-raised: #ffffff;
   --surface-subtle: #f8fafc;
-  --surface-muted: #eef4f8;
+  --surface-muted: #e6f4f8;
 
   --border-default: #dfe7ef;
   --border-strong: #cbd8e4;
 
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
 
-  --interactive: #006b9a;
-  --interactive-hover: #00557f;
+  --interactive: #0f4c81;
+  --interactive-hover: #0b3d68;
   --focus-color: #1a66c9;
 
   --status-info: #2f6fd6;
@@ -421,9 +427,13 @@ A frontend change is visually complete only when all applicable items are true:
 
 ---
 
-## 14. Asset roadmap
+## 14. Brand assets
 
-The documentation is approved as the development baseline. Production brand assets remain a separate deliverable.
+The approved identity board is stored at:
+
+`docs/visual-identity/assets/medflux-brand-identity-guidelines-v1.webp`
+
+It is the visual approval record and must remain linked from this document. Production-ready standalone logo exports remain a separate deliverable.
 
 Required next assets:
 
