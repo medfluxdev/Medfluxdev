@@ -131,7 +131,11 @@ describe("Import (FE-08)", () => {
     await waitFor(() => expect(screen.getByText("Import-Ergebnis")).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: "Analyse erneut starten" }));
-    expect(apiPostMock).toHaveBeenCalledWith(expect.stringContaining("/api/documents/dv-1234/retry"), {});
+    expect(apiPostMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/documents/dv-1234/retry?organization_slug=test-klinik"),
+      {},
+      120000,
+    );
     await waitFor(() => expect(screen.getByText("Analyse erfolgreich.")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Analyse erneut starten" })).not.toBeInTheDocument();
   });
