@@ -55,7 +55,7 @@ def answer_portfolio_question(question: PortfolioQuestion, rows: Iterable[dict])
         if "uncovered" in q or "nicht abgedeckt" in q:
             if row.get("equipment_coverage") == "uncovered":
                 selected.append(row)
-        elif "expire" in q or "endet" in q or "ablauf" in q or "auslauf" in q:
+        elif "expire" in q or "endet" in q or "enden" in q or "ablauf" in q or "auslauf" in q:
             end = row.get("end_date")
             if isinstance(end, date) and question.as_of_date and end >= question.as_of_date:
                 selected.append(row)
