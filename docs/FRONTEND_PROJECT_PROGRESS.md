@@ -215,3 +215,40 @@ npm run verify
 ```
 
 Run backend `pytest` only when backend behavior changes.
+
+
+---
+
+## Visual identity v1.0 integration — 2026-09-13
+
+**Status:** IMPLEMENTED
+
+### Scope
+- Applied the approved MedFlux identity from `docs/VISUAL_IDENTITY.md` to the product shell and authentication entry points.
+- Added a reusable, accessible logo component with full and compact variants.
+- Added an SVG application icon/favicon.
+- Added a final global identity layer that maps the approved palette to existing semantic tokens without changing business-state meanings.
+- Updated visible product naming from `Medflux` to `MedFlux` in the shell, login, organization selector, page metadata, and fallback title.
+- Branded the dashboard hero, navigation selection, primary actions, cards, and login surface.
+- Kept Poppins as the approved font with the existing local/system stack as fallback until self-hosted Poppins files are added.
+
+### Files
+- `frontend/components/brand/MedFluxLogo.tsx`
+- `frontend/app/brand-identity.css`
+- `frontend/app/icon.svg`
+- `frontend/components/shell/AppSidebar.tsx`
+- `frontend/components/shell/AppTopbar.tsx`
+- `frontend/components/ClientNav.tsx`
+- `frontend/app/login/page.tsx`
+- `frontend/app/select-organization/page.tsx`
+- `frontend/app/layout.tsx`
+- `frontend/test/visual-identity.test.tsx`
+- `docs/VISUAL_IDENTITY.md`
+
+### Verification
+- Static repository verification completed for imports, asset paths, metadata, approved naming, and token values.
+- Added focused component tests for full and compact logo variants.
+- Full `npm run verify` must be run after pulling branch `Ahmad` to the local Windows installation.
+
+### Known limit
+- Poppins is declared as the approved font but is not fetched remotely. The application intentionally falls back to its local/system font stack until licensed font files are self-hosted in the repository.
