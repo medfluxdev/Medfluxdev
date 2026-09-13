@@ -15,7 +15,7 @@ export default function ClientNav({ children }: { children: React.ReactNode }) {
   }
 
   if (loading) {
-    return <div className="auth-loading" role="status">Medflux wird geladen…</div>;
+    return <div className="auth-loading" role="status">MedFlux wird geladen…</div>;
   }
 
   if (!account) {
