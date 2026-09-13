@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,8 +57,12 @@ describe("Import (FE-08)", () => {
     await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
     await waitFor(() => expect(screen.getByText("Import-Ergebnis")).toBeInTheDocument());
 
-    expect(screen.getByText("2", { selector: ".import-result-summary strong" })).toBeInTheDocument();
-    expect(screen.getByText("1", { selector: ".import-result-summary strong" })).toBeInTheDocument();
+    const importedSummary = screen.getByText("importiert").closest("div");
+    const successSummary = screen.getByText("Analyse erfolgreich").closest("div");
+    const failedSummary = screen.getByText("Analyse fehlgeschlagen").closest("div");
+    expect(importedSummary && within(importedSummary).getByText("2")).toBeTruthy();
+    expect(successSummary && within(successSummary).getByText("1")).toBeTruthy();
+    expect(failedSummary && within(failedSummary).getByText("1")).toBeTruthy();
     expect(screen.getAllByText("Importiert").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Erfolgreich")).toBeInTheDocument();
     expect(screen.getByText("Fehlgeschlagen")).toBeInTheDocument();
