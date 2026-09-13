@@ -58,3 +58,22 @@ def test_unknown_deployment_mode_is_rejected():
     settings = _settings(app_env="mystery")
     with pytest.raises(RuntimeError, match="APP_ENV"):
         settings.validate_auth_runtime()
+
+
+def test_samesite_none_requires_secure_cookie():
+    settings = _settings(
+        auth_cookie_samesite="none",
+        auth_cookie_secure=False,
+    )
+    with pytest.raises(RuntimeError, match="AUTH_COOKIE_SECURE=true"):
+        settings.validate_auth_runtime()
+
+
+def test_authenticated_runtime_rejects_cors_wildcard():
+    settings = _settings(
+        auth_enabled=True,
+        app_secret_key="test-secret-not-default",
+        cors_origins="*",
+    )
+    with pytest.raises(RuntimeError, match="CORS-Wildcard"):
+        settings.validate_auth_runtime()
