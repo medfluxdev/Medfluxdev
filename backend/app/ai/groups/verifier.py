@@ -165,9 +165,36 @@ def _contains_duration_value(text: str, value: Any) -> bool:
     return _contains_number(text, number) and any(word.casefold() in text.casefold() for word in words)
 
 
+def _money_currency(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    currency = getattr(value, "currency", None)
+    if isinstance(value, dict):
+        currency = value.get("currency")
+    return str(currency).strip().upper() if currency else None
+
+
+def _contains_currency(text: str, currency: Optional[str]) -> bool:
+    if not currency:
+        return True
+    markers = {
+        "EUR": ("eur", "€", "euro"),
+        "USD": ("usd", "$", "us-dollar", "us dollar"),
+        "CHF": ("chf", "fr.", "franken"),
+        "GBP": ("gbp", "£", "pound"),
+    }.get(currency, (currency.casefold(),))
+    low = text.casefold()
+    return any(marker.casefold() in low for marker in markers)
+
+
 def _contains_money_value(text: str, value: Any) -> bool:
     amount = _money_amount(value)
-    return amount is not None and _contains_number(text, amount)
+    currency = _money_currency(value)
+    return (
+        amount is not None
+        and _contains_number(text, amount)
+        and _contains_currency(text, currency)
+    )
 
 
 def _contains_time_value(text: str, value: Any) -> bool:
