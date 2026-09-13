@@ -100,9 +100,12 @@ class GroupPipeline:
                 merged_groups[name] = None
                 continue
             spec = self._specs[name]
-            merged_groups[name] = self._merge_models(
+            merged, conflicts = self._merge_models(
                 spec.model, [r.model for r in results]
             )
+            merged_groups[name] = merged
+            for conflict in conflicts:
+                messages.append(f"Merge-Konflikt {name}: {conflict}")
 
         contract = Contract()
         any_group_failures = (
@@ -151,7 +154,16 @@ class GroupPipeline:
                 units=units,
             )
             diag.ai_calls += calls
-            verifier_issues = self._apply_verifier(contract, verifier_result)
+            if calls > 0 and not verifier_result.decisions:
+                # ``run_verifier`` deliberately returns an empty result on
+                # provider/JSON/schema failure. For sensitive claims, absence of
+                # a decision is NOT evidence of support; fail closed instead of
+                # silently upgrading the extraction to SUCCESS.
+                verifier_issues = [
+                    "Verifier: keine verwertbare Entscheidung erhalten – sensible Felder müssen manuell geprüft werden"
+                ]
+            else:
+                verifier_issues = self._apply_verifier(contract, verifier_result)
             diag.verifier_issues += len(verifier_issues)
             messages.extend(verifier_issues)
 
@@ -342,8 +354,9 @@ class GroupPipeline:
         outcome.retries = max(0, attempts - 1)
         return outcome
 
-    def _merge_models(self, model_type, models: list[Any]):
+    def _merge_models(self, model_type, models: list[Any]) -> tuple[Any, list[str]]:
         merged_data = models[0].model_dump(exclude_none=False)
+        all_conflicts: list[str] = []
         for model in models[1:]:
             conflicts: list[str] = []
             merged_data = _deep_merge(
@@ -352,7 +365,8 @@ class GroupPipeline:
                 conflicts,
                 "$",
             )
-        return model_type.model_validate(merged_data)
+            all_conflicts.extend(conflicts)
+        return model_type.model_validate(merged_data), all_conflicts
 
 
 @dataclass
