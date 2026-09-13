@@ -46,3 +46,15 @@ def test_excluded_service_requires_explicit_negative_semantics():
         contract, [_unit("Verbrauchsmaterial ist nicht enthalten")]
     )
     assert explicit_exclusion == []
+
+
+def test_neighbor_clause_negation_does_not_prove_exclusion():
+    contract = Contract()
+    contract.services.excluded_services = ["Software-Updates"]
+
+    issues = verify_service_list_claims(
+        contract,
+        [_unit("Wartung ist nicht enthalten; Software-Updates sind enthalten")],
+    )
+
+    assert any("Software-Updates" in issue for issue in issues)
