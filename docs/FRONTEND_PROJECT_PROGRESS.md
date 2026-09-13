@@ -269,3 +269,10 @@ Run backend `pytest` only when backend behavior changes.
 - Removed `Healthcare Intelligence Platform`, the divider, and `Connect · Analyze · Improve` from the production logo.
 - Replaced the application asset with an enhanced 860 × 536 px PNG and regenerated the favicon from the same clean artwork.
 - Removed the separate login tagline so no text is rendered beneath the logo.
+
+
+### Logo refinement — transparent integration
+
+- Removed the raster logo's white background and preserved alpha transparency.
+- Removed the login logo container's white background, border, padding, and shadow.
+- The MedFlux logo now renders directly on its surrounding surface without a visible frame.
