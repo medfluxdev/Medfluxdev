@@ -79,38 +79,44 @@ def restore_backup(
         raise RuntimeError("Storage-Ziel ist nicht leer; Restore wird abgebrochen.")
     target_documents_dir.mkdir(parents=True, exist_ok=True)
 
-    conn_args, env = _postgres_connection(target_database_url)
-    dump_path = backup / "database.dump"
-    cmd = [pg_restore_bin, *conn_args, "--no-owner", "--no-acl", "--exit-on-error"]
-    if clean_target:
-        cmd.extend(["--clean", "--if-exists"])
-    cmd.append(str(dump_path))
-
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        shutil.rmtree(target_documents_dir, ignore_errors=True)
-        raise RuntimeError((result.stderr or "pg_restore fehlgeschlagen").strip())
-
+    # Stage and validate all storage before touching PostgreSQL. A successful DB
+    # restore must never be followed by a predictable source/storage failure.
     manifest = json.loads((backup / "manifest.json").read_text(encoding="utf-8"))
     target_storage = DocumentStorage(target_documents_dir)
     try:
         storage_objects = manifest.get("storage_objects") or []
-        for item in storage_objects:
-            storage_key = str(item["storage_key"])
-            source = (backup / str(item["backup_path"])).resolve()
-            target_storage.write_reference(storage_key, source.read_bytes())
-
-        # Initial pre-layout v1 draft fallback. These files cannot reconstruct
-        # canonical DB storage references, so reject rather than pretending a
-        # complete restore succeeded.
         if not storage_objects and manifest.get("documents"):
             raise RuntimeError(
                 "Legacy-Backup enthaelt keine kanonischen storage_keys und ist "
                 "nicht fuer einen vollstaendigen Restore geeignet."
             )
+        for item in storage_objects:
+            storage_key = str(item["storage_key"])
+            source = (backup / str(item["backup_path"])).resolve()
+            target_storage.write_reference(storage_key, source.read_bytes())
+
+        conn_args, env = _postgres_connection(target_database_url)
+        dump_path = backup / "database.dump"
+        cmd = [
+            pg_restore_bin,
+            *conn_args,
+            "--no-owner",
+            "--no-acl",
+            "--exit-on-error",
+        ]
+        if clean_target:
+            cmd.extend(["--clean", "--if-exists"])
+        cmd.append(str(dump_path))
+
+        result = subprocess.run(
+            cmd, env=env, capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or "pg_restore fehlgeschlagen").strip())
     except Exception:
-        # DB-Restore is already done; remove storage target so callers cannot
-        # mistake a partial document restore for a complete one.
+        # Storage is staged first, so source/path/write failures happen before
+        # PostgreSQL is touched. If pg_restore itself fails, remove staged
+        # storage so callers cannot mistake the target for a completed restore.
         shutil.rmtree(target_documents_dir, ignore_errors=True)
         raise
 
