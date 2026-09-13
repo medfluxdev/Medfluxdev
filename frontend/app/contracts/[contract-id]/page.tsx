@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
 import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
 import ContractIntelligencePanel from "@/components/contracts/detail/ContractIntelligencePanel";
+import ContractLifecyclePanel from "@/components/contracts/detail/ContractLifecyclePanel";
 import PdfViewer from "@/components/contracts/detail/PdfViewer";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getContract } from "@/lib/domain-api/contracts";
@@ -150,6 +151,7 @@ export default function ContractDetailPage() {
         <>
           <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />
           <ContractWorkspace data={data} orgSlug={organizationSlug} onReload={load} />
+          <ContractLifecyclePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
           <ContractIntelligencePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
           {sourceUnavailable ? (
             <div id="intelligence-source-viewer" className="alert" role="status">
