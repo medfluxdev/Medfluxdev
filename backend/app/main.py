@@ -33,6 +33,7 @@ from app.auth.provenance import register_auth_provenance_hooks
 from app.core.config import settings
 from app.core.scope_context import ScopeContextMiddleware
 from app.security.headers import SecurityHeadersMiddleware
+from app.security.request_context import LoginRateLimitMiddleware, RequestIdMiddleware
 
 register_auth_provenance_hooks()
 
@@ -55,8 +56,10 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=settings.auth_enabled,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Request-ID"],
 )
+app.add_middleware(LoginRateLimitMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 # Keep JAMAL security headers outermost.
 app.add_middleware(SecurityHeadersMiddleware)
