@@ -23,12 +23,12 @@ from pydantic import ValidationError
 from app.ai.groups.evidence import verify_evidence
 from app.ai.groups.normalize import ground_source_identity, run_normalization
 from app.ai.groups.schema import GroupSpec, group_order, group_specs
-from app.ai.groups.verifier import run_verifier, unsupported_fields
+from app.ai.groups.verifier import SENSITIVE_FIELDS, run_verifier, unsupported_fields
 from app.ai.service import AIService
 from app.core.config import Settings
 from app.documents.extraction.schemas import ExtractionUnit
 from app.models.contract import Contract
-from app.models.enums import ReviewFlag, ReviewStatus
+from app.models.enums import BillingInterval, ReviewFlag, ReviewStatus
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ class GroupPipeline:
         messages.extend(norm_issues)
 
         if self._run_verification:
+            expected_fields = self._expected_verifier_fields(contract)
             verifier_result, calls = await run_verifier(
                 self._ai,
                 contract,
@@ -154,16 +155,17 @@ class GroupPipeline:
                 units=units,
             )
             diag.ai_calls += calls
-            if calls > 0 and not verifier_result.decisions:
-                # ``run_verifier`` deliberately returns an empty result on
-                # provider/JSON/schema failure. For sensitive claims, absence of
-                # a decision is NOT evidence of support; fail closed instead of
-                # silently upgrading the extraction to SUCCESS.
-                verifier_issues = [
-                    "Verifier: keine verwertbare Entscheidung erhalten – sensible Felder müssen manuell geprüft werden"
-                ]
-            else:
-                verifier_issues = self._apply_verifier(contract, verifier_result)
+
+            verifier_issues = self._apply_verifier(contract, verifier_result)
+            returned_fields = {
+                decision.field for decision in getattr(verifier_result, "decisions", [])
+            }
+            missing_fields = expected_fields - returned_fields
+            for field in sorted(missing_fields):
+                verifier_issues.append(
+                    f"Verifier: {field} ohne Entscheidung – manuelle Prüfung erforderlich"
+                )
+
             diag.verifier_issues += len(verifier_issues)
             messages.extend(verifier_issues)
 
@@ -184,6 +186,26 @@ class GroupPipeline:
 
     def _context_text(self, chunks) -> str:
         return "\n".join(c.text for c in chunks)[:6000]
+
+    def _expected_verifier_fields(self, contract: Contract) -> set[str]:
+        """Return every non-default sensitive claim that requires a decision."""
+        expected: set[str] = set()
+        for field in SENSITIVE_FIELDS:
+            section_name, attr_name = field.split(".", 1)
+            section = getattr(contract, section_name, None)
+            if section is None:
+                continue
+            value = getattr(section, attr_name, None)
+            if value is None:
+                continue
+            if field == "payment.billing_interval" and value in (
+                BillingInterval.OTHER,
+                BillingInterval.OTHER.value,
+                "other",
+            ):
+                continue
+            expected.add(field)
+        return expected
 
     def _scan_evidence_review(self, contract: Contract) -> list[str]:
         issues: list[str] = []
