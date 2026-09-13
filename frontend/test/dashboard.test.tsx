@@ -149,8 +149,10 @@ describe("Dashboard Übersicht", () => {
   it("zeigt die vier Kennzahlen vor den großen Detailtabellen", async () => {
     await renderWithData(fixture());
     const firstKpi = screen.getByText("Aktive Verträge");
-    const firstTable = screen.getByText("Handlungsbedarf");
-    expect(firstKpi.compareDocumentPosition(firstTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const costTable = screen.getByText("Kostenübersicht");
+    const finalTable = screen.getByText("Handlungsbedarf");
+    expect(firstKpi.compareDocumentPosition(costTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(costTable.compareDocumentPosition(finalTable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("formatiert Währungen und Datum deutsch (42.500,00 €)", async () => {
