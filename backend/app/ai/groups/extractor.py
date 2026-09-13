@@ -123,13 +123,17 @@ class GroupPipeline:
         if not any(v is not None for v in merged_groups.values()):
             return None, diag, [MSG_GROUP_VALIDATION]
 
-        # Deterministische Korrektur ausschließlich aus echten Texteinheiten:
-        # - Bestellnummern dürfen keine Vertragsnummer werden.
-        # - OCR-beschädigte Parteinamen dürfen auf eine sauber belegte Schreibweise
-        #   desselben Namens kanonisiert werden.
-        source_issues = ground_source_identity(contract, units)
-        diag.normalization_issues += len(source_issues)
-        messages.extend(source_issues)
+        # Deterministic source grounding is a successful correction path, not a
+        # review condition. Keep its notes in diagnostics/logging only. Review
+        # flags are reserved for actual evidence/verifier/normalization problems.
+        source_notes = ground_source_identity(contract, units)
+        diag.normalization_issues += len(source_notes)
+        if source_notes:
+            logger.info(
+                "Deterministic source grounding applied %d correction(s): %s",
+                len(source_notes),
+                source_notes,
+            )
 
         evidence_issues = self._verify_evidence_on_contract(contract, units)
         diag.evidence_issues += len(evidence_issues)
