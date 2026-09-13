@@ -27,6 +27,7 @@ from app.api.routes import (
     user_scopes,
     users,
     work_queue,
+    work_queue_collaboration,
 )
 from app.auth.middleware import LocalAuthMiddleware
 from app.auth.provenance import register_auth_provenance_hooks
@@ -86,6 +87,7 @@ app.include_router(dashboard.router)
 app.include_router(contracts.router)
 app.include_router(equipment.router)
 app.include_router(work_queue.router)
+app.include_router(work_queue_collaboration.router)
 app.include_router(intelligence.router)
 app.include_router(intelligence_actions.router)
 app.include_router(notifications.router)
