@@ -149,12 +149,7 @@ export async function apiUpload<T>(path: string, files: File[], slug?: string): 
   const query = q.toString() ? `?${q.toString()}` : "";
   const res = await fetchWithTimeout(`${API_BASE}${path}${query}`, { method: "POST", body: form }, DEFAULT_TIMEOUT_MS);
   if (!res.ok) return throwForResponse(res, path);
-  const data = (await res.json()) as T;
-  if (path === "/api/documents/import" && effectiveSlug && (h || d)) {
-    const documents = (data as { documents?: Array<{ contract_id?: string | null }> }).documents ?? [];
-    await Promise.all(documents.filter((item) => item.contract_id).map((item) => apiPatch(`/api/ownership/contracts/${encodeURIComponent(item.contract_id as string)}?organization_slug=${encodeURIComponent(effectiveSlug)}`, { hospital_id: h, department_ids: d ? [d] : [], cost_center_id: null })));
-  }
-  return data;
+  return (await res.json()) as T;
 }
 
 export function sourceRegionUrl(documentVersionId: string, orgSlug: string, snippet: string, page: number | null): string {
