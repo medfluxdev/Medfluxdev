@@ -24,6 +24,16 @@ def test_ground_source_identity_rejects_order_number_as_contract_number():
     assert any("Bestellnummer" in issue for issue in issues)
 
 
+def test_ground_source_identity_rejects_bestell_nr_variant():
+    contract = Contract()
+    contract.identity.contract_number = "452664"
+    units = [_unit(SourceType.PARAGRAPH, 1, "Bestell-Nr. 452664")]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.contract_number is None
+
+
 def test_ground_source_identity_keeps_explicit_contract_number():
     contract = Contract()
     contract.identity.contract_number = "452664"
@@ -35,6 +45,29 @@ def test_ground_source_identity_keeps_explicit_contract_number():
     ground_source_identity(contract, units)
 
     assert contract.identity.contract_number == "452664"
+
+
+def test_ground_source_identity_keeps_vertrags_nr_variant():
+    contract = Contract()
+    contract.identity.contract_number = "452664"
+    units = [
+        _unit(SourceType.PARAGRAPH, 1, "Bestell-Nr. 452664"),
+        _unit(SourceType.PARAGRAPH, 2, "Vertrags-Nr. 452664"),
+    ]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.contract_number == "452664"
+
+
+def test_ground_source_identity_keeps_explicit_offer_number():
+    contract = Contract()
+    contract.identity.contract_number = "A-7788"
+    units = [_unit(SourceType.PARAGRAPH, 1, "Angebots-Nr. A-7788")]
+
+    ground_source_identity(contract, units)
+
+    assert contract.identity.contract_number == "A-7788"
 
 
 def test_ground_source_identity_canonicalizes_ocr_party_name_from_clean_source():
