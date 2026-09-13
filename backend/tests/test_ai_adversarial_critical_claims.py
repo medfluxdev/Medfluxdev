@@ -125,3 +125,23 @@ def test_billing_other_is_not_upgraded_by_unrelated_payment_text():
         "payment.billing_interval",
     )
     assert claim.evidence is None
+
+
+def test_table_with_both_party_names_does_not_support_swapped_roles():
+    contract = Contract()
+    contract.identity.customer = "MEDTRON AG"
+    contract.identity.supplier = "Krankenhaus Nordwest GmbH"
+    table = ExtractionUnit(
+        source_type=SourceType.TABLE,
+        index=1,
+        text=(
+            "Auftraggeber | Auftragnehmer\n"
+            "Krankenhaus Nordwest GmbH\n"
+            "Frankfurt am Main | MEDTRON AG\n"
+            "Saarbrücken"
+        ),
+    )
+
+    values = {v.field: v for v in _collect_sensitive_values(contract, units=[table])}
+    assert values["identity.customer"].evidence is None
+    assert values["identity.supplier"].evidence is None
