@@ -443,28 +443,67 @@ async def run_verifier(
     units: Optional[Iterable[object]] = None,
 ) -> tuple[SensitiveVerificationResult, int]:
     """Run semantic verification and reject incomplete/duplicate result sets."""
-    sensitive = [s for s in _collect_sensitive_values(contract, units=units) if _is_sensitive_relevant(s)]
+    sensitive = [
+        s
+        for s in _collect_sensitive_values(contract, units=units)
+        if _is_sensitive_relevant(s)
+    ]
     if not sensitive:
         return SensitiveVerificationResult(), 0
 
-    payload = json.dumps(_payload(sensitive, context), ensure_ascii=False)
+    # Evidence-first invariant: a critical claim without a concrete routed
+    # excerpt is deterministically unsupported. Do not ask the model to rescue
+    # it from broad context; that would turn the LLM into an authority.
+    rejected = {
+        s.field: VerificationDecision(
+            field=s.field,
+            supported=False,
+            reason="Kein feldspezifischer Quellenbeleg vorhanden.",
+        )
+        for s in sensitive
+        if not (s.evidence or "").strip()
+    }
+    to_verify = [s for s in sensitive if s.field not in rejected]
+
+    if not to_verify:
+        return SensitiveVerificationResult(
+            decisions=[rejected[s.field] for s in sensitive]
+        ), 0
+
+    payload = json.dumps(_payload(to_verify, context), ensure_ascii=False)
     schema = pydantic_json_schema(SensitiveVerificationResult)
     try:
-        raw = await ai_service.generate_structured(payload, VERIFIER_SYSTEM_PROMPT, schema, max_tokens=max_tokens)
+        raw = await ai_service.generate_structured(
+            payload, VERIFIER_SYSTEM_PROMPT, schema, max_tokens=max_tokens
+        )
     except Exception:
-        return SensitiveVerificationResult(), 1
+        # The model/verifier outage still fails closed for every claim that
+        # reached it. Returning no decisions lets GroupPipeline mark them
+        # missing, while deterministic no-evidence rejections are preserved.
+        return SensitiveVerificationResult(
+            decisions=[rejected[s.field] for s in sensitive if s.field in rejected]
+        ), 1
 
     try:
         result = SensitiveVerificationResult.model_validate(json.loads(raw))
     except Exception:
-        return SensitiveVerificationResult(), 1
+        return SensitiveVerificationResult(
+            decisions=[rejected[s.field] for s in sensitive if s.field in rejected]
+        ), 1
 
-    expected = [s.field for s in sensitive]
+    expected = [s.field for s in to_verify]
     returned = [d.field for d in result.decisions]
     if len(returned) != len(set(returned)) or set(returned) != set(expected):
-        # Empty result deliberately triggers GroupPipeline's missing-decision gate.
-        return SensitiveVerificationResult(), 1
-    return result, 1
+        return SensitiveVerificationResult(
+            decisions=[rejected[s.field] for s in sensitive if s.field in rejected]
+        ), 1
+
+    verified_by_field = {d.field: d for d in result.decisions}
+    combined = [
+        rejected.get(s.field) or verified_by_field[s.field]
+        for s in sensitive
+    ]
+    return SensitiveVerificationResult(decisions=combined), 1
 
 
 def unsupported_fields(result: SensitiveVerificationResult) -> set[str]:
