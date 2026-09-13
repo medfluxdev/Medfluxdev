@@ -1,0 +1,23 @@
+.notification-center { position: relative; }
+.notification-trigger { position: relative; display: inline-flex; min-width: 2.5rem; min-height: 2.5rem; align-items: center; justify-content: center; cursor: pointer; border-radius: .7rem; }
+.notification-trigger::-webkit-details-marker { display: none; }
+.notification-count { position: absolute; top: -.25rem; right: -.25rem; min-width: 1.25rem; height: 1.25rem; padding: 0 .25rem; border-radius: 999px; background: var(--danger, #b42318); color: white; font-size: .7rem; line-height: 1.25rem; text-align: center; }
+.notification-panel { width: min(25rem, 90vw); max-height: 32rem; overflow: auto; }
+.notification-item { display: grid !important; gap: .2rem; padding: .75rem !important; text-decoration: none; }
+.notification-item strong { color: inherit; }
+.notification-item small { white-space: normal; line-height: 1.35; }
+.notification-item span { font-size: .75rem; text-transform: uppercase; opacity: .65; }
+.button-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .65rem; }
+.work-collaboration-panel { margin-bottom: 1rem; }
+.work-collaboration-panel .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.work-collaboration-panel .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; }
+.work-collaboration-panel label { display: grid; gap: .35rem; font-weight: 600; }
+.work-collaboration-panel input,
+.work-collaboration-panel select,
+.work-collaboration-panel textarea { width: 100%; }
+.form-field-wide { grid-column: 1 / -1; }
+.work-comments { margin-top: 1.25rem; border-top: 1px solid var(--border, #d8dee8); padding-top: 1rem; }
+.work-comments ul { display: grid; gap: .75rem; padding: 0; list-style: none; }
+.work-comments li { padding: .75rem; border: 1px solid var(--border, #d8dee8); border-radius: .65rem; }
+.work-comments li p { margin: .3rem 0; }
+@media (max-width: 900px) { .work-collaboration-panel .form-grid { grid-template-columns: 1fr; } .form-field-wide { grid-column: auto; } }
