@@ -107,3 +107,18 @@ def test_sla_notes_must_be_traceable_to_source():
     )
 
     assert any("sla.sla_notes" in issue for issue in issues)
+
+
+def test_default_currency_requires_source_support():
+    contract = Contract()
+    contract.costs.default_currency = "EUR"
+
+    wrong = verify_residual_critical_claims(
+        contract, [_unit("Alle Preise verstehen sich in USD")]
+    )
+    assert any("costs.default_currency" in issue for issue in wrong)
+
+    supported = verify_residual_critical_claims(
+        contract, [_unit("Alle Preise verstehen sich in EUR")]
+    )
+    assert not any("costs.default_currency" in issue for issue in supported)
