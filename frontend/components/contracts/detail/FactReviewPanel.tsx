@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { apiPost } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { apiGet, apiPost } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import type {
   ContractDetailResponse,
@@ -14,9 +14,17 @@ interface Props {
   data: ContractDetailResponse;
   orgSlug: string;
   onReload: () => void;
-  /** Navigiert den PDF-Viewer zum Quellen-Beleg eines Fakts (UAT Defect F). */
   onNavigate?: (ev: EvidenceRef) => void;
 }
+
+type AuthIdentity = {
+  user_id: string;
+  organization_id: string;
+  organization_slug: string;
+  username: string;
+  display_name: string;
+  role: string;
+};
 
 function valueText(v: unknown): string {
   if (v == null || v === "") return "–";
@@ -48,10 +56,6 @@ const ACTION_LABEL: Record<string, string> = {
   reopened: "Erneut geöffnet",
 };
 
-// Präsentationswort je Fakten-Zustand: leitet sich STRENG aus dem gespeicherten
-// `state`/`action` ab. Bestätigung wird nie als Korrektur beschrieben und
-// umgekehrt; die ausführlichen Backend-Labels (z. B. "Manuell korrigiert")
-// werden dafür nicht mehr wörtlich übernommen.
 const RESULT_VERB: Record<string, string> = {
   confirmed: "Bestätigt",
   corrected: "Korrigiert",
@@ -71,16 +75,16 @@ const STATE_TONE: Record<string, string> = {
 };
 
 function identityHint(identity: string | null): string {
-  if (!identity) return "manuell, unverifiziert";
-  return identity === "manual_unverified"
-    ? "manuell, unverifiziert"
-    : identity;
+  if (!identity || identity === "manual_unverified") return "manuell, unverifiziert";
+  if (identity === "authenticated_local") return "authentifiziert";
+  return identity;
 }
 
 export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }: Props) {
   const toast = useToast();
   const panelRef = useRef<HTMLElement | null>(null);
   const [reviewer, setReviewer] = useState("");
+  const [authenticatedReviewer, setAuthenticatedReviewer] = useState<AuthIdentity | null>(null);
   const [note, setNote] = useState("");
   const [corrected, setCorrected] = useState<Record<string, string>>({});
   const [openFact, setOpenFact] = useState<string | null>(null);
@@ -90,23 +94,33 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  useEffect(() => {
+    let mounted = true;
+    apiGet<AuthIdentity>("/api/auth/me")
+      .then((identity) => {
+        if (mounted) setAuthenticatedReviewer(identity);
+      })
+      .catch(() => {
+        if (mounted) setAuthenticatedReviewer(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const effectiveReviewer = authenticatedReviewer?.display_name ?? reviewer.trim();
   const cr = data.contract_review;
 
-  // Belege-Index (evidence_id -> EvidenceRef) für die Fakt-nach-Fakt-Navigation.
   const evidenceById = new Map<string, EvidenceRef>();
   for (const e of data.evidence) {
     if (e.evidence_id) evidenceById.set(e.evidence_id, e);
   }
 
   async function postFact(body: Record<string, unknown>): Promise<boolean> {
-    // Backend lehnt Aktionen ohne Prüfer-Name ab (422 "Prüfer-Name fehlt"),
-    // damit keine erfundene Prüfer-Identität entsteht (bis Schritt 16 manuell/
-    // unverifiziert). Vorher ehrlich blockieren und begründen – statt eines
-    // toten Endpunkts mit generischer Fehlermeldung.
-    if ((reviewer ?? "").trim() === "") {
+    if (!effectiveReviewer) {
       setMsg({
         ok: false,
-        text: "Bitte zuerst Prüfer*in angeben (Feld oben, z. B. „Klinik-Werksteam“). Ohne Prüfer-Name wird die Prüf-Aktion nicht gespeichert.",
+        text: "Bitte zuerst Prüfer*in angeben. Im Anmeldemodus wird die serverseitig authentifizierte Identität automatisch verwendet.",
       });
       return false;
     }
@@ -117,13 +131,11 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
         `/api/contracts/${encodeURIComponent(
           data.contract_id
         )}/fact-reviews?organization_slug=${encodeURIComponent(orgSlug)}`,
-        body
+        { ...body, reviewer_display_name: effectiveReviewer }
       );
       setMsg({ ok: true, text: "Prüf-Aktion gespeichert." });
       toast("Prüf-Aktion gespeichert.", "success");
       onReload();
-      // Fokus im Prüf-Panel behalten (kein Scroll-Sprung, wiederholbares
-      // Review trotz neuem Datenstand – UAT-Batch „Review-Arbeitsposition“).
       window.setTimeout(() => panelRef.current?.focus({ preventScroll: true }), 30);
       return true;
     } catch {
@@ -139,7 +151,6 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
     void postFact({
       fact_key: fk,
       action: "confirmed",
-      reviewer_display_name: reviewer || null,
       note: note || null,
     });
   }
@@ -154,7 +165,6 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
       fact_key: fk,
       action: "corrected",
       corrected_value: String(value).trim(),
-      reviewer_display_name: reviewer || null,
       note: note || null,
     });
     if (ok) setOpenFact(null);
@@ -164,17 +174,15 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
     void postFact({
       fact_key: fk,
       action: "reopened",
-      reviewer_display_name: reviewer || null,
       note: note || null,
     });
   }
 
   async function postLifecycle(path: "start" | "complete"): Promise<boolean> {
-    // Gleiche Anforderung wie bei Einzelfakten: Prüfer-Name ist Pflicht.
-    if ((reviewer ?? "").trim() === "") {
+    if (!effectiveReviewer) {
       setMsg({
         ok: false,
-        text: "Bitte zuerst Prüfer*in angeben (Feld oben). Ohne Prüfer-Name wird das Review nicht gespeichert.",
+        text: "Bitte zuerst Prüfer*in angeben. Im Anmeldemodus wird die serverseitig authentifizierte Identität automatisch verwendet.",
       });
       return false;
     }
@@ -186,17 +194,14 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
           data.contract_id
         )}/review/${path}?organization_slug=${encodeURIComponent(orgSlug)}`,
         {
-          reviewer_display_name: reviewer || null,
+          reviewer_display_name: effectiveReviewer,
           note: path === "complete" ? completionNote : note,
           acknowledge_unreviewed: path === "complete" ? ack : false,
         }
       );
       setMsg({
         ok: true,
-        text:
-          path === "complete"
-            ? "Review abgeschlossen."
-            : "Review erneut geöffnet.",
+        text: path === "complete" ? "Review abgeschlossen." : "Review erneut geöffnet.",
       });
       toast(
         path === "complete" ? "Review abgeschlossen." : "Review erneut geöffnet.",
@@ -264,34 +269,37 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
         </p>
       )}
 
-      {/* Prüfer-Kontext */}
       <div className="override-group">
-        <label className="reviewer-label" htmlFor="fact-reviewer">
-          Prüfer*in (bis Schritt 16 als manuell/unverifiziert geführt)
-        </label>
-        <input
-          id="fact-reviewer"
-          type="text"
-          placeholder="z. B. Klinik-Werksteam"
-          value={reviewer}
-          onChange={(e) => setReviewer(e.target.value)}
-          aria-label="Name der prüfenden Person"
-        />
+        {authenticatedReviewer ? (
+          <p className="muted small">
+            Prüfer*in: <strong>{authenticatedReviewer.display_name}</strong> · authentifiziert
+            · die gespeicherte Identität wird serverseitig aus der Anmeldung gebunden.
+          </p>
+        ) : (
+          <>
+            <label className="reviewer-label" htmlFor="fact-reviewer">
+              Prüfer*in (Entwicklungsmodus ohne Anmeldung: manuell/unverifiziert)
+            </label>
+            <input
+              id="fact-reviewer"
+              type="text"
+              placeholder="z. B. Klinik-Werksteam"
+              value={reviewer}
+              onChange={(e) => setReviewer(e.target.value)}
+              aria-label="Name der prüfenden Person"
+            />
+          </>
+        )}
       </div>
 
-      {/* Vertragsreview */}
       <div className="override-group">
         <h3>Vertragsreview</h3>
         <p className="muted small">
-          {cr.reviewed_count} von {cr.relevant_count} relevanten Angaben
-          geprüft
-          {cr.unresolved_count > 0
-            ? ` · ${cr.unresolved_count} ungeprüft`
-            : ""}
+          {cr.reviewed_count} von {cr.relevant_count} relevanten Angaben geprüft
+          {cr.unresolved_count > 0 ? ` · ${cr.unresolved_count} ungeprüft` : ""}
           {cr.critical_unreviewed_count > 0 && (
             <span className="fact-review">
-              {" "}
-              · {cr.critical_unreviewed_count} kritisch ungeprüft
+              {" "}· {cr.critical_unreviewed_count} kritisch ungeprüft
             </span>
           )}
           {" · "}
@@ -360,7 +368,6 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
         </div>
       </div>
 
-      {/* Einzelne Fakte */}
       <div className="override-group">
         <h3>Materiale Angaben</h3>
         {states.length === 0 && <p className="muted">Keine Angaben vorhanden.</p>}
@@ -374,10 +381,7 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
                 <div className="fact-state-head">
                   <span className="fact-review-name">
                     {s.is_critical && (
-                      <span
-                        className="fact-critical"
-                        title="Material-relevante Angabe"
-                      >
+                      <span className="fact-critical" title="Material-relevante Angabe">
                         kritisch{" "}
                       </span>
                     )}
@@ -402,8 +406,7 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
                     ) : (
                       <>
                         <span className="muted small">
-                          Quellen-Beleg
-                          {s.evidence_count > 1 ? `e (${s.evidence_count})` : ""}:{" "}
+                          Quellen-Beleg{s.evidence_count > 1 ? `e (${s.evidence_count})` : ""}:{" "}
                         </span>
                         {s.linked_evidence_refs.map((eid) => {
                           const ev = evidenceById.get(eid);
@@ -438,12 +441,7 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
                   </div>
                 )}
                 <div className="override-row fact-state-actions">
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => confirmFact(fk)}
-                    disabled={busy}
-                  >
+                  <button type="button" className="btn btn-sm" onClick={() => confirmFact(fk)} disabled={busy}>
                     Bestätigen
                   </button>
                   <button
@@ -455,21 +453,14 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
                     {open ? "Abbrechen" : "Korrigieren"}
                   </button>
                   {s.state !== "unreviewed" && (
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => reopenFact(fk)}
-                      disabled={busy}
-                    >
+                    <button type="button" className="btn-link" onClick={() => reopenFact(fk)} disabled={busy}>
                       Erneut öffnen
                     </button>
                   )}
                   <button
                     type="button"
                     className="btn-link"
-                    onClick={() =>
-                      setHistoryFact(showHistory ? null : fk)
-                    }
+                    onClick={() => setHistoryFact(showHistory ? null : fk)}
                   >
                     {showHistory ? "Historie ausblenden" : "Historie"}
                   </button>
@@ -481,19 +472,11 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
                       placeholder="Korrigierter Wert"
                       value={corrected[fk] ?? ""}
                       onChange={(e) =>
-                        setCorrected((prev) => ({
-                          ...prev,
-                          [fk]: e.target.value,
-                        }))
+                        setCorrected((prev) => ({ ...prev, [fk]: e.target.value }))
                       }
                       aria-label={`Korrigierter Wert für ${s.label_de}`}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={() => correctFact(fk)}
-                      disabled={busy}
-                    >
+                    <button type="button" className="btn btn-sm" onClick={() => correctFact(fk)} disabled={busy}>
                       Speichern
                     </button>
                   </div>
@@ -512,25 +495,19 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
                           {r.fact_label_de || r.fact_key}
                         </span>
                         {r.action === "confirmed" && (
-                          <span className="audit-value">
-                            Wert übernommen (kein Override)
-                          </span>
+                          <span className="audit-value">Wert übernommen (kein Override)</span>
                         )}
                         {r.action === "corrected" && (
                           <>
                             <span className="audit-old">
                               {valueText(r.previous_effective_value)} →{" "}
                             </span>
-                            <span className="audit-value">
-                              {valueText(r.new_effective_value)}
-                            </span>
+                            <span className="audit-value">{valueText(r.new_effective_value)}</span>
                           </>
                         )}
                         {r.note && <span className="muted"> – {r.note}</span>}
                         <span className="audit-date">{stampTime(r.created_at)}</span>
-                        <span className="audit-ref">
-                          {identityHint(r.reviewer_identity_type)}
-                        </span>
+                        <span className="audit-ref">{identityHint(r.reviewer_identity_type)}</span>
                       </li>
                     ))}
                   </ul>
