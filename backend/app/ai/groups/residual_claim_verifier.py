@@ -36,7 +36,7 @@ _SERVICE_HOURS_RE = re.compile(r"servicezeit|servicezeiten|geschäftszeit|gescha
 
 _CURRENCY_MARKERS = {
     "EUR": ("eur", "€", "euro"),
-    "USD": ("usd", "$", "us-dollar", "us dollar"),
+    "USD": ("usd", "us$", "us-dollar", "us dollar"),
     "CHF": ("chf", "fr.", "franken"),
     "GBP": ("gbp", "£", "pound"),
 }
