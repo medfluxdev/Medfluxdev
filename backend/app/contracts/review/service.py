@@ -241,8 +241,15 @@ def complete_review(
     acknowledge_unreviewed: bool = False,
     relevant_count: int = 0,
     reviewed_count: int = 0,
+    critical_unreviewed_count: int = 0,
 ) -> ContractReview:
     reviewer = _require_reviewer(reviewer_display_name)
+    if critical_unreviewed_count > 0:
+        raise ReviewError(
+            f"Es gibt noch {critical_unreviewed_count} kritische ungeprüfte Angabe(n). "
+            "Kritische Vertragsfakten müssen bestätigt, korrigiert oder verworfen werden; "
+            "eine pauschale Quittierung ist nicht zulässig."
+        )
     unresolved = max(0, relevant_count - reviewed_count)
     if unresolved > 0 and not acknowledge_unreviewed:
         raise ReviewError(
