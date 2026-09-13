@@ -13,6 +13,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.scope_context import current_scope_context
+from app.database.models import WorkItem
+from app.database.scope_queries import scoped_contract_ids
 from app.database.services import PersistenceError, get_organization
 from app.database.session import create_session
 from app.work_queue.models import WorkItemList, WorkItemStatusUpdate, WorkItemSummary
@@ -68,6 +71,19 @@ def work_queue_list(
             limit=limit,
         )
         raw = list_work_items_dto(**scope)
+        request_scope = current_scope_context()
+        allowed = scoped_contract_ids(
+            session,
+            org.id,
+            request_scope.hospital_id,
+            request_scope.department_id,
+        )
+        if allowed is not None:
+            raw = [
+                item
+                for item in raw
+                if UUID(str(item.get("contract_id"))) in allowed
+            ]
         return WorkItemList(items=[WorkItemSummary(**r) for r in raw], total=len(raw))
     finally:
         session.close()
@@ -82,6 +98,24 @@ def work_item_status_update(
         org = get_organization(session, organization_slug)
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        request_scope = current_scope_context()
+        allowed = scoped_contract_ids(
+            session,
+            org.id,
+            request_scope.hospital_id,
+            request_scope.department_id,
+        )
+        if allowed is not None:
+            row = session.get(WorkItem, work_item_id)
+            if (
+                row is None
+                or row.organization_id != org.id
+                or row.contract_id not in allowed
+            ):
+                raise HTTPException(
+                    status_code=404,
+                    detail="Arbeitselement nicht gefunden.",
+                )
         try:
             _ = set_work_item_status(
                 session, organization_id=org.id, work_item_id=work_item_id,
