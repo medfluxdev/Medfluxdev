@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiGet } from "@/lib/api";
+import { apiGet, ApiError, userMessageForStatus } from "@/lib/api";
 
 // Interaktions-Audit: Ladezustände müssen IMMER terminieren. Der API-Layer
 // bekommt pro Request ein Standard-Timeout; haengt der Server, endet der
@@ -21,8 +21,7 @@ function stubFetch(promiseFor: (init: RequestInit) => Promise<Response>) {
 }
 
 describe("API-Schicht: garantierte Terminierung", () => {
-  it("bricht einen haengenden GET nach dem Standard-Timeout mit Fehler ab", async () => {
-    // Ein fetch, das NIE aufloest, aber auf das AbortSignal hoert (Timeout).
+  it("bricht einen haengenden GET nach dem Standard-Timeout mit verständlichem Fehler ab", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -37,9 +36,9 @@ describe("API-Schicht: garantierte Terminierung", () => {
 
     vi.useFakeTimers();
     const p = apiGet<unknown>("/api/never");
-    p.catch(() => undefined); // Rejection wird hier bewusst behandelt.
+    p.catch(() => undefined);
     await vi.advanceTimersByTimeAsync(21000);
-    await expect(p).rejects.toThrow();
+    await expect(p).rejects.toThrow("Die Anfrage hat zu lange gedauert");
   });
 
   it("loest ueber den Timeout hinausgehende 200-Responses korrekt auf", async () => {
@@ -67,11 +66,24 @@ describe("API-Schicht: garantierte Terminierung", () => {
     const p = apiGet<unknown>("/api/slow", undefined, 500);
     p.catch(() => undefined);
     await vi.advanceTimersByTimeAsync(600);
-    await expect(p).rejects.toThrow();
+    await expect(p).rejects.toThrow("Die Anfrage hat zu lange gedauert");
   });
 
-  it("meldet HTTP-Fehler weiterhin als ehrlichen Fehler", async () => {
+  it("liefert für HTTP-Fehler standardisierte deutsche Meldungen und den Status", async () => {
     stubFetch(async () => new Response("kaputt", { status: 500 }));
-    await expect(apiGet<unknown>("/api/500")).rejects.toThrow("Request failed: 500");
+    try {
+      await apiGet<unknown>("/api/500");
+      throw new Error("Erwarteter Fehler wurde nicht ausgelöst");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(500);
+      expect((error as Error).message).toBe("Der Server ist momentan nicht verfügbar. Bitte versuchen Sie es erneut.");
+    }
+  });
+
+  it("unterscheidet 401, 403 und 404 verständlich", () => {
+    expect(userMessageForStatus(401)).toMatch(/Sitzung ist abgelaufen/);
+    expect(userMessageForStatus(403)).toMatch(/keine Berechtigung/);
+    expect(userMessageForStatus(404)).toMatch(/nicht gefunden/);
   });
 });
