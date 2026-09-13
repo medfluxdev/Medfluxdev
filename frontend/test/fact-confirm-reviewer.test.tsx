@@ -143,7 +143,7 @@ describe("Faktprüfung – Bestätigen (UAT Defect, MEDTRON)", () => {
     expect(apiPostMock).not.toHaveBeenCalled();
     expect(
       await screen.findByText(
-        /Bitte zuerst Prüfer\*in angeben \(Feld oben, z\. B\. „Klinik-Werksteam“\). Ohne Prüfer-Name wird die Prüf-Aktion nicht gespeichert\./
+        /Bitte zuerst Prüfer\*in angeben\. Im Anmeldemodus wird die serverseitig authentifizierte Identität automatisch verwendet\./
       )
     ).toBeInTheDocument();
   });
