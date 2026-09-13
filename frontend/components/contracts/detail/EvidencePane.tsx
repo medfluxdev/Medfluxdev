@@ -1,7 +1,7 @@
 "use client";
 
 import { evidenceGroupLabel } from "@/lib/contract-detail-types";
-import type { EvidenceRef, SourceNavigationTarget } from "@/lib/contract-detail-types";
+import type { EvidenceRef } from "@/lib/contract-detail-types";
 import { evidencePrecision } from "@/lib/source-geometry";
 
 interface Props {
@@ -14,19 +14,6 @@ function fieldLabel(fieldRef: string | null): string {
   if (!fieldRef) return "Quellenangabe";
   const last = fieldRef.split(".").pop() ?? fieldRef;
   return last.replace(/_/g, " ");
-}
-
-function toTarget(ref: EvidenceRef): SourceNavigationTarget {
-  return {
-    document_version_id: ref.document_version_id,
-    page: ref.page,
-    bbox: ref.bbox,
-    bbox_space: ref.bbox_space,
-    supports_exact_navigation: ref.supports_exact_navigation,
-    label: `${fieldLabel(ref.field_ref)} · ${sourceLabel(ref)}`,
-    field_ref: ref.field_ref,
-    evidence_id: ref.evidence_id,
-  };
 }
 
 function isCoarseBbox(ref: EvidenceRef): boolean {
@@ -65,7 +52,6 @@ export default function EvidencePane({ evidence, activeEvidenceId, onNavigate }:
         const active = ref.evidence_id === activeEvidenceId;
         const exactPosition = Boolean(ref.bbox && ref.page != null && ref.supports_exact_navigation && !isCoarseBbox(ref));
         const confidence = confidenceLabel(ref.confidence);
-        void toTarget;
         return (
           <li key={ref.evidence_id}>
             <button
