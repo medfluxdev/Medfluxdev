@@ -87,6 +87,12 @@ def _find_support(field: str, value: Any, source_texts: list[str]) -> bool:
 
 
 def _identity_keys(equipment: Any) -> set[tuple[str, str]]:
+    """Return only identities safe enough to correlate two list items.
+
+    Serial/inventory identifiers dominate. Device+model is used only when neither
+    item carries a stronger identifier; otherwise two identical product models
+    with different serials must remain distinct physical devices.
+    """
     keys: set[tuple[str, str]] = set()
     serial = _norm(getattr(equipment, "serial_number", None))
     inventory = _norm(getattr(equipment, "inventory_number", None))
@@ -96,7 +102,7 @@ def _identity_keys(equipment: Any) -> set[tuple[str, str]]:
         keys.add(("serial", serial))
     if inventory:
         keys.add(("inventory", inventory))
-    if device and model:
+    if not serial and not inventory and device and model:
         keys.add(("device_model", f"{device}|{model}"))
     return keys
 
@@ -120,11 +126,7 @@ def _mark_review(equipment: Any) -> None:
 
 
 def _duplicate_conflict_issues(contract: Contract) -> list[str]:
-    """Flag two list items that clearly identify the same device but disagree.
-
-    We only correlate strong identities (serial, inventory, or exact device+model)
-    to avoid collapsing distinct devices that merely share a generic product name.
-    """
+    """Flag two list items that clearly identify the same device but disagree."""
     issues: list[str] = []
     seen: dict[tuple[str, str], int] = {}
     comparable_fields = (
