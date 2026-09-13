@@ -10,11 +10,10 @@ import KpiCard from "@/components/dashboard/KpiCard";
 import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
-import { apiGet } from "@/lib/api";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { getDashboardOverview } from "@/lib/domain-api/dashboard";
 import type { DashboardOverview } from "@/lib/dashboard-types";
 import { formatDate, formatISODateOnly } from "@/lib/format";
-
-const ORG_SLUG = process.env.NEXT_PUBLIC_ORG_SLUG ?? "krankenhaus";
 
 const KPI_LINKS: Record<string, string> = {
   active_contracts: "/contracts?status=active",
@@ -38,23 +37,25 @@ function PanelIcon({ tone, children }: { tone: "blue" | "green" | "violet" | "am
 }
 
 export default function DashboardPage() {
+  const { organizationSlug } = useAuth();
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!organizationSlug) return;
     setLoading(true);
     setError(null);
     try {
       const today = formatISODateOnly(new Date());
-      const res = await apiGet<DashboardOverview>(`/api/dashboard/overview?organization_slug=${encodeURIComponent(ORG_SLUG)}&as_of_date=${today}`);
+      const res = await getDashboardOverview(organizationSlug, today);
       setData(res);
     } catch {
       setError("Dashboard konnte nicht geladen werden.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [organizationSlug]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -118,6 +119,7 @@ export default function DashboardPage() {
               {data.data_quality.length > 0 && <div className="dashboard-card-footer"><Link href="/contracts?requires_review=true">Verträge mit Prüfbedarf anzeigen →</Link></div>}
             </section>
           </div>
+
           <div className="dash-grid dashboard-card-grid dashboard-priority-grid">
             <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="handlungsbedarf">
               <div className="panel-head dashboard-feature-head">
@@ -140,7 +142,6 @@ export default function DashboardPage() {
               <DeadlineDistribution buckets={data.deadlines} />
             </section>
           </div>
-
         </div>
       )}
 
