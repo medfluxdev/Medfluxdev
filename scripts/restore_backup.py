@@ -33,6 +33,17 @@ def _normalized(url: str) -> str:
     return url.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
+def _database_identity(url: str) -> tuple[str, int, str]:
+    """Compare database targets independent of credentials/query/driver spelling."""
+    parsed = urlparse(_normalized(url))
+    if parsed.scheme != "postgresql" or not parsed.hostname or not parsed.path.strip("/"):
+        raise ValueError("Ziel muss eine PostgreSQL-URL sein.")
+    host = parsed.hostname.strip().casefold()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        host = "loopback"
+    return host, parsed.port or 5432, unquote(parsed.path.lstrip("/"))
+
+
 def _postgres_connection(url: str) -> tuple[list[str], dict[str, str]]:
     parsed = urlparse(_normalized(url))
     if parsed.scheme != "postgresql" or not parsed.hostname or not parsed.path.strip("/"):
@@ -60,7 +71,7 @@ def restore_backup(
     backup = backup.resolve()
     verify_backup(backup)
 
-    if _normalized(target_database_url) == _normalized(settings.database_url):
+    if _database_identity(target_database_url) == _database_identity(settings.database_url):
         raise RuntimeError("Restore in die konfigurierte laufende MedFlux-Datenbank ist verboten.")
 
     target_documents_dir = target_documents_dir.resolve()
