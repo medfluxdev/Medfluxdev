@@ -13,6 +13,20 @@ Status snapshot after Big Pickle quota exhaustion. Static/GitHub work continues;
 - [x] Require concrete `source_text` for evidence; a page/paragraph/table pointer alone is not proof.
 - [x] Add targeted regression tests for verifier fail-closed behavior, completeness, merge conflicts, and evidence source text.
 - [x] Add a DB-free PowerShell safety gate: `scripts/step18_safety_gate.ps1`.
+- [x] Inventory all contract-model critical fields and document verifier/evidence coverage in `docs/STEP18_CRITICAL_FIELD_AUDIT.md`.
+- [x] Confirm central auth middleware binds requested `organization_slug` to the signed identity when auth is enabled; mismatches fail as 404 and viewers cannot mutate domain data.
+
+## Static implementation backlog
+
+- [ ] Verify each `equipment[].evidence` object in GroupPipeline; current section evidence loop covers identity/dates/termination/costs/payment/services/SLA but not per-equipment evidence.
+- [ ] Replace the ad-hoc `SENSITIVE_FIELDS` tuple with a centralized critical-claim policy describing severity, unknown/default semantics, evidence strategy and verifier requirement.
+- [ ] Add party-role verification for supplier/customer/contractor.
+- [ ] Add equipment identity/coverage verification for device/model/serial/inventory/coverage/service scope.
+- [ ] Add services/SLA verification with strict tri-state boolean semantics.
+- [ ] Expand financial verification to the remaining extracted money/payment fields without deriving or aggregating values.
+- [ ] Add adversarial tests for conflicting parties, devices, inclusion/exclusion, SLA and money.
+- [ ] Review all contract/document/equipment/intelligence routes for tenant binding and direct-object authorization.
+- [ ] Review Contract 360 and Human Review UI so unverified/unsupported claims cannot look verified.
 
 ## Runtime gate when local model quota is available
 
