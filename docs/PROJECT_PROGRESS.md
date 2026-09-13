@@ -3770,3 +3770,24 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 - Replaced the dark login background with a light `#E6F4F8`-based brand gradient so the canonical teal/dark-blue logo remains fully legible.
 - Kept the logo transparent and unframed.
 - Reduced the login card shadow and border contrast for a calmer, integrated healthcare presentation.
+
+
+---
+
+## Profile editing database fix — 2026-09-13
+
+**Status:** IMPLEMENTED
+
+### Problem
+- The `Mein Profil` UI and `/api/profile` endpoint already supported editable profile data, but local setup and container startup did not execute Alembic migrations.
+- Existing installations could therefore run application code against a database that did not yet contain the profile columns, causing profile loading or saving to fail.
+
+### Resolution
+- `scripts/setup.ps1` now runs `python -m alembic upgrade head` after installing backend dependencies.
+- The backend container now copies Alembic configuration/migrations and upgrades the database before starting Uvicorn.
+- Backend setup documentation now explicitly requires the migration after pulls.
+
+### Verification
+- Confirmed that the profile model, API route, frontend form, and migration `f9a3b4c5d6e7` agree on the editable fields.
+- Static verification completed for the Windows and Docker startup commands.
+- Local runtime verification requires the configured database service.
