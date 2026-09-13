@@ -3739,3 +3739,12 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ### Known limit
 - Poppins is declared as the approved font but is not fetched remotely. The application intentionally falls back to its local/system font stack until licensed font files are self-hosted in the repository.
+
+
+### Correction — canonical Main Logo 01 only
+
+- Replaced the reconstructed SVG/wordmark implementation with the exact cropped `01 — Main Logo` artwork from the approved identity board.
+- The single canonical application asset is `frontend/public/brand/medflux-main-logo.png`.
+- Sidebar, login, and organization selection use that same asset; no horizontal, icon-only, or code-drawn alternative is rendered.
+- Removed `frontend/app/icon.svg`; `frontend/app/icon.png` is derived from Main Logo 01 for the required square browser icon.
+- Updated `frontend/test/visual-identity.test.tsx` to require the canonical PNG and reject inline SVG logo rendering.
