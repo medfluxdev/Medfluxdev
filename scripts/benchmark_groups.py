@@ -29,6 +29,10 @@ from app.ai.contract_extractor import (  # noqa: E402
 )
 from app.ai.groups import extractor as groups_extractor  # noqa: E402
 from app.ai.groups.evidence import verify_evidence  # noqa: E402
+from app.ai.groups.verifier import (  # noqa: E402
+    _collect_sensitive_values,
+    _is_sensitive_relevant,
+)
 from app.documents.extraction.docx import extract_docx_units  # noqa: E402
 from app.documents.extraction.schemas import (  # noqa: E402
     FileType,
@@ -137,11 +141,23 @@ def run_verifier_report(contract, units, captured) -> dict:
     decisions = captured.get("decisions") or []
     supported = [d for d in decisions if d["supported"]]
     unsupported = [d for d in decisions if not d["supported"]]
+    expected_claims = [
+        item
+        for item in _collect_sensitive_values(contract, units=units)
+        if _is_sensitive_relevant(item)
+    ]
+    expected_fields = [item.field for item in expected_claims]
+    returned_fields = [d["field"] for d in decisions]
     return {
         "verifier_calls": captured.get("calls", 0),
+        "fields_expected": len(expected_fields),
         "fields_verified": len(decisions),
         "supported_fields": [d["field"] for d in supported],
         "unsupported_fields": [d["field"] for d in unsupported],
+        "missing_fields": sorted(set(expected_fields) - set(returned_fields)),
+        "evidence_scopes": {
+            item.field: item.evidence_scope for item in expected_claims
+        },
     }
 
 
@@ -201,6 +217,15 @@ async def main() -> None:
         action="store_true",
         help="Exit non-zero unless every selected report passes every ground-truth field.",
     )
+    ap.add_argument(
+        "--require-safe",
+        action="store_true",
+        help=(
+            "Exit non-zero if a selected run has evidence issues, unsupported or "
+            "missing critical verifier decisions, or a relevant scalar critical "
+            "claim lacks field-scoped evidence."
+        ),
+    )
     args = ap.parse_args()
 
     gt = json.loads(Path(args.gt).read_text(encoding="utf-8"))
@@ -235,13 +260,7 @@ async def main() -> None:
             if rep is not None:
                 reports.append(rep)
 
-    if args.runs > 1:
-        best = set()
-        for r in reports:
-            k = (r["key"], r["fields_passed"])
-        summary_extra = {"runs_per_contract": args.runs}
-    else:
-        summary_extra = {"runs_per_contract": 1}
+    summary_extra = {"runs_per_contract": args.runs}
 
     out = {"reports": reports, "summary": summary_extra}
     Path(args.report).write_text(
@@ -273,6 +292,41 @@ async def main() -> None:
         ]
         if failed:
             raise SystemExit(2)
+
+    if args.require_safe:
+        unsafe = []
+        for r in reports:
+            extraction = r.get("extraction") or {}
+            verifier = r.get("verifier") or {}
+            scopes = verifier.get("evidence_scopes") or {}
+            non_field_scopes = {
+                field: scope
+                for field, scope in scopes.items()
+                if scope != "field"
+            }
+            if (
+                r.get("error")
+                or extraction.get("evidence_issues", 0) != 0
+                or verifier.get("unsupported_fields")
+                or verifier.get("missing_fields")
+                or non_field_scopes
+            ):
+                unsafe.append(
+                    {
+                        "key": r.get("key"),
+                        "evidence_issues": extraction.get("evidence_issues"),
+                        "unsupported_fields": verifier.get("unsupported_fields"),
+                        "missing_fields": verifier.get("missing_fields"),
+                        "non_field_scopes": non_field_scopes,
+                    }
+                )
+        if unsafe:
+            print(
+                "STEP18_BENCHMARK_UNSAFE: "
+                + json.dumps(unsafe, ensure_ascii=False),
+                flush=True,
+            )
+            raise SystemExit(3)
 
 
 if __name__ == "__main__":
