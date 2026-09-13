@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
 import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
+import ContractIntelligencePanel from "@/components/contracts/detail/ContractIntelligencePanel";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { apiGet } from "@/lib/api";
+import { getContract } from "@/lib/domain-api/contracts";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 
 function normalizeContractDetail(res: ContractDetailResponse): ContractDetailResponse {
@@ -71,9 +72,7 @@ export default function ContractDetailPage() {
     if (!contractId || !organizationSlug) return;
     setLoading(true);
     setError(false);
-    apiGet<ContractDetailResponse>(
-      `/api/contracts/${encodeURIComponent(contractId)}?organization_slug=${encodeURIComponent(organizationSlug)}`
-    )
+    getContract(contractId, organizationSlug)
       .then((res) => setData(normalizeContractDetail(res)))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -104,6 +103,7 @@ export default function ContractDetailPage() {
         <>
           <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />
           <ContractWorkspace data={data} orgSlug={organizationSlug} onReload={load} />
+          <ContractIntelligencePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
         </>
       ) : null}
     </div>
