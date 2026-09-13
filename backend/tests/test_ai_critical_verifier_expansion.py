@@ -159,3 +159,13 @@ async def test_context_cannot_rescue_evidence_less_critical_claim():
     assert result.decisions[0].field == "identity.contract_number"
     assert result.decisions[0].supported is False
     assert "Kein feldspezifischer Quellenbeleg" in (result.decisions[0].reason or "")
+
+
+def test_money_field_evidence_rejects_currency_mismatch():
+    contract = Contract()
+    contract.costs.annual_cost = Money(amount=1200, currency="EUR", period="annual")
+    values = _by_field(
+        contract,
+        [_unit("Jährliche Gebühr: 1.200 USD")],
+    )
+    assert values["costs.annual_cost"].evidence is None
