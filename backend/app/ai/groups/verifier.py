@@ -164,12 +164,7 @@ def _contains_money_value(text: str, value: Any) -> bool:
 
 
 def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -> Optional[str]:
-    """Findet einen engen, feldspezifischen Beleg direkt in den Source Units.
-
-    Diese Funktion akzeptiert nur semantisch passende Zeilen/Einheiten. Ein
-    fachfremder Section-Beleg kann dadurch kein sensibles Feld mehr scheinbar
-    belegen oder entwerten.
-    """
+    """Findet einen engen, feldspezifischen Beleg direkt in den Source Units."""
     texts = _unit_texts(units)
     if not texts or value is None:
         return None
@@ -177,8 +172,8 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
     if field == "identity.contract_number":
         needle = str(value).strip()
         label_re = re.compile(
-            r"vertragsnummer|vertrags[- ]?nr\.?|vertrag[- ]?nr\.?|angebotsnummer|angebots[- ]?nr\.?"," 
-            " re.I
+            r"vertragsnummer|vertrags[- ]?nr\.?|vertrag[- ]?nr\.?|angebotsnummer|angebots[- ]?nr\.?",
+            re.I,
         )
         for text in texts:
             if needle and needle.casefold() in text.casefold() and label_re.search(text):
@@ -249,11 +244,7 @@ def _field_evidence(field: str, value: Any, units: Optional[Iterable[object]]) -
 
 
 def _collect_sensitive_values(contract, units: Optional[Iterable[object]] = None) -> list[SensitiveValue]:
-    """Sammelt sensible Werte mit feldspezifischem Evidence-Routing.
-
-    Source-unit evidence hat Vorrang. Section-level evidence bleibt aus
-    Rückwärtskompatibilität als Fallback erhalten.
-    """
+    """Sammelt sensible Werte mit field-evidence-first und section fallback."""
     out: list[SensitiveValue] = []
 
     def _section_ev(section) -> Optional[str]:
