@@ -96,6 +96,28 @@ export default function DashboardPage() {
               ))}
           </section>
 
+          <div className="lower-grid dashboard-card-grid">
+            <section className="panel dashboard-feature-card" aria-labelledby="kosten">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="green">€</PanelIcon>
+                  <div><h2 id="kosten">Kostenübersicht</h2><p>Nur verlässliche Werte; unbekannt bleibt unbekannt</p></div>
+                </div>
+              </div>
+              <FinancialOverview financial={data.financial} />
+            </section>
+
+            <section className="panel dashboard-feature-card" aria-labelledby="datenqualitaet">
+              <div className="panel-head dashboard-feature-head">
+                <div className="dashboard-feature-title">
+                  <PanelIcon tone="violet">✓</PanelIcon>
+                  <div><h2 id="datenqualitaet">Manuelle Prüfung / Datenqualität</h2><p>Offene Prüfungen und Datenlücken</p></div>
+                </div>
+              </div>
+              <DataQuality items={data.data_quality} />
+              {data.data_quality.length > 0 && <div className="dashboard-card-footer"><Link href="/contracts?requires_review=true">Verträge mit Prüfbedarf anzeigen →</Link></div>}
+            </section>
+          </div>
           <div className="dash-grid dashboard-card-grid dashboard-priority-grid">
             <section className="panel dashboard-feature-card dashboard-priority-card" aria-labelledby="handlungsbedarf">
               <div className="panel-head dashboard-feature-head">
@@ -119,28 +141,6 @@ export default function DashboardPage() {
             </section>
           </div>
 
-          <div className="lower-grid dashboard-card-grid">
-            <section className="panel dashboard-feature-card" aria-labelledby="kosten">
-              <div className="panel-head dashboard-feature-head">
-                <div className="dashboard-feature-title">
-                  <PanelIcon tone="green">€</PanelIcon>
-                  <div><h2 id="kosten">Kostenübersicht</h2><p>Nur verlässliche Werte; unbekannt bleibt unbekannt</p></div>
-                </div>
-              </div>
-              <FinancialOverview financial={data.financial} />
-            </section>
-
-            <section className="panel dashboard-feature-card" aria-labelledby="datenqualitaet">
-              <div className="panel-head dashboard-feature-head">
-                <div className="dashboard-feature-title">
-                  <PanelIcon tone="violet">✓</PanelIcon>
-                  <div><h2 id="datenqualitaet">Manuelle Prüfung / Datenqualität</h2><p>Offene Prüfungen und Datenlücken</p></div>
-                </div>
-              </div>
-              <DataQuality items={data.data_quality} />
-              {data.data_quality.length > 0 && <div className="dashboard-card-footer"><Link href="/contracts?requires_review=true">Verträge mit Prüfbedarf anzeigen →</Link></div>}
-            </section>
-          </div>
         </div>
       )}
 
