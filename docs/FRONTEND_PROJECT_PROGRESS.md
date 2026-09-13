@@ -3,9 +3,9 @@
 Created: 2026-09-13
 Last updated: 2026-09-13
 Status: IN PROGRESS
-Progress: 6/10 development steps complete (60%)
-Active step: FE-07 — Action-oriented dashboards
-Next action: Verify the first FE-07 batch, then finish partial/empty states and role/scope clarity using only DTO-supported data.
+Progress: 7/10 development steps complete (70%)
+Active step: FE-08 — Import and analysis experience
+Next action: Verify the first FE-08 batch, then finish duplicate/partial-result handling and completion/review navigation using only supported backend states.
 
 ## Purpose
 Develop Medflux into a consistent, accessible, reliable application for hospital contract management. Optimize the daily journey: identify required action, find a contract, verify its source, and complete the review.
@@ -34,8 +34,8 @@ Allowed statuses: PLANNED, IN PROGRESS, BLOCKED, COMPLETE.
 | FE-04 | Loading, errors, authentication, and service states | P0 | COMPLETE |
 | FE-05 | Contract table and search workflow | P0 | COMPLETE |
 | FE-06 | Contract detail and source review workspace | P0 | COMPLETE |
-| FE-07 | Action-oriented dashboards | P1 | IN PROGRESS |
-| FE-08 | Import and analysis experience | P1 | PLANNED |
+| FE-07 | Action-oriented dashboards | P1 | COMPLETE |
+| FE-08 | Import and analysis experience | P1 | IN PROGRESS |
 | FE-09 | Tasks, deadlines, and administration | P1 | PLANNED |
 | FE-10 | Accessibility, performance, and release verification | P0 release gate | PLANNED |
 
@@ -129,44 +129,52 @@ Verification result:
 - User-reported local frontend tests and production build green after the final FE-06 calculation/split-workspace batch.
 
 ## FE-07 — Action-oriented dashboards
-Status: IN PROGRESS
+Status: COMPLETE
 Depends on: FE-06
 
-Verified backend foundation:
-- Dashboard DTO provides active/current accepted projection state, accepted deterministic calculations and active warnings only.
-- `DeadlineBucket` explicitly separates cancellation deadlines from contract-end counts.
-- Financial totals are grouped per currency and expose counts of contracts without reliable values.
-- Action items expose warning type, severity, review/action flags and optional reliable annual cost.
-- Current DTO does not expose a contract ID on action items, so direct per-contract links must not be invented.
+Implemented / verified:
+- Urgent `Handlungsbedarf` and deadline panels are placed before lower-priority KPI/financial summaries.
+- Supported KPI cards link to real contract filters: active contracts, approaching contract end and critical cancellation deadlines.
+- Cancellation deadlines are summarized separately from contract ends and critical cancellation opens the corresponding filtered list.
+- Action rows expose `Aktion erforderlich` / `Prüfung erforderlich` textually; unsupported per-contract chevrons/links are absent because the DTO has no contract ID.
+- Financial coverage explicitly reports unreliable/missing annual cost and total-value counts; unknown values are never rendered as 0 €.
+- Multi-currency behavior remains separate with no invented conversion.
+- Data-quality and cost-coverage panels use supported review filters only.
+- Data date and freshness remain visible near the top of the dashboard.
+- Empty/partial dashboard states remain meaningful and existing automated accessibility coverage still runs against the dashboard.
 
-Implemented in first FE-07 batch:
-- [x] Urgent `Handlungsbedarf` and deadline panels are placed before lower-priority KPI/financial summaries.
-- [x] Supported KPI cards link to real contract filters: active contracts, approaching contract end and critical cancellation deadlines.
-- [x] Cancellation deadlines are summarized separately from contract ends and critical cancellation opens the corresponding filtered list.
-- [x] Action rows expose `Aktion erforderlich` / `Prüfung erforderlich` textually; unsupported per-contract chevrons/links are removed because the DTO has no contract ID.
-- [x] Financial coverage explicitly reports unreliable/missing annual cost and total-value counts; unknown values are never rendered as 0 €.
-- [x] Multi-currency behavior remains separate with no invented conversion.
-- [x] Data-quality and cost-coverage panels link to the supported `requires_review=true` contract filter.
-- [x] Data date and freshness remain visible near the top of the dashboard.
-- [x] Added focused tests for filtered KPI links, cancellation-vs-end separation and missing-cost coverage.
-
-Remaining FE-07 scope:
-- [ ] Verify the new dashboard batch with the full frontend suite and production build.
-- [ ] Review meaningful partial states when some dashboard sections are empty while others contain data.
-- [ ] Confirm that current role/scope presentation does not imply data the DTO cannot prove.
-- [ ] Re-run accessibility coverage after the new links and priority layout.
+Verification result:
+- User-reported local frontend tests and production build green after the final FE-07 batch.
 
 ## FE-08 — Import and analysis experience
-Status: PLANNED
+Status: IN PROGRESS
 Depends on: FE-07
 
-Planned scope:
-- Accessible picker and drag/drop.
-- Honest supported types/limits and target scope.
-- Per-file upload/import/analysis outcomes.
-- Separate import success from analysis success.
-- Real server stages or honest indeterminate progress.
-- Retry only eligible failures and preserve durable jobs where supported.
+Verified backend behavior:
+- `/api/documents/import` accepts a batch of PDF/DOCX uploads and processes each document through the persisted production orchestrator.
+- The endpoint is synchronous from the browser perspective and returns per-file results only after processing; it does not expose live per-stage percentage/status events.
+- Per-file results include import status, optional analysis status, review requirement, stored document-version ID and optional contract ID.
+- `/api/documents/{document_version_id}/retry` supports retry from a stored document version after failed/incomplete analysis.
+- No frontend-verifiable fixed maximum file-size limit is exposed by the current import API, so the UI must not invent one.
+
+Implemented in first FE-08 batch:
+- [x] Existing drag/drop area remains keyboard accessible and the native picker restricts to PDF/DOCX.
+- [x] Unsupported extensions are rejected before upload with an explicit user-visible message.
+- [x] Active organization/working-scope target is shown before import; the selected hospital/department scope continues to be assigned through the verified ownership flow after successful import.
+- [x] Removed hardcoded import/retry organization usage in favor of the authenticated active organization scope.
+- [x] Import success is presented separately from analysis success/failure for every file.
+- [x] `analysis_failed` no longer visually implies that document persistence itself failed.
+- [x] Indeterminate processing copy explicitly states that the API has no live stages/percentages; no fake percentage is shown.
+- [x] Retry is offered only for failed analysis with a stored document-version ID.
+- [x] Result summary separates imported documents, successful analyses, failed analyses and duplicates.
+- [x] Direct contract links are shown only when the backend returns a real contract ID.
+- [x] Added focused tests for supported-file validation, separated import/analysis states, retry and honest indeterminate processing.
+
+Remaining FE-08 scope:
+- [ ] Verify the current import batch with the full frontend suite and production build.
+- [ ] Recheck duplicate and partial-analysis presentation with representative backend fixtures.
+- [ ] Confirm completion/review navigation for files requiring manual review.
+- [ ] Document that durable background job tracking is not available because the current endpoint is synchronous and exposes no job ID/status endpoint.
 
 ## FE-09 — Tasks, deadlines, and administration
 Status: PLANNED
