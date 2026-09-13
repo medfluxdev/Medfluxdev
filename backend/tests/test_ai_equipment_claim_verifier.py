@@ -118,3 +118,17 @@ def test_two_same_named_devices_with_distinct_serials_are_not_false_conflict():
     ]
     issues = verify_equipment_claims(contract, units)
     assert not any("gleiche Geräteidentität" in issue for issue in issues)
+
+
+def test_equipment_location_is_operationally_grounded():
+    contract = Contract(
+        equipment=[
+            Equipment(
+                device_name="Pump X",
+                location="OP 3",
+                evidence=SourceEvidence(source_text="Pump X"),
+            )
+        ]
+    )
+    issues = verify_equipment_claims(contract, [_unit("Pump X befindet sich im OP 2")])
+    assert any(".location" in issue for issue in issues)
