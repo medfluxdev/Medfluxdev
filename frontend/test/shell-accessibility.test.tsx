@@ -21,6 +21,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({
       display_name: "Max Mustermann",
       email: "max@example.test",
       is_developer: false,
+      profile_photo_data_url: "data:image/png;base64,bWVkaWNhbC1sb2dv",
     },
     membership: {
       organization_slug: "krankenhaus",
@@ -34,6 +35,14 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 describe("Application shell accessibility", () => {
   beforeEach(() => {
     pushMock.mockClear();
+  });
+
+  it("shows the saved profile photo in the account trigger", () => {
+    render(<AppTopbar />);
+    expect(screen.getByRole("img", { hidden: true })).toHaveAttribute(
+      "src",
+      expect.stringContaining("data:image/png;base64,bWVkaWNhbC1sb2dv")
+    );
   });
 
   it("opens Mein Profil directly and closes the account menu", async () => {
