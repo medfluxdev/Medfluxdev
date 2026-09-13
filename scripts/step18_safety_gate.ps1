@@ -7,12 +7,14 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $backend = Join-Path $repoRoot "backend"
+$venvPython = Join-Path $backend ".venv\Scripts\python.exe"
+$python = if (Test-Path $venvPython) { $venvPython } else { "python" }
 Set-Location $backend
 
 $env:MEDFLUX_UNIT_ONLY = "1"
 
 Write-Host "[STEP18] Python syntax gate..."
-python -m py_compile `
+& $python -m py_compile `
     app/ai/groups/critical_policy.py `
     app/ai/groups/equipment_verifier.py `
     app/ai/groups/evidence.py `
@@ -26,7 +28,7 @@ python -m py_compile `
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "[STEP18] Targeted fail-closed tests..."
-python -m pytest -q `
+& $python -m pytest -q `
     tests/test_ai_adversarial_critical_claims.py `
     tests/test_ai_critical_policy.py `
     tests/test_ai_critical_verifier_expansion.py `
