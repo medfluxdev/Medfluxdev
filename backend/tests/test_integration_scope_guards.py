@@ -85,3 +85,19 @@ def test_unassigned_non_admin_membership_is_fail_closed():
     assert "_NO_SCOPE_HOSPITAL = UUID(int=0)" in source
     assert "membership.hospital_id or _NO_SCOPE_HOSPITAL" in source
     assert "actor.role != \"admin\"" in source
+
+
+def test_organization_structure_reads_are_scope_filtered():
+    source = _source("app/api/routes/organization_structure.py")
+    assert "current_scope_context" in source
+    assert 'actor.role != "admin" and not actor.is_developer' in source
+    assert "Hospital.id == scope.hospital_id" in source
+    assert "Department.id == scope.department_id" in source
+
+
+def test_cost_center_reads_are_scope_filtered():
+    source = _source("app/api/routes/cost_center_routes.py")
+    assert "current_scope_context" in source
+    assert 'actor.role != "admin" and not actor.is_developer' in source
+    assert "CostCenter.hospital_id == scope.hospital_id" in source
+    assert "CostCenter.department_id == scope.department_id" in source
