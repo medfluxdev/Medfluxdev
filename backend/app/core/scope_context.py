@@ -20,6 +20,7 @@ class ScopeContext:
 
 
 _scope: ContextVar[ScopeContext] = ContextVar("medflux_scope", default=ScopeContext())
+_NO_SCOPE_HOSPITAL = UUID(int=0)
 
 
 def current_scope_context() -> ScopeContext:
@@ -51,8 +52,17 @@ class ScopeContextMiddleware(BaseHTTPMiddleware):
                     & (AccountMembership.is_active.is_(True))
                 ))
                 if membership is not None:
-                    hospital_id = membership.hospital_id
+                    # Normal users never get organization-wide visibility by
+                    # accident. A membership without an assigned hospital is a
+                    # provisioning state, not a global scope. UUID(0) is an
+                    # impossible hospital FK and therefore yields an empty scope
+                    # in all scoped contract/equipment queries until an admin
+                    # assigns the user properly.
+                    hospital_id = membership.hospital_id or _NO_SCOPE_HOSPITAL
                     department_id = membership.department_id
+                else:
+                    hospital_id = _NO_SCOPE_HOSPITAL
+                    department_id = None
             finally:
                 session.close()
 
