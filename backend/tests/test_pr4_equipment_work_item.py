@@ -499,12 +499,12 @@ def test_work_queue_routes_ok_and_cross_org_404(engine, db):
             json={"status": "acknowledged"},
         )
         assert rp.status_code == 200
-        # Cross-Org: Liste leer (kein Datenleck), PATCH verweigert (422).
+        # Cross-Org: Liste leer (kein Datenleck), PATCH verborgen (404).
         rg = client.get(f"/api/work-queue?organization_slug={slug_b}")
         assert rg.status_code == 200
         assert rg.json()["total"] == 0
         rp2 = client.patch(f"/api/work-queue/{wi_id}?organization_slug={slug_b}", json={"status": "resolved"})
-        assert rp2.status_code == 422
+        assert rp2.status_code == 404
     finally:
         _cleanup_org(engine, org.id)
         if org_b is not None:
