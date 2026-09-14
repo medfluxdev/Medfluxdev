@@ -234,8 +234,9 @@ describe("Vertrags-Detail + Quellenanzeige (STEP 14)", () => {
       name: "Quellenangaben",
     });
     expect(within(pane).getByText("Positionsbestimmt")).toBeInTheDocument();
+    expect(within(pane).getByText("Unbestätigt")).toBeInTheDocument();
     expect(
-      within(pane).getByText("Ohne Positionsangabe")
+      within(pane).getByText(/Keine Seitenangabe/)
     ).toBeInTheDocument();
     expect(within(pane).getByText(/Konfidenz 98%/)).toBeInTheDocument();
   });
@@ -299,8 +300,9 @@ describe("Vertrags-Detail + Quellenanzeige (STEP 14)", () => {
     expect(screen.queryByText(/hervorgehoben/)).not.toBeInTheDocument();
     // Die Quelle ist im Panel dennoch ausgewaehlt (als nicht lokalisierbar markiert).
     const pane = screen.getByRole("region", { name: "Quellenangaben" });
+    expect(within(pane).getByText("Unbestätigt")).toBeInTheDocument();
     expect(
-      within(pane).getByText(/Ohne Positionsangabe/)
+      within(pane).getByText(/Keine Seitenangabe/)
     ).toBeInTheDocument();
   });
 
