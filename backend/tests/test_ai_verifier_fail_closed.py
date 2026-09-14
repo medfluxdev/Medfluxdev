@@ -127,7 +127,11 @@ async def test_extraction_counts_only_unsupported_verifier_decisions_as_issues()
 
     assert result.status == ExtractionStatus.PARTIAL
     assert result.requires_review is True
-    assert result.verifier_issues == 1
+    # Source grounding rejects the Bestellnummer before semantic verification,
+    # so the result is fail-closed through normalization rather than an LLM
+    # verifier decision.
+    assert result.verifier_issues == 0
+    assert result.normalization_issues >= 1
     assert result.contract is not None
     assert "identity.contract_number" in (result.contract.review.risk_notes or "")
 
