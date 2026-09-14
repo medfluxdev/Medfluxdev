@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.core.config import settings
 from app.demo.workspace import set_workspace_enabled, workspace_status
 from app.database.session import create_session
 
@@ -26,6 +27,12 @@ class WorkspaceToggleResponse(BaseModel):
 
 
 def _require_developer(request: Request) -> None:
+    # development/test können bewusst ohne Auth laufen. In diesem lokalen Modus
+    # gibt es keine Developer-Identität, deshalb bleibt das UAT-Werkzeug für den
+    # lokalen Operator erreichbar. Mit aktivierter Authentifizierung gilt strikt
+    # Developer-only.
+    if not settings.auth_enabled:
+        return
     if getattr(request.state, "is_developer", False):
         return
     raise HTTPException(

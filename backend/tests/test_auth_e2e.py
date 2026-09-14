@@ -1,7 +1,7 @@
 """DB-backed end-to-end coverage for STEP 16 local auth boundaries.
 
 These tests deliberately exercise the real FastAPI middleware/routes against the
-pytest-isolated PostgreSQL schema from ``backend/conftest.py``.  They must never
+pytest-isolated PostgreSQL schema from ``backend/conftest.py``. They must never
 run with ``MEDFLUX_UNIT_ONLY=1`` because persistence is part of the contract
 being verified here.
 """
@@ -62,6 +62,14 @@ def auth_fixture(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
             role="viewer",
             active=True,
         )
+        admin = User(
+            organization_id=org.id,
+            username="admin",
+            display_name="Admin Person",
+            password_hash=hash_password(password),
+            role="admin",
+            active=True,
+        )
         other_admin = User(
             organization_id=other_org.id,
             username="other-admin",
@@ -70,7 +78,7 @@ def auth_fixture(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
             role="admin",
             active=True,
         )
-        session.add_all([reviewer, viewer, other_admin])
+        session.add_all([reviewer, viewer, admin, other_admin])
         session.flush()
 
         record_audit_event(
@@ -115,16 +123,17 @@ def test_login_me_audit_logout_roundtrip(auth_fixture: dict[str, str]) -> None:
             password=auth_fixture["password"],
         )
         assert login.status_code == 200
-        body = login.json()
-        assert body["organization_slug"] == auth_fixture["org_slug"]
-        assert body["username"] == "reviewer"
-        assert body["display_name"] == "Review Person"
-        assert body["role"] == "reviewer"
+        assert login.json() == {"ok": True}
         assert settings.auth_cookie_name in client.cookies
 
         me = client.get("/api/auth/me")
         assert me.status_code == 200
-        assert me.json() == body
+        body = me.json()
+        assert body["email"] == "reviewer"
+        assert body["display_name"] == "Review Person"
+        assert body["is_active"] is True
+        assert body["memberships"][0]["organization_slug"] == auth_fixture["org_slug"]
+        assert body["memberships"][0]["role"] == "reviewer"
 
         audit = client.get("/api/audit")
         assert audit.status_code == 200
@@ -133,7 +142,8 @@ def test_login_me_audit_logout_roundtrip(auth_fixture: dict[str, str]) -> None:
         assert "other-org.private-event" not in actions
 
         logout = client.post("/api/auth/logout")
-        assert logout.status_code == 204
+        assert logout.status_code == 200
+        assert logout.json() == {"ok": True}
 
         after_logout = client.get("/api/auth/me")
         assert after_logout.status_code == 401
@@ -157,7 +167,7 @@ def test_cross_org_query_is_hidden(auth_fixture: dict[str, str]) -> None:
         assert response.json()["detail"] == "Ressource nicht gefunden."
 
 
-def test_viewer_write_block_and_reviewer_write_allow(auth_fixture: dict[str, str]) -> None:
+def test_write_permissions_follow_integrated_role_policy(auth_fixture: dict[str, str]) -> None:
     with TestClient(app) as viewer_client:
         login = _login(
             viewer_client,
@@ -166,7 +176,6 @@ def test_viewer_write_block_and_reviewer_write_allow(auth_fixture: dict[str, str
             password=auth_fixture["password"],
         )
         assert login.status_code == 200
-
         blocked = viewer_client.post(
             "/api/documents/import",
             params={"organization_slug": auth_fixture["org_slug"]},
@@ -182,8 +191,22 @@ def test_viewer_write_block_and_reviewer_write_allow(auth_fixture: dict[str, str
             password=auth_fixture["password"],
         )
         assert login.status_code == 200
+        blocked = reviewer_client.post(
+            "/api/documents/import",
+            params={"organization_slug": auth_fixture["org_slug"]},
+        )
+        assert blocked.status_code == 403
+        assert "Berechtigung" in blocked.json()["detail"]
 
-        allowed = reviewer_client.post(
+    with TestClient(app) as admin_client:
+        login = _login(
+            admin_client,
+            org_slug=auth_fixture["org_slug"],
+            username="admin",
+            password=auth_fixture["password"],
+        )
+        assert login.status_code == 200
+        allowed = admin_client.post(
             "/api/documents/import",
             params={"organization_slug": auth_fixture["org_slug"]},
         )

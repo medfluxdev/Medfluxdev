@@ -2,7 +2,7 @@
 
 Dünne API-Schicht – alle Logik liegt im AIService bzw. in Discovery/Selection.
 Die globale Provider-/Modellauswahl darf nur von Administrator/Developer
-verändert oder aktiv getestet werden.
+verändert oder aktiv getestet werden, sobald Authentifizierung aktiv ist.
 """
 
 import logging
@@ -35,6 +35,12 @@ _ai_service = AIService(settings)
 
 
 def _require_ai_admin(request: Request) -> None:
+    # development/test dürfen laut Runtime-Konfiguration bewusst ohne Auth laufen.
+    # In diesem Modus existiert keine Rollenidentität; der lokale Operator darf
+    # deshalb die lokale KI testen/konfigurieren. Sobald Auth aktiv ist, bleibt
+    # die globale Auswahl strikt Admin/Developer-only.
+    if not settings.auth_enabled:
+        return
     if getattr(request.state, "is_developer", False):
         return
     actor = getattr(request.state, "actor", None)

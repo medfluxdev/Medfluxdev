@@ -22,12 +22,23 @@ def test_patch_preflight_is_allowed():
 @pytest.mark.parametrize("bad_dto,commit_error,expected", [(True, False, 500), (False, True, 503), (False, False, 200)])
 def test_patch_validates_before_commit(monkeypatch, bad_dto, commit_error, expected):
     session = MagicMock()
+    org_id = uuid.uuid4()
+    item_id = uuid.uuid4()
+    contract_id = uuid.uuid4()
+    row = SimpleNamespace(
+        id=item_id,
+        organization_id=org_id,
+        contract_id=contract_id,
+        status="open",
+        item_type="manual_review",
+    )
+    session.get.return_value = row
     monkeypatch.setattr(routes, "create_session", lambda: session)
-    monkeypatch.setattr(routes, "get_organization", lambda *a: SimpleNamespace(id=uuid.uuid4()))
+    monkeypatch.setattr(routes, "get_organization", lambda *a: SimpleNamespace(id=org_id))
+    monkeypatch.setattr(routes, "scoped_contract_ids", lambda *a, **kw: None)
     mutation = MagicMock()
     monkeypatch.setattr(routes, "set_work_item_status", mutation)
-    item_id = uuid.uuid4()
-    dto = {"id": str(item_id), "contract_id": str(uuid.uuid4()), "item_type": "manual_review",
+    dto = {"id": str(item_id), "contract_id": str(contract_id), "item_type": "manual_review",
            "severity": "medium", "status": "acknowledged", "title_de": "Test"}
     monkeypatch.setattr(routes, "get_work_item_dto", lambda *a, **kw: {} if bad_dto else dto)
     if commit_error:

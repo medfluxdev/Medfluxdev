@@ -80,6 +80,23 @@ def pytest_sessionstart(session) -> None:
         raise pytest.UsageError("Test isolation unavailable; refusing database tests") from exc
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit_between_tests():
+    """Keep login throttling deterministic without weakening the runtime limiter.
+
+    The limiter is deliberately process-global. A full pytest process, however,
+    represents many independent browser/client scenarios, so one test must not
+    consume another test's login budget.
+    """
+    from app.security.request_context import LoginRateLimitMiddleware
+
+    with LoginRateLimitMiddleware._lock:
+        LoginRateLimitMiddleware._attempts.clear()
+    yield
+    with LoginRateLimitMiddleware._lock:
+        LoginRateLimitMiddleware._attempts.clear()
+
+
 def pytest_sessionfinish(session, exitstatus):
     if os.environ.get("MEDFLUX_UNIT_ONLY") == "1":
         return

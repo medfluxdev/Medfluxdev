@@ -16,4 +16,7 @@ def test_root():
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    payload = r.json()
+    assert payload["status"] == "ok"
+    assert payload["service"] == "Medflux"
+    assert payload["version"]
