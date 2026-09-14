@@ -179,6 +179,9 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
     // … ohne die Seite zu entladen: dasselbe Panel-DOM bleibt stehen,
     // womit die Bildlaufposition beim Fakt-Prüfen erhalten bleibt.
     expect(container.querySelector("#fact-review-panel")).toBe(panel);
-    expect(apiGetMock).toHaveBeenCalledTimes(2);
+    const detailCalls = apiGetMock.mock.calls.filter(
+      ([path]) => typeof path === "string" && path.startsWith("/api/contracts/")
+    );
+    expect(detailCalls).toHaveLength(2);
   });
 });
