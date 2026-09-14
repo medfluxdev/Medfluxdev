@@ -26,6 +26,11 @@ _PUBLIC_PREFIXES = (
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
+def _origin_allowed(origin: str) -> bool:
+    normalized = origin.rstrip("/")
+    return normalized in {value.rstrip("/") for value in settings.cors_origins_list}
+
+
 def _reviewer_mutation_allowed(path: str) -> bool:
     return (
         (
@@ -94,6 +99,14 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
                     )
 
                 if request.method in _WRITE_METHODS:
+                    # Cookie-authenticated browser writes must originate from an
+                    # explicitly configured frontend origin.
+                    origin = request.headers.get("origin")
+                    if origin and not _origin_allowed(origin):
+                        return JSONResponse(
+                            status_code=403,
+                            content={"detail": "Ungueltiger Anfrage-Ursprung."},
+                        )
                     if identity.role == "viewer":
                         return JSONResponse(
                             status_code=403,
