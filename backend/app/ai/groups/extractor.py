@@ -142,6 +142,10 @@ class GroupPipeline:
                 len(source_notes),
                 source_notes,
             )
+            # Benign canonicalization does not require review, but discarding a
+            # model claim as semantically misclassified must never look like a
+            # clean SUCCESS.
+            messages.extend(note for note in source_notes if "verworfen" in note)
 
         evidence_issues = self._verify_evidence_on_contract(contract, units)
         equipment_issues = verify_equipment_claims(contract, units)
@@ -182,7 +186,7 @@ class GroupPipeline:
                 self._mark_verifier_fields_for_review(contract, missing_fields)
             for field in sorted(missing_fields):
                 verifier_issues.append(
-                    f"Verifier: {field} ohne Entscheidung – manuelle Prüfung erforderlich"
+                    f"Verifier: {field} keine verwertbare Entscheidung – manuelle Prüfung erforderlich"
                 )
 
             diag.verifier_issues += len(verifier_issues)
