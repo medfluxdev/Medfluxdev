@@ -148,7 +148,7 @@ GOOD_EVIDENCE = build_handler({
         "contract_number": "CN-1",
         "evidence": {
             "source_type": "paragraph",
-            "source_text": "Wartung CN-1",
+            "source_text": "Vertragsnummer CN-1",
             "confidence": 0.9,
             "page": 1
         }
@@ -308,7 +308,7 @@ async def test_evidence_verification_passes():
         page_count=1,
         total_characters=10,
         text_available=True,
-        units=[_page(1, "Wartung CN-1")],
+        units=[_page(1, "Vertragsnummer CN-1")],
     )
     orch = _orchestrator(GOOD_EVIDENCE)
     res = await orch.analyze(result)
