@@ -44,6 +44,13 @@ def main() -> None:
         if keeper.organization_id != org.id or shadow.organization_id != org.id:
             sys.exit("Org-Mismatch - Abbruch.")
 
+        if "--apply" not in sys.argv[1:]:
+            print(
+                "DRY-RUN: Keeper und Schatten-Duplikat wurden verifiziert; "
+                "keine Daten geaendert. Mit --apply explizit ausfuehren."
+            )
+            return
+
         # Zeiger umhaengen: CEQ + Work-Items des Schattens -> Master.
         r1 = s.execute(
             sa.update(m.ContractEquipment)

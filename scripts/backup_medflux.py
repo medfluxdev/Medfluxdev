@@ -78,6 +78,26 @@ def _organization(session, slug: str) -> Organization:
     return org
 
 
+def _assert_single_org_backup_scope(session, slug: str) -> Organization:
+    """Fail closed: a full pg_dump must never masquerade as a tenant-only backup.
+
+    STEP 17 currently stores a PostgreSQL custom dump of the complete database.
+    Until a truly tenant-filtered relational export exists, allowing that dump
+    in a multi-organization database would leak other tenants into an archive
+    labelled with a single organization slug.
+    """
+    organizations = list(session.scalars(select(Organization)).all())
+    if len(organizations) != 1:
+        raise RuntimeError(
+            "Organisationsbezogenes Backup ist nur bei genau einer Organisation "
+            "in der Datenbank erlaubt; ein Voll-Dump darf keine fremden Mandanten enthalten."
+        )
+    org = organizations[0]
+    if org.slug != slug:
+        raise RuntimeError("Organisation nicht gefunden.")
+    return org
+
+
 def _remember_object(
     objects: dict[str, dict],
     *,
@@ -119,6 +139,12 @@ def create_backup(*, organization_slug: str, target: Path, pg_dump_bin: str = "p
 
     dump_path = target / "database.dump"
     try:
+        scope_session = create_session()
+        try:
+            _assert_single_org_backup_scope(scope_session, organization_slug)
+        finally:
+            scope_session.close()
+
         conn_args, env = _postgres_connection(settings.database_url)
         cmd = [
             pg_dump_bin,

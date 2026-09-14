@@ -177,7 +177,10 @@ def _norm(value: Any) -> Any:
 def main() -> None:
     if len(sys.argv) < 2:
         print(__doc__)
-        sys.exit("usage: cleanup_product_db.py <keep_contract_id>")
+        sys.exit(
+            "usage: cleanup_product_db.py <keep_contract_id> "
+            "[--apply --confirm-drop-schema=DROP-PUBLIC-SCHEMA]"
+        )
     keep_contract_id = uuid.UUID(sys.argv[1])
 
     meta: MetaData = Base.metadata
@@ -201,6 +204,18 @@ def main() -> None:
     keep = keep_closure(meta, keep_org_id, {keep_contract_id})
     keep_count = sum(len(v) for v in keep.values())
     print(f"Keep-Teilmenge: {keep_count} Zeilen ueber {len(keep)} Tabellen")
+
+    # Destructive schema rebuild is never implicit. A plain invocation is a
+    # dry-run that proves the keep-set can be calculated. Two explicit signals
+    # are required before DROP SCHEMA is reachable.
+    apply = "--apply" in sys.argv[2:]
+    confirmed = "--confirm-drop-schema=DROP-PUBLIC-SCHEMA" in sys.argv[2:]
+    if not apply or not confirmed:
+        print(
+            "DRY-RUN: keine Daten veraendert. Fuer den destruktiven Lauf sind "
+            "--apply und --confirm-drop-schema=DROP-PUBLIC-SCHEMA erforderlich."
+        )
+        return
 
     backup_dir = ROOT / "data" / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)

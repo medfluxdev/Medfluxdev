@@ -33,6 +33,17 @@ def _normalized(url: str) -> str:
     return url.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
+def _database_identity(url: str) -> tuple[str, int, str]:
+    """Compare database targets independent of credentials/query/driver spelling."""
+    parsed = urlparse(_normalized(url))
+    if parsed.scheme != "postgresql" or not parsed.hostname or not parsed.path.strip("/"):
+        raise ValueError("Ziel muss eine PostgreSQL-URL sein.")
+    host = parsed.hostname.strip().casefold()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        host = "loopback"
+    return host, parsed.port or 5432, unquote(parsed.path.lstrip("/"))
+
+
 def _postgres_connection(url: str) -> tuple[list[str], dict[str, str]]:
     parsed = urlparse(_normalized(url))
     if parsed.scheme != "postgresql" or not parsed.hostname or not parsed.path.strip("/"):
@@ -60,7 +71,7 @@ def restore_backup(
     backup = backup.resolve()
     verify_backup(backup)
 
-    if _normalized(target_database_url) == _normalized(settings.database_url):
+    if _database_identity(target_database_url) == _database_identity(settings.database_url):
         raise RuntimeError("Restore in die konfigurierte laufende MedFlux-Datenbank ist verboten.")
 
     target_documents_dir = target_documents_dir.resolve()
@@ -68,38 +79,44 @@ def restore_backup(
         raise RuntimeError("Storage-Ziel ist nicht leer; Restore wird abgebrochen.")
     target_documents_dir.mkdir(parents=True, exist_ok=True)
 
-    conn_args, env = _postgres_connection(target_database_url)
-    dump_path = backup / "database.dump"
-    cmd = [pg_restore_bin, *conn_args, "--no-owner", "--no-acl", "--exit-on-error"]
-    if clean_target:
-        cmd.extend(["--clean", "--if-exists"])
-    cmd.append(str(dump_path))
-
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        shutil.rmtree(target_documents_dir, ignore_errors=True)
-        raise RuntimeError((result.stderr or "pg_restore fehlgeschlagen").strip())
-
+    # Stage and validate all storage before touching PostgreSQL. A successful DB
+    # restore must never be followed by a predictable source/storage failure.
     manifest = json.loads((backup / "manifest.json").read_text(encoding="utf-8"))
     target_storage = DocumentStorage(target_documents_dir)
     try:
         storage_objects = manifest.get("storage_objects") or []
-        for item in storage_objects:
-            storage_key = str(item["storage_key"])
-            source = (backup / str(item["backup_path"])).resolve()
-            target_storage.write_reference(storage_key, source.read_bytes())
-
-        # Initial pre-layout v1 draft fallback. These files cannot reconstruct
-        # canonical DB storage references, so reject rather than pretending a
-        # complete restore succeeded.
         if not storage_objects and manifest.get("documents"):
             raise RuntimeError(
                 "Legacy-Backup enthaelt keine kanonischen storage_keys und ist "
                 "nicht fuer einen vollstaendigen Restore geeignet."
             )
+        for item in storage_objects:
+            storage_key = str(item["storage_key"])
+            source = (backup / str(item["backup_path"])).resolve()
+            target_storage.write_reference(storage_key, source.read_bytes())
+
+        conn_args, env = _postgres_connection(target_database_url)
+        dump_path = backup / "database.dump"
+        cmd = [
+            pg_restore_bin,
+            *conn_args,
+            "--no-owner",
+            "--no-acl",
+            "--exit-on-error",
+        ]
+        if clean_target:
+            cmd.extend(["--clean", "--if-exists"])
+        cmd.append(str(dump_path))
+
+        result = subprocess.run(
+            cmd, env=env, capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or "pg_restore fehlgeschlagen").strip())
     except Exception:
-        # DB-Restore is already done; remove storage target so callers cannot
-        # mistake a partial document restore for a complete one.
+        # Storage is staged first, so source/path/write failures happen before
+        # PostgreSQL is touched. If pg_restore itself fails, remove staged
+        # storage so callers cannot mistake the target for a completed restore.
         shutil.rmtree(target_documents_dir, ignore_errors=True)
         raise
 
