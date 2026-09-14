@@ -12,13 +12,17 @@ from typing import Any, Optional
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.auth.security import verify_password
+from app.auth.security import hash_password, verify_password
 from app.auth.credential_store import derive_password, verify_password as verify_account_password
 from app.core.config import settings
 from app.database.models.auth import AuditEvent, User
 from app.database.models.organization import Organization
 from app.database.models import Account, AccountMembership, LoginSession
 from app.database.models.account import ACCOUNT_ROLES
+
+# Failed legacy-login attempts for unknown users still perform password hashing
+# work, reducing username/organization timing differences.
+_DUMMY_PASSWORD_HASH = hash_password("medflux-dummy-auth-password")
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,7 @@ def authenticate_user(
     )
     row = session.execute(stmt).first()
     if row is None:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
         return None
     user, org = row
     if not verify_password(password, user.password_hash):
