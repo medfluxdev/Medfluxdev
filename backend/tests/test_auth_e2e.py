@@ -215,3 +215,22 @@ def test_write_permissions_follow_integrated_role_policy(auth_fixture: dict[str,
         assert payload["total"] == 0
         assert payload["successful"] == 0
         assert payload["failed"] == 0
+
+
+def test_authenticated_write_rejects_untrusted_origin(auth_fixture: dict[str, str]) -> None:
+    with TestClient(app) as client:
+        login = _login(
+            client,
+            org_slug=auth_fixture["org_slug"],
+            username="admin",
+            password=auth_fixture["password"],
+        )
+        assert login.status_code == 200
+
+        response = client.post(
+            "/api/documents/import",
+            params={"organization_slug": auth_fixture["org_slug"]},
+            headers={"Origin": "https://evil.example"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Ungueltiger Anfrage-Ursprung."
