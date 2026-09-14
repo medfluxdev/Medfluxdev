@@ -147,7 +147,7 @@ GOOD_EVIDENCE = build_handler({
         "contract_title": "Wartung",
         "contract_number": "CN-1",
         "evidence": {
-            "source_type": "paragraph",
+            "source_type": "page",
             "source_text": "Vertragsnummer CN-1",
             "confidence": 0.9,
             "page": 1
