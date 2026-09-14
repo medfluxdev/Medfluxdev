@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
@@ -80,6 +81,8 @@ type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"];
 
 export default function SettingsPage() {
   const push = useToast();
+  const { account, role } = useAuth();
+  const canManageAi = Boolean(account?.is_developer || role === "admin");
   const [activeSection, setActiveSection] =
     useState<SettingsSectionId>("lokale-ki");
 
@@ -287,6 +290,7 @@ export default function SettingsPage() {
                     id="ki-provider"
                     className="select"
                     value={providerId}
+                    disabled={!canManageAi}
                     onChange={(e) => onProviderChange(e.target.value)}
                   >
                     {providers.map((p) => (
@@ -307,7 +311,7 @@ export default function SettingsPage() {
                     id="ki-model"
                     className="select"
                     value={modelId}
-                    disabled={selectableModels.length === 0}
+                    disabled={!canManageAi || selectableModels.length === 0}
                     onChange={(e) => setModelId(e.target.value)}
                   >
                     {selectableModels.length === 0 && (
@@ -347,6 +351,12 @@ export default function SettingsPage() {
                   <p className="field-note">{snapshot.selection.message_de}</p>
                 </div>
 
+                {!canManageAi && (
+                  <InlineAlert tone="info" role="status">
+                    Die globale KI-Auswahl und Verbindungstests sind Administratoren bzw. dem Developer vorbehalten.
+                  </InlineAlert>
+                )}
+
                 {saveError && (
                   <InlineAlert tone="critical" role="alert">
                     {saveError}
@@ -357,11 +367,11 @@ export default function SettingsPage() {
                   <Button
                     variant="primary"
                     onClick={save}
-                    disabled={saving || selectableModels.length === 0 || !modelId}
+                    disabled={!canManageAi || saving || selectableModels.length === 0 || !modelId}
                   >
                     {saving ? "Speichern…" : "Auswahl speichern"}
                   </Button>
-                  <Button variant="ghost" onClick={runTest} disabled={testing}>
+                  <Button variant="ghost" onClick={runTest} disabled={!canManageAi || testing}>
                     {testing ? "Test läuft…" : "KI-Verbindung testen"}
                   </Button>
                 </div>
@@ -457,11 +467,10 @@ export default function SettingsPage() {
           {activeSection === "sicherheit" && (
             <Section id="sicherheit" title="Benutzer &amp; Sicherheit">
             <p className="side-note">
-              Medflux läuft derzeit als lokale Installation. Eine verwaltete
-              Benutzer- und Rechteverwaltung ist für einen späteren Schritt
-              vorgesehen. Es werden keine Vertragsdaten an externe Dienste
-              übertragen; Provider werden ausschließlich über lokale
-              Endpunkte (localhost) erkannt und angesprochen.
+              Benutzer, Rollen und Organisationszuordnungen werden serverseitig verwaltet.
+              Änderungen werden an die aktive Sitzung und deren Berechtigungen gebunden.
+              Vertragsdaten bleiben lokal; KI-Provider werden ausschließlich über
+              konfigurierte lokale Endpunkte angesprochen.
             </p>
           </Section>
           )}
@@ -473,7 +482,7 @@ export default function SettingsPage() {
               Modell aus.
             </p>
             <div className="import-actions">
-              <Button variant="primary" onClick={runTest} disabled={testing}>
+              <Button variant="primary" onClick={runTest} disabled={!canManageAi || testing}>
                 {testing ? "Test läuft…" : "KI-Verbindung testen"}
               </Button>
             </div>
