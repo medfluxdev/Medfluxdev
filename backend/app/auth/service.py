@@ -12,13 +12,20 @@ from typing import Any, Optional
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.auth.security import verify_password
+from app.auth.security import hash_password, verify_password
 from app.auth.credential_store import derive_password, verify_password as verify_account_password
 from app.core.config import settings
 from app.database.models.auth import AuditEvent, User
 from app.database.models.organization import Organization
 from app.database.models import Account, AccountMembership, LoginSession
 from app.database.models.account import ACCOUNT_ROLES
+
+
+# Unknown usernames still perform the same expensive verification family as known
+# users. This keeps both the STEP16 and Ahmad account login paths from becoming a
+# cheap username/organization timing oracle.
+_DUMMY_PASSWORD_HASH = hash_password("medflux-dummy-auth-password")
+_DUMMY_ACCOUNT_DIGEST = derive_password("medflux-dummy-account-password")
 
 
 @dataclass(frozen=True)
@@ -50,6 +57,7 @@ def authenticate_user(
     )
     row = session.execute(stmt).first()
     if row is None:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
         return None
     user, org = row
     if not verify_password(password, user.password_hash):
@@ -116,7 +124,6 @@ def list_audit_events(session: Session, *, organization_id: uuid.UUID, limit: in
         .limit(limit)
     )
     return list(session.scalars(stmt))
-
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +198,7 @@ def authenticate(session: Session, login_name: str, password: str) -> Optional[A
     login = normalize_login(login_name)
     account = session.scalar(select(Account).where(Account.login_name == login))
     if account is None or not account.is_active:
+        verify_account_password(password, _DUMMY_ACCOUNT_DIGEST)
         return None
     if not verify_account_password(password, account.credential_digest):
         return None
