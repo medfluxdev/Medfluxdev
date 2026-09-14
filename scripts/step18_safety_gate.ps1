@@ -44,6 +44,7 @@ Write-Host "[STEP18] Targeted fail-closed tests..."
     tests/test_ai_verifier_safety.py `
     tests/test_ai_verifier_fail_closed.py `
     tests/test_ai_verifier_completeness.py `
+    tests/test_ai_pipeline_residual_integration.py `
     tests/test_ai_source_grounding.py `
     tests/test_ai_structured.py `
     tests/test_auth_review_provenance.py `
