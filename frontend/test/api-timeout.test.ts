@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiGet, apiPost, ApiError, userMessageForStatus } from "@/lib/api";
+import { apiGet, apiPost, apiUpload, ApiError, userMessageForStatus } from "@/lib/api";
 
 // Interaktions-Audit: Ladezustände müssen IMMER terminieren. Der API-Layer
 // bekommt pro Request ein Standard-Timeout; haengt der Server, endet der
@@ -66,6 +66,28 @@ describe("API-Schicht: garantierte Terminierung", () => {
     const p = apiGet<unknown>("/api/slow", undefined, 500);
     p.catch(() => undefined);
     await vi.advanceTimersByTimeAsync(600);
+    await expect(p).rejects.toThrow("Die Anfrage hat zu lange gedauert");
+  });
+
+  it("gibt Uploads ein eigenes 120s-Fenster statt des normalen 20s-Timeouts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit): Promise<Response> =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError"))
+            );
+          })
+      )
+    );
+    vi.useFakeTimers();
+    const file = new File(["x"], "vertrag.pdf", { type: "application/pdf" });
+    const p = apiUpload<unknown>("/api/documents/import", [file], "test-org");
+    p.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(21000);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(100000);
     await expect(p).rejects.toThrow("Die Anfrage hat zu lange gedauert");
   });
 
