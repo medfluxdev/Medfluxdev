@@ -163,6 +163,7 @@ describe("Einstellungen: KI-Test error-path ehrlich und terminiert", () => {
     await waitFor(() =>
       expect(screen.getByText("Nicht erreichbar")).toBeInTheDocument()
     );
+    await user.click(screen.getByRole("button", { name: "System & Diagnose" }));
 
     const errorResult: AITestResponse = {
       provider: "ollama",
@@ -197,6 +198,7 @@ describe("Einstellungen: KI-Test error-path ehrlich und terminiert", () => {
     await waitFor(() =>
       expect(screen.getByText("Nicht erreichbar")).toBeInTheDocument()
     );
+    await user.click(screen.getByRole("button", { name: "System & Diagnose" }));
 
     const okResult: AITestResponse = {
       provider: "ollama",
