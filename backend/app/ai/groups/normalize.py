@@ -318,7 +318,13 @@ def _source_contract_title(texts: list[str]) -> Optional[str]:
     for text in texts[:12]:
         for raw_line in text.splitlines():
             line = " ".join(raw_line.split())
-            if 6 <= len(line) <= 180 and _CONTRACT_TITLE_RE.search(line):
+            if 6 <= len(line) <= 180 and (match := _CONTRACT_TITLE_RE.search(line)):
+                # A sentence such as "Wartungsvertrag X zwischen A und B" is
+                # not itself a title. Preserve rich heading text, but for an
+                # inline party sentence keep only the explicit contract-type
+                # phrase instead of promoting the whole sentence to title.
+                if re.search(r"\bzwischen\b", line, re.IGNORECASE):
+                    return match.group(0)
                 return line
     return None
 
