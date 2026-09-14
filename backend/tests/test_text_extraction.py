@@ -25,8 +25,9 @@ def make_pdf_bytes(pages_text: list[str]) -> bytes:
     for text in pages_text:
         page = doc.new_page()
         if text:
-            page.insert_font(fontname="arial", fontfile=_ARIAL)
-            page.insert_text((72, 72), text, fontsize=11, fontname="arial")
+            # Built-in Helvetica keeps the fixture portable across Windows
+            # developer machines and Linux CI runners.
+            page.insert_text((72, 72), text, fontsize=11, fontname="helv")
     buf = io.BytesIO()
     doc.save(buf)
     doc.close()
