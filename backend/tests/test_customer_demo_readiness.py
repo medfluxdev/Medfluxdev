@@ -206,6 +206,28 @@ def _temp_env():
     return d, storage, svc
 
 
+
+def _confirm_all_critical_facts(client: TestClient, org_slug: str, contract_id) -> None:
+    detail = client.get(
+        f"/api/contracts/{contract_id}?organization_slug={org_slug}"
+    )
+    assert detail.status_code == 200, detail.text
+    for state in detail.json().get("fact_review_states", []):
+        if not state.get("present") or not state.get("is_critical"):
+            continue
+        if state.get("state") in {"confirmed", "corrected", "voided"}:
+            continue
+        response = client.post(
+            f"/api/contracts/{contract_id}/fact-reviews?organization_slug={org_slug}",
+            json={
+                "fact_key": state["fact_key"],
+                "action": "confirmed",
+                "reviewer_display_name": "M. Kraft",
+            },
+        )
+        assert response.status_code == 200, response.text
+
+
 def import_app():
     from app.main import app
 
@@ -304,6 +326,7 @@ class TestFactReviewFlow:
         try:
             org_slug, contract_id, _ = _build_committed_chain(engine, svc)
             client = TestClient(import_app())
+            _confirm_all_critical_facts(client, org_slug, contract_id)
             r_nack = client.post(
                 f"/api/contracts/{contract_id}/review/complete?organization_slug={org_slug}",
                 json={"reviewer_display_name": "M. Kraft"},
@@ -331,6 +354,7 @@ class TestFactReviewFlow:
         try:
             org_slug, contract_id, _ = _build_committed_chain(engine, svc)
             client = TestClient(import_app())
+            _confirm_all_critical_facts(client, org_slug, contract_id)
             client.post(
                 f"/api/contracts/{contract_id}/review/complete?organization_slug={org_slug}",
                 json={"reviewer_display_name": "M", "acknowledge_unreviewed": True,
