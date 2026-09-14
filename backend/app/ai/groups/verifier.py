@@ -119,12 +119,12 @@ def _unit_texts(units: Optional[Iterable[object]]) -> list[str]:
 
 def _short_excerpt(text: str, match_start: int = 0, match_end: Optional[int] = None) -> str:
     text = " ".join(text.split())
-    if len(text) <= 220:
+    if len(text) <= 120:
         return text
     match_end = match_end if match_end is not None else match_start
-    start = max(0, match_start - 75)
-    end = min(len(text), max(match_end + 120, start + 220))
-    return text[start:end][:220]
+    start = max(0, match_start - 40)
+    end = min(len(text), max(match_end + 70, start + 120))
+    return text[start:end][:120]
 
 
 def _duration_parts(value: Any) -> tuple[Optional[float], Optional[str]]:
