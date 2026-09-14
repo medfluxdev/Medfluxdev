@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - JAMAL-AHMAD-FULL-INTEGRATION
+      - JAMAL-AHMAD-MERGE-WIP
   pull_request:
     branches:
       - JAMAL-AHMAD-FULL-INTEGRATION
@@ -17,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: medflux
           POSTGRES_PASSWORD: medflux
