@@ -22,14 +22,20 @@ from sqlalchemy.orm import Session
 
 from app.database.models import Contract, DemoWorkspace, DemoWorkspaceEntry
 from app.database.models.demo import DEMO_WORKSPACE_ID
+from app.core.config import settings
 
 
 def workspace_enabled(session: Session) -> bool:
+    # Demo/UAT filtering must never influence pilot or production portfolios.
+    if settings.app_env.strip().casefold() not in {"development", "test"}:
+        return False
     row = session.get(DemoWorkspace, DEMO_WORKSPACE_ID)
     return bool(row and row.enabled)
 
 
 def set_workspace_enabled(session: Session, *, enabled: bool) -> None:
+    if settings.app_env.strip().casefold() not in {"development", "test"}:
+        raise RuntimeError("Demo-Arbeitsbereich ist nur in Entwicklung/Test erlaubt.")
     row = session.get(DemoWorkspace, DEMO_WORKSPACE_ID)
     if row is None:
         row = DemoWorkspace(id=DEMO_WORKSPACE_ID, enabled=enabled)
