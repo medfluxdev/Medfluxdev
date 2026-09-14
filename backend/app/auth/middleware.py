@@ -108,13 +108,17 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
                             status_code=403,
                             content={"detail": "Ungueltiger Anfrage-Ursprung."},
                         )
-                    if identity.role == "viewer":
+                    # Logout is a self-service security action and must remain
+                    # available to every authenticated role. RBAC restrictions
+                    # apply only to product mutations, never to ending a session.
+                    if path != "/api/auth/logout" and identity.role == "viewer":
                         return JSONResponse(
                             status_code=403,
                             content={"detail": "Keine Berechtigung fuer diese Aktion."},
                         )
                     if (
-                        identity.role == "reviewer"
+                        path != "/api/auth/logout"
+                        and identity.role == "reviewer"
                         and not _reviewer_mutation_allowed(path)
                     ):
                         return JSONResponse(
