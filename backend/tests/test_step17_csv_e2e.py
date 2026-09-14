@@ -42,10 +42,10 @@ def csv_fixture(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         )
         user = User(
             organization_id=org.id,
-            username="reviewer",
-            display_name="CSV Reviewer",
+            username="admin",
+            display_name="CSV Admin",
             password_hash=hash_password(password),
-            role="reviewer",
+            role="admin",
             active=True,
         )
         session.add(user)
@@ -94,7 +94,7 @@ def _login(client: TestClient, fixture: dict[str, str]) -> None:
         "/api/auth/login",
         json={
             "organization_slug": fixture["org_slug"],
-            "username": "reviewer",
+            "username": "admin",
             "password": fixture["password"],
         },
     )
