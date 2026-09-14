@@ -538,7 +538,7 @@ def _section_evidence(section: Any) -> Optional[str]:
     ev = getattr(section, "evidence", None)
     if ev is None:
         return None
-    return (ev.source_text or "")[:180] or None
+    return (ev.source_text or "")[:120] or None
 
 
 def _collect_sensitive_values(contract: Any, units: Optional[Iterable[object]] = None) -> list[SensitiveValue]:
