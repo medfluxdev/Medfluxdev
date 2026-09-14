@@ -142,18 +142,21 @@ PARTIAL = build_handler({
     "sla": {}
 })
 
-GOOD_EVIDENCE = build_handler({
-    "identity": {
-        "contract_title": "Wartung",
-        "contract_number": "CN-1",
-        "evidence": {
-            "source_type": "page",
-            "source_text": "Vertragsnummer CN-1",
-            "confidence": 0.9,
-            "page": 1
+GOOD_EVIDENCE = build_handler(
+    {
+        "identity": {
+            "contract_title": "Wartung",
+            "contract_number": "CN-1",
+            "evidence": {
+                "source_type": "page",
+                "source_text": "Vertragsnummer CN-1",
+                "confidence": 0.9,
+                "page": 1,
+            },
         }
-    }
-})
+    },
+    verifier_fields=["identity.contract_number"],
+)
 
 DIAG = build_handler({
     "identity": {
