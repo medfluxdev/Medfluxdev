@@ -1,5 +1,6 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 20000;
+const UPLOAD_TIMEOUT_MS = 120000;
 
 export class ApiError extends Error {
   status?: number;
@@ -148,7 +149,12 @@ export function contentUrl(contractId: string, documentVersionId: string, orgSlu
   return `${API_BASE}/api/contracts/${encodeURIComponent(contractId)}/documents/${encodeURIComponent(documentVersionId)}/content?${q.toString()}`;
 }
 
-export async function apiUpload<T>(path: string, files: File[], slug?: string): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  files: File[],
+  slug?: string,
+  timeoutMs: number = UPLOAD_TIMEOUT_MS,
+): Promise<T> {
   const form = new FormData();
   for (const file of files) form.append("files", file);
   const selected = typeof window !== "undefined" ? localStorage.getItem("medflux.organization_slug") : null;
@@ -160,7 +166,7 @@ export async function apiUpload<T>(path: string, files: File[], slug?: string): 
   if (h) q.set("hospital_id", h);
   if (d) q.set("department_id", d);
   const query = q.toString() ? `?${q.toString()}` : "";
-  const res = await fetchWithTimeout(`${API_BASE}${path}${query}`, { method: "POST", body: form }, DEFAULT_TIMEOUT_MS);
+  const res = await fetchWithTimeout(`${API_BASE}${path}${query}`, { method: "POST", body: form }, timeoutMs);
   if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
