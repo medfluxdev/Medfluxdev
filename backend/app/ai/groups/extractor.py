@@ -24,6 +24,7 @@ from app.ai.groups.equipment_verifier import verify_equipment_claims
 from app.ai.groups.evidence import verify_evidence
 from app.ai.groups.list_claim_verifier import verify_service_list_claims
 from app.ai.groups.normalize import ground_source_identity, run_normalization
+from app.ai.groups.residual_claim_verifier import verify_residual_critical_claims
 from app.ai.groups.schema import GroupSpec, group_order, group_specs
 from app.ai.groups.verifier import (
     _collect_sensitive_values,
@@ -141,6 +142,10 @@ class GroupPipeline:
                 len(source_notes),
                 source_notes,
             )
+            # Benign canonicalization does not require review, but discarding a
+            # model claim as semantically misclassified must never look like a
+            # clean SUCCESS.
+            messages.extend(note for note in source_notes if "verworfen" in note)
 
         evidence_issues = self._verify_evidence_on_contract(contract, units)
         equipment_issues = verify_equipment_claims(contract, units)
@@ -148,6 +153,15 @@ class GroupPipeline:
         all_evidence_issues = evidence_issues + equipment_issues + service_list_issues
         diag.evidence_issues += len(all_evidence_issues)
         messages.extend(all_evidence_issues)
+
+        # Residual critical claims are deliberately deterministic and must run
+        # even when the optional semantic/LLM verifier is disabled.  These
+        # fields are declared as specialized critical claims in the central
+        # policy and may never bypass verification merely because they are not
+        # scalar verifier fields.
+        residual_issues = verify_residual_critical_claims(contract, units)
+        diag.verifier_issues += len(residual_issues)
+        messages.extend(residual_issues)
 
         norm_issues = run_normalization(contract)
         diag.normalization_issues += len(norm_issues)
@@ -168,9 +182,11 @@ class GroupPipeline:
                 decision.field for decision in getattr(verifier_result, "decisions", [])
             }
             missing_fields = expected_fields - returned_fields
+            if missing_fields:
+                self._mark_verifier_fields_for_review(contract, missing_fields)
             for field in sorted(missing_fields):
                 verifier_issues.append(
-                    f"Verifier: {field} ohne Entscheidung – manuelle Prüfung erforderlich"
+                    f"Verifier: {field} keine verwertbare Entscheidung – manuelle Prüfung erforderlich"
                 )
 
             diag.verifier_issues += len(verifier_issues)
@@ -293,6 +309,31 @@ class GroupPipeline:
                 issues.append(f"Equipment[{index}]: Nachweis erfordert Prüfung")
         return issues
 
+    def _mark_verifier_fields_for_review(
+        self, contract: Contract, fields: set[str]
+    ) -> None:
+        """Downgrade section evidence for unsupported or undecided critical claims."""
+        sections = {
+            "identity": contract.identity,
+            "dates": contract.dates,
+            "termination": contract.termination,
+            "costs": contract.costs,
+            "payment": contract.payment,
+            "services": contract.services,
+            "sla": contract.sla,
+        }
+        flagged = {
+            field.split(".", 1)[0]
+            for field in fields
+            if field.split(".", 1)[0] in sections
+        }
+        for secname in flagged:
+            ev = getattr(sections[secname], "evidence", None)
+            if ev is not None:
+                ev.requires_review = True
+                if ev.confidence is None or ev.confidence > 0.5:
+                    ev.confidence = 0.5
+
     def _apply_verifier(self, contract: Contract, result) -> list[str]:
         """Fail closed for every unsupported critical field."""
         unsup = unsupported_fields(result)
@@ -304,27 +345,7 @@ class GroupPipeline:
             len(unsup),
             sorted(unsup),
         )
-        sections = {
-            "identity": contract.identity,
-            "dates": contract.dates,
-            "termination": contract.termination,
-            "costs": contract.costs,
-            "payment": contract.payment,
-            "services": contract.services,
-            "sla": contract.sla,
-        }
-        flagged: set[str] = set()
-        for field in unsup:
-            section_name = field.split(".", 1)[0]
-            if section_name in sections:
-                flagged.add(section_name)
-        for secname in flagged:
-            sec = sections[secname]
-            ev = getattr(sec, "evidence", None)
-            if ev is not None:
-                ev.requires_review = True
-                if ev.confidence is None or ev.confidence > 0.5:
-                    ev.confidence = 0.5
+        self._mark_verifier_fields_for_review(contract, unsup)
 
         reasons = {
             decision.field: decision.reason

@@ -156,7 +156,10 @@ CONTRACT = {
 async def test_structured_extraction_populates_fields():
     ex = _extractor(build_handler(CONTRACT))
     res = await ex.extract([_page(1, "Wartungsvertrag")])
-    assert res.status == ExtractionStatus.SUCCESS
+    # The fixture intentionally proposes several critical claims while the
+    # source unit contains only the contract title. The production pipeline
+    # must therefore preserve the extracted values but mark the result partial.
+    assert res.status == ExtractionStatus.PARTIAL
     c = res.contract
     assert c.identity.contract_type.value == "maintenance"
     assert c.identity.supplier == "Siemens Healthineers"

@@ -5,6 +5,7 @@ Keine externen Dateien, kein Internet.
 """
 
 import io
+from pathlib import Path
 
 import fitz
 import pytest
@@ -20,13 +21,26 @@ from app.models.enums import ExtractionStatus
 _ARIAL = r"C:\Windows\Fonts\arial.ttf"
 
 
+def _test_font_path() -> str:
+    candidates = [
+        Path(r"C:\\Windows\\Fonts\\arial.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    raise RuntimeError("Kein Unicode-Testfont gefunden.")
+
+
 def make_pdf_bytes(pages_text: list[str]) -> bytes:
     doc = fitz.open()
     for text in pages_text:
         page = doc.new_page()
         if text:
-            page.insert_font(fontname="arial", fontfile=_ARIAL)
-            page.insert_text((72, 72), text, fontsize=11, fontname="arial")
+            font_path = _test_font_path()
+            page.insert_font(fontname="testfont", fontfile=font_path)
+            page.insert_text((72, 72), text, fontsize=11, fontname="testfont")
     buf = io.BytesIO()
     doc.save(buf)
     doc.close()
