@@ -103,7 +103,7 @@ if !errorlevel! equ 0 (
 echo       Waiting for backend health check...
 set "BACKEND_READY=0"
 for /L %%I in (1,1,30) do (
-    powershell -NoProfile -Command "try { $r = Invoke-RestMethod http://127.0.0.1:8000/ready -TimeoutSec 2; if ($r.status -eq 'ok') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+    powershell -NoProfile -Command "try { $r = Invoke-RestMethod http://127.0.0.1:8000/ready -TimeoutSec 2; if ($r.status -eq 'ready') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
     if !errorlevel! equ 0 (
         set "BACKEND_READY=1"
         goto :backend_ready
