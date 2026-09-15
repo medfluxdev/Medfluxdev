@@ -669,6 +669,24 @@ class HarnessV3:
                 metric["usage"] = dict(getattr(provider, "last_usage", {}))
                 planner.output_tokens = original_output
 
+        def resolve_evidence_quote(block: Block, quote: str) -> tuple[str, bool] | None:
+            """Resolve evidence against canonical text first, then exact VLM transcription.
+
+            Vision descriptions/inferences are never evidence. visible_text is prompted
+            as verbatim transcription and remains review-required when used.
+            """
+            resolved = _find_quote(block.text or "", quote)
+            if resolved is not None:
+                return resolved[0], False
+            observation = visual_observations.get(block.id)
+            if observation is None:
+                return None
+            for visible in observation.visible_text or []:
+                resolved = _find_quote(visible, quote)
+                if resolved is not None:
+                    return resolved[0], True
+            return None
+
         def canonicalize_evidence(candidate: FactCandidate) -> bool:
             if not candidate.evidence_refs:
                 return False
@@ -676,7 +694,7 @@ class HarnessV3:
                 block = document.index.get(ref.block_id)
                 if block is None:
                     return False
-                resolved = _find_quote(block.text, ref.quote)
+                resolved = resolve_evidence_quote(block, ref.quote)
                 if resolved is None:
                     return False
                 ref.quote = resolved[0]
@@ -741,6 +759,17 @@ class HarnessV3:
                 return batch
 
             semantic_candidates = [batch.candidates[index] for index in escalate_indices]
+            visual_transcripts = []
+            for candidate in semantic_candidates:
+                for ref in candidate.evidence_refs:
+                    block = document.index.get(ref.block_id)
+                    observation = visual_observations.get(ref.block_id)
+                    if block is None or observation is None or not observation.visible_text:
+                        continue
+                    visual_transcripts.append({
+                        "block_id": ref.block_id, "page": block.page,
+                        "visible_text": list(observation.visible_text),
+                    })
             decisions = await call(
                 purpose,
                 "Check whether the quoted sources ENTAIL every part of each candidate, including negation, "
@@ -748,10 +777,10 @@ class HarnessV3:
                 "insufficient. Reject unsupported normalized values. Return exactly one decision per candidate "
                 "index in THIS SUBSET. Be concise.\n"
                 + CandidateBatch(candidates=semantic_candidates).model_dump_json()
-                + "\n"
-                + context,
-                GroundingBatch,
-                stage="ground",
+                + "\nCanonical source context:\n" + context
+                + "\nExact visual transcriptions (model-read; review-required if used):\n"
+                + json.dumps(visual_transcripts, ensure_ascii=False, separators=(",", ":")),
+                GroundingBatch, stage="ground",
             )
             for subset_index, original_index in enumerate(escalate_indices):
                 candidate = batch.candidates[original_index]
@@ -1073,11 +1102,15 @@ class HarnessV3:
                 and page_image_loader is not None
                 and len(batch_eligible_pages) >= self.settings.harness_vision_min_pages_for_batch
             ):
+                # Page-batch understanding is provisional and cannot itself become
+                # quotable evidence. Keep direct transcription for textless blocks.
                 deferred_region_candidates = [
-                    block for block in visual_candidates if block.page in batch_eligible_pages
+                    block for block in visual_candidates
+                    if block.page in batch_eligible_pages and (block.text or "").strip()
                 ]
                 visual_candidates = [
-                    block for block in visual_candidates if block.page not in batch_eligible_pages
+                    block for block in visual_candidates
+                    if block.page not in batch_eligible_pages or not (block.text or "").strip()
                 ]
             for block in skipped_visuals:
                 planner.decisions.append({"block": block.id, "vision": "skipped_repeated_empty_decoration"})
@@ -1098,8 +1131,10 @@ class HarnessV3:
                         region_visual_attempts += 1
                         observation = await call(
                             "vision:" + block.id,
-                            "Describe only contract-relevant visual evidence in region " + block.id +
-                            ". Distinguish visible text from inference, mark uncertainty, and do not invent text. "
+                            "Read only contract-relevant visual evidence in region " + block.id +
+                            ". Put exact verbatim text fragments that you can actually read into visible_text; "
+                            "never paraphrase visible_text. Put uncertain/illegible content in unresolved and omit "
+                            "it from visible_text. Keep description/inference separate and never invent text. "
                             "Be concise. Native/OCR context: " + block.text,
                             VisionObservation,
                             [image],
@@ -2423,18 +2458,21 @@ class HarnessV3:
 
                     for ref in candidate.evidence_refs:
                         block = document.index[ref.block_id]
+                        resolved = resolve_evidence_quote(block, ref.quote)
+                        vision_derived = bool(resolved is not None and resolved[1])
                         source = SourceEvidence(
-                            document_id=canonical.document_id,
-                            page=block.page,
-                            source_type=block.source_type,
-                            source_text=ref.quote,
+                            document_id=canonical.document_id, page=block.page,
+                            source_type=block.source_type, source_text=ref.quote,
                             paragraph_index=block.source_index if block.source_type == "paragraph" else None,
                             table_index=block.source_index if block.source_type == "table" else None,
+                            requires_review=vision_derived,
                         )
                         box, confidence = evidence_geometry(block, ref.quote)
                         if box is not None:
                             source.bounding_box = box
                             source.ocr_confidence = confidence
+                        if vision_derived:
+                            issues.append(candidate.field + ": vision-transcribed evidence requires review")
                         evidence_rows.append(
                             {"field": candidate.field, "block_id": block.id, "source": source.model_dump(mode="json")}
                         )

@@ -686,3 +686,22 @@ def test_harness_diagnostics_do_not_report_fake_zero_chunks():
     assert diagnostics["chunk_count"] is None
     assert diagnostics["truncated_chunks"] is None
     assert diagnostics["ai_call_count"] == 0
+
+
+def test_scanned_pdf_without_text_is_eligible_for_v3_visual_path():
+    canonical = DocumentIntelligenceResult(
+        document_id="scan-1", source_sha256="b" * 64, source_filename="scan.pdf",
+        source_path=None, canonical_text="", pages_text=[],
+        pages=[Page(page_number=1, width_pt=595, height_pt=842, text="", elements=[])],
+        logical_units=[],
+        provenance=ProcessingProvenance(provider="test", provider_version="1",
+            method=Method.UNKNOWN, do_ocr=True, do_table_structure=True,
+            geometry_provider=None, config={}),
+        warnings=[], processing_time_s=0.0,
+    )
+    extraction = DocumentProcessingService._canonical_to_extraction(canonical)
+    assert extraction.text_available is False
+    assert extraction.units == []
+    assert settings.harness_engine == "v3"
+    assert Path(canonical.source_filename).suffix.lower() == ".pdf"
+    assert bool(canonical.pages) is True

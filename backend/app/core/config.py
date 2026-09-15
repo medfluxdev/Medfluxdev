@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     harness_context_tokens: int = 8192
     harness_output_tokens: int = 1800
     harness_max_calls: int = 32
-    harness_engine: str = "v2"
+    harness_engine: str = "v3"
     harness_vision_pages_per_batch: int = 4
     harness_vision_batch_scale: int = 1600
     harness_vision_min_pages_for_batch: int = 2
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     document_intelligence_atomic_geometry: bool = False
     document_intelligence_atomic_geometry_dpi: int = 200
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen3:8b"
+    ollama_model: str = "qwen3-vl:8b-instruct"
     lmstudio_base_url: str = "http://127.0.0.1:1234"
     llama_cpp_base_url: str = ""
     generic_openai_base_url: str = ""

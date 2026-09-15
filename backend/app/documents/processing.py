@@ -612,11 +612,21 @@ class DocumentProcessingService:
                     canonical=canonical,
                 )
 
-            # Fail closed before selecting an analysis engine. Production uses
-            # the canonical Harness by default while tests/controlled callers may
-            # inject the legacy structured extractor. Text availability must not
-            # depend on which engine happens to be selected.
-            if not extraction.text_available or not extraction.units:
+            # Text is sufficient for both engines, but it is NOT a prerequisite
+            # for the production V3 visual path. A scanned PDF can legitimately
+            # contain zero OCR/native text while still having trustworthy source
+            # pages that Qwen-VL can read locally. Legacy/injected analyzers and
+            # non-visual inputs still fail closed when no text units exist.
+            visual_only_pdf = (
+                self._analysis is None
+                and settings.harness_engine == "v3"
+                and Path(canonical.source_filename or "").suffix.lower() == ".pdf"
+                and bool(canonical.pages)
+            )
+            if (
+                (not extraction.text_available or not extraction.units)
+                and not visual_only_pdf
+            ):
                 placeholder_id = self._persist_failed_analysis(
                     stored=stored,
                     organization_id=organization_id,

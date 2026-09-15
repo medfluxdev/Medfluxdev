@@ -191,7 +191,11 @@ class FakeProvider:
         else:
             self.last_done_reason = None
         if title == "VisionObservation":
-            return json.dumps({"description": "Visual region with option table"})
+            return json.dumps({
+                "description": "Visual region with contract text",
+                "visible_text": ["Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"],
+                "contract_signals": [], "unresolved": [],
+            })
         if title == "SectionUnderstanding":
             return json.dumps({"section_index": 0})
         if title == "GlobalContractUnderstanding":
@@ -283,12 +287,13 @@ def ai(provider, vision=True):
 
 
 # ----------------------------------------------------------------------
-# Engine selection (decision 1: v2 stays the default, v3 explicit)
+# Engine selection: V3 production default; V2 explicit compatibility.
 # ----------------------------------------------------------------------
 
 
-def test_engine_selection_default_is_v2_and_v3_is_explicit():
-    assert get_harness_class(Settings(_env_file=None)) is HarnessV2
+def test_engine_selection_default_is_v3_and_v2_remains_explicit():
+    assert get_harness_class(Settings(_env_file=None)) is HarnessV3
+    assert get_harness_class(Settings(_env_file=None, harness_engine="v2")) is HarnessV2
     assert get_harness_class(v3_settings()) is HarnessV3
 
 
@@ -421,14 +426,33 @@ async def test_v3_scanned_document_batches_visual_compute_into_sections():
     purposes = {row.get("purpose") for row in diagnostics["calls"]}
     assert any(str(p).startswith("understanding:") for p in purposes)
     vision_rows = [row for row in diagnostics["calls"] if row.get("stage") == "vision"]
-    # Page-first vision owns these scanned pages, so duplicate region calls
-    # are intentionally suppressed.
-    assert vision_rows == []
-    deferred = [
-        d for d in diagnostics["context_decisions"]
-        if d.get("vision") == "deferred_to_page_batch"
-    ]
-    assert len(deferred) == 4
+    assert len(vision_rows) == 3
+    deferred = [d for d in diagnostics["context_decisions"] if d.get("vision") == "deferred_to_page_batch"]
+    assert len(deferred) == 1
+
+
+@pytest.mark.asyncio
+async def test_v3_true_image_only_scan_produces_review_required_grounded_truth():
+    source = scan_document(3).model_copy(update={
+        "canonical_text": "",
+        "pages": [page.model_copy(update={"text": "", "elements": [
+            element.model_copy(update={"text": ""}) for element in page.elements
+        ]}) for page in scan_document(3).pages],
+    })
+    provider = FakeProvider(block_ref="p1:s1")
+    result = await HarnessV3(v3_settings(), ai(provider, vision=True)).analyze(
+        source, image_loader=lambda block: "region-image",
+        page_image_loader=lambda page: "page-image",
+    )
+    assert result.ai_call_count > 0
+    assert result.contract is not None, result.diagnostics["issues"]
+    assert result.contract.identity.supplier == "MedTech GmbH"
+    assert result.contract.costs.annual_cost.amount == 1650
+    assert result.requires_review is True
+    assert result.diagnostics["evidence_count"] > 0
+    assert any(row.get("stage") == "vision" and row.get("pages") == [1] for row in result.diagnostics["calls"])
+    evidence = result.contract.analysis.harness["evidence"]
+    assert any(item["source"]["requires_review"] is True for item in evidence)
 
 
 @pytest.mark.asyncio
