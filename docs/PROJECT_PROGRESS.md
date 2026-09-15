@@ -3798,3 +3798,49 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 - Runtime logs showed `GET /api/me` returning 200 while `GET /api/profile` returned 401 for the same browser session.
 - The profile route now resolves the authenticated account directly from the configured login-session cookie, matching the proven `/api/me` behavior.
 - Added a regression test preventing the profile route from returning to fragile `request.state.account_id` authentication.
+
+
+---
+
+## Contract-analysis architecture repair — 2026-09-15
+
+**Status:** IMPLEMENTED
+
+### Problem
+- Production import used the canonical Harness path while older diagnostics/docs still described the legacy chunked StructuredContractExtractor path.
+- Empty-text guarding depended on an injected legacy analyzer, so the production Harness path could continue with a non-analyzable document.
+- PDF/DOCX classification incorrectly inferred DOCX from the presence of logical units.
+- Canonical analyzability incorrectly depended on `canonical_text` instead of the actual units consumed by analyzers.
+- Harness evidence persistence was coupled to the exact version string `"v2"`; Harness `v2.1` evidence could therefore be silently skipped.
+- Contract-detail recovery logic also compared the Harness version literally to `"v2"`, causing version drift for `v2.1`/`v3`.
+- Legacy-only `chunk_count=0` diagnostics were persisted for Harness runs and could be misread as a chunking failure.
+
+### Resolution
+- Made the no-text/no-units gate engine-independent before either analysis path is selected.
+- Made source file type derive from the original filename extension rather than canonical structure.
+- Made analyzability and character count derive from actual extraction units.
+- Made Harness evidence persistence version-neutral by consuming the Harness evidence payload whenever present.
+- Made Contract 360/read-model Harness detection version-neutral.
+- Persist `chunk_count`/`truncated_chunks` as NULL for Harness/not-started analyses so legacy chunk metrics cannot masquerade as Harness failures.
+- Updated structured-extraction and document-import documentation to describe the actual synchronous production Harness pipeline and placeholder semantics.
+
+### Files
+- `backend/app/documents/processing.py`
+- `backend/app/contracts/detail/service.py`
+- `backend/tests/test_document_processing.py`
+- `backend/tests/test_contract_detail.py`
+- `docs/STRUCTURED_AI_EXTRACTION.md`
+- `docs/DOCUMENT_IMPORT.md`
+- `docs/PROJECT_PROGRESS.md`
+
+### Verification
+- Added regression coverage for structured PDF source typing, unit-derived analyzability, Harness v2.1 evidence projection, Harness diagnostics without fake chunk counts, and version-neutral Contract Detail Harness detection.
+- GitHub Integration Check was triggered for the updated branch; final workflow result still queued at the time of this progress entry.
+- Real-contract local E2E retest remains required after pulling the branch because the GitHub runner cannot access the user's local PostgreSQL/Ollama/document bytes.
+
+### Known follow-up
+- Re-run the same real contract locally and verify: canonical units > 0, Harness AI calls > 0, model/provider populated, accepted extraction created, evidence rows persisted, and Contract 360 fields populated.
+- A placeholder draft without `accepted_extraction_id` must continue to be treated as failed analysis, not accepted contract truth.
+
+### Progress
+- No new MVP main step was added; this is a corrective hardening pass across the existing import/AI/detail pipeline.
