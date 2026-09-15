@@ -921,7 +921,29 @@ class DocumentProcessingService:
             do_table_structure=settings.document_intelligence_table_structure,
             ocr_lang=[settings.ocr_lang],
         )
-        canonical = provider.process(path, intelligence_settings)
+        try:
+            canonical = provider.process(path, intelligence_settings)
+        except Exception as exc:
+            # OCR/layout intelligence is an enhancement layer, not a single
+            # point of failure for PDF vision. Fall back to local PyMuPDF page
+            # discovery so V3 can still render the protected original.
+            if getattr(provider, "name", "") == "native_pdf":
+                raise
+            logger.warning(
+                "Primary document intelligence failed; using native PDF/Vision fallback (type=%s)",
+                type(exc).__name__,
+            )
+            fallback = get_provider("native_pdf")
+            fallback_settings = intelligence_settings.model_copy(update={
+                "do_ocr": False,
+                "do_table_structure": False,
+                "structural_roles": False,
+            })
+            canonical = fallback.process(path, fallback_settings)
+            canonical.warnings.append(
+                "Primärer Dokument-Intelligence-Provider fehlgeschlagen; "
+                "nativer PDF-/Vision-Fallback verwendet."
+            )
         if canonical.source_sha256 != stored.sha256:
             raise RuntimeError("canonical source hash mismatch")
         # Atomic OCR/geometry (RapidOCR) is a perception/evidence helper only.

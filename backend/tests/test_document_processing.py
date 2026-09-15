@@ -705,3 +705,28 @@ def test_scanned_pdf_without_text_is_eligible_for_v3_visual_path():
     assert settings.harness_engine == "v3"
     assert Path(canonical.source_filename).suffix.lower() == ".pdf"
     assert bool(canonical.pages) is True
+
+
+def test_build_canonical_falls_back_to_native_pdf_when_primary_di_fails(tmp_path):
+    class BrokenProvider:
+        name = "docling"
+
+        def process(self, path, settings):
+            raise RuntimeError("simulated local DI failure")
+
+    content = _pdf_bytes()
+    path = tmp_path / "fallback.pdf"
+    path.write_bytes(content)
+    stored = ProcessedDocument(
+        document_id=str(uuid.uuid4()),
+        document_version_id=str(uuid.uuid4()),
+        sha256=hashlib.sha256(content).hexdigest(),
+        original_filename="fallback.pdf",
+        status="imported",
+    )
+    service = DocumentProcessingService(intelligence=BrokenProvider())
+    canonical, extraction = service._build_canonical(stored, path)
+    assert canonical.provenance.provider == "native_pdf"
+    assert canonical.pages
+    assert extraction.file_type == FileType.PDF
+    assert any("Vision-Fallback" in warning for warning in canonical.warnings)
