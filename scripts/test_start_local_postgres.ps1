@@ -61,3 +61,4 @@ if ($watch.Elapsed.TotalSeconds -gt 5) {
 Write-Host "[PASS] missing-pgctl path fails promptly"
 
 Write-Host "Windows startup regression checks passed."
+exit 0
