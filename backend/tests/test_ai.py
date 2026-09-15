@@ -48,7 +48,7 @@ def _provider(handler: Callable[[httpx.Request], httpx.Response]) -> OllamaProvi
 
 def test_ai_provider_configuration():
     assert settings.ai_provider == "ollama"
-    assert settings.ollama_model == "qwen3:8b"
+    assert settings.ollama_model == "qwen3-vl:8b-instruct"
     assert settings.ollama_base_url == "http://127.0.0.1:11434"
     assert settings.ai_request_timeout_seconds > 0
     assert 0.0 <= settings.ai_temperature <= 1.0

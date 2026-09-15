@@ -714,7 +714,12 @@ def test_build_canonical_falls_back_to_native_pdf_when_primary_di_fails(tmp_path
         def process(self, path, settings):
             raise RuntimeError("simulated local DI failure")
 
-    content = _pdf_bytes()
+    import fitz
+
+    pdf = fitz.open()
+    pdf.new_page()
+    content = pdf.tobytes()
+    pdf.close()
     path = tmp_path / "fallback.pdf"
     path.write_bytes(content)
     stored = ProcessedDocument(
