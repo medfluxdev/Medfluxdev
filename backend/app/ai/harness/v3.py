@@ -1082,6 +1082,43 @@ class HarnessV3:
                 raise ValueError("Selected model/provider lacks verified text/structured-output capability")
             if not document.blocks:
                 raise ValueError("Canonical document contains no analyzable source blocks")
+
+            # Image-only contracts require an explicitly selected vision-capable
+            # model. Never auto-switch models: the persisted user selection is
+            # authoritative. Fail fast before any semantic/model call instead of
+            # leaving a scan in a long-running state that can never be grounded.
+            has_text_blocks = any((block.text or "").strip() for block in document.blocks)
+            visual_only = bool(document.visual_pages) and not has_text_blocks
+            if visual_only and descriptor.capabilities.vision is not True:
+                message = (
+                    "Das ausgewählte KI-Modell unterstützt keine verifizierte "
+                    "Bildanalyse. Bitte wählen Sie für dieses gescannte PDF "
+                    "explizit ein Vision-Modell aus."
+                )
+                diagnostics = {
+                    "harness_version": "v3",
+                    "provider": provider_id,
+                    "model": model_id,
+                    "source_sha256": canonical.source_sha256,
+                    "calls": [],
+                    "call_count": 0,
+                    "issues": ["vision_capability_required"],
+                }
+                return ContractAnalysisResult(
+                    document_id=canonical.document_id or "",
+                    contract=None,
+                    status=ExtractionStatus.FAILED,
+                    validation_status=ValidationStatus.UNKNOWN,
+                    requires_review=True,
+                    model=model_id,
+                    prompt_version="harness-v3",
+                    ai_call_count=0,
+                    groups_processed=0,
+                    processing_duration=time.monotonic() - started,
+                    message=message,
+                    error="VisionCapabilityRequired",
+                    diagnostics=diagnostics,
+                )
             all_pages = sorted({block.page for block in document.blocks if block.page is not None})
 
             # ---- PERCEPTION (deterministic evidence capture; never decides) ----
