@@ -3862,6 +3862,7 @@ Implemented:
 - failed analysis is no longer styled as successful in the import UI.
 - synchronous local AI import/retry windows raised to 30 minutes.
 - Windows startup tries existing local PostgreSQL safely before Docker and checks `/ready`.
+- PDF processing falls back locally from a failed Docling/OCR-layout pass to PyMuPDF page discovery so V3 Vision can still analyze the protected original.
 - regression coverage expanded for truly textless scanned documents.
 - full findings/UAT criteria: `docs/RELIABILITY_AUDIT_2026-09-15.md`.
 

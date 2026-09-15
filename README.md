@@ -23,8 +23,8 @@ Medflux importiert Verträge lokal (PDF/DOCX), analysiert sie vollständig lokal
 | Frontend       | Next.js / React / TypeScript                  |
 | Backend        | Python + FastAPI                              |
 | Lokale KI      | Ollama (Qwen3-VL 8B, lokal)                     |
-| Datenbank MVP  | SQLite                                        |
-| Produktion     | PostgreSQL                                    |
+| Datenbank      | PostgreSQL 18                                 |
+| Produktion     | PostgreSQL (lokal / Docker)                    |
 | PDF            | PyMuPDF                                       |
 | DOCX           | python-docx                                   |
 | OCR            | lokal, nur wenn nötig                         |

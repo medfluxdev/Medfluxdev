@@ -17,8 +17,9 @@ This audit records defects found in this pass and corrective controls. It does n
 7. **High – frontend styled `analysis_failed` as successful/green import.** It is explicitly labeled as analysis failure with critical tone.
 8. **High – synchronous local AI browser requests timed out after 120 seconds.** Import/retry/reanalysis use a bounded 30-minute client window.
 9. **High – Windows launcher assumed a fixed Docker container and checked only process liveness.** It now tries an existing Windows PostgreSQL service, then an existing local cluster without initialization/overwrite, then Docker Compose, and uses `/ready` for database-aware backend readiness.
-10. **Medium – runtime docs/defaults described V2 + text model as production.** Runtime defaults, `.env.example`, README and architecture docs are aligned with V3 + local vision.
-11. **Regression gap – the prior “scanned” V3 test still contained text on page 1.** Coverage now includes a truly textless scan and review-required visual evidence.
+10. **High – primary OCR/layout Document Intelligence could become a single point of failure.** PDF processing now falls back locally to PyMuPDF page discovery so V3 can still render and analyze the protected original; no cloud fallback is used.
+11. **Medium – runtime docs/defaults described V2 + text model as production.** Runtime defaults, `.env.example`, README and architecture docs are aligned with V3 + local vision.
+12. **Regression gap – the prior “scanned” V3 test still contained text on page 1.** Coverage now includes a truly textless scan and review-required visual evidence.
 
 ## Safety invariants retained
 
