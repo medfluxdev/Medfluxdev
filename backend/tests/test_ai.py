@@ -183,6 +183,27 @@ async def test_generation_sends_think_and_stream_opts():
     assert data["model"] == MODEL
 
 
+@pytest.mark.asyncio
+async def test_generation_forwards_explicit_num_gpu():
+    captured: dict = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured["body"] = req.content
+        return _json({"message": {"role": "assistant", "content": "ok"}})
+
+    gpu_settings = Settings(_env_file=None, ollama_num_gpu=999)
+    p = OllamaProvider(
+        gpu_settings,
+        model_resolver=lambda: MODEL,
+        client=_client(handler),
+    )
+    await p.generate("Eingabe", SYSTEM)
+
+    import json as _jsonlib
+    payload = _jsonlib.loads(captured["body"].decode("utf-8"))
+    assert payload["options"]["num_gpu"] == 999
+
+
 # ---------------------------------------------------------------- Generierung (Fehler)
 
 @pytest.mark.asyncio
