@@ -1,11 +1,11 @@
-$ErrorActionPreference = "Stop"
-
 param(
     [int]$Port = $(if ($env:MEDFLUX_PG_PORT) { [int]$env:MEDFLUX_PG_PORT } else { 5432 }),
     [string]$PgCtlPath = $env:MEDFLUX_PG_CTL,
     [string]$DataDirOverride = $env:MEDFLUX_PGDATA,
     [switch]$SkipServiceDiscovery
 )
+
+$ErrorActionPreference = "Stop"
 
 function Test-MedfluxPort {
     param([int]$TargetPort)
