@@ -392,8 +392,9 @@ async def test_v3_full_native_path_records_stages_and_contract():
     assert "global_understanding" in purposes
     assert any(p.startswith("understanding:") for p in purposes)
     assert "applicability" in purposes
-    assert any(p.startswith("resolve_pack:core:") for p in purposes)
-    assert any(p.startswith("resolve_pack:commercial:") for p in purposes)
+    assert any(p.startswith("resolve_pack:identity:") for p in purposes)
+    assert any(p.startswith("resolve_pack:dates:") for p in purposes)
+    assert any(p.startswith("resolve_pack:costs:") for p in purposes)
 
     global_call = next(row for row in result.diagnostics["calls"] if row["purpose"] == "global_understanding")
     assert global_call["stage"] == "global"
@@ -743,7 +744,7 @@ async def test_b_family_packing_records_small_real_reserve_not_static_magic():
 def test_b_measured_output_retry_only_for_eligible_stages():
     assert measured_output_budget("resolve:identity:0", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is not None
-    assert measured_output_budget("resolve_pack:core:0", prompt_tokens=3000,
+    assert measured_output_budget("resolve_pack:costs:0", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is not None
     assert measured_output_budget("vision:p1:a", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is None
@@ -1051,18 +1052,25 @@ async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
 
 
 @pytest.mark.asyncio
-async def test_semantic_packs_reduce_resolve_stage_call_fanout():
+async def test_fact_resolution_isolates_semantic_families_after_real_truncation():
     provider = FakeProvider()
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
     resolve_calls = [
         row for row in result.diagnostics["calls"]
         if row.get("stage") == "resolve"
     ]
-    purposes = {row.get("purpose") for row in resolve_calls}
-    assert any(str(p).startswith("resolve_pack:core:") for p in purposes)
-    assert any(str(p).startswith("resolve_pack:commercial:") for p in purposes)
-    assert any(str(p).startswith("resolve_pack:operations:") for p in purposes)
-    assert not any(str(p).startswith("resolve:identity:") for p in purposes)
+    purposes = {str(row.get("purpose")) for row in resolve_calls}
+    for family in ("identity", "dates", "termination", "costs", "payment", "equipment", "services", "sla"):
+        assert any(p.startswith(f"resolve_pack:{family}:") for p in purposes)
+    assert not any(p.startswith("resolve_pack:commercial:") for p in purposes)
+    assert not any(p.startswith("resolve_pack:core:") for p in purposes)
+    assert not any(p.startswith("resolve_pack:operations:") for p in purposes)
+    outcomes = {row["pack"]: row for row in result.diagnostics["pack_outcomes"]}
+    assert set(outcomes) == {
+        "identity", "dates", "termination", "costs",
+        "payment", "equipment", "services", "sla",
+    }
+    assert outcomes["identity"]["candidate_count"] >= 1
 
 
 def test_source_has_parseable_contract_map_control_flow():
