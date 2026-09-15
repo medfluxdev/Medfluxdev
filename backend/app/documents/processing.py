@@ -906,53 +906,14 @@ class DocumentProcessingService:
             device=settings.document_intelligence_device,
         )
 
-        # A fully image-only PDF does not need Docling OCR before Harness V3:
-        # V3 renders the protected original pages itself and can obtain bounded
-        # visual transcription/evidence directly from the selected vision model.
-        # Running Docling first can block on heavyweight OCR/model bootstrap and
-        # turn a valid visual contract into an indefinitely "running" import.
-        #
-        # Restrict this fast path to the real production Docling selection
-        # (tests/injected providers keep their explicit contract). PyMuPDF page
-        # discovery is local, deterministic, and cheap. If it cannot inspect the
-        # PDF we simply continue to the normal provider/fallback path.
-        selected_engine = str(settings.harness_engine or "").strip().lower()
-        if (
-            self._intelligence is None
-            and getattr(provider, "name", "") == "docling"
-            and selected_engine not in {"v2-compat", "legacy-v2"}
-        ):
-            try:
-                native = get_provider("native_pdf")
-                native_settings = intelligence_settings.model_copy(update={
-                    "do_ocr": False,
-                    "do_table_structure": False,
-                    "structural_roles": False,
-                })
-                native_canonical = native.process(path, native_settings)
-                if (
-                    native_canonical.pages
-                    and not any((page.text or "").strip() for page in native_canonical.pages)
-                ):
-                    native_canonical.warnings.append(
-                        "Bild-PDF ohne eingebetteten Text erkannt; "
-                        "Docling-OCR übersprungen und direkter V3-Vision-Pfad verwendet."
-                    )
-                    canonical = native_canonical
-                else:
-                    canonical = None
-            except Exception as exc:
-                logger.warning(
-                    "Native scan preflight failed; continuing with primary DI (type=%s)",
-                    type(exc).__name__,
-                )
-                canonical = None
-        else:
-            canonical = None
+        # Image-only PDFs still need a canonical OCR/layout layer.  Harness V3
+        # may use the selected vision model as a second perception source, but
+        # downstream grounding requires stable page/block text.  Do not bypass
+        # Docling merely because the PDF has no embedded text.
+        canonical = None
 
         try:
-            if canonical is None:
-                canonical = provider.process(path, intelligence_settings)
+            canonical = provider.process(path, intelligence_settings)
         except Exception as exc:
             # OCR/layout intelligence is an enhancement layer, not a single
             # point of failure for PDF vision. Fall back to local PyMuPDF page
