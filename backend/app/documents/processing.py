@@ -903,6 +903,7 @@ class DocumentProcessingService:
             do_ocr=settings.ocr_enabled,
             do_table_structure=settings.document_intelligence_table_structure,
             ocr_lang=[settings.ocr_lang],
+            device=settings.document_intelligence_device,
         )
 
         # A fully image-only PDF does not need Docling OCR before Harness V3:
