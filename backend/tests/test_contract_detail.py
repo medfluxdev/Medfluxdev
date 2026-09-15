@@ -661,3 +661,13 @@ def test_range_invalid_416(engine, svc, pinned_storage):
     finally:
         cleanup()
 
+
+
+def test_harness_snapshot_detection_is_version_neutral():
+    from app.contracts.detail.service import _snapshot_uses_harness
+
+    assert _snapshot_uses_harness({"analysis": {"harness_version": "v2"}}) is True
+    assert _snapshot_uses_harness({"analysis": {"harness_version": "v2.1"}}) is True
+    assert _snapshot_uses_harness({"analysis": {"harness_version": "v3"}}) is True
+    assert _snapshot_uses_harness({"analysis": {}}) is False
+    assert _snapshot_uses_harness(None) is False
