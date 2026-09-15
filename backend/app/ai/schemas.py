@@ -2,7 +2,7 @@
 
 Erweitert um Anbieter-unabhängige Modell-/Provider-Metadaten (Schritt 6B):
 gefundene lokale Provider, deren (normalisierte) Modelllisten und die
-aktuell gewählte (persistierte oder bootstrap-default) Auswahl.
+aktuell explizit gewählte und persistierte Auswahl.
 """
 
 from typing import Literal
@@ -22,9 +22,9 @@ class AIStatus(BaseModel):
 
     model_config = {"protected_namespaces": ()}
 
-    provider: str
+    provider: str | None
     available: bool
-    model: str
+    model: str | None
     model_available: bool
     message: str
 
@@ -38,8 +38,8 @@ class AITestRequest(BaseModel):
 class AITestResponse(BaseModel):
     """Antwort des Test-Endpunkts (Erfolg oder deutscher Hinweis)."""
 
-    provider: str
-    model: str
+    provider: str | None
+    model: str | None
     response: str | None = None
     error: str | None = None
 
@@ -87,12 +87,12 @@ class ProviderInfo(BaseModel):
 
 
 class SelectionInfo(BaseModel):
-    """Aktuell aktive Provider-/Modell-Auswahl (persistiert oder Bootstrap)."""
+    """Aktuell aktive Provider-/Modell-Auswahl; ohne explizite Auswahl bleibt sie leer."""
 
-    provider_id: str
-    model_id: str
-    source: Literal["db", "env"]
-    state: Literal["ready", "unavailable"]
+    provider_id: str | None = None
+    model_id: str | None = None
+    source: Literal["db", "none"]
+    state: Literal["ready", "unavailable", "unselected"]
     provider_reachable: bool
     model_available: bool
     message_de: str
@@ -103,8 +103,6 @@ class AISnapshot(BaseModel):
 
     selection: SelectionInfo
     providers: list[ProviderInfo]
-    configured_default_provider: str
-    configured_default_model: str
     application_version: str
 
 

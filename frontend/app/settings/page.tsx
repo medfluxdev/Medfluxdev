@@ -61,6 +61,9 @@ function selectionBadge(sel: SelectionInfo) {
   if (sel.state === "ready") {
     return <StatusBadge tone="success" label="Bereit" />;
   }
+  if (sel.state === "unselected") {
+    return <StatusBadge tone="neutral" label="Nicht ausgewählt" />;
+  }
   if (sel.provider_reachable) {
     return <StatusBadge tone="warning" label="Nicht verfügbar" />;
   }
@@ -103,8 +106,8 @@ export default function SettingsPage() {
     try {
       const res = await apiGet<AISnapshot>("/api/ai/snapshot", undefined, 40000);
       setSnapshot(res);
-      setProviderId(res.selection.provider_id);
-      setModelId(res.selection.model_id);
+      setProviderId(res.selection.provider_id ?? "");
+      setModelId(res.selection.model_id ?? "");
     } catch {
       setError("Einstellungen konnten nicht geladen werden.");
     } finally {
@@ -140,8 +143,7 @@ export default function SettingsPage() {
 
   const onProviderChange = (value: string) => {
     setProviderId(value);
-    const next = providers.find((p) => p.provider_id === value);
-    setModelId(next && next.models.length > 0 ? next.models[0].model_id : "");
+    setModelId("");
   };
 
   const runTest = useCallback(async () => {
@@ -184,8 +186,8 @@ export default function SettingsPage() {
         endpoint: activeProvider.endpoint,
       });
       setSnapshot(res);
-      setProviderId(res.selection.provider_id);
-      setModelId(res.selection.model_id);
+      setProviderId(res.selection.provider_id ?? "");
+      setModelId(res.selection.model_id ?? "");
       push("KI-Auswahl gespeichert.", "success");
     } catch (err) {
       setSaveError(
@@ -268,9 +270,10 @@ export default function SettingsPage() {
             {snapshot && !loading && (
               <>
                 <InlineAlert tone="info" role="status">
-                  Die aktive Auswahl wird serverseitig gespeichert und überlebt
-                  Neustarts. Gespeicherte Verträge werden beim Wechsel des
-                  Modells nicht automatisch neu analysiert.
+                  Es gibt kein Standardmodell. Provider und Modell werden bewusst
+                  ausgewählt und serverseitig gespeichert. Ohne gespeicherte Auswahl
+                  startet Medflux keine KI-Analyse. Gespeicherte Verträge werden beim
+                  Wechsel des Modells nicht automatisch neu analysiert.
                 </InlineAlert>
 
                 <div className="form-field">
@@ -289,6 +292,7 @@ export default function SettingsPage() {
                     value={providerId}
                     onChange={(e) => onProviderChange(e.target.value)}
                   >
+                    <option value="">– Provider auswählen –</option>
                     {providers.map((p) => (
                       <option key={`${p.provider_id}:${p.endpoint ?? ""}`} value={p.provider_id}>
                         {p.display_name}
@@ -310,9 +314,7 @@ export default function SettingsPage() {
                     disabled={selectableModels.length === 0}
                     onChange={(e) => setModelId(e.target.value)}
                   >
-                    {selectableModels.length === 0 && (
-                      <option value="">– verfügbare Modelle unbekannt –</option>
-                    )}
+                    <option value="">– Modell auswählen –</option>
                     {selectableModels.map((m) => (
                       <option key={m.model_id} value={m.model_id}>
                         {m.model_id}
@@ -396,16 +398,8 @@ export default function SettingsPage() {
                         label: "Auswahl-Quelle",
                         value:
                           snapshot.selection.source === "db"
-                            ? "gespeichert (DB)"
-                            : "Umgebungskonfiguration",
-                      },
-                      {
-                        label: "Bootstrap-Provider",
-                        value: snapshot.configured_default_provider,
-                      },
-                      {
-                        label: "Bootstrap-Modell",
-                        value: snapshot.configured_default_model,
+                            ? "explizit gespeichert (DB)"
+                            : "keine Auswahl",
                       },
                       ...providers
                         .filter((p) => p.endpoint)

@@ -1,16 +1,16 @@
 // TS-Abbilder der lokalen-KI-DTOs (Backend app/ai/schemas).
 // KEINE erfinderischen Zustände – nur das, was das Backend ehrlich meldet.
 export interface AIStatus {
-  provider: string;
+  provider: string | null;
   available: boolean;
-  model: string;
+  model: string | null;
   model_available: boolean;
   message: string;
 }
 
 export interface AITestResponse {
-  provider: string;
-  model: string;
+  provider: string | null;
+  model: string | null;
   response: string | null;
   error: string | null;
 }
@@ -54,10 +54,10 @@ export interface ProviderInfo {
 }
 
 export interface SelectionInfo {
-  provider_id: string;
-  model_id: string;
-  source: "db" | "env";
-  state: "ready" | "unavailable";
+  provider_id: string | null;
+  model_id: string | null;
+  source: "db" | "none";
+  state: "ready" | "unavailable" | "unselected";
   provider_reachable: boolean;
   model_available: boolean;
   message_de: string;
@@ -66,8 +66,6 @@ export interface SelectionInfo {
 export interface AISnapshot {
   selection: SelectionInfo;
   providers: ProviderInfo[];
-  configured_default_provider: string;
-  configured_default_model: string;
   application_version: string;
 }
 

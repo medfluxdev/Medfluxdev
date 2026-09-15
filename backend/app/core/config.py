@@ -25,7 +25,8 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 50
 
-    # Lokale KI (Provider-Abstraktion, Standard: Ollama)
+    # Lokale KI. Provider-Endpunkte sind konfigurierbar; das aktive Modell
+    # wird ausschließlich durch den Benutzer in der DB ausgewählt.
     ai_provider: str = "ollama"
     harness_context_tokens: int = 8192
     harness_output_tokens: int = 1800
@@ -38,7 +39,8 @@ class Settings(BaseSettings):
     document_intelligence_atomic_geometry: bool = False
     document_intelligence_atomic_geometry_dpi: int = 200
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen3-vl:8b-instruct"
+    # Legacy-Kompatibilitätsfeld; wird NICHT als aktive Modellauswahl verwendet.
+    ollama_model: str = ""
     lmstudio_base_url: str = "http://127.0.0.1:1234"
     llama_cpp_base_url: str = ""
     generic_openai_base_url: str = ""

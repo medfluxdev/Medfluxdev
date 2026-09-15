@@ -47,16 +47,15 @@ class AIProvider(ABC):
         """Provider-neutral request; adapters must implement context/image transport."""
         raise NotImplementedError("Provider does not implement Harness requests")
 
-    @property
-    def default_model(self) -> str:
-        """Bootstrap-Modell aus der Umgebungskonfiguration."""
-        return self.settings.ollama_model
-
     def _model(self) -> str:
-        """Aktives Modell: aufgelöste Persistenz oder Bootstrap-Default."""
-        if self._model_resolver is not None:
-            return self._model_resolver()
-        return self.default_model
+        """Aktives Modell nur aus einer expliziten Auswahl-Resolver-Funktion.
+
+        Provider dürfen für Discovery ohne Modell gebaut werden. Generierung darf
+        jedoch niemals auf ein stilles Bootstrap-/Default-Modell zurückfallen.
+        """
+        if self._model_resolver is None:
+            return ""
+        return self._model_resolver() or ""
 
     @abstractmethod
     async def health_check(self) -> AIStatus:

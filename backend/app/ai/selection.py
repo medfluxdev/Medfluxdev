@@ -24,6 +24,17 @@ def build_selection(settings: Settings, providers: list[ProviderInfo]) -> Select
     provider_id = resolve_provider_id(settings)
     model_id = resolve_model_id(settings)
     source = selection_source(settings)
+    if not provider_id or not model_id:
+        return SelectionInfo(
+            provider_id=None,
+            model_id=None,
+            source="none",
+            state="unselected",
+            provider_reachable=False,
+            model_available=False,
+            message_de="Kein KI-Modell ausgewählt. Bitte Provider und Modell bewusst auswählen.",
+        )
+
     display = provider_display_name(provider_id)
 
     if not supports_provider(provider_id):

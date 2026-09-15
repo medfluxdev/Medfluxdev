@@ -58,8 +58,6 @@ async def build_snapshot() -> AISnapshot:
     return AISnapshot(
         selection=selection,
         providers=providers,
-        configured_default_provider=settings.ai_provider,
-        configured_default_model=settings.ollama_model,
         application_version=settings.app_version,
     )
 

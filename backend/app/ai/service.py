@@ -1,8 +1,7 @@
 """KI-Service: Provider-Auswahl, Status- und Generierungs-Orchestrierung.
 
 Enthält keine Vertrags-Extraktionslogik (das folgt in Schritt 7). Die aktive
-Provider-/Modell-Auswahl wird zur LAUFZEIT aufgelöst (persistierte Auswahl
-gewinnen gegenüber der Umgebungskonfiguration), sodass ein Wechsel in den
+Provider-/Modell-Auswahl wird zur LAUFZEIT aufgelöst (ausschließlich die explizit persistierte Auswahl), sodass ein Wechsel in den
 Einstellungen ohne Neustart und ohne Neuanalyse der Verträge wirksam wird.
 """
 
@@ -38,12 +37,12 @@ class AIService:
         self._client = client
         self._provider = None
 
-    def active_provider_id(self) -> str:
-        """Aktuell gültiger Provider (persistiert oder Umgebungs-Default)."""
+    def active_provider_id(self) -> str | None:
+        """Explizit gewählter Provider oder None."""
         return resolve_provider_id(self.settings)
 
-    def active_model_id(self) -> str:
-        """Aktuell gültiges Modell (persistiert oder Umgebungs-Default)."""
+    def active_model_id(self) -> str | None:
+        """Explizit gewähltes Modell oder None."""
         return resolve_model_id(self.settings)
 
     def _model_resolver(self):
@@ -56,7 +55,8 @@ class AIService:
 
     def _ensure_provider(self):
         provider_id = self.active_provider_id()
-        if not supports_provider(provider_id):
+        model_id = self.active_model_id()
+        if not provider_id or not model_id or not supports_provider(provider_id):
             self._provider = None
             return None
         if self._provider is None or self._provider.provider_id != provider_id:
@@ -91,10 +91,7 @@ class AIService:
                 available=False,
                 model=model,
                 model_available=False,
-                message=(
-                    "Kein lokaler KI-Provider konfiguriert "
-                    f"(nicht verfügbar: '{provider_id}')."
-                ),
+                message="Kein KI-Modell ausgewählt. Bitte in den Einstellungen Provider und Modell auswählen.",
             )
         try:
             return await provider.health_check()
@@ -214,6 +211,8 @@ class AIService:
     async def harness_runtime(self):
         """Pin provider, endpoint and model for one processing run, without changing selection."""
         provider_id, model_id = self.active_provider_id(), self.active_model_id()
+        if not provider_id or not model_id:
+            raise AIUnavailableError("Kein KI-Modell ausgewählt.")
         endpoint = resolve_endpoint_for_provider(self.settings, provider_id)
         provider = build_provider(provider_id, self.settings, model_resolver=lambda: model_id,
                                   client=self._client,
