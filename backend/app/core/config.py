@@ -106,9 +106,10 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "AUTH_COOKIE_SAMESITE=none erfordert AUTH_COOKIE_SECURE=true."
             )
-        if self.auth_enabled and "*" in self.cors_origins_list:
+        if "*" in self.cors_origins_list:
             raise RuntimeError(
-                "AUTH_ENABLED=true erlaubt keinen CORS-Wildcard-Origin."
+                "CORS_ORIGINS darf keinen Wildcard-Origin enthalten, "
+                "weil der Frontend-Client Requests mit Credentials sendet."
             )
 
 
