@@ -20,12 +20,21 @@ from app.ai.providers.ollama import OllamaProvider
 from app.ai.schema import contract_json_schema
 from app.ai.service import AIService
 from app.core.config import Settings
+from app.database.ai_selection import set_ai_selection, set_setting
 from app.documents.extraction.schemas import ExtractionUnit, SourceType, UnitMethod
 from app.models.enums import ExtractionStatus, ValidationStatus
 
 from tests.helpers_group import build_handler, chat_reply
 
 settings = Settings(_env_file=None)
+
+
+@pytest.fixture(autouse=True)
+def _explicit_model_selection_for_mocked_ai():
+    set_ai_selection("ollama", "qwen3:8b-test")
+    yield
+    for key in ("ai_provider", "ai_model", "ai_provider_endpoint"):
+        set_setting(key, None)
 
 
 def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.AsyncClient:
