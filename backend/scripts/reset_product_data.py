@@ -96,6 +96,7 @@ def main() -> None:
     print("Geleerte Root-Tabellen:", ", ".join(roots) if roots else "keine")
     print("Entfernte Einträge aus data/contracts:", files)
     print("Benutzer, Organisationen, Rechte und gespeicherte KI-Auswahl wurden beibehalten.")
+    print("Der Login admin@medflux.local und sein bestehender Passwort-Hash bleiben unverändert.")
 
 
 if __name__ == "__main__":

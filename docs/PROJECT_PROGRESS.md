@@ -3893,3 +3893,17 @@ installation.
 Existing local development databases are intentionally **not** auto-erased on
 startup. A one-time explicit cleanup is required before UAT so a normal restart
 can never destroy real hospital contracts.
+
+
+## Persistent local admin bootstrap – 2026-09-15
+
+Local development/test setup now idempotently ensures the account
+`admin@medflux.local` exists after migrations. Existing credentials are never
+rewritten during normal setup, so the current password remains valid across
+restarts, pulls and product-data cleanup. The contract-data reset explicitly
+preserves accounts, memberships, organizations and the stored password digest.
+
+For a completely fresh database, the password is supplied once via an
+interactive hidden prompt (or the one-process `MEDFLUX_LOCAL_ADMIN_PASSWORD`
+environment variable). No plaintext/default password is committed to GitHub.
+Pilot/production bootstrap is intentionally not automatic.

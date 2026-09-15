@@ -32,6 +32,10 @@ Push-Location (Join-Path $root "backend")
 Write-Host "[..] Aktualisiere Datenbankschema ..."
 & ".\.venv\Scripts\python.exe" -m alembic upgrade head
 Write-Host "[OK] Datenbankschema ist aktuell."
+
+Write-Host "[..] Prüfe persistenten lokalen Admin-Account ..."
+& ".\.venv\Scripts\python.exe" "scripts\ensure_local_admin.py" --email "admin@medflux.local"
+Write-Host "[OK] Admin-Account ist vorhanden. Ein bestehendes Passwort wurde nicht verändert."
 Pop-Location
 
 Write-Host "[..] Installiere Frontend-Abhängigkeiten ..."
