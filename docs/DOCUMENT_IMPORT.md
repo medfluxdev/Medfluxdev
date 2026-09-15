@@ -1,10 +1,10 @@
 # Medflux – Dokumentimport (Document Import)
 
-Dieses Dokument beschreibt, wie Medflux Vertragsdokumente lokal importiert,
-validiert und ablegt (Schritt 4). Es geht ausschließlich um Empfang,
-Validierung, Speicherung und Nachverfolgung von Dateien – **nicht** um
-Textextraktion, KI-Analyse oder Vertragsinhalte (diese folgen in späteren
-Schritten).
+Dieses Dokument beschreibt den aktuellen produktiven Dokumentimport. Der
+Endpunkt nimmt Dateien an, validiert und persistiert sie und führt anschließend
+denselben synchronen Produktionspfad für Document Intelligence, lokale
+KI-Analyse, deterministische Berechnungen und Persistenz der akzeptierten
+Vertragswahrheit aus. Importstatus und Analysestatus sind getrennt zu lesen.
 
 ## Unterstützte Formate
 
@@ -65,10 +65,15 @@ Beispiel-Antwort:
 ```
 
 Mögliche per-Datei-Status:
-- `imported` – erfolgreich lokal gespeichert
+- `imported` – Dokument wurde gespeichert **und** der Produktionspfad erfolgreich abgeschlossen
+- `reanalyzed` – gespeicherte Version wurde erfolgreich neu analysiert
+- `analysis_failed` – Datei ist gespeichert, aber die Vertragsanalyse wurde nicht akzeptiert; ein sichtbarer Draft/Placeholder kann existieren
 - `rejected` – abgelehnt (falscher Typ, zu groß, leer)
-- `duplicate` – identische Datei bereits vorhanden
+- `duplicate` – identische Datei bzw. bereits akzeptierte Version vorhanden
 - `failed` – Speicher-/Systemfehler
+
+Der HTTP-Request wartet auf die serverseitige Verarbeitung; der aktuelle
+Importendpunkt startet **keinen** separaten Background-AI-Job.
 
 ## Lokale Speicherung (nur lokal)
 
@@ -118,7 +123,7 @@ eingeführt wird.
 
 - **Keine Ausführung** hochgeladener Dateien
 - **Kein automatisches Öffnen** der Dateien
-- **Kein Parsen** der Dokumentinhalte (Textextraktion folgt in Schritt 5)
+- **Lokale Inhaltsverarbeitung:** Parsing/OCR/Document Intelligence und KI-Analyse bleiben vollständig lokal
 - **Keine externen Dienste**
 - **Pfadsicherheit:** Nutzerdateinamen werden nie als Dateipfad verwendet;
   Path-Traversal (`../`, absolute Pfade) wird dadurch wirkungslos.
