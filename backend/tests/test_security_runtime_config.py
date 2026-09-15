@@ -77,3 +77,12 @@ def test_authenticated_runtime_rejects_cors_wildcard():
     )
     with pytest.raises(RuntimeError, match="CORS-Wildcard"):
         settings.validate_auth_runtime()
+
+
+def test_auth_disabled_runtime_rejects_cors_wildcard():
+    settings = _settings(
+        auth_enabled=False,
+        cors_origins="*",
+    )
+    with pytest.raises(RuntimeError, match="CORS-Wildcard"):
+        settings.validate_auth_runtime()
