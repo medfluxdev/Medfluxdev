@@ -65,6 +65,8 @@ def test_ai_provider_configuration():
 
 
 def test_no_user_selection_means_ai_not_configured():
+    for key in ("ai_provider", "ai_model", "ai_provider_endpoint"):
+        set_setting(key, None)
     s = Settings(_env_file=None)
     svc = AIService(s)
     assert svc.configured is False
@@ -72,6 +74,8 @@ def test_no_user_selection_means_ai_not_configured():
 
 @pytest.mark.asyncio
 async def test_generate_raises_without_configured_provider():
+    for key in ("ai_provider", "ai_model", "ai_provider_endpoint"):
+        set_setting(key, None)
     s = Settings(_env_file=None)
     svc = AIService(s)
     with pytest.raises(AIUnavailableError):
@@ -80,6 +84,8 @@ async def test_generate_raises_without_configured_provider():
 
 @pytest.mark.asyncio
 async def test_status_without_configured_provider():
+    for key in ("ai_provider", "ai_model", "ai_provider_endpoint"):
+        set_setting(key, None)
     s = Settings(_env_file=None)
     svc = AIService(s)
     st = await svc.status()
