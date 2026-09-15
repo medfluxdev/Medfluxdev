@@ -60,9 +60,8 @@ if (Test-Path -LiteralPath $pgCtl) {
         }
 
         Write-Host "Starting PostgreSQL cluster: $dataDir"
-        $args = @("start", "-w", "-t", "15", "-D", $dataDir, "-l", $log)
-        $proc = Start-Process -FilePath $pgCtl -ArgumentList $args -NoNewWindow -PassThru -Wait
-        if ($proc.ExitCode -ne 0) {
+        & $pgCtl start -w -t 15 -D $dataDir -l $log | Out-Host
+        if ($LASTEXITCODE -ne 0) {
             continue
         }
 
