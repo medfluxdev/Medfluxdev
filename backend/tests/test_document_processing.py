@@ -803,3 +803,64 @@ def test_textless_v3_pdf_still_runs_document_intelligence_ocr(
     assert extraction.units
     assert not any("direkter V3-Vision-Pfad" in w for w in canonical.warnings)
 
+
+
+def test_docling_cuda_failure_retries_auto_before_native_fallback(tmp_path, monkeypatch):
+    import fitz
+    from app.documents import processing as processing_module
+    from app.documents.intelligence.native_provider import NativePdfDocumentProvider
+
+    pdf = fitz.open()
+    pdf.new_page()
+    content = pdf.tobytes()
+    pdf.close()
+    path = tmp_path / "cuda-retry-scan.pdf"
+    path.write_bytes(content)
+
+    native = NativePdfDocumentProvider()
+
+    class RetryDocling:
+        name = "docling"
+
+        def __init__(self):
+            self.devices = []
+
+        def process(self, path, di_settings):
+            self.devices.append(di_settings.device)
+            if di_settings.device == "cuda":
+                raise RuntimeError("CUDA backend unavailable")
+            canonical = native.process(path, di_settings)
+            page = canonical.pages[0].model_copy(update={"text": "Laufzeit 4 Jahre"})
+            return canonical.model_copy(update={
+                "canonical_text": page.text,
+                "pages_text": [page.text],
+                "pages": [page],
+            })
+
+    docling = RetryDocling()
+
+    def provider_factory(name):
+        if name == "docling":
+            return docling
+        if name == "native_pdf":
+            return native
+        raise AssertionError(name)
+
+    monkeypatch.setattr(processing_module, "get_provider", provider_factory)
+    monkeypatch.setattr(settings, "document_intelligence_provider", "docling")
+    monkeypatch.setattr(settings, "document_intelligence_device", "cuda")
+
+    stored = ProcessedDocument(
+        document_id=str(uuid.uuid4()),
+        document_version_id=str(uuid.uuid4()),
+        sha256=hashlib.sha256(content).hexdigest(),
+        original_filename="cuda-retry-scan.pdf",
+        status="imported",
+    )
+
+    canonical, extraction = DocumentProcessingService()._build_canonical(stored, path)
+
+    assert docling.devices == ["cuda", "auto"]
+    assert extraction.text_available is True
+    assert canonical.pages[0].text == "Laufzeit 4 Jahre"
+    assert any("automatischer Beschleunigerwahl" in w for w in canonical.warnings)
