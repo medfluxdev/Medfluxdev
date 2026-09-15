@@ -55,10 +55,13 @@ app = FastAPI(
 app.add_middleware(ScopeContextMiddleware)
 app.add_middleware(LocalAuthMiddleware)
 
+# The frontend always uses credentials="include". CORS must therefore advertise
+# credentials support in both auth-enabled and local auth-disabled modes.
+# Wildcard origins are rejected by settings validation.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=settings.auth_enabled,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "X-Request-ID"],
 )
