@@ -908,7 +908,7 @@ class HarnessV3:
 
         def vision_summary() -> str:
             return (
-                "\nVisual observations (auxiliary, not quotable textual evidence): "
+                "\nVisual observations: exact visible_text is quotable source transcription for the same block_id; descriptions/inferences remain auxiliary and are never evidence: "
                 + json.dumps(
                     [{"block_id": key, **value.model_dump()} for key, value in visual_observations.items()],
                     ensure_ascii=False,
@@ -1168,11 +1168,15 @@ class HarnessV3:
                         region_visual_attempts += 1
                         observation = await call(
                             "vision:" + block.id,
-                            "Read only contract-relevant visual evidence in region " + block.id +
+                            "Read contract-relevant visual evidence in region " + block.id +
                             ". Put exact verbatim text fragments that you can actually read into visible_text; "
-                            "never paraphrase visible_text. Put uncertain/illegible content in unresolved and omit "
-                            "it from visible_text. Keep description/inference separate and never invent text. "
-                            "Be concise. Native/OCR context: " + block.text,
+                            "never paraphrase visible_text. For a full-page scanned contract, capture ALL material "
+                            "contract text needed to identify parties, contract/reference numbers, dates, term, renewal, "
+                            "termination/notice, prices/fees, payment, services, SLA and equipment. Preserve units, "
+                            "currency, punctuation and recurrence words exactly. Put uncertain/illegible content in "
+                            "unresolved and omit it from visible_text. Keep description/inference separate and never "
+                            "invent text. visible_text may later be cited as evidence for this same block_id. "
+                            "Native/OCR context: " + block.text,
                             VisionObservation,
                             [image],
                             pages=[block.page] if block.page is not None else None,
@@ -1389,8 +1393,10 @@ class HarnessV3:
                         observation = await call(
                             "vision_fallback:" + block.id,
                             "Read this unresolved contract-relevant visual region because page-level vision did not "
-                            "produce a usable section reading. Distinguish visible text from inference, preserve "
-                            "uncertainty, and do not invent text. Native/OCR context: " + block.text,
+                            "produce a usable section reading. Put exact verbatim source text in visible_text; that "
+                            "visible_text may later be cited as evidence for this same block_id. Distinguish visible "
+                            "text from inference, preserve uncertainty, and do not invent text. Native/OCR context: "
+                            + block.text,
                             VisionObservation,
                             [image],
                             pages=[block.page] if block.page is not None else None,
@@ -2048,8 +2054,11 @@ class HarnessV3:
                     "Resolve this related contract-field pack in ONE pass: "
                     + ", ".join(pack_families)
                     + ". Qwen owns contractual meaning, applicability, precedence and number roles. "
-                    "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs "
-                    "copied from supplied source blocks. Do not compute derived dates or annual totals. "
+                    "Return candidates only for requested fields. Every supported candidate needs exact evidence_refs. "
+                    "Evidence may be copied from supplied canonical source-block text OR from an exact visible_text "
+                    "entry in the Visual observations for the SAME block_id. Never cite a visual description, inference "
+                    "or section summary as evidence. For image-only blocks, exact visible_text is the source transcription. "
+                    "Do not compute derived dates or annual totals. "
                     "Keep selected fixed prices separate from alternatives, optional add-ons and variable/event charges. "
                     "For visually uncertain handwritten/scan values (serials, installation dates, identifiers), use ambiguous "
                     "status and state the uncertainty instead of asserting a normalized value. Attribute SLA/service facts only "
@@ -2104,7 +2113,8 @@ class HarnessV3:
                             "Resolve this related contract-field pack in ONE pass: "
                             + ", ".join(pack_families)
                             + ". Qwen owns contractual meaning. Return only requested fields. "
-                            "Every supported candidate needs exact evidence_refs from supplied source blocks. "
+                            "Every supported candidate needs exact evidence_refs from canonical block text or exact "
+                            "visible_text for the same block_id. Never cite visual descriptions/inferences. "
                             "Keep alternatives/optional/variable charges separate from binding values. "
                             "Candidate field types: "
                             + json.dumps(catalog, separators=(",", ":"))
