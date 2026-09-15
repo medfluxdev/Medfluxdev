@@ -1487,3 +1487,67 @@ async def test_g_reference_classification_blocks_contract_number_without_map_rol
     roles = {n["value"]: n["role"] for n in result.diagnostics["number_roles"]}
     assert roles.get("452664") == "order_number"
     assert any(issue.startswith("identity.contract_number") for issue in result.diagnostics["issues"])
+
+def test_v3_scan_prompt_allows_exact_visual_transcription_as_evidence():
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(
+        encoding="utf-8"
+    )
+    assert "exact visible_text is the source transcription" in source
+    assert "Never cite a visual description, inference" in source
+    assert "visible_text may later be cited as evidence for this same block_id" in source
+
+
+def test_document_model_marks_ocr_elements_for_visual_verification():
+    from app.ai.harness.document import DocumentModel
+    from app.documents.intelligence.canonical import (
+        DocumentIntelligenceResult,
+        Element,
+        Method,
+        Page,
+        ProcessingProvenance,
+    )
+
+    source = DocumentIntelligenceResult(
+        document_id="ocr-vision-1",
+        source_sha256="f" * 64,
+        source_filename="scan.pdf",
+        source_path=None,
+        canonical_text="Jahrespreis 8.000 EUR",
+        pages_text=["Jahrespreis 8.000 EUR"],
+        pages=[
+            Page(
+                page_number=1,
+                width_pt=595,
+                height_pt=842,
+                text="Jahrespreis 8.000 EUR",
+                elements=[
+                    Element(
+                        element_id="ocr1",
+                        type="text",
+                        text="Jahrespreis 8.000 EUR",
+                        page=1,
+                        reading_order=0,
+                        method=Method.OCR,
+                    )
+                ],
+            )
+        ],
+        logical_units=[],
+        provenance=ProcessingProvenance(
+            provider="docling",
+            provider_version="test",
+            method=Method.OCR,
+            do_ocr=True,
+            do_table_structure=True,
+            geometry_provider=None,
+            config={},
+        ),
+        warnings=[],
+        processing_time_s=0.0,
+    )
+
+    document = DocumentModel.build(source)
+    assert document.blocks[0].needs_vision is True
+    assert document.visual_pages == [1]
