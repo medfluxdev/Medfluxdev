@@ -667,3 +667,22 @@ def test_harness_evidence_persistence_is_not_coupled_to_exact_version():
     assert evidence[0]["field_ref"] == "costs.annual_cost.evidence.0"
     assert evidence[0]["page"] == 2
     assert evidence[0]["source_text"] == "Jahrespreis 12.000 EUR"
+
+
+def test_harness_diagnostics_do_not_report_fake_zero_chunks():
+    analysis = ContractAnalysisResult(
+        document_id="doc-1",
+        status=ExtractionStatus.FAILED,
+        validation_status=ValidationStatus.UNKNOWN,
+        requires_review=True,
+        contract=None,
+        prompt_version="harness-v2.1",
+        ai_call_count=0,
+        groups_processed=0,
+    )
+
+    diagnostics = DocumentProcessingService._analysis_diagnostics(analysis)
+
+    assert diagnostics["chunk_count"] is None
+    assert diagnostics["truncated_chunks"] is None
+    assert diagnostics["ai_call_count"] == 0
