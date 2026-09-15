@@ -100,20 +100,14 @@ _OUTPUT_RETRY_MAX = 2800
 _OUTPUT_RETRY_MIN_GAIN = 128
 _OUTPUT_RETRY_RESERVE = 512
 
-# Reliability-first family isolation.  Real Abiomed UAT showed that a combined
-# commercial CandidateBatch could exhaust the model output budget and leave the
-# whole family unresolved.  Resolve one semantic family per pack so an oversized
-# costs/payment response cannot consume or obscure identity/date/termination
-# results.  The call budget remains bounded by ContextPlanner/HARNESS_MAX_CALLS.
+# Related families are resolved together in the normal fast path.  If a real
+# provider truncates a multi-family CandidateBatch even after the bounded output
+# retry, the resolver falls back to the individual families in that pack only.
+# This preserves the efficient common path while making truncation recoverable.
 _FAMILY_PACKS = (
-    ("identity", ("identity",)),
-    ("dates", ("dates",)),
-    ("termination", ("termination",)),
-    ("costs", ("costs",)),
-    ("payment", ("payment",)),
-    ("equipment", ("equipment",)),
-    ("services", ("services",)),
-    ("sla", ("sla",)),
+    ("core", ("identity", "dates", "termination")),
+    ("commercial", ("costs", "payment")),
+    ("operations", ("equipment", "services", "sla")),
 )
 
 
@@ -2290,12 +2284,126 @@ class HarnessV3:
                         })
                         break
                     except (ContextOverflow, ValueError, RuntimeError, AIProviderError) as exc:
+                        failed_purpose = f"resolve_pack:{pack_name}:{segment_index}"
+                        last_pack_call = next(
+                            (
+                                row for row in reversed(calls)
+                                if row.get("purpose") == failed_purpose
+                            ),
+                            None,
+                        )
+                        was_output_truncated = bool(
+                            last_pack_call
+                            and last_pack_call.get("error_category") == "truncated_output"
+                        )
+                        split_batches: list[CandidateBatch] = []
+                        # Real Abiomed UAT proved that the commercial multi-family
+                        # response can hit done_reason=length even after the bounded
+                        # retry.  Recover only that failed pack by asking for each
+                        # constituent family separately.  Other packs/results are
+                        # untouched; no global output-token increase is used.
+                        if was_output_truncated and len(pack_families) > 1:
+                            planner.decisions.append({
+                                "purpose": failed_purpose,
+                                "decision": "split_pack_after_output_truncation",
+                                "families": list(pack_families),
+                            })
+                            for split_family in pack_families:
+                                split_types = {
+                                    key: val
+                                    for key, val in types.items()
+                                    if key == split_family or key.startswith(split_family + ".")
+                                }
+                                split_catalog = {
+                                    key: str(value)
+                                    .replace("typing.", "")
+                                    .replace("app.models.values.", "")
+                                    .replace("app.models.contract.", "")
+                                    .replace("app.models.enums.", "")
+                                    for key, value in split_types.items()
+                                }
+                                split_prompt = (
+                                    "Resolve ONLY contract-field family "
+                                    + split_family
+                                    + ". Return candidates only for requested fields. "
+                                    "Every supported candidate needs exact evidence_refs from canonical "
+                                    "source-block text or exact visible_text for the same block_id. "
+                                    "Never cite visual descriptions or inferences. Keep alternatives, "
+                                    "optional values and variable charges separate from binding facts. "
+                                    "Keep output compact: omit absent fields; reasoning_summary <= 120 "
+                                    "characters; authority_note <= 80 characters. Candidate field types: "
+                                    + json.dumps(split_catalog, separators=(",", ":"))
+                                    + "\n"
+                                    + "Compact semantic state: "
+                                    + json.dumps(
+                                        {
+                                            split_family: semantic_by_family.get(
+                                                split_family, {}
+                                            )
+                                        },
+                                        ensure_ascii=False,
+                                        separators=(",", ":"),
+                                    )
+                                    + "\nVisual observations for these blocks: "
+                                    + vision_context(segment)
+                                    + "\nRelevant provisional section readings: "
+                                    + sections_context_pages(segment_pages)
+                                    + "\n"
+                                    + context
+                                )
+                                split_purpose = (
+                                    f"resolve_pack:{pack_name}-{split_family}:{segment_index}"
+                                )
+                                try:
+                                    split_resolved = await call(
+                                        split_purpose,
+                                        split_prompt,
+                                        CandidateBatch,
+                                        pages=segment_pages or None,
+                                        stage="resolve",
+                                    )
+                                    split_resolved = await verify(
+                                        split_resolved,
+                                        context,
+                                        f"ground_pack:{pack_name}-{split_family}:{segment_index}",
+                                    )
+                                    split_batches.append(split_resolved)
+                                    planner.decisions.append({
+                                        "purpose": split_purpose,
+                                        "decision": "split_family_recovered",
+                                    })
+                                except CallBudgetExhausted:
+                                    budget_exhausted = True
+                                    planner.decisions.append({
+                                        "purpose": split_purpose,
+                                        "decision": "split_family_call_budget_exhausted",
+                                    })
+                                    break
+                                except (
+                                    ContextOverflow,
+                                    ValueError,
+                                    RuntimeError,
+                                    AIProviderError,
+                                ) as split_exc:
+                                    issues.append(
+                                        f"{pack_name}/{split_family} segment {segment_index}: "
+                                        f"{type(split_exc).__name__}; manuelle Prüfung erforderlich"
+                                    )
+                                    planner.decisions.append({
+                                        "purpose": split_purpose,
+                                        "decision": "split_family_failed_continue",
+                                        "error_type": type(split_exc).__name__,
+                                    })
+                            if split_batches:
+                                segment_batches.extend(split_batches)
+                                continue
+
                         issues.append(
                             f"{pack_name} segment {segment_index}: {type(exc).__name__}; "
                             "manuelle Prüfung erforderlich"
                         )
                         planner.decisions.append({
-                            "purpose": f"resolve_pack:{pack_name}:{segment_index}",
+                            "purpose": failed_purpose,
                             "decision": "segment_failed_continue",
                             "error_type": type(exc).__name__,
                         })
