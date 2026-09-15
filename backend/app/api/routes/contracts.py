@@ -369,7 +369,7 @@ def contract_fact_review(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         try:
             data = build_contract_detail(
@@ -436,7 +436,7 @@ def contract_review_start(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         try:
             start_review(
@@ -482,7 +482,7 @@ def contract_review_complete(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         try:
             data = build_contract_detail(
@@ -576,7 +576,7 @@ def contract_archive(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         existing = session.execute(
             select(Contract.id).where(
@@ -613,7 +613,7 @@ def contract_unarchive(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         existing = session.execute(
             select(Contract.id).where(
@@ -656,7 +656,7 @@ def contract_override(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         try:
             value = None
@@ -720,7 +720,7 @@ def contract_document_content(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
+        if _scope_denies(session, org.id, cid):
             raise _not_found()
         svc = DocumentPersistenceService()
         version = session.scalars(
