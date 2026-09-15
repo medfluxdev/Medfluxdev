@@ -737,10 +737,10 @@ def test_build_canonical_falls_back_to_native_pdf_when_primary_di_fails(tmp_path
     assert any("Vision-Fallback" in warning for warning in canonical.warnings)
 
 
-def test_textless_v3_pdf_skips_docling_and_uses_native_visual_baseline(
+def test_textless_v3_pdf_still_runs_document_intelligence_ocr(
     tmp_path, monkeypatch
 ):
-    """Image-only V3 imports must not block on Docling before vision starts."""
+    """A scanned V3 PDF must retain an OCR/layout evidence layer before vision."""
     import fitz
     from app.documents import processing as processing_module
     from app.documents.intelligence.native_provider import NativePdfDocumentProvider
@@ -752,17 +752,31 @@ def test_textless_v3_pdf_skips_docling_and_uses_native_visual_baseline(
     path = tmp_path / "textless-scan.pdf"
     path.write_bytes(content)
 
-    class MustNotRunDocling:
+    native = NativePdfDocumentProvider()
+
+    class TrackingDocling:
         name = "docling"
 
-        def process(self, path, settings):
-            raise AssertionError("Docling must be bypassed for a fully textless V3 PDF")
+        def __init__(self):
+            self.calls = 0
 
-    native = NativePdfDocumentProvider()
+        def process(self, path, settings):
+            self.calls += 1
+            canonical = native.process(path, settings)
+            page = canonical.pages[0].model_copy(update={
+                "text": "Vertragsnummer OCR-1 Jahrespreis 8.000 EUR",
+            })
+            return canonical.model_copy(update={
+                "canonical_text": page.text,
+                "pages_text": [page.text],
+                "pages": [page],
+            })
+
+    docling = TrackingDocling()
 
     def provider_factory(name):
         if name == "docling":
-            return MustNotRunDocling()
+            return docling
         if name == "native_pdf":
             return native
         raise AssertionError(f"unexpected provider: {name}")
@@ -782,7 +796,10 @@ def test_textless_v3_pdf_skips_docling_and_uses_native_visual_baseline(
     service = DocumentProcessingService()
     canonical, extraction = service._build_canonical(stored, path)
 
-    assert canonical.provenance.provider == "native_pdf"
+    assert docling.calls == 1
     assert canonical.pages
-    assert extraction.text_available is False
-    assert any("direkter V3-Vision-Pfad" in w for w in canonical.warnings)
+    assert canonical.pages[0].text == "Vertragsnummer OCR-1 Jahrespreis 8.000 EUR"
+    assert extraction.text_available is True
+    assert extraction.units
+    assert not any("direkter V3-Vision-Pfad" in w for w in canonical.warnings)
+
