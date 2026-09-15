@@ -1,5 +1,7 @@
 """Zentrale Konfiguration von Medflux (aus .env bzw. Umgebungsvariablen)."""
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +52,10 @@ class Settings(BaseSettings):
     ai_max_tokens: int = 256
     ai_repeat_penalty: float | None = 1.3
     ollama_think: bool = False
+    # None = Ollama entscheidet automatisch. Fuer lokale GPU-Tests kann ein
+    # expliziter Layer-Wert (z. B. 999 fuer "so viele wie moeglich") gesetzt
+    # werden; der Wert wird pro Request als num_gpu an Ollama uebergeben.
+    ollama_num_gpu: int | None = None
     ai_extraction_max_tokens: int = 8192
     ai_max_chunk_characters: int = 6000
     ai_run_semantic_verification: bool = True
@@ -60,6 +66,9 @@ class Settings(BaseSettings):
     ocr_lang: str = "deu"
     document_intelligence_provider: str = "docling"
     document_intelligence_table_structure: bool = True
+    # Docling darf nicht hart auf CPU festgenagelt sein. "auto" nutzt den
+    # verfuegbaren Beschleuniger (CUDA auf kompatibler NVIDIA-Hardware).
+    document_intelligence_device: Literal["auto", "cuda", "cpu"] = "auto"
     document_processing_stale_minutes: int = 60
 
     data_dir: str = "./data"
