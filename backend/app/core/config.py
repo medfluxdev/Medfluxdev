@@ -108,8 +108,8 @@ class Settings(BaseSettings):
             )
         if "*" in self.cors_origins_list:
             raise RuntimeError(
-                "CORS_ORIGINS darf keinen Wildcard-Origin enthalten, "
-                "weil der Frontend-Client Requests mit Credentials sendet."
+                "CORS-Wildcard-Origin ist nicht erlaubt, weil der "
+                "Frontend-Client Requests mit Credentials sendet."
             )
 
 
