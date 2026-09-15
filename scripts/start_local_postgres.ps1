@@ -4,18 +4,36 @@ function Test-MedfluxPort {
     param([int]$Port = 5432)
     try {
         $client = [Net.Sockets.TcpClient]::new()
-        $client.Connect("127.0.0.1", $Port)
-        $client.Close()
+        $task = $client.ConnectAsync("127.0.0.1", $Port)
+        if (-not $task.Wait(1000)) {
+            $client.Dispose()
+            return $false
+        }
+        $client.Dispose()
         return $true
-    } catch { return $false }
+    } catch {
+        return $false
+    }
 }
 
-if (Test-MedfluxPort) { Write-Host "PostgreSQL already reachable on 127.0.0.1:5432."; exit 0 }
+if (Test-MedfluxPort) {
+    Write-Host "PostgreSQL already reachable on 127.0.0.1:5432."
+    exit 0
+}
 
 $services = @(Get-Service -Name "*postgres*" -ErrorAction SilentlyContinue)
 foreach ($service in $services) {
-    if ($service.Status -ne "Running") { try { Start-Service -Name $service.Name -ErrorAction Stop } catch { continue } }
-    for ($i=0; $i -lt 20; $i++) { if (Test-MedfluxPort) { exit 0 }; Start-Sleep -Milliseconds 500 }
+    if ($service.Status -ne "Running") {
+        try {
+            Start-Service -Name $service.Name -ErrorAction Stop
+        } catch {
+            continue
+        }
+    }
+    for ($i = 0; $i -lt 20; $i++) {
+        if (Test-MedfluxPort) { exit 0 }
+        Start-Sleep -Milliseconds 500
+    }
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -30,10 +48,30 @@ if (Test-Path -LiteralPath $pgCtl) {
     foreach ($dataDir in $candidates | Select-Object -Unique) {
         if (-not $dataDir) { continue }
         if (-not (Test-Path -LiteralPath (Join-Path $dataDir "PG_VERSION"))) { continue }
-        try { & $pgCtl start -D $dataDir -l $log | Out-Host } catch { }
-        for ($i=0; $i -lt 30; $i++) { if (Test-MedfluxPort) { exit 0 }; Start-Sleep -Milliseconds 500 }
+
+        # If this exact cluster is already running, do not invoke 'pg_ctl start'
+        # again. This avoids the "another server might be running" branch and,
+        # more importantly, avoids keeping the launcher attached to a second
+        # startup attempt.
+        $status = & $pgCtl status -D $dataDir 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "PostgreSQL cluster already running: $dataDir"
+            if (Test-MedfluxPort) { exit 0 }
+        }
+
+        Write-Host "Starting PostgreSQL cluster: $dataDir"
+        $args = @("start", "-w", "-t", "15", "-D", $dataDir, "-l", $log)
+        $proc = Start-Process -FilePath $pgCtl -ArgumentList $args -NoNewWindow -PassThru -Wait
+        if ($proc.ExitCode -ne 0) {
+            continue
+        }
+
+        for ($i = 0; $i -lt 20; $i++) {
+            if (Test-MedfluxPort) { exit 0 }
+            Start-Sleep -Milliseconds 500
+        }
     }
 }
 
-Write-Warning "No existing local PostgreSQL cluster became reachable."
+Write-Warning "No existing local PostgreSQL cluster became reachable on 127.0.0.1:5432."
 exit 2
