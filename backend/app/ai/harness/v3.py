@@ -100,14 +100,20 @@ _OUTPUT_RETRY_MAX = 2800
 _OUTPUT_RETRY_MIN_GAIN = 128
 _OUTPUT_RETRY_RESERVE = 512
 
-# Families are resolved in semantic packs so Qwen can reuse the same local
-# contract state instead of re-reading nearly identical context eight times.
-# This is a latency optimization only; each candidate still keeps its canonical
-# field name and evidence refs, and sensitive semantics remain Qwen-owned.
+# Reliability-first family isolation.  Real Abiomed UAT showed that a combined
+# commercial CandidateBatch could exhaust the model output budget and leave the
+# whole family unresolved.  Resolve one semantic family per pack so an oversized
+# costs/payment response cannot consume or obscure identity/date/termination
+# results.  The call budget remains bounded by ContextPlanner/HARNESS_MAX_CALLS.
 _FAMILY_PACKS = (
-    ("core", ("identity", "dates", "termination")),
-    ("commercial", ("costs", "payment")),
-    ("operations", ("equipment", "services", "sla")),
+    ("identity", ("identity",)),
+    ("dates", ("dates",)),
+    ("termination", ("termination",)),
+    ("costs", ("costs",)),
+    ("payment", ("payment",)),
+    ("equipment", ("equipment",)),
+    ("services", ("services",)),
+    ("sla", ("sla",)),
 )
 
 
@@ -1968,6 +1974,7 @@ class HarnessV3:
                 (pack_name, [f for f in families if f in TOPICS])
                 for pack_name, families in _FAMILY_PACKS
             ]
+            pack_outcomes: list[dict] = []
 
             for pack_index, (pack_name, pack_families) in enumerate(packed_family_order):
                 if budget_exhausted:
@@ -2064,6 +2071,8 @@ class HarnessV3:
                     "status and state the uncertainty instead of asserting a normalized value. Attribute SLA/service facts only "
                     "to the selected applicable plan when source evidence supports that scope. "
                     "For identity.contract_number obey the supplied Qwen number-role/applicability state. "
+                    "Keep output compact: omit absent fields; keep reasoning_summary <= 120 characters and "
+                    "authority_note <= 80 characters; never repeat source text outside evidence quotes. "
                     "Candidate field types: "
                     + json.dumps(catalog, separators=(",", ":"))
                     + "\nCompact semantic state by family: "
@@ -2428,6 +2437,23 @@ class HarnessV3:
                             "error_type": type(exc).__name__,
                         })
 
+                pack_outcomes.append({
+                    "pack": pack_name,
+                    "families": list(pack_families),
+                    "candidate_count": len(batch.candidates),
+                    "supported_status_count": sum(
+                        1 for item in batch.candidates if item.status == "supported"
+                    ),
+                    "ambiguous_count": sum(
+                        1 for item in batch.candidates if item.status == "ambiguous"
+                    ),
+                    "unsupported_count": sum(
+                        1 for item in batch.candidates if item.status == "unsupported"
+                    ),
+                    "missing_count": sum(
+                        1 for item in batch.candidates if item.status == "missing"
+                    ),
+                })
                 candidates.extend(batch.candidates)
 
             if document.blocks and not any(
@@ -2618,6 +2644,7 @@ class HarnessV3:
                 key: value.model_dump() for key, value in visual_observations.items()
             },
             "candidates": [candidate.model_dump() for candidate in candidates],
+            "pack_outcomes": list(locals().get("pack_outcomes", [])),
             "evidence_count": len(evidence_rows),
             "supported_count": int(locals().get("supported_count", 0)),
             "excluded_count": int(locals().get("excluded_count", 0)),
