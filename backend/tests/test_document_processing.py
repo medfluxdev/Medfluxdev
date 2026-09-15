@@ -735,3 +735,54 @@ def test_build_canonical_falls_back_to_native_pdf_when_primary_di_fails(tmp_path
     assert canonical.pages
     assert extraction.file_type == FileType.PDF
     assert any("Vision-Fallback" in warning for warning in canonical.warnings)
+
+
+def test_textless_v3_pdf_skips_docling_and_uses_native_visual_baseline(
+    tmp_path, monkeypatch
+):
+    """Image-only V3 imports must not block on Docling before vision starts."""
+    import fitz
+    from app.documents import processing as processing_module
+    from app.documents.intelligence.native_provider import NativePdfDocumentProvider
+
+    pdf = fitz.open()
+    pdf.new_page()
+    content = pdf.tobytes()
+    pdf.close()
+    path = tmp_path / "textless-scan.pdf"
+    path.write_bytes(content)
+
+    class MustNotRunDocling:
+        name = "docling"
+
+        def process(self, path, settings):
+            raise AssertionError("Docling must be bypassed for a fully textless V3 PDF")
+
+    native = NativePdfDocumentProvider()
+
+    def provider_factory(name):
+        if name == "docling":
+            return MustNotRunDocling()
+        if name == "native_pdf":
+            return native
+        raise AssertionError(f"unexpected provider: {name}")
+
+    monkeypatch.setattr(processing_module, "get_provider", provider_factory)
+    monkeypatch.setattr(settings, "document_intelligence_provider", "docling")
+    monkeypatch.setattr(settings, "harness_engine", "v3")
+
+    stored = ProcessedDocument(
+        document_id=str(uuid.uuid4()),
+        document_version_id=str(uuid.uuid4()),
+        sha256=hashlib.sha256(content).hexdigest(),
+        original_filename="textless-scan.pdf",
+        status="imported",
+    )
+
+    service = DocumentProcessingService()
+    canonical, extraction = service._build_canonical(stored, path)
+
+    assert canonical.provenance.provider == "native_pdf"
+    assert canonical.pages
+    assert extraction.text_available is False
+    assert any("direkter V3-Vision-Pfad" in w for w in canonical.warnings)
