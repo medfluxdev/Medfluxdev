@@ -612,7 +612,11 @@ class DocumentProcessingService:
                     canonical=canonical,
                 )
 
-            if (not extraction.text_available or not extraction.units) and self._analysis is not None:
+            # Fail closed before selecting an analysis engine. Production uses
+            # the canonical Harness by default while tests/controlled callers may
+            # inject the legacy structured extractor. Text availability must not
+            # depend on which engine happens to be selected.
+            if not extraction.text_available or not extraction.units:
                 placeholder_id = self._persist_failed_analysis(
                     stored=stored,
                     organization_id=organization_id,
@@ -971,6 +975,12 @@ class DocumentProcessingService:
 
     @staticmethod
     def _canonical_to_extraction(canonical: DocumentIntelligenceResult):
+        # Source structure and source file type are independent. PDFs produced
+        # by Document Intelligence may legitimately contain logical units, so
+        # logical_units must never be used as a DOCX detector.
+        source_suffix = Path(canonical.source_filename or "").suffix.lower()
+        file_type = FileType.DOCX if source_suffix == ".docx" else FileType.PDF
+
         if canonical.logical_units:
             units = [
                 ExtractionUnit(
@@ -984,16 +994,20 @@ class DocumentProcessingService:
                     ),
                 )
                 for unit in canonical.logical_units
+                if unit.text and unit.text.strip()
             ]
-            file_type = FileType.DOCX
         else:
             units = [
                 DocumentProcessingService._page_to_extraction_unit(page)
                 for page in canonical.pages
-                if page.text.strip()
+                if page.text and page.text.strip()
             ]
-            file_type = FileType.PDF
-        text_available = bool(units and canonical.canonical_text.strip())
+
+        # The canonical text convenience field is not the source of truth for
+        # analyzability. Providers can supply page/logical-unit text even when
+        # canonical_text is empty; use the actual units consumed by analyzers.
+        total_characters = sum(len(unit.text) for unit in units)
+        text_available = bool(units and total_characters > 0)
         method = (
             UnitMethod.OCR
             if any(unit.method == UnitMethod.OCR for unit in units)
@@ -1009,7 +1023,7 @@ class DocumentProcessingService:
             ),
             extraction_method=method,
             page_count=len(canonical.pages),
-            total_characters=len(canonical.canonical_text),
+            total_characters=total_characters,
             text_available=text_available,
             requires_ocr=bool(canonical.provenance.do_ocr),
             units=units,
@@ -1611,7 +1625,10 @@ class DocumentProcessingService:
             page_count=len(canonical.pages) if canonical is not None else 0,
             doc_type=(
                 "docx"
-                if canonical is not None and canonical.logical_units
+                if (
+                    canonical is not None
+                    and Path(canonical.source_filename or "").suffix.lower() == ".docx"
+                )
                 else "pdf"
             ),
             processed_at=datetime.now(timezone.utc),
@@ -1701,8 +1718,12 @@ class DocumentProcessingService:
             )
             if row is not None:
                 evidence.append(row)
-        if contract_model.analysis.harness_version == "v2":
-            for index, entry in enumerate(contract_model.analysis.harness.get("evidence", [])):
+        # Harness evidence is version-neutral at this boundary. Do not couple
+        # persistence to an exact harness version ("v2" vs "v2.1" already caused
+        # valid grounded evidence to be silently dropped).
+        harness_evidence = (contract_model.analysis.harness or {}).get("evidence", [])
+        if harness_evidence:
+            for index, entry in enumerate(harness_evidence):
                 from app.models.evidence import SourceEvidence
                 row = DocumentProcessingService._evidence_row(
                     f"{entry['field']}.evidence.{index}", SourceEvidence(**entry["source"]))
