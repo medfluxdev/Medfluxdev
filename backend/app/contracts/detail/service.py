@@ -270,6 +270,12 @@ _WARNING_TITLES = {
 }
 
 
+def _snapshot_uses_harness(snapshot: dict | None) -> bool:
+    """Return whether the accepted snapshot came from any Harness generation."""
+    analysis = (snapshot or {}).get("analysis") or {}
+    return bool(analysis.get("harness_version"))
+
+
 def build_contract_detail(
     session: Session, *, organization_id, contract_id
 ):
@@ -375,7 +381,7 @@ def build_contract_detail(
             organization_id=organization_id,
             document_version_id=ext.document_version_id,
         )
-        if pages and (snapshot or {}).get("analysis", {}).get("harness_version") != "v2":
+        if pages and not _snapshot_uses_harness(snapshot):
             recovered = recover_financial_facts(pages)
 
     recovered_laufzeit = recovered.laufzeit if recovered is not None else None
@@ -425,7 +431,7 @@ def build_contract_detail(
 
     scope, scope_evidence_refs = _scope_section(
         snapshot,
-        pages=[] if (snapshot or {}).get("analysis", {}).get("harness_version") == "v2" else pages,
+        pages=[] if _snapshot_uses_harness(snapshot) else pages,
         version_to_file=version_to_file,
         document_version_id=ext.document_version_id if ext else None,
     )
