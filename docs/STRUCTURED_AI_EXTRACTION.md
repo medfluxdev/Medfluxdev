@@ -1,30 +1,61 @@
-# Medflux – Strukturierte KI-Extraktion (Schritt 7)
+# Medflux – Strukturierte KI-Extraktion
 
-Dieses Dokument beschreibt die **strukturierte KI-Extraktion von Vertragsdaten**
-(Schritt 7). Es baut auf Schritt 5 (Text-Extraktion) und Schritt 6
-(Lokale AI-Anbindung) auf und erzeugt aus extrahierten Texteinheiten ein
-**validiertes `Contract`-Modell** – vollständig lokal.
+> **Produktionsstand:** Der produktive Importpfad verwendet standardmäßig den
+> provider-neutralen Contract Intelligence Harness (aktuell `v2`, optional
+> `v3`) auf Basis des kanonischen `DocumentIntelligenceResult`.
+> `StructuredContractExtractor` / `ContractAnalysisOrchestrator` bleiben als
+> kontrollierter Legacy-/Testpfad erhalten, sind aber **nicht** der Default des
+> Endpunkts `POST /api/documents/import`.
 
-Kein Teil dieses Schritts speichert Ergebnisse in einer Datenbank; die
-Persistenz folgt in Schritt 10. Berechnungen (Kündigungstermin, Kostenaggregation,
-Warnstufen) sind bewusst **nicht** hier enthalten (folgen in Schritt 9).
+## Produktiver Pipeline-Pfad
 
-## Überblick / Pipeline
-
+```text
+Upload PDF/DOCX
+  -> DocumentProcessingService
+  -> geschütztes Original + DocumentVersion
+  -> Document Intelligence (PDF: Docling, DOCX: python-docx)
+  -> DocumentIntelligenceResult (canonical)
+  -> Analyzierbarkeits-Gate (Text/Units müssen vorhanden sein)
+  -> HarnessV2/HarnessV3
+  -> AIService.harness_runtime()
+  -> lokaler AIProvider (z. B. Ollama / qwen3:8b)
+  -> source-grounded Facts + Evidence
+  -> ContractAnalysisResult
+  -> deterministische Berechnung/Warnungen
+  -> atomare Persistenz + akzeptierte Contract Truth
 ```
-TextExtractionResult (Schritt 5: ExtractionUnit-Liste)
-  -> chunk_units(): deterministisches Chunking nach Texteinheiten
-  -> StructuredContractExtractor.extract(chunks) über die lokale KI
-        (AIService -> AIProvider -> Ollama, qwen3:8b)
-  -> strikte JSON-Ausgabe
-  -> _parse_json(): robustes JSON-Parsing
-  -> Contract.model_validate(): Pydantic-Validierung gegen das Vertrags-Schema
-  -> deterministisches Multi-Chunk-Merging (_merge/_deep_merge)
-  -> Contract-Modell + ContractAnalysisResult
+
+Wenn keine belastbar belegte Vertragsinformation entsteht, liefert der Harness
+`contract=None`. Der Orchestrator persistiert den Fehllauf und erzeugt nur
+einen sichtbaren Draft/Placeholder ohne `accepted_extraction_id`, damit
+Quelle und Fehlerlage in der UI erreichbar bleiben. Ein Placeholder ist **kein
+erfolgreich analysierter Vertrag**.
+
+### Diagnose-Metriken
+
+Die Felder `chunk_count` und `truncated_chunks` gehören ausschließlich zum
+Legacy-`StructuredContractExtractor`. Für Harness-Läufe werden sie als
+`NULL` persistiert. Für den produktiven Harness sind insbesondere
+`prompt_version=harness-...`, `model`, `ai_call_count`,
+`groups_processed` sowie die Harness-Diagnostics maßgeblich.
+
+### Legacy-/Testpfad
+
+Der ältere strukturierte Pfad arbeitet weiterhin so:
+
+```text
+TextExtractionResult
+  -> ContractAnalysisOrchestrator
+  -> StructuredContractExtractor
+  -> chunk_units()
+  -> GroupPipeline
+  -> AIService / lokaler Provider
+  -> ContractAnalysisResult
 ```
 
-Die KI extrahiert **Fakten**; alle **Struktur** (Chunking, Parsing, Validierung,
-Merging) macht deterministischer **Code**.
+Er wird verwendet, wenn `DocumentProcessingService` explizit ein
+`analysis`-Objekt injiziert bekommt (z. B. kontrollierte Tests). Er darf nicht
+zur Interpretation produktiver Harness-Metriken herangezogen werden.
 
 ## Kernkomponenten
 
