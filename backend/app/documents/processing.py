@@ -915,26 +915,58 @@ class DocumentProcessingService:
         try:
             canonical = provider.process(path, intelligence_settings)
         except Exception as exc:
-            # OCR/layout intelligence is an enhancement layer, not a single
-            # point of failure for PDF vision. Fall back to local PyMuPDF page
-            # discovery so V3 can still render the protected original.
-            if getattr(provider, "name", "") == "native_pdf":
-                raise
-            logger.warning(
-                "Primary document intelligence failed; using native PDF/Vision fallback (type=%s)",
-                type(exc).__name__,
-            )
-            fallback = get_provider("native_pdf")
-            fallback_settings = intelligence_settings.model_copy(update={
-                "do_ocr": False,
-                "do_table_structure": False,
-                "structural_roles": False,
-            })
-            canonical = fallback.process(path, fallback_settings)
-            canonical.warnings.append(
-                "Primärer Dokument-Intelligence-Provider fehlgeschlagen; "
-                "nativer PDF-/Vision-Fallback verwendet."
-            )
+            # If the local environment explicitly requested CUDA for Docling but
+            # its Python inference stack has no CUDA backend, retry Docling once
+            # with automatic accelerator selection.  This keeps the OCR/layout
+            # evidence layer instead of silently collapsing a scanned contract
+            # to image-only native PDF pages.  Ollama GPU offload is independent.
+            canonical = None
+            if (
+                getattr(provider, "name", "") == "docling"
+                and intelligence_settings.device == "cuda"
+            ):
+                try:
+                    retry_settings = intelligence_settings.model_copy(
+                        update={"device": "auto"}
+                    )
+                    canonical = provider.process(path, retry_settings)
+                    canonical.warnings.append(
+                        "Docling-CUDA lokal nicht verfügbar; OCR/Layout mit "
+                        "automatischer Beschleunigerwahl erneut ausgeführt."
+                    )
+                    logger.warning(
+                        "Docling CUDA failed; OCR/layout succeeded with device=auto "
+                        "(original_type=%s)",
+                        type(exc).__name__,
+                    )
+                except Exception as retry_exc:
+                    logger.warning(
+                        "Docling CUDA and auto retry failed; using native PDF/Vision "
+                        "fallback (cuda_type=%s auto_type=%s)",
+                        type(exc).__name__,
+                        type(retry_exc).__name__,
+                    )
+            if canonical is None:
+                # OCR/layout intelligence is an enhancement layer, not a single
+                # point of failure for PDF vision. Fall back to local PyMuPDF page
+                # discovery only after the Docling retry path has been exhausted.
+                if getattr(provider, "name", "") == "native_pdf":
+                    raise
+                logger.warning(
+                    "Primary document intelligence failed; using native PDF/Vision fallback (type=%s)",
+                    type(exc).__name__,
+                )
+                fallback = get_provider("native_pdf")
+                fallback_settings = intelligence_settings.model_copy(update={
+                    "do_ocr": False,
+                    "do_table_structure": False,
+                    "structural_roles": False,
+                })
+                canonical = fallback.process(path, fallback_settings)
+                canonical.warnings.append(
+                    "Primärer Dokument-Intelligence-Provider fehlgeschlagen; "
+                    "nativer PDF-/Vision-Fallback verwendet."
+                )
         if canonical.source_sha256 != stored.sha256:
             raise RuntimeError("canonical source hash mismatch")
         # Atomic OCR/geometry (RapidOCR) is a perception/evidence helper only.
