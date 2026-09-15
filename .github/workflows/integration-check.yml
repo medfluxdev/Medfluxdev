@@ -3,11 +3,11 @@ name: Integration Check
 on:
   push:
     branches:
-      - JAMAL-AHMAD-FULL-INTEGRATION
-      - JAMAL-AHMAD-MERGE-WIP
+      - main
+      - Ahmad
   pull_request:
     branches:
-      - JAMAL-AHMAD-FULL-INTEGRATION
+      - main
 
 concurrency:
   group: integration-check-${{ github.ref }}
