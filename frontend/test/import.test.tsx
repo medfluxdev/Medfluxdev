@@ -63,7 +63,8 @@ describe("Import (FE-08)", () => {
     expect(importedSummary && within(importedSummary).getByText("2")).toBeTruthy();
     expect(successSummary && within(successSummary).getByText("1")).toBeTruthy();
     expect(failedSummary && within(failedSummary).getByText("1")).toBeTruthy();
-    expect(screen.getAllByText("Importiert").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Importiert")).toBeInTheDocument();
+    expect(screen.getByText("Importiert – Analyse fehlgeschlagen")).toBeInTheDocument();
     expect(screen.getByText("Erfolgreich")).toBeInTheDocument();
     expect(screen.getByText("Fehlgeschlagen")).toBeInTheDocument();
     expect(screen.getByText("Dokumentanalyse konnte nicht abgeschlossen werden.")).toBeInTheDocument();
@@ -134,7 +135,7 @@ describe("Import (FE-08)", () => {
     expect(apiPostMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/documents/dv-1234/retry?organization_slug=test-klinik"),
       {},
-      120000,
+      30 * 60 * 1000,
     );
     await waitFor(() => expect(screen.getByText("Analyse erfolgreich.")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Analyse erneut starten" })).not.toBeInTheDocument();

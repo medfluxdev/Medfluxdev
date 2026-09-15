@@ -69,7 +69,7 @@ describe("API-Schicht: garantierte Terminierung", () => {
     await expect(p).rejects.toThrow("Die Anfrage hat zu lange gedauert");
   });
 
-  it("gibt Uploads ein eigenes 120s-Fenster statt des normalen 20s-Timeouts", async () => {
+  it("gibt lokalen KI-Uploads ein eigenes 30min-Fenster statt des normalen 20s-Timeouts", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -87,7 +87,7 @@ describe("API-Schicht: garantierte Terminierung", () => {
     p.catch(() => undefined);
     await vi.advanceTimersByTimeAsync(21000);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
-    await vi.advanceTimersByTimeAsync(100000);
+    await vi.advanceTimersByTimeAsync(1_780_000);
     await expect(p).rejects.toThrow("Die Anfrage hat zu lange gedauert");
   });
 

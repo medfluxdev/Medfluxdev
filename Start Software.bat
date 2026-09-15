@@ -10,20 +10,19 @@ echo ========================================
 echo.
 
 rem ------------------------------------------------------------
-rem 1) Docker Desktop + PostgreSQL
+rem 1) PostgreSQL - existing local cluster first, Docker fallback
 rem ------------------------------------------------------------
-set "DATABASE_CONTAINER=medflux-runtime-database-1"
-powershell -NoProfile -Command "try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5432); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start_local_postgres.ps1"
 if !errorlevel! equ 0 (
-    echo [1/5] PostgreSQL already running.
+    echo [1/5] PostgreSQL is ready.
 ) else (
-    echo [1/5] Starting Docker Desktop and PostgreSQL...
+    echo [1/5] No usable local PostgreSQL cluster was started; trying Docker...
     docker info >nul 2>&1
     if !errorlevel! neq 0 (
         if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
             start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
         ) else (
-            echo [ERROR] Docker Desktop was not found.
+            echo [ERROR] PostgreSQL is not reachable and Docker Desktop was not found.
             pause
             exit /b 1
         )
@@ -40,22 +39,21 @@ if !errorlevel! equ 0 (
         pause
         exit /b 1
     )
-    docker start "%DATABASE_CONTAINER%" >nul 2>&1
+    docker compose up -d postgres
     if !errorlevel! neq 0 (
-        echo [ERROR] PostgreSQL container "%DATABASE_CONTAINER%" was not found.
+        echo [ERROR] Docker PostgreSQL could not be started.
         pause
         exit /b 1
     )
-    echo       Waiting for PostgreSQL...
     set "DATABASE_READY="
     for /L %%I in (1,1,60) do (
         if not defined DATABASE_READY (
-            docker inspect --format "{{.State.Health.Status}}" "%DATABASE_CONTAINER%" 2>nul | findstr /x "healthy" >nul
+            powershell -NoProfile -Command "try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5432); $c.Close(); exit 0 } catch { exit 1 }" >nul 2>&1
             if !errorlevel! equ 0 (set "DATABASE_READY=1") else (timeout /t 1 /nobreak >nul)
         )
     )
     if not defined DATABASE_READY (
-        echo [ERROR] PostgreSQL did not become healthy.
+        echo [ERROR] PostgreSQL did not become reachable on 127.0.0.1:5432.
         pause
         exit /b 1
     )
@@ -88,7 +86,7 @@ if not exist "backend" (
     exit /b 1
 )
 
-powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/health -TimeoutSec 2 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/ready -TimeoutSec 2 ^| Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
 if !errorlevel! equ 0 (
     echo [3/5] Backend already running.
 ) else (
@@ -105,7 +103,7 @@ if !errorlevel! equ 0 (
 echo       Waiting for backend health check...
 set "BACKEND_READY=0"
 for /L %%I in (1,1,30) do (
-    powershell -NoProfile -Command "try { $r = Invoke-RestMethod http://127.0.0.1:8000/health -TimeoutSec 2; if ($r.status -eq 'ok') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+    powershell -NoProfile -Command "try { $r = Invoke-RestMethod http://127.0.0.1:8000/ready -TimeoutSec 2; if ($r.status -eq 'ok') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
     if !errorlevel! equ 0 (
         set "BACKEND_READY=1"
         goto :backend_ready

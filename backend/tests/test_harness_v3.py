@@ -293,7 +293,8 @@ def ai(provider, vision=True):
 
 def test_engine_selection_default_is_v3_and_v2_remains_explicit():
     assert get_harness_class(Settings(_env_file=None)) is HarnessV3
-    assert get_harness_class(Settings(_env_file=None, harness_engine="v2")) is HarnessV2
+    assert get_harness_class(Settings(_env_file=None, harness_engine="v2")) is HarnessV3
+    assert get_harness_class(Settings(_env_file=None, harness_engine="v2-compat")) is HarnessV2
     assert get_harness_class(v3_settings()) is HarnessV3
 
 

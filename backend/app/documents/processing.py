@@ -617,9 +617,10 @@ class DocumentProcessingService:
             # contain zero OCR/native text while still having trustworthy source
             # pages that Qwen-VL can read locally. Legacy/injected analyzers and
             # non-visual inputs still fail closed when no text units exist.
+            selected_engine = str(settings.harness_engine or "").strip().lower()
             visual_only_pdf = (
                 self._analysis is None
-                and settings.harness_engine == "v3"
+                and selected_engine not in {"v2-compat", "legacy-v2"}
                 and Path(canonical.source_filename or "").suffix.lower() == ".pdf"
                 and bool(canonical.pages)
             )
@@ -655,12 +656,13 @@ class DocumentProcessingService:
                 from app.ai.harness import get_harness_class
                 from app.ai.harness.vision import page_image, region_image
                 harness_cls = get_harness_class(settings)
+                using_v3 = harness_cls.__name__ == "HarnessV3"
                 analysis = asyncio.run(harness_cls(settings).analyze(
                     canonical,
                     image_loader=lambda block: region_image(path, block),
                     page_image_loader=lambda page: page_image(
                         path, page, longest_side=settings.harness_vision_batch_scale
-                    ) if settings.harness_engine == "v3" else None,
+                    ) if using_v3 else None,
                 ))
             if analysis.contract is None:
                 placeholder_id = self._persist_failed_analysis(

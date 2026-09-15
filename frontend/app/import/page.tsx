@@ -16,7 +16,7 @@ const statusLabel: Record<ImportStatus, string> = {
   duplicate: "Duplikat",
   rejected: "Abgelehnt",
   failed: "Import fehlgeschlagen",
-  analysis_failed: "Importiert",
+  analysis_failed: "Importiert – Analyse fehlgeschlagen",
 };
 
 const statusTone: Record<ImportStatus, StatusTone> = {
@@ -24,7 +24,7 @@ const statusTone: Record<ImportStatus, StatusTone> = {
   duplicate: "warning",
   rejected: "critical",
   failed: "critical",
-  analysis_failed: "success",
+  analysis_failed: "critical",
 };
 
 function supportedFile(file: File) {

@@ -19,7 +19,7 @@ export function retryDocument(documentVersionId: string, organizationSlug: strin
   return apiPost<DocumentProcessResult>(
     `/api/documents/${encodeURIComponent(documentVersionId)}/retry?organization_slug=${encodeURIComponent(organizationSlug)}`,
     {},
-    120000,
+    30 * 60 * 1000,
   );
 }
 
@@ -27,7 +27,7 @@ export function reanalyzeDocument(documentVersionId: string, organizationSlug: s
   return apiPost<DocumentProcessResult>(
     `/api/documents/${encodeURIComponent(documentVersionId)}/reanalyze?organization_slug=${encodeURIComponent(organizationSlug)}`,
     {},
-    120000,
+    30 * 60 * 1000,
   );
 }
 
