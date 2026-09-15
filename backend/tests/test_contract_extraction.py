@@ -24,6 +24,7 @@ from app.ai.contract_extractor import (
 from app.ai.service import AIService
 from app.api.routes import documents as documents_module
 from app.core.config import Settings
+from app.database.ai_selection import set_ai_selection, set_setting
 from app.documents.extraction.schemas import (
     ExtractionUnit,
     SourceType,
@@ -37,7 +38,15 @@ from tests.helpers_group import build_handler, chat_reply
 
 client = TestClient(medflux_app)
 settings = Settings(_env_file=None)
-MODEL = settings.ollama_model
+MODEL = "qwen3:8b-test"
+
+
+@pytest.fixture(autouse=True)
+def _explicit_model_selection_for_mocked_ai():
+    set_ai_selection("ollama", MODEL)
+    yield
+    for key in ("ai_provider", "ai_model", "ai_provider_endpoint"):
+        set_setting(key, None)
 
 
 # ---------------------------------------------------------------- Fixtures
