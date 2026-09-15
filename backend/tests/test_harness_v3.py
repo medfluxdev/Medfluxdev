@@ -256,6 +256,16 @@ class FakeProvider:
                     "applicability": self.cost_applicability,
                     "evidence_refs": [{"block_id": ref, "quote": "1.650,00 EUR"}],
                 }]})
+            if "Resolve ONLY contract-field family costs" in text:
+                return json.dumps({"candidates": [{
+                    "field": "costs.annual_cost",
+                    "value": {"amount": 1650, "currency": "EUR", "period": "annual"},
+                    "status": "supported",
+                    "applicability": self.cost_applicability,
+                    "evidence_refs": [{"block_id": ref, "quote": "1.650,00 EUR"}],
+                }]})
+            if "Resolve ONLY contract-field family payment" in text:
+                return json.dumps({"candidates": []})
             if "identity, dates, termination" in text and "related contract-field pack" in text:
                 facts = [{
                     "field": "identity.contract_number", "value": "452664",
@@ -392,9 +402,8 @@ async def test_v3_full_native_path_records_stages_and_contract():
     assert "global_understanding" in purposes
     assert any(p.startswith("understanding:") for p in purposes)
     assert "applicability" in purposes
-    assert any(p.startswith("resolve_pack:identity:") for p in purposes)
-    assert any(p.startswith("resolve_pack:dates:") for p in purposes)
-    assert any(p.startswith("resolve_pack:costs:") for p in purposes)
+    assert any(p.startswith("resolve_pack:core:") for p in purposes)
+    assert any(p.startswith("resolve_pack:commercial:") for p in purposes)
 
     global_call = next(row for row in result.diagnostics["calls"] if row["purpose"] == "global_understanding")
     assert global_call["stage"] == "global"
@@ -744,7 +753,7 @@ async def test_b_family_packing_records_small_real_reserve_not_static_magic():
 def test_b_measured_output_retry_only_for_eligible_stages():
     assert measured_output_budget("resolve:identity:0", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is not None
-    assert measured_output_budget("resolve_pack:costs:0", prompt_tokens=3000,
+    assert measured_output_budget("resolve_pack:core:0", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is not None
     assert measured_output_budget("vision:p1:a", prompt_tokens=3000,
                                   capacity=8192, base_output=1800) is None
@@ -924,6 +933,48 @@ async def test_e_resolve_stage_recovers_via_measured_retry():
     assert result.contract.identity.supplier == "MedTech GmbH"
 
 
+class PersistentCommercialTruncationProvider(FakeProvider):
+    async def generate_request(self, text, system, schema, max_tokens, context_tokens, images=None):
+        if (
+            schema["title"] == "CandidateBatch"
+            and "costs, payment" in text
+            and "related contract-field pack" in text
+        ):
+            self.requests.append((text, images, context_tokens))
+            self.last_done_reason = "length"
+            return '{"candidates": ['
+        return await super().generate_request(
+            text, system, schema, max_tokens, context_tokens, images
+        )
+
+
+@pytest.mark.asyncio
+async def test_e_persistent_multi_family_truncation_splits_only_failed_pack():
+    provider = PersistentCommercialTruncationProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+
+    assert result.contract is not None, result.diagnostics["issues"]
+    assert result.contract.identity.supplier == "MedTech GmbH"
+    assert result.contract.costs.annual_cost.amount == 1650
+
+    decisions = result.diagnostics["context_decisions"]
+    assert any(
+        row.get("decision") == "split_pack_after_output_truncation"
+        and row.get("purpose", "").startswith("resolve_pack:commercial:")
+        for row in decisions
+    )
+    assert any(
+        row.get("decision") == "split_family_recovered"
+        and "commercial-costs" in row.get("purpose", "")
+        for row in decisions
+    )
+    assert any(
+        row.get("purpose", "").startswith("resolve_pack:commercial:")
+        and row.get("error_category") == "truncated_output"
+        for row in result.diagnostics["calls"]
+    )
+
+
 def test_e_retry_bounds_are_stage_local_and_never_global():
     # resolve/ground eligible; vision never; oversized prompts never.
     assert measured_output_budget("ground:identity:0", 2500, 8192, 1800) == 2800
@@ -1052,25 +1103,20 @@ async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
 
 
 @pytest.mark.asyncio
-async def test_fact_resolution_isolates_semantic_families_after_real_truncation():
+async def test_semantic_packs_reduce_resolve_stage_call_fanout():
     provider = FakeProvider()
     result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
     resolve_calls = [
         row for row in result.diagnostics["calls"]
         if row.get("stage") == "resolve"
     ]
-    purposes = {str(row.get("purpose")) for row in resolve_calls}
-    for family in ("identity", "dates", "termination", "costs", "payment", "equipment", "services", "sla"):
-        assert any(p.startswith(f"resolve_pack:{family}:") for p in purposes)
-    assert not any(p.startswith("resolve_pack:commercial:") for p in purposes)
-    assert not any(p.startswith("resolve_pack:core:") for p in purposes)
-    assert not any(p.startswith("resolve_pack:operations:") for p in purposes)
+    purposes = {row.get("purpose") for row in resolve_calls}
+    assert any(str(p).startswith("resolve_pack:core:") for p in purposes)
+    assert any(str(p).startswith("resolve_pack:commercial:") for p in purposes)
+    assert any(str(p).startswith("resolve_pack:operations:") for p in purposes)
+    assert not any(str(p).startswith("resolve:identity:") for p in purposes)
     outcomes = {row["pack"]: row for row in result.diagnostics["pack_outcomes"]}
-    assert set(outcomes) == {
-        "identity", "dates", "termination", "costs",
-        "payment", "equipment", "services", "sla",
-    }
-    assert outcomes["identity"]["candidate_count"] >= 1
+    assert set(outcomes) == {"core", "commercial", "operations"}
 
 
 def test_source_has_parseable_contract_map_control_flow():
