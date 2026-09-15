@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 param(
     [int]$Port = $(if ($env:MEDFLUX_PG_PORT) { [int]$env:MEDFLUX_PG_PORT } else { 5432 }),
     [string]$PgCtlPath = $env:MEDFLUX_PG_CTL,
-    [string]$DataDirOverride = $env:MEDFLUX_PGDATA
+    [string]$DataDirOverride = $env:MEDFLUX_PGDATA,
+    [switch]$SkipServiceDiscovery
 )
 
 function Test-MedfluxPort {
@@ -39,16 +40,18 @@ if (Test-MedfluxPort -TargetPort $Port) {
     exit 0
 }
 
-$services = @(Get-Service -Name "*postgres*" -ErrorAction SilentlyContinue)
-foreach ($service in $services) {
-    if ($service.Status -ne "Running") {
-        try {
-            Start-Service -Name $service.Name -ErrorAction Stop
-        } catch {
-            continue
+if (-not $SkipServiceDiscovery) {
+    $services = @(Get-Service -Name "*postgres*" -ErrorAction SilentlyContinue)
+    foreach ($service in $services) {
+        if ($service.Status -ne "Running") {
+            try {
+                Start-Service -Name $service.Name -ErrorAction Stop
+            } catch {
+                continue
+            }
         }
+        if (Wait-MedfluxPort -TargetPort $Port -Attempts 20) { exit 0 }
     }
-    if (Wait-MedfluxPort -TargetPort $Port -Attempts 20) { exit 0 }
 }
 
 $root = Split-Path -Parent $PSScriptRoot
