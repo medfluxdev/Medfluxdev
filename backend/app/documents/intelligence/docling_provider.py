@@ -269,9 +269,14 @@ class DoclingDocumentProvider(DocumentIntelligenceProvider):
                     else TableFormerMode.FAST
                 ),
             )
+        accelerator = {
+            "auto": AcceleratorDevice.AUTO,
+            "cuda": AcceleratorDevice.CUDA,
+            "cpu": AcceleratorDevice.CPU,
+        }[settings.device]
         opts.accelerator_options = AcceleratorOptions(
             num_threads=settings.num_threads or 4,
-            device=AcceleratorDevice.CPU,  # CPU-fokussiert, CUDA via torch spaeter moeglich
+            device=accelerator,
         )
 
         options_hash = create_pipeline_options_hash(opts)
@@ -297,12 +302,13 @@ class DoclingDocumentProvider(DocumentIntelligenceProvider):
             do_ocr=bool(settings.do_ocr),
             do_table_structure=bool(settings.do_table_structure),
             table_mode=settings.table_mode,
-            device="cpu",
+            device=settings.device,
             preprocessing="structural_roles_v1" if settings.structural_roles else None,
             config={
                 "pipeline_hash": self._pipeline_hash,
                 "hf_symlinks": "disabled",
                 "structural_roles": bool(settings.structural_roles),
+                "accelerator_device": settings.device,
             },
         )
 
