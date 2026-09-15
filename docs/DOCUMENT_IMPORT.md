@@ -75,6 +75,19 @@ Mögliche per-Datei-Status:
 Der HTTP-Request wartet auf die serverseitige Verarbeitung; der aktuelle
 Importendpunkt startet **keinen** separaten Background-AI-Job.
 
+## Bildbasierte PDF-Verarbeitung
+
+Der produktive Standard ist Harness V3 mit einem lokalen Vision-Modell. Wenn
+Docling/OCR keinen brauchbaren Text liefert, aber echte PDF-Seiten vorhanden
+sind, endet der Import nicht mehr am Text-Gate. Die Seiten werden lokal,
+größenbegrenzt gerendert und dem konfigurierten lokalen Vision-Modell übergeben.
+Visuell gelesene Belege bleiben prüfpflichtig. Ein Analysefehler wird in der
+Import-UI ausdrücklich als Analysefehler (nicht als grüner Erfolg) dargestellt.
+
+Der synchrone Browser-Request hat wegen lokaler OCR/VLM-Laufzeiten ein
+30-Minuten-Fenster; dies ändert nichts an den serverseitigen begrenzten
+Provider-/Call-Budgets.
+
 ## Lokale Speicherung (nur lokal)
 
 Dateien bleiben ausschließlich lokal unter `data/contracts/`. Es gibt keine

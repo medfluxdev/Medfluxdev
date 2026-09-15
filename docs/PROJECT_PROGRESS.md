@@ -3844,3 +3844,25 @@ Endabnahme erfolgt nach der manuellen UAT-RÃ¼ckschau des Kunden)
 
 ### Progress
 - No new MVP main step was added; this is a corrective hardening pass across the existing import/AI/detail pipeline.
+
+
+## Reliability hardening – 2026-09-15 (scan/Vision production path)
+
+**Status:** Implemented; automated CI and real-contract UAT are the release gate.
+
+A repository/runtime audit after real scanned-PDF testing found that image-only PDFs were rejected by a text-only analyzability gate before local AI could run. The production default also still selected Harness V2 and a text-only Qwen model although V3/Vision code existed.
+
+Implemented:
+- Harness V3 + `qwen3-vl:8b-instruct` are production defaults.
+- stale private `HARNESS_ENGINE=v2` values safely route to V3; legacy V2 requires `v2-compat`.
+- image-only PDFs with real pages reach V3 instead of failing before AI.
+- textless visual blocks keep direct bounded transcription even with page batches.
+- exact `visible_text` can ground facts; descriptions/inference cannot.
+- vision-only evidence is explicitly review-required and included in semantic grounding.
+- failed analysis is no longer styled as successful in the import UI.
+- synchronous local AI import/retry windows raised to 30 minutes.
+- Windows startup tries existing local PostgreSQL safely before Docker and checks `/ready`.
+- regression coverage expanded for truly textless scanned documents.
+- full findings/UAT criteria: `docs/RELIABILITY_AUDIT_2026-09-15.md`.
+
+No external AI service, destructive data migration, fixture contract truth or automatic acceptance of visual uncertainty was introduced.

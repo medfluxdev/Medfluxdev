@@ -22,7 +22,7 @@ Medflux importiert Verträge lokal (PDF/DOCX), analysiert sie vollständig lokal
 |----------------|-----------------------------------------------|
 | Frontend       | Next.js / React / TypeScript                  |
 | Backend        | Python + FastAPI                              |
-| Lokale KI      | Ollama (Qwen3 8B Q4)                          |
+| Lokale KI      | Ollama (Qwen3-VL 8B, lokal)                     |
 | Datenbank MVP  | SQLite                                        |
 | Produktion     | PostgreSQL                                    |
 | PDF            | PyMuPDF                                       |
@@ -53,7 +53,7 @@ Medflux/
 
 - Node.js 20+
 - Python 3.11+
-- Ollama (mit installiertem Modell, z. B. `qwen3:8b-q4`)
+- Ollama (Produktionspfad: installiertes Vision-Modell `qwen3-vl:8b-instruct`)
 - (optional) Docker
 
 ### Backend starten (lokal)

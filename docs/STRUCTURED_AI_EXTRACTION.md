@@ -1,8 +1,8 @@
 # Medflux – Strukturierte KI-Extraktion
 
 > **Produktionsstand:** Der produktive Importpfad verwendet standardmäßig den
-> provider-neutralen Contract Intelligence Harness (aktuell `v2`, optional
-> `v3`) auf Basis des kanonischen `DocumentIntelligenceResult`.
+> provider-neutralen Contract Intelligence Harness `v3` auf Basis des kanonischen
+> `DocumentIntelligenceResult`. `v2-compat` bleibt als expliziter textorientierter Kompatibilitätspfad verfügbar.
 > `StructuredContractExtractor` / `ContractAnalysisOrchestrator` bleiben als
 > kontrollierter Legacy-/Testpfad erhalten, sind aber **nicht** der Default des
 > Endpunkts `POST /api/documents/import`.
@@ -15,10 +15,11 @@ Upload PDF/DOCX
   -> geschütztes Original + DocumentVersion
   -> Document Intelligence (PDF: Docling, DOCX: python-docx)
   -> DocumentIntelligenceResult (canonical)
-  -> Analyzierbarkeits-Gate (Text/Units müssen vorhanden sein)
-  -> HarnessV2/HarnessV3
+  -> Analyzierbarkeits-Gate (Text ODER bei PDF echte Seiten für V3-Vision)
+  -> HarnessV3 (`v2-compat` nur expliziter Kompatibilitätsmodus)
   -> AIService.harness_runtime()
-  -> lokaler AIProvider (z. B. Ollama / qwen3:8b)
+  -> lokaler AIProvider (Standard: Ollama / qwen3-vl:8b-instruct)
+  -> bei Scan/image-heavy PDF: bounded Page/Region Rendering -> VLM Vision
   -> source-grounded Facts + Evidence
   -> ContractAnalysisResult
   -> deterministische Berechnung/Warnungen
@@ -30,6 +31,25 @@ Wenn keine belastbar belegte Vertragsinformation entsteht, liefert der Harness
 einen sichtbaren Draft/Placeholder ohne `accepted_extraction_id`, damit
 Quelle und Fehlerlage in der UI erreichbar bleiben. Ein Placeholder ist **kein
 erfolgreich analysierter Vertrag**.
+
+### Gescannte / bildbasierte PDFs
+
+Ein PDF ohne extrahierbaren OCR-/Native-Text wird im produktiven V3-Pfad **nicht
+vor der KI abgebrochen**. Vorhandene PDF-Seiten werden lokal gerendert und über
+den Vision-Kanal des aktiven lokalen Modells gelesen. Verbatim-Inhalte aus
+`VisionObservation.visible_text` dürfen als Evidence verwendet werden, aber nur
+nach exakter Quote-Auflösung; Vision-Beschreibungen oder Inferenz sind niemals
+Evidence. Rein visuell transkribierte Evidence wird mit
+`requires_review=true` persistiert, damit ein Krankenhaus-Workflow die
+modellgelesene Quelle vor verbindlicher Nutzung prüfen kann.
+
+Alte lokale `.env`-Dateien mit `HARNESS_ENGINE=v2` werden sicher auf V3 geroutet,
+damit ein veralteter privater Konfigurationswert den Scan-Pfad nicht wieder
+abschaltet. Der alte Text-Harness ist nur noch über `v2-compat` explizit wählbar.
+
+Ein text-only Modell kann weiterhin native Textdokumente analysieren. Bei
+image-heavy Dokumenten führt fehlende Vision-Fähigkeit zu einem sichtbaren
+Analysefehler/Prüfbedarf statt zu einem scheinbar erfolgreichen leeren Vertrag.
 
 ### Diagnose-Metriken
 

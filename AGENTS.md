@@ -8,7 +8,7 @@ Medflux ist ein lokales, schlankes KI-System für deutsche Krankenhäuser zur An
 
 Kernfunktionen (Roadmap):
 - Lokaler Import mehrerer PDF/DOCX-Verträge
-- Vollständig lokale KI-Analyse (Ollama, Qwen3 8B Q4)
+- Vollständig lokale KI-Analyse (Ollama, Qwen3-VL 8B; Text + Vision)
 - Strukturierte Extraktion von Vertragsdaten (Quelle + Seite + Confidence)
 - Überwachung von Vertragsende und Kündigungsfristen
 - Kostenauswertung (jährlich/monatlich/Gesamt)
@@ -21,7 +21,7 @@ Kernfunktionen (Roadmap):
 |---------------|------------------------------------|
 | Frontend      | Next.js / React / TypeScript       |
 | Backend       | Python + FastAPI                   |
-| Lokale KI     | Ollama (Qwen3 8B Q4)               |
+| Lokale KI     | Ollama (Qwen3-VL 8B, lokal)          |
 | DB MVP        | SQLite, Produktion: PostgreSQL     |
 | PDF           | PyMuPDF                            |
 | DOCX          | python-docx                        |
