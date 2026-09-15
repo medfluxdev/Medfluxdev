@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.documents.intelligence.canonical import DocumentIntelligenceResult, Element
+from app.documents.intelligence.canonical import DocumentIntelligenceResult, Element, Method
 
 
 @dataclass
@@ -47,9 +47,13 @@ class DocumentModel:
                 if el.table:
                     represented_tables.add(el.table.table_id)
 
-                visual = bool(el.metadata.get("requires_vision")) or el.type.value in {
-                    "image", "figure", "checkbox", "signature", "stamp", "form"
-                }
+                visual = (
+                    bool(el.metadata.get("requires_vision"))
+                    or el.method == Method.OCR
+                    or el.type.value in {
+                        "image", "figure", "checkbox", "signature", "stamp", "form"
+                    }
+                )
                 # Empty OCR/layout artifacts waste context.  Keep an empty block only
                 # when its visual region itself may contain contract meaning.
                 if not text.strip() and not visual:
