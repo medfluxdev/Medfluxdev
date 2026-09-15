@@ -23,13 +23,22 @@ from app.ai.schemas import AITestRequest
 from app.ai.service import AIService
 from app.api.routes import ai as ai_router
 from app.core.config import Settings
+from app.database.ai_selection import set_ai_selection, set_setting
 from app.main import app
 
 client = TestClient(app)
 settings = Settings(_env_file=None)
 
-MODEL = settings.ollama_model
+MODEL = "qwen3:8b-test"
 SYSTEM = "Systemhinweis."
+
+
+@pytest.fixture(autouse=True)
+def _explicit_model_selection():
+    set_ai_selection("ollama", MODEL)
+    yield
+    for key in ("ai_provider", "ai_model", "ai_provider_endpoint"):
+        set_setting(key, None)
 
 
 def _client(handler: Callable[[httpx.Request], httpx.Response]) -> httpx.AsyncClient:
@@ -41,29 +50,29 @@ def _json(json: dict, status: int = 200) -> httpx.Response:
 
 
 def _provider(handler: Callable[[httpx.Request], httpx.Response]) -> OllamaProvider:
-    return OllamaProvider(settings, client=_client(handler))
+    return OllamaProvider(settings, model_resolver=lambda: MODEL, client=_client(handler))
 
 
 # ---------------------------------------------------------------- Konfiguration
 
 def test_ai_provider_configuration():
     assert settings.ai_provider == "ollama"
-    assert settings.ollama_model == "qwen3-vl:8b-instruct"
+    assert settings.ollama_model == ""
     assert settings.ollama_base_url == "http://127.0.0.1:11434"
     assert settings.ai_request_timeout_seconds > 0
     assert 0.0 <= settings.ai_temperature <= 1.0
     assert settings.ai_max_tokens > 0
 
 
-def test_no_external_ai_provider_configured():
-    s = Settings(_env_file=None, ai_provider="bogus")
+def test_no_user_selection_means_ai_not_configured():
+    s = Settings(_env_file=None)
     svc = AIService(s)
     assert svc.configured is False
 
 
 @pytest.mark.asyncio
 async def test_generate_raises_without_configured_provider():
-    s = Settings(_env_file=None, ai_provider="bogus")
+    s = Settings(_env_file=None)
     svc = AIService(s)
     with pytest.raises(AIUnavailableError):
         await svc.generate("x")
@@ -71,12 +80,14 @@ async def test_generate_raises_without_configured_provider():
 
 @pytest.mark.asyncio
 async def test_status_without_configured_provider():
-    s = Settings(_env_file=None, ai_provider="bogus")
+    s = Settings(_env_file=None)
     svc = AIService(s)
     st = await svc.status()
     assert st.available is False
     assert st.model_available is False
-    assert "Kein lokaler KI-Provider" in st.message
+    assert st.provider is None
+    assert st.model is None
+    assert "Kein KI-Modell ausgewählt" in st.message
 
 
 # ---------------------------------------------------------------- Ollama verfügbar

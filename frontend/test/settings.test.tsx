@@ -35,7 +35,7 @@ function snapshotFixture(overrides: Partial<AISnapshot> = {}): AISnapshot {
     selection: {
       provider_id: "ollama",
       model_id: "qwen3:8b-q4",
-      source: "env",
+      source: "db",
       state: "ready",
       provider_reachable: true,
       model_available: true,
@@ -66,8 +66,6 @@ function snapshotFixture(overrides: Partial<AISnapshot> = {}): AISnapshot {
         models: [],
       },
     ],
-    configured_default_provider: "ollama",
-    configured_default_model: "qwen3:8b",
     application_version: "0.1.0",
     ...overrides,
   };
@@ -167,6 +165,8 @@ describe("Einstellungen (STEP 6B, Anbieter-unabhängig)", () => {
     await waitFor(() =>
       expect(screen.getByRole("option", { name: /lm-modell/ })).toBeInTheDocument()
     );
+    expect(screen.getByLabelText("KI-Modell")).toHaveValue("");
+    await user.selectOptions(screen.getByLabelText("KI-Modell"), ["lm-modell"]);
     expect(screen.getByText("Text")).toBeInTheDocument();
   });
 
@@ -210,6 +210,26 @@ describe("Einstellungen (STEP 6B, Anbieter-unabhängig)", () => {
         )
       ).toBeInTheDocument()
     );
+  });
+
+  it("wählt niemals automatisch ein Modell aus, wenn noch keine Auswahl gespeichert ist", async () => {
+    await renderWithSnapshot(
+      snapshotFixture({
+        selection: {
+          provider_id: null,
+          model_id: null,
+          source: "none",
+          state: "unselected",
+          provider_reachable: false,
+          model_available: false,
+          message_de: "Kein KI-Modell ausgewählt. Bitte Provider und Modell bewusst auswählen.",
+        },
+      })
+    );
+    expect(screen.getByText("Nicht ausgewählt")).toBeInTheDocument();
+    expect(screen.getByLabelText(/KI-Provider/)).toHaveValue("");
+    expect(screen.getByLabelText("KI-Modell")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Auswahl speichern" })).toBeDisabled();
   });
 
   it("hat keine automatisierten WCAG-A11y-Verstöße", async () => {

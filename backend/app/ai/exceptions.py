@@ -16,8 +16,8 @@ class AIProviderError(Exception):
 class AIUnavailableError(AIProviderError):
     """Ollama ist nicht erreichbar / nicht gestartet."""
 
-    def __init__(self) -> None:
-        super().__init__("Die lokale KI ist derzeit nicht verfügbar.")
+    def __init__(self, user_message: str = "Die lokale KI ist derzeit nicht verfügbar.") -> None:
+        super().__init__(user_message)
 
 
 class AIModelMissingError(AIProviderError):

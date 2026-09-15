@@ -3867,3 +3867,14 @@ Implemented:
 - full findings/UAT criteria: `docs/RELIABILITY_AUDIT_2026-09-15.md`.
 
 No external AI service, destructive data migration, fixture contract truth or automatic acceptance of visual uncertainty was introduced.
+
+
+## Explicit AI model selection – 2026-09-15
+
+Medflux besitzt kein aktives Standardmodell mehr. Ein Modell wird ausschließlich
+über die Einstellungsoberfläche bewusst ausgewählt und in der Datenbank gespeichert.
+Ohne vollständige Provider-/Modell-Auswahl bleibt der KI-Zustand `unselected` und
+Import/Analyse darf keine Inferenz starten. Environment- oder Bootstrap-Werte
+dürfen weder bei fehlender Auswahl noch bei DB-Fehlern still als aktives Modell
+übernommen werden. Ein Provider-Wechsel in der UI wählt ebenfalls nicht automatisch
+das erste gefundene Modell; der Benutzer muss das Modell explizit auswählen.

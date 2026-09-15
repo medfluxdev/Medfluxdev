@@ -98,7 +98,7 @@ def test_selection_endpoint_persisted_and_cleared():
     assert endpoint2 is None
 
 
-def test_resolve_defaults_to_environment_when_unset():
+def test_no_active_model_when_user_has_not_selected_one():
     settings = _settings()
     from app.ai.settings_service import (
         resolve_model_id,
@@ -106,9 +106,9 @@ def test_resolve_defaults_to_environment_when_unset():
         selection_source,
     )
 
-    assert resolve_provider_id(settings) == settings.ai_provider
-    assert resolve_model_id(settings) == settings.ollama_model
-    assert selection_source(settings) == "env"
+    assert resolve_provider_id(settings) is None
+    assert resolve_model_id(settings) is None
+    assert selection_source(settings) == "none"
 
 
 def test_resolve_prefers_persisted_selection():
@@ -133,7 +133,7 @@ def test_services_resolve_persisted_active_ids():
     assert svc.active_model_id() == "modell-x"
 
 
-def test_db_failure_falls_back_to_environment(monkeypatch):
+def test_db_failure_never_activates_environment_model(monkeypatch):
     settings = _settings()
 
     def boom():
@@ -142,26 +142,26 @@ def test_db_failure_falls_back_to_environment(monkeypatch):
     monkeypatch.setattr("app.database.ai_selection.get_ai_selection", boom)
     from app.ai.settings_service import resolve_model_id, resolve_provider_id
 
-    assert resolve_provider_id(settings) == settings.ai_provider
-    assert resolve_model_id(settings) == settings.ollama_model
+    assert resolve_provider_id(settings) is None
+    assert resolve_model_id(settings) is None
 
 
 # ---------------------------------------------------------------- Auswahl-Zustand
 
-def test_selection_ready_env_source():
+def test_selection_unselected_until_user_saves_provider_and_model():
     settings = _settings()
-    providers = [_provider("ollama", [settings.ollama_model])]
+    providers = [_provider("ollama", ["qwen3:8b"])]
     sel = build_selection(settings, providers)
-    assert sel.state == "ready"
-    assert sel.provider_reachable is True
-    assert sel.model_available is True
-    assert sel.source == "env"
-    assert "Bereit" in sel.message_de
+    assert sel.state == "unselected"
+    assert sel.provider_id is None
+    assert sel.model_id is None
+    assert sel.source == "none"
+    assert "ausgewählt" in sel.message_de
 
 
 def test_saved_unreachable_provider_no_silent_fallback():
     settings = _settings()
-    set_ai_selection("ollama", settings.ollama_model)
+    set_ai_selection("ollama", "qwen3:8b")
     providers = [
         _provider("ollama", [], reachable=False),
         _provider("lmstudio", ["anderes"], reachable=True),
@@ -179,7 +179,7 @@ def test_saved_unreachable_provider_no_silent_fallback():
 def test_saved_model_missing_flagged_not_silent():
     settings = _settings()
     set_ai_selection("ollama", "geister-modell")
-    providers = [_provider("ollama", [settings.ollama_model], reachable=True)]
+    providers = [_provider("ollama", ["qwen3:8b"], reachable=True)]
     sel = build_selection(settings, providers)
     assert sel.state == "unavailable"
     assert sel.provider_reachable is True
@@ -227,16 +227,15 @@ def test_generic_selection_readiness_uses_endpoint():
 @pytest.mark.asyncio
 async def test_status_and_selection_state_agree():
     settings = _settings()
+    set_ai_selection("ollama", "qwen3:8b")
     mock = httpx.AsyncClient(
         transport=httpx.MockTransport(
-            lambda req: httpx.Response(
-                200, json={"models": [{"name": settings.ollama_model}]}
-            )
+            lambda req: httpx.Response(200, json={"models": [{"name": "qwen3:8b"}]})
         )
     )
     svc = AIService(settings, client=mock)
     st = await svc.status()
-    providers = [_provider("ollama", [settings.ollama_model])]
+    providers = [_provider("ollama", ["qwen3:8b"])]
     sel = build_selection(settings, providers)
     assert st.available is True
     assert st.model_available is True
@@ -272,8 +271,6 @@ def test_put_selection_persists_and_returns_snapshot(monkeypatch, engine):
             message_de="Bereit: 'Ollama' mit Modell 'qwen3:8b'.",
         ),
         providers=[_provider("ollama", ["qwen3:8b"])],
-        configured_default_provider="ollama",
-        configured_default_model="qwen3:8b",
         application_version="0.1.0",
     )
 
