@@ -457,6 +457,31 @@ async def test_v3_true_image_only_scan_produces_review_required_grounded_truth()
 
 
 @pytest.mark.asyncio
+async def test_v3_true_image_only_scan_without_vision_model_fails_fast():
+    source = scan_document(3).model_copy(update={
+        "canonical_text": "",
+        "pages": [page.model_copy(update={"text": "", "elements": [
+            element.model_copy(update={"text": ""}) for element in page.elements
+        ]}) for page in scan_document(3).pages],
+    })
+    provider = FakeProvider(block_ref="p1:s1")
+
+    result = await HarnessV3(v3_settings(), ai(provider, vision=False)).analyze(
+        source,
+        image_loader=lambda block: "region-image",
+        page_image_loader=lambda page: "page-image",
+    )
+
+    assert result.contract is None
+    assert result.ai_call_count == 0
+    assert provider.requests == []
+    assert result.prompt_version == "harness-v3"
+    assert result.diagnostics["harness_version"] == "v3"
+    assert result.diagnostics["issues"] == ["vision_capability_required"]
+    assert "Vision-Modell" in result.message
+
+
+@pytest.mark.asyncio
 async def test_v3_image_heavy_without_vision_degrades_gracefully():
     provider = FakeProvider(block_ref="p1:s1")
     result = await HarnessV3(v3_settings(), ai(provider, vision=False)).analyze(
