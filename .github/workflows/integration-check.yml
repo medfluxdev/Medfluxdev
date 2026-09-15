@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - Ahmad
+      - JAMAL
   pull_request:
     branches:
       - main
@@ -99,4 +99,7 @@ jobs:
           }
           if ($launcher -notmatch "/ready") {
             throw "Start Software.bat does not wait for backend readiness."
+          }
+          if ($launcher -notmatch "\$r\.status -eq 'ready'") {
+            throw "Start Software.bat does not honor the /ready status contract."
           }
