@@ -35,6 +35,8 @@ PRODUCT_DOMAINS = [
     "calculation_run",
     "warning_evaluation_run",
     "calculation_review_flag",
+    "demo_workspace",
+    "demo_workspace_entry",
 ]
 
 

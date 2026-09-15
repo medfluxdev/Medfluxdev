@@ -11,7 +11,6 @@ from app.api.routes import (
     contracts,
     cost_center_routes,
     dashboard,
-    demo,
     documents,
     equipment,
     health,
@@ -101,7 +100,6 @@ app.include_router(contract_billing.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(operations.router)
-app.include_router(demo.router)
 
 
 @app.get("/")

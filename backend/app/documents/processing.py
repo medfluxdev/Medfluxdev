@@ -67,7 +67,6 @@ from app.database.services import (
     upsert_processing_summary,
 )
 from app.database.session import create_session
-from app.demo.workspace import track_contract
 from app.documents.extraction.schemas import (
     ExtractionUnit,
     FileType,
@@ -250,12 +249,11 @@ class DocumentProcessingService:
         )
 
     def _finalize_visibility(self, result, organization_id) -> ProcessedDocument:
-        """Stellt Sichtbarkeit sicher (Platzhalter) und berücksichtigt den Demo-Workspace.
+        """Stellt ausschließlich die normale Produkt-Sichtbarkeit sicher.
 
-        - `contract_id` fehlt bei einem persistierten Fehlschlag ⇒ es wird ein
-          Platzhalter-Vertrag sichergestellt, damit die UI das Dokument mit
-          Quelle und Fehler-Lage zeigen kann (failure-safe).
-        - Während der Demo registriert `track_contract` nur die Demo-Uploads.
+        Fehlt `contract_id` bei einem persistierten Analysefehler, wird ein
+        Platzhalter-Vertrag sichergestellt, damit Quelle und Fehlerstatus in der
+        UI sichtbar bleiben. Es gibt keinen Demo-/UAT-Sonderbestand.
         """
         if result.contract_id is None and result.document_version_id:
             try:
@@ -270,21 +268,6 @@ class DocumentProcessingService:
             except Exception:
                 logger.exception("Failed to ensure placeholder visibility")
                 return result
-        if result.contract_id:
-            try:
-                with create_session() as session:
-                    track_contract(
-                        session,
-                        contract_id=uuid.UUID(result.contract_id),
-                        document_version_id=(
-                            uuid.UUID(result.document_version_id)
-                            if result.document_version_id
-                            else None
-                        ),
-                    )
-                    session.commit()
-            except Exception:
-                logger.exception("Failed to track workspace contract")
         return result
 
     def resume_document(

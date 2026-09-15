@@ -3878,3 +3878,18 @@ Import/Analyse darf keine Inferenz starten. Environment- oder Bootstrap-Werte
 dürfen weder bei fehlender Auswahl noch bei DB-Fehlern still als aktives Modell
 übernommen werden. Ein Provider-Wechsel in der UI wählt ebenfalls nicht automatisch
 das erste gefundene Modell; der Benutzer muss das Modell explizit auswählen.
+
+
+## Clean product start – 2026-09-15
+
+The runtime no longer exposes or applies the historical Demo/UAT workspace to
+contract lists, dashboard visibility, document imports, or contract detail
+authorization. Fresh installations are required to contain zero contract,
+document, equipment, work-item, evidence, review, warning, calculation and
+Demo/UAT workspace rows. Automated regression tests remain isolated from the
+product database; they are not product data and must never seed the live
+installation.
+
+Existing local development databases are intentionally **not** auto-erased on
+startup. A one-time explicit cleanup is required before UAT so a normal restart
+can never destroy real hospital contracts.

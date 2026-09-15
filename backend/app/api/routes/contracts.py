@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.scope_context import current_scope_context
-from app.database.scope_queries import intersect_ids, scoped_contract_ids
+from app.database.scope_queries import scoped_contract_ids
 
 from app.auth.context import reviewer_name
 from app.contracts.overrides.keys import (
@@ -57,7 +57,6 @@ from app.contracts.review.service import (
     review_detail_response,
     start_review,
 )
-from app.demo.workspace import workspace_contract_ids
 from app.documents.status import build_import_state
 from app.database.models.activity_log import ActivityLog
 from app.database.models import (
@@ -152,13 +151,12 @@ def _record_account_activity(
     )
 
 
-def _workspace_denies(session, organization_id, contract_id: UUID) -> bool:
-    demo_ids = workspace_contract_ids(session)
+def _scope_denies(session, organization_id, contract_id: UUID) -> bool:
+    """Scope-Isolation ohne Demo-/UAT-Sonderzustand."""
     scope = current_scope_context()
-    scope_ids = scoped_contract_ids(
+    allowed = scoped_contract_ids(
         session, organization_id, scope.hospital_id, scope.department_id
     )
-    allowed = intersect_ids(demo_ids, scope_ids)
     if allowed is None:
         return False
     return contract_id not in allowed
@@ -281,14 +279,11 @@ def contract_list(
                 params,
                 organization_id=org.id,
                 request_as_of=today,
-                workspace_contract_ids=intersect_ids(
-                    workspace_contract_ids(session),
-                    scoped_contract_ids(
-                        session,
-                        org.id,
-                        current_scope_context().hospital_id,
-                        current_scope_context().department_id,
-                    ),
+                workspace_contract_ids=scoped_contract_ids(
+                    session,
+                    org.id,
+                    current_scope_context().hospital_id,
+                    current_scope_context().department_id,
                 ),
             )
         except SearchError as exc:
@@ -338,8 +333,8 @@ def contract_detail(
         org = get_organization(session, organization_slug)
         if org is None:
             raise _not_found()
-        if _workspace_denies(session, org.id, cid):
-            raise _not_found()  # Demo-Modus: außerhalb des Workspace unsichtbar
+        if _scope_denies(session, org.id, cid):
+            raise _not_found()
         try:
             data = _build_augmented_detail(
                 session, organization_id=org.id, contract_id=cid
