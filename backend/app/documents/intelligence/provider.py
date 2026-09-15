@@ -30,7 +30,7 @@ class DocumentIntelligenceSettings(BaseModel):
     do_table_structure: bool = True
     table_mode: Literal["accurate", "fast"] = "accurate"
     ocr_lang: list[str] = Field(default_factory=lambda: ["de", "en"])
-    device: Literal["cpu", "cuda", "auto"] = "cpu"
+    device: Literal["cpu", "cuda", "auto"] = "auto"
     num_threads: Optional[int] = None
     max_pages: Optional[int] = None
     ocr_backend: str = "rapidocr"
