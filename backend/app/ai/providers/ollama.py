@@ -272,6 +272,8 @@ class OllamaProvider(AIProvider):
         rp = self.settings.ai_repeat_penalty
         if rp is not None and rp > 0:
             options["repeat_penalty"] = rp
+        if self.settings.ollama_num_gpu is not None:
+            options["num_gpu"] = int(self.settings.ollama_num_gpu)
         return options
 
     async def generate(
