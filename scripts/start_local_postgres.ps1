@@ -92,7 +92,7 @@ if (Test-Path -LiteralPath $PgCtlPath) {
         $startCode = $LASTEXITCODE
 
         if ($startCode -ne 0) {
-            Write-Warning "pg_ctl failed with exit code $startCode: $dataDir"
+            Write-Warning ("pg_ctl failed with exit code {0}: {1}" -f $startCode, $dataDir)
             continue
         }
         if (Wait-MedfluxPort -TargetPort $Port -Attempts 20) { exit 0 }
