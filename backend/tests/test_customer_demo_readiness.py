@@ -373,52 +373,33 @@ class TestFactReviewFlow:
             d.cleanup()
 
 
-class TestDemoWorkspace:
-    def test_enable_disable_isolation(self, engine):
-        from app.demo.workspace import set_workspace_enabled, track_contract
-
+class TestNoDemoWorkspace:
+    def test_demo_workspace_runtime_is_removed(self, engine):
         d, storage, svc = _temp_env()
         try:
             org_slug, contract_id, _ = _build_committed_chain(engine, svc)
             client = TestClient(import_app())
 
-            r0 = client.get(f"/api/contracts?organization_slug={org_slug}&page_size=25")
-            assert r0.status_code == 200
-            assert len(r0.json()["items"]) == 1
+            before = client.get(
+                f"/api/contracts?organization_slug={org_slug}&page_size=25"
+            )
+            assert before.status_code == 200
+            assert len(before.json()["items"]) == 1
 
-            # Ein: Bestand verschwindet (Workspace noch leer).
-            e = client.post("/api/demo/workspace/enable")
-            assert e.json()["enabled"] is True
-            r1 = client.get(f"/api/contracts?organization_slug={org_slug}&page_size=25")
-            assert len(r1.json()["items"]) == 0
+            assert client.post("/api/demo/workspace/enable").status_code == 404
+            assert client.post("/api/demo/workspace/disable").status_code == 404
 
-            # Detail-Zugriff auf Nicht-Workspace = blind
-            r2 = client.get(f"/api/contracts/{contract_id}?organization_slug={org_slug}")
-            assert r2.status_code == 404
+            after = client.get(
+                f"/api/contracts?organization_slug={org_slug}&page_size=25"
+            )
+            assert after.status_code == 200
+            assert len(after.json()["items"]) == 1
 
-            # Track macht den Vertrag sichtbar.
-            session = Session(engine, expire_on_commit=False)
-            session.begin()
-            track_contract(session, contract_id=contract_id)
-            session.commit()
-            session.close()
-            r3 = client.get(f"/api/contracts?organization_slug={org_slug}&page_size=25")
-            assert len(r3.json()["items"]) == 1
-
-            # Aus: Portfolio wieder komplett.
-            d_ = client.post("/api/demo/workspace/disable")
-            assert d_.json()["enabled"] is False
-            r4 = client.get(f"/api/contracts?organization_slug={org_slug}&page_size=25")
-            assert len(r4.json()["items"]) == 1
+            detail = client.get(
+                f"/api/contracts/{contract_id}?organization_slug={org_slug}"
+            )
+            assert detail.status_code == 200
         finally:
-            session = Session(engine)
-            try:
-                from app.demo.workspace import set_workspace_enabled
-                session.begin()
-                set_workspace_enabled(session, enabled=False)
-                session.commit()
-            finally:
-                session.close()
             d.cleanup()
 
 
