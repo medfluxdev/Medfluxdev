@@ -81,3 +81,22 @@ jobs:
           name: frontend-verify-log
           path: frontend/verify.log
           if-no-files-found: ignore
+
+
+  windows-startup-regression:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows PostgreSQL launcher regression checks
+        shell: powershell
+        run: .\scripts\test_start_local_postgres.ps1
+      - name: Verify top-level launcher wiring
+        shell: powershell
+        run: |
+          $launcher = Get-Content -LiteralPath ".\Start Software.bat" -Raw
+          if ($launcher -notmatch "start_local_postgres\.ps1") {
+            throw "Start Software.bat bypasses the PostgreSQL helper."
+          }
+          if ($launcher -notmatch "/ready") {
+            throw "Start Software.bat does not wait for backend readiness."
+          }
