@@ -316,6 +316,7 @@ def test_settings_defaults():
     assert s.ocr_lang == ["de", "en"]
     assert s.table_mode == "accurate"
     assert s.do_table_structure is True
+    assert s.device == "auto"
 
 
 # ------------------------------------------------------------------ PR-1: OCR-Sprach-Normierung
