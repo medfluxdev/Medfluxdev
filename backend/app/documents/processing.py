@@ -1641,23 +1641,31 @@ class DocumentProcessingService:
     def _analysis_diagnostics(analysis):
         if analysis is None:
             return {
-                "chunk_count": 0,
+                # NULL means "not applicable / analysis never started".  Zero used
+                # to be misleading because production Harness runs do not use the
+                # legacy chunk pipeline at all.
+                "chunk_count": None,
                 "processing_duration": 0.0,
                 "timeout_count": 0,
                 "retry_count": 0,
-                "truncated_chunks": 0,
+                "truncated_chunks": None,
                 "ai_call_count": 0,
                 "groups_processed": 0,
                 "evidence_issues": 0,
                 "verifier_issues": 0,
                 "normalization_issues": 0,
             }
+        is_harness = str(getattr(analysis, "prompt_version", "") or "").startswith(
+            "harness-"
+        )
         return {
-            "chunk_count": analysis.chunk_count,
+            # Chunk metrics belong to StructuredContractExtractor only. Harness
+            # uses DocumentModel/ContextPlanner segments instead.
+            "chunk_count": None if is_harness else analysis.chunk_count,
             "processing_duration": analysis.processing_duration,
             "timeout_count": analysis.timeout_count,
             "retry_count": analysis.retry_count,
-            "truncated_chunks": analysis.truncated_chunks,
+            "truncated_chunks": None if is_harness else analysis.truncated_chunks,
             "ai_call_count": analysis.ai_call_count,
             "groups_processed": analysis.groups_processed,
             "evidence_issues": analysis.evidence_issues,
