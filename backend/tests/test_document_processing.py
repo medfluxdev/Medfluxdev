@@ -46,6 +46,7 @@ from app.documents.extraction.schemas import (
 from app.documents.intelligence.canonical import (
     DocumentIntelligenceResult,
     Element,
+    LogicalUnit,
     ElementType,
     Method,
     Page,
@@ -601,3 +602,68 @@ def test_import_route_requires_organization_and_never_exposes_internal_error(mon
     assert payload["documents"][0]["message"] == "Verarbeitung fehlgeschlagen."
     assert "secret" not in response.text
     assert "internal-host" not in response.text
+
+
+def test_canonical_to_extraction_uses_source_extension_not_logical_unit_shape():
+    """A structured PDF must never be reclassified as DOCX."""
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-1",
+        source_sha256="a" * 64,
+        source_filename="structured-contract.pdf",
+        source_path=None,
+        canonical_text="",
+        pages_text=[],
+        pages=[],
+        logical_units=[
+            LogicalUnit(
+                source_type="paragraph",
+                index=1,
+                text="Vertragsnummer PDF-LOGICAL-1",
+                method=Method.NATIVE,
+            )
+        ],
+        provenance=ProcessingProvenance(
+            provider="test",
+            provider_version="1",
+            method=Method.NATIVE,
+            do_ocr=False,
+            do_table_structure=True,
+            geometry_provider=None,
+            config={},
+        ),
+        warnings=[],
+        processing_time_s=0.0,
+    )
+
+    extraction = DocumentProcessingService._canonical_to_extraction(canonical)
+
+    assert extraction.file_type == FileType.PDF
+    assert extraction.text_available is True
+    assert extraction.total_characters == len("Vertragsnummer PDF-LOGICAL-1")
+    assert len(extraction.units) == 1
+
+
+def test_harness_evidence_persistence_is_not_coupled_to_exact_version():
+    contract = DomainContract()
+    source = SourceEvidence(
+        page=2,
+        source_type="page",
+        source_text="Jahrespreis 12.000 EUR",
+        confidence=0.98,
+    )
+    contract.analysis.harness_version = "v2.1"
+    contract.analysis.harness = {
+        "evidence": [
+            {
+                "field": "costs.annual_cost",
+                "source": source.model_dump(mode="json"),
+            }
+        ]
+    }
+
+    _snapshot, evidence = DocumentProcessingService._build_extraction(contract)
+
+    assert len(evidence) == 1
+    assert evidence[0]["field_ref"] == "costs.annual_cost.evidence.0"
+    assert evidence[0]["page"] == 2
+    assert evidence[0]["source_text"] == "Jahrespreis 12.000 EUR"
