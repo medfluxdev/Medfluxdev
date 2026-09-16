@@ -65,7 +65,7 @@ export default function ContractLifecyclePanel({ contractId, organizationSlug }:
     {error ? <InlineAlert tone="warning" role="alert">{error}</InlineAlert> : null}
     <form className="form-grid cw-lifecycle-form" onSubmit={submit}>
       <label>Entscheidung<select value={decision} onChange={(e) => setDecision(e.target.value as ContractLifecycleDecisionKind)}>{DECISIONS.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label>Wirksam am<input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} /></label>
+      <label>Wirksam am<input className="cw-date-input" type="date" lang="de-DE" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} /></label>
       <label className="form-field-wide">Notiz<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></label>
       <div><Button type="submit" variant="primary" disabled={busy}>Entscheidung anlegen</Button></div>
     </form>
