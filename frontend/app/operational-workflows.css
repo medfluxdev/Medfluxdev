@@ -21,3 +21,54 @@
 .work-comments li { padding: .75rem; border: 1px solid var(--border, #d8dee8); border-radius: .65rem; }
 .work-comments li p { margin: .3rem 0; }
 @media (max-width: 900px) { .work-collaboration-panel .form-grid { grid-template-columns: 1fr; } .form-field-wide { grid-column: auto; } }
+
+
+/* Contract lifecycle form: keep native controls aligned and readable. */
+.contract-workspace .cw-section .form-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(190px, .8fr);
+  gap: 14px;
+  align-items: end;
+}
+.contract-workspace .cw-section .form-grid > label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+.contract-workspace .cw-section .form-grid select,
+.contract-workspace .cw-section .form-grid input,
+.contract-workspace .cw-section .form-grid textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid var(--border-strong, #cbd8e4);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text-primary, #0f172a);
+  line-height: 1.35;
+}
+.contract-workspace .cw-section .form-grid input[type="date"] {
+  min-width: 0;
+}
+.contract-workspace .cw-section .form-grid textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+.contract-workspace .cw-section .form-grid .form-field-wide {
+  grid-column: 1 / -1;
+}
+.contract-workspace .cw-section .form-grid > div:last-child {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-start;
+}
+@media (max-width: 760px) {
+  .contract-workspace .cw-section .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .contract-workspace .cw-section .form-grid .form-field-wide,
+  .contract-workspace .cw-section .form-grid > div:last-child {
+    grid-column: auto;
+  }
+}
