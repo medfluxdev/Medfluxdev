@@ -222,7 +222,13 @@ def ai(provider=None):
 
 def test_engine_selection_uses_replacement_harness():
     assert get_harness_class(settings()) is HarnessV3
-    assert HarnessV3 is DirectContractHarness
+    assert issubclass(HarnessV3, DirectContractHarness)
+
+
+def test_production_constructor_accepts_settings_only():
+    harness = HarnessV3(settings())
+    assert isinstance(harness, DirectContractHarness)
+    assert harness.ai is not None
 
 
 def test_source_signals_find_reference_values():
