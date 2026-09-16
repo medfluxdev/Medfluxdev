@@ -222,7 +222,7 @@ def _normalize_date_payload(value: Any) -> Any:
 def _normalize_duration_payload(value: Any) -> Any:
     if isinstance(value, str):
         match = re.search(
-            r"(?P<value>\\d+)\\s*(?P<unit>Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?)",
+            r"(?P<value>\d+)\s*(?P<unit>Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?)",
             value,
             re.IGNORECASE,
         )
@@ -283,6 +283,14 @@ _MONEY_FIELDS = {
     "payment.advance_payment",
 }
 
+_MONEY_PERIOD_BY_FIELD = {
+    "costs.annual_cost": "annual",
+    "costs.monthly_cost": "monthly",
+    "costs.quarterly_cost": "quarterly",
+    "costs.semi_annual_cost": "semi_annual",
+    "costs.one_time_cost": "once",
+}
+
 
 def _normalize_fact_value(field: str, value: Any) -> Any:
     if field in {"dates.start_date", "dates.end_date"}:
@@ -295,7 +303,12 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
     }:
         return _normalize_duration_payload(value)
     if field in _MONEY_FIELDS:
-        return _normalize_money_payload(value)
+        normalized = _normalize_money_payload(value)
+        if isinstance(normalized, dict) and not normalized.get("period"):
+            period = _MONEY_PERIOD_BY_FIELD.get(field)
+            if period:
+                normalized["period"] = period
+        return normalized
     if field == "costs.default_currency" and isinstance(value, str):
         return value.strip().upper()
     if field == "costs.variable_charges" and isinstance(value, list):
