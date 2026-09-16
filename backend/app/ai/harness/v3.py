@@ -71,6 +71,7 @@ from app.ai.harness.pipeline import (
     field_types,
     strict_value,
 )
+from app.ai.harness.source_signals import collect_source_signals
 from app.ai.harness.v3_perception import perceive_option_clusters
 from app.ai.service import AIService
 from app.core.config import Settings
@@ -545,6 +546,7 @@ class HarnessV3:
         )
         provider_id = model_id = None
         document = DocumentModel.build(canonical)
+        source_signals = collect_source_signals(document)
         types = field_types()
         visual_observations: dict[str, VisionObservation] = {}
         section_understandings: list[SectionUnderstanding] = []
@@ -2081,6 +2083,11 @@ class HarnessV3:
                     for key, value in family_types.items()
                 }
 
+                signal_block_ids = {block.id for block in ranked_union}
+                pack_source_signals = [
+                    row for row in source_signals
+                    if row.get("block_id") in signal_block_ids
+                ]
                 prompt = (
                     "Resolve this related contract-field pack in ONE pass: "
                     + ", ".join(pack_families)
@@ -2101,6 +2108,8 @@ class HarnessV3:
                     + json.dumps(catalog, separators=(",", ":"))
                     + "\nCompact semantic state by family: "
                     + compact_pack_semantic_state(semantic_by_family, total_budget=720)
+                    + "\nLiteral source signals (observations only; decide their contractual role yourself): "
+                    + json.dumps(pack_source_signals[:80], ensure_ascii=False, separators=(",", ":"))
                     + "\n"
                 )
                 # Planner overhead must reflect exactly what call() will prepend:
@@ -2766,6 +2775,7 @@ class HarnessV3:
             "budget_exhausted": budget_exhausted,
             "failure_categories": _tally_failure_categories(calls, budget_exhausted),
             "dropped_refs": dropped_refs,
+            "source_signals": source_signals,
             "evidence_binding_failures": evidence_binding_failures,
             "evidence_rebindings": evidence_rebindings,
             "perception": {
