@@ -535,6 +535,7 @@ class HarnessV3:
         evidence_rows: list[dict] = []
         dropped_refs: list[dict] = []
         evidence_binding_failures: list[dict] = []
+        evidence_rebindings: list[dict] = []
         budget_exhausted = False
         contract = Contract()
         planner = ContextPlanner(
@@ -706,12 +707,33 @@ class HarnessV3:
                     return False
                 resolved = resolve_evidence_quote(block, ref.quote)
                 if resolved is None:
+                    exact_matches = []
+                    for other in document.blocks:
+                        matched = resolve_evidence_quote(other, ref.quote)
+                        if matched is not None:
+                            exact_matches.append((other, matched))
+                    if len(exact_matches) == 1:
+                        rebound_block, rebound = exact_matches[0]
+                        evidence_rebindings.append({
+                            "field": candidate.field,
+                            "from_block_id": ref.block_id,
+                            "to_block_id": rebound_block.id,
+                            "page": rebound_block.page,
+                        })
+                        ref.block_id = rebound_block.id
+                        ref.quote = rebound[0]
+                        continue
                     evidence_binding_failures.append({
                         "field": candidate.field,
-                        "reason": "quote_not_found",
+                        "reason": (
+                            "quote_not_found"
+                            if not exact_matches
+                            else "quote_ambiguous_across_blocks"
+                        ),
                         "block_id": ref.block_id,
                         "page": block.page,
                         "quote": ref.quote[:240],
+                        "match_count": len(exact_matches),
                     })
                     return False
                 ref.quote = resolved[0]
@@ -2745,6 +2767,7 @@ class HarnessV3:
             "failure_categories": _tally_failure_categories(calls, budget_exhausted),
             "dropped_refs": dropped_refs,
             "evidence_binding_failures": evidence_binding_failures,
+            "evidence_rebindings": evidence_rebindings,
             "perception": {
                 "option_clusters": [c.model_dump() for c in clusters],
             },
