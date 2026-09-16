@@ -316,3 +316,104 @@ async def test_quote_can_bind_by_literal_source_signal_when_model_quote_is_bad()
         row["field"]: row for row in result.diagnostics["accepted_facts"]
     }
     assert accepted["identity.contract_number"]["page"] == 1
+
+
+@pytest.mark.asyncio
+async def test_missing_page_and_quote_are_auto_anchored_and_dates_normalized():
+    class SparseEvidenceProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] != "ProposedFactBatch":
+                return raw
+            payload = json.loads(raw)
+            for fact in payload["facts"]:
+                if fact["field"] == "identity.supplier":
+                    fact["page"] = None
+                    fact["quote"] = ""
+                if fact["field"] == "dates.start_date":
+                    fact["value"] = "01.04.2025"
+                    fact["page"] = None
+                    fact["quote"] = ""
+                if fact["field"] == "dates.end_date":
+                    fact["value"] = "31.03.2029"
+                    fact["page"] = None
+                    fact["quote"] = ""
+                if fact["field"] == "dates.duration":
+                    fact["value"] = "4 Jahren"
+                    fact["page"] = None
+                    fact["quote"] = ""
+                if fact["field"] == "costs.annual_cost":
+                    fact["value"] = "8.000,00 EUR"
+                    fact["page"] = None
+                    fact["quote"] = ""
+            return json.dumps(payload)
+
+    result = await DirectContractHarness(
+        settings(), ai(SparseEvidenceProvider())
+    ).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert str(result.contract.dates.start_date.date) == "2025-04-01"
+    assert str(result.contract.dates.end_date.date) == "2029-03-31"
+    assert result.contract.dates.duration.value == 4
+    assert result.contract.costs.annual_cost.amount == 8000
+    normalized_fields = {
+        row["field"] for row in result.diagnostics["normalizations"]
+    }
+    assert "dates.start_date" in normalized_fields
+    assert "dates.end_date" in normalized_fields
+    assert "dates.duration" in normalized_fields
+    assert "costs.annual_cost" in normalized_fields
+    accepted = {
+        row["field"]: row for row in result.diagnostics["accepted_facts"]
+    }
+    assert accepted["identity.supplier"]["page"] == 1
+    assert accepted["dates.start_date"]["page"] == 5
+    assert accepted["dates.end_date"]["page"] == 5
+    assert accepted["costs.annual_cost"]["page"] == 8
+
+
+@pytest.mark.asyncio
+async def test_known_time_value_drops_unknown_model_properties_before_validation():
+    class ExtraSlaPropertyProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "sla.service_hours" in text:
+                payload = json.loads(raw)
+                payload["facts"].append(
+                    {
+                        "field": "sla.service_hours",
+                        "value": {
+                            "value": 8,
+                            "unit": "hours",
+                            "original_text": "8 Stunden",
+                            "unexpected": "discard me",
+                        },
+                        "page": None,
+                        "quote": "",
+                        "applicability": "applicable",
+                    }
+                )
+                return json.dumps(payload)
+            return raw
+
+    # No source evidence for this synthetic SLA value, so it must still be
+    # rejected by evidence rather than by schema shape.
+    result = await DirectContractHarness(
+        settings(), ai(ExtraSlaPropertyProvider())
+    ).analyze(document())
+    rows = [
+        row for row in result.diagnostics["rejected_facts"]
+        if row["field"] == "sla.service_hours"
+    ]
+    assert rows
+    assert rows[0]["reason"] == "evidence_not_located"
