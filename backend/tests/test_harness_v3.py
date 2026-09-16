@@ -88,6 +88,44 @@ def native_document(text="Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"):
     )
 
 
+def two_block_document():
+    first = "Vertrag 452664"
+    second = "MedTech GmbH Service 1.650,00 EUR"
+    text = first + "\n" + second
+    return DocumentIntelligenceResult(
+        document_id="synthetic-two-block",
+        source_sha256="9" * 64,
+        canonical_text=text,
+        provenance=ProcessingProvenance(provider="native_pdf"),
+        pages=[
+            Page(
+                page_number=1,
+                width_pt=600,
+                height_pt=800,
+                text=text,
+                elements=[
+                    Element(
+                        element_id="a",
+                        page=1,
+                        reading_order=0,
+                        text=first,
+                        type="paragraph",
+                        method="native",
+                    ),
+                    Element(
+                        element_id="b",
+                        page=1,
+                        reading_order=1,
+                        text=second,
+                        type="paragraph",
+                        method="native",
+                    ),
+                ],
+            )
+        ],
+    )
+
+
 def scan_document(pages: int):
     page_models = []
     for page_number in range(1, pages + 1):
@@ -912,6 +950,34 @@ async def test_e_truncated_output_never_silently_accepted():
         assert row.get("error_category") == "truncated_output"
     # The truncated global payload was never accepted as global meaning.
     assert result.diagnostics["global_understanding"] is None
+
+
+@pytest.mark.asyncio
+async def test_exact_grounded_facts_do_not_require_second_model_veto():
+    provider = FakeProvider()
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
+    assert result.contract is not None, result.diagnostics["issues"]
+    assert result.contract.identity.supplier == "MedTech GmbH"
+    assert not [
+        row for row in result.diagnostics["calls"]
+        if row.get("schema") == "GroundingBatch"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_unique_exact_quote_can_rebind_wrong_model_block_reference():
+    provider = FakeProvider(block_ref="p1:a")
+    result = await HarnessV3(v3_settings(), ai(provider)).analyze(two_block_document())
+    assert result.contract is not None, result.diagnostics["issues"]
+    assert result.contract.identity.supplier == "MedTech GmbH"
+    assert result.contract.costs.annual_cost.amount == 1650
+    rebound = result.diagnostics["evidence_rebindings"]
+    assert any(
+        row.get("field") == "identity.supplier"
+        and row.get("from_block_id") == "p1:a"
+        and row.get("to_block_id") == "p1:b"
+        for row in rebound
+    )
 
 
 @pytest.mark.asyncio
