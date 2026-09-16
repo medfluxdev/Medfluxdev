@@ -1,1687 +1,312 @@
-﻿"""PR-6 / Contract Intelligence V3 focused tests.
-
-Mocked provider only. These tests validate ARCHITECTURE and CONTROL FLOW, not
-ABIOMED/Accutron correctness against the real model. A real-model benchmark is
-still required (see test_report notes at the bottom of this module).
-"""
-import inspect
 import json
 from types import SimpleNamespace
 
 import pytest
 
 from app.ai.harness import get_harness_class
-from app.ai.harness.context import CallBudgetExhausted, ContextOverflow, ContextPlanner, estimate_tokens
-from app.ai.harness.document import Block, DocumentModel
-from app.ai.harness.models import (
-    ApplicabilityDecision,
-    ContractMap,
-    NumberRole,
-    Observation,
-    OptionCluster,
-    OptionItem,
-    PrecedenceRule,
-    SectionUnderstanding,
-    SelectionRelation,
-)
-from app.ai.harness.pipeline import HarnessV2
-from app.ai.harness.v3 import (
-    HarnessV3,
-    _fair_token_allocation,
-    _merge_maps_v3,
-    _retry_fits_context,
-    _retry_output_plan,
-    compact_sections,
-    measured_output_budget,
-    sanitize_applicability,
-    sanitize_contract_map,
-)
+from app.ai.harness.document import DocumentModel
 from app.ai.harness.source_signals import collect_source_signals
-from app.ai.harness.v3_perception import perceive_option_clusters
+from app.ai.harness.v3 import DirectContractHarness, HarnessV3
 from app.ai.schemas import ModelCapabilities, ModelDescriptor
 from app.core.config import Settings
 from app.documents.intelligence.canonical import (
-    BoundingRegion,
     DocumentIntelligenceResult,
     Element,
     Page,
     ProcessingProvenance,
 )
-from app.models.values import Money
 
 
-SETTINGS_V3 = dict(
-    harness_engine="v3",
-    harness_max_calls=64,
-    harness_vision_pages_per_batch=2,
-    harness_vision_min_pages_for_batch=2,
-)
+def settings(**overrides):
+    base = {
+        "harness_engine": "v3",
+        "harness_max_calls": 16,
+        "harness_output_tokens": 1800,
+        "harness_context_tokens": 8192,
+        "harness_vision_max_calls": 2,
+    }
+    base.update(overrides)
+    return Settings(_env_file=None, **base)
 
 
-def v3_settings(**overrides):
-    return Settings(_env_file=None, **(SETTINGS_V3 | overrides))
-
-
-def native_document(text="Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"):
+def document():
+    pages = [
+        Page(
+            page_number=1,
+            width_pt=600,
+            height_pt=800,
+            text="ABIOMED Europe GmbH Vertr.-Nr.: 40015645",
+            elements=[
+                Element(
+                    element_id="p1",
+                    page=1,
+                    reading_order=0,
+                    text="ABIOMED Europe GmbH Vertr.-Nr.: 40015645",
+                    type="paragraph",
+                    method="ocr",
+                )
+            ],
+        ),
+        Page(
+            page_number=5,
+            width_pt=600,
+            height_pt=800,
+            text=(
+                "Der Vertrag beginnt am 01.04.2025 und endet am 31.03.2029. "
+                "Die Laufzeit beträgt 4 Jahren. Der Vertrag wird nicht automatisch verlängert."
+            ),
+            elements=[
+                Element(
+                    element_id="p5",
+                    page=5,
+                    reading_order=0,
+                    text=(
+                        "Der Vertrag beginnt am 01.04.2025 und endet am 31.03.2029. "
+                        "Die Laufzeit beträgt 4 Jahren. Der Vertrag wird nicht automatisch verlängert."
+                    ),
+                    type="paragraph",
+                    method="ocr",
+                )
+            ],
+        ),
+        Page(
+            page_number=8,
+            width_pt=600,
+            height_pt=800,
+            text="Fixed per call: 2.226,00 EUR. 2.Jahr 8.000,00 EUR.",
+            elements=[
+                Element(
+                    element_id="p8",
+                    page=8,
+                    reading_order=0,
+                    text="Fixed per call: 2.226,00 EUR. 2.Jahr 8.000,00 EUR.",
+                    type="paragraph",
+                    method="ocr",
+                )
+            ],
+        ),
+    ]
     return DocumentIntelligenceResult(
-        document_id="synthetic",
+        document_id="abiomed-test",
         source_sha256="a" * 64,
-        canonical_text=text,
-        provenance=ProcessingProvenance(provider="native_pdf"),
-        pages=[
-            Page(
-                page_number=1,
-                width_pt=600,
-                height_pt=800,
-                text=text,
-                elements=[
-                    Element(
-                        element_id="a",
-                        page=1,
-                        reading_order=0,
-                        text=text,
-                        type="paragraph",
-                        method="native",
-                    )
-                ],
-            )
-        ],
-    )
-
-
-def two_block_document():
-    first = "Vertrag 452664"
-    second = "MedTech GmbH Service 1.650,00 EUR"
-    text = first + "\n" + second
-    return DocumentIntelligenceResult(
-        document_id="synthetic-two-block",
-        source_sha256="9" * 64,
-        canonical_text=text,
-        provenance=ProcessingProvenance(provider="native_pdf"),
-        pages=[
-            Page(
-                page_number=1,
-                width_pt=600,
-                height_pt=800,
-                text=text,
-                elements=[
-                    Element(
-                        element_id="a",
-                        page=1,
-                        reading_order=0,
-                        text=first,
-                        type="paragraph",
-                        method="native",
-                    ),
-                    Element(
-                        element_id="b",
-                        page=1,
-                        reading_order=1,
-                        text=second,
-                        type="paragraph",
-                        method="native",
-                    ),
-                ],
-            )
-        ],
-    )
-
-
-def scan_document(pages: int):
-    page_models = []
-    for page_number in range(1, pages + 1):
-        text = "Vertrag 452664 MedTech GmbH 1.650,00 EUR" if page_number == 1 else ""
-        page_models.append(
-            Page(
-                page_number=page_number,
-                width_pt=600,
-                height_pt=800,
-                text=text,
-                elements=[
-                    Element(
-                        element_id=f"s{page_number}",
-                        page=page_number,
-                        reading_order=0,
-                        text=text,
-                        type="image",
-                        method="native",
-                    )
-                ],
-            )
-        )
-    return DocumentIntelligenceResult(
-        document_id="synthetic",
-        source_sha256="b" * 64,
-        canonical_text=" ".join(p.text or "" for p in page_models),
-        provenance=ProcessingProvenance(provider="native_pdf"),
-        pages=page_models,
-    )
-
-
-def multi_block_document(blocks: int = 8, block_ref="p1:e0"):
-    """Text-based multi-block document whose full-document prompt does NOT fit,
-    forcing the family resolver to use planner.segments()/packing."""
-    elements = []
-    texts = []
-    for i in range(blocks):
-        text = f"Klausel {i}. " + ("Vertragsbedingungen und Leistungsumfang " * 22)
-        texts.append(text)
-        elements.append(
-            Element(
-                element_id=f"e{i}",
-                page=1,
-                reading_order=i,
-                text=text,
-                type="paragraph",
-                method="native",
-            )
-        )
-    return DocumentIntelligenceResult(
-        document_id="synthetic",
-        source_sha256="f" * 64,
-        canonical_text=" ".join(texts),
-        provenance=ProcessingProvenance(provider="native_pdf"),
-        pages=[Page(
-            page_number=1, width_pt=600, height_pt=800, text=" ".join(texts),
-            elements=elements,
-        )],
+        canonical_text="\n".join(page.text for page in pages),
+        provenance=ProcessingProvenance(provider="docling"),
+        pages=pages,
     )
 
 
 class FakeProvider:
     supports_structured_output = True
     last_done_reason = None
-    last_usage = {"prompt_tokens": 123, "completion_tokens": 42}
+    last_response_sha256 = None
 
-    def __init__(self, unsupported=False, cost_applicability="applicable", number_decision=None,
-                 block_ref="p1:a", map_number_role="order_number",
-                 truncated_titles=None, truncate_once=True):
-        self.requests = []
-        self.unsupported = unsupported
-        self.cost_applicability = cost_applicability
-        self.number_decision = number_decision
-        self.block_ref = block_ref
-        self.map_number_role = map_number_role
-        self.truncated_titles = set(truncated_titles or [])
-        self.truncate_once = truncate_once
-        self._truncated = False
-
-    def _find_candidate_batch(self, text):
-        idx = text.find('{"candidates"')
-        found = None
-        while idx != -1:
-            try:
-                obj, _ = json.JSONDecoder().raw_decode(text, idx)
-                if isinstance(obj, dict) and "candidates" in obj:
-                    found = obj
-            except Exception:
-                pass
-            idx = text.find('{"candidates"', idx + 1)
-        return found
-
-    async def generate_request(self, text, system, schema, max_tokens, context_tokens, images=None):
-        self.requests.append((text, images, context_tokens))
+    async def generate_request(
+        self, text, system, schema, max_tokens, context_tokens, images=None
+    ):
         title = schema["title"]
-        ref = self.block_ref
-        truncated = title in self.truncated_titles and not (self.truncate_once and self._truncated)
-        if truncated:
-            self._truncated = True
-            self.last_done_reason = "length"
-        else:
-            self.last_done_reason = None
-        if title == "VisionObservation":
-            return json.dumps({
-                "description": "Visual region with contract text",
-                "visible_text": ["Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"],
-                "contract_signals": [], "unresolved": [],
-            })
-        if title == "SectionUnderstanding":
-            return json.dumps({"section_index": 0})
-        if title == "GlobalContractUnderstanding":
-            return json.dumps({
-                "document_type": "service",
-                "purpose": "wartung",
-                "authority_order": ["Hauptvertrag", "Anlage"],
-                "selections_summary": ["selected plan visible"],
-                "key_clauses": ["plan options and prices"],
-                "unresolved": [],
-            })
-        if title == "ContractMap":
-            payload = {
-                "document_type": "service",
-                "observations": [{
-                    "topic": "identity costs delivery",
-                    "summary": "Service contract with plan options",
-                    "block_refs": [ref],
-                    "related_refs": [],
-                }],
-                "selections": [{
-                    "cluster": "plan", "option": "selected plan", "selected": True,
-                    "applicability": "applicable", "block_ids": [ref],
-                    "reason": "selection evidenced in clause",
-                }],
-            }
-            if self.map_number_role is not None:
-                payload["number_roles"] = [{
-                    "value": "452664", "role": self.map_number_role, "block_ids": [ref],
-                    "reason": "appears as order reference",
-                }]
-            return json.dumps(payload)
-        if title == "ApplicabilityBatch":
-            decisions = [{
-                "scope": "option", "decision": "selected", "target": "selected plan",
-                "reason": "selection evidenced", "block_ids": [ref],
-            }]
-            if self.number_decision is not None:
-                decisions.append({
-                    "scope": "number", "decision": self.number_decision, "target": "452664",
-                    "reason": "number role", "block_ids": [ref],
-                })
-            return json.dumps({"decisions": decisions})
-        if title == "GroundingBatch":
-            batch = self._find_candidate_batch(text) or {"candidates": []}
-            return json.dumps({
-                "decisions": [{
-                    "candidate_index": i, "supported": not self.unsupported,
-                    "explanation": "Source entails claim",
-                } for i in range(len(batch["candidates"]))],
-            })
-        if title == "CandidateBatch":
-            if "costs, payment" in text and "related contract-field pack" in text:
-                return json.dumps({"candidates": [{
-                    "field": "costs.annual_cost",
-                    "value": {"amount": 1650, "currency": "EUR", "period": "annual"},
-                    "status": "supported",
-                    "applicability": self.cost_applicability,
-                    "evidence_refs": [{"block_id": ref, "quote": "1.650,00 EUR"}],
-                }]})
-            if "Resolve ONLY contract-field family costs" in text:
-                return json.dumps({"candidates": [{
-                    "field": "costs.annual_cost",
-                    "value": {"amount": 1650, "currency": "EUR", "period": "annual"},
-                    "status": "supported",
-                    "applicability": self.cost_applicability,
-                    "evidence_refs": [{"block_id": ref, "quote": "1.650,00 EUR"}],
-                }]})
-            if "Resolve ONLY contract-field family payment" in text:
-                return json.dumps({"candidates": []})
-            if "identity, dates, termination" in text and "related contract-field pack" in text:
-                facts = [{
-                    "field": "identity.contract_number", "value": "452664",
-                    "status": "supported",
-                    "evidence_refs": [{"block_id": ref, "quote": "452664"}],
-                }]
-                if self.unsupported:
-                    return json.dumps({"candidates": facts})
-                facts.append({
-                    "field": "identity.supplier", "value": "MedTech GmbH",
-                    "status": "supported",
-                    "evidence_refs": [{"block_id": ref, "quote": "MedTech GmbH"}],
-                })
-                return json.dumps({"candidates": facts})
-            return '{"candidates": []}'
-        raise AssertionError(f"unexpected schema {title}")
+        if title == "ProposedFactBatch":
+            if "semantic:core" in text:
+                raise AssertionError("purpose must not leak into prompt")
+            if "identity.contract_number" in text:
+                return json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "field": "identity.supplier",
+                                "value": "ABIOMED Europe GmbH",
+                                "page": 1,
+                                "quote": "ABIOMED Europe GmbH",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "identity.contract_number",
+                                "value": "40015645",
+                                "page": 1,
+                                "quote": "Vertr.-Nr.: 40015645",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "dates.start_date",
+                                "value": {
+                                    "date": "2025-04-01",
+                                    "condition": None,
+                                    "requires_review": False,
+                                },
+                                "page": 5,
+                                "quote": "beginnt am 01.04.2025",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "dates.end_date",
+                                "value": {
+                                    "date": "2029-03-31",
+                                    "condition": None,
+                                    "requires_review": False,
+                                },
+                                "page": 5,
+                                "quote": "endet am 31.03.2029",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "dates.duration",
+                                "value": {"value": 4, "unit": "years"},
+                                "page": 5,
+                                "quote": "Laufzeit beträgt 4 Jahren",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "termination.automatic_renewal",
+                                "value": False,
+                                "page": 5,
+                                "quote": "nicht automatisch verlängert",
+                                "applicability": "applicable",
+                            },
+                        ]
+                    }
+                )
+            if "costs.annual_cost" in text:
+                return json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "field": "costs.annual_cost",
+                                "value": {
+                                    "amount": 8000,
+                                    "currency": "EUR",
+                                    "period": "annual",
+                                },
+                                "page": 8,
+                                "quote": "8.000,00 EUR",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "costs.variable_charges",
+                                "value": [
+                                    {
+                                        "label": "Fixed per call",
+                                        "amount": {
+                                            "amount": 2226,
+                                            "currency": "EUR",
+                                            "period": None,
+                                        },
+                                        "unit": "per_call",
+                                        "condition": None,
+                                    }
+                                ],
+                                "page": 8,
+                                "quote": "Fixed per call: 2.226,00 EUR",
+                                "applicability": "applicable",
+                            },
+                        ]
+                    }
+                )
+            return '{"facts":[]}'
+        if title == "VisualPageReading":
+            return json.dumps({"page": 1, "visible_text": [], "unresolved": []})
+        raise AssertionError(title)
 
 
-def ai(provider, vision=True):
+def ai(provider=None):
+    provider = provider or FakeProvider()
+
     async def runtime():
         return provider, ModelDescriptor(
             provider_id="mock",
-            model_id="selected",
-            context_length=262144,
-            capabilities=ModelCapabilities(text=True, vision=vision),
+            model_id="qwen3-vl:8b-instruct",
+            context_length=8192,
+            capabilities=ModelCapabilities(text=True, vision=True),
         )
 
     return SimpleNamespace(harness_runtime=runtime)
 
 
-# ----------------------------------------------------------------------
-# Engine selection: V3 production default; V2 explicit compatibility.
-# ----------------------------------------------------------------------
+def test_engine_selection_uses_replacement_harness():
+    assert get_harness_class(settings()) is HarnessV3
+    assert HarnessV3 is DirectContractHarness
 
 
-def test_engine_selection_default_is_v3_and_v2_remains_explicit():
-    assert get_harness_class(Settings(_env_file=None)) is HarnessV3
-    assert get_harness_class(Settings(_env_file=None, harness_engine="v2")) is HarnessV3
-    assert get_harness_class(Settings(_env_file=None, harness_engine="v2-compat")) is HarnessV2
-    assert get_harness_class(v3_settings()) is HarnessV3
+def test_source_signals_find_reference_values():
+    rows = collect_source_signals(DocumentModel.build(document()))
+    values = {row["value"] for row in rows}
+    assert "40015645" in values
+    assert "01.04.2025" in values
+    assert "31.03.2029" in values
+    assert "4 Jahren" in values
+    assert "2.226,00 EUR" in values
+    assert "8.000,00 EUR" in values
 
 
-def test_source_signal_layer_collects_literal_dates_money_and_contract_number():
-    source = native_document(
-        "Vertr.-Nr.: 40015645 beginnt am 01.04.2025 und kostet 8.000,00 EUR"
+@pytest.mark.asyncio
+async def test_direct_harness_delivers_grounded_contract_without_block_ids():
+    result = await DirectContractHarness(settings(), ai()).analyze(document())
+
+    assert result.contract is not None, result.error
+    contract = result.contract
+    assert contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert contract.identity.contract_number == "40015645"
+    assert str(contract.dates.start_date.date) == "2025-04-01"
+    assert str(contract.dates.end_date.date) == "2029-03-31"
+    assert contract.dates.duration.value == 4
+    assert contract.termination.automatic_renewal is False
+    assert contract.costs.annual_cost.amount == 8000
+    assert contract.costs.variable_charges[0].amount.amount == 2226
+    assert result.diagnostics["supported_count"] >= 8
+    assert result.diagnostics["evidence_count"] >= 8
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 3
+
+
+@pytest.mark.asyncio
+async def test_alternative_fact_never_projects():
+    class AlternativeProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "costs.annual_cost" in text:
+                payload = json.loads(raw)
+                for fact in payload["facts"]:
+                    if fact["field"] == "costs.annual_cost":
+                        fact["applicability"] = "alternative"
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(settings(), ai(AlternativeProvider())).analyze(
+        document()
     )
-    rows = collect_source_signals(DocumentModel.build(source))
-    kinds = {row["kind"] for row in rows}
-    assert "labelled_contract_number" in kinds
-    assert "date" in kinds
-    assert "money" in kinds
-    assert any(row["value"] == "40015645" for row in rows)
-    assert all(row["block_id"] == "p1:a" for row in rows)
-
-
-def test_no_business_specific_rule_strings_in_v3_source():
-    for cls in (HarnessV3,):
-        source = inspect.getsource(cls)
-        for forbidden in ("Guard TOP", "ABIOMED", "Accutron", "1650", "1.650"):
-            assert forbidden not in source
-
-
-# ----------------------------------------------------------------------
-# Perception layer (evidence capture only)
-# ----------------------------------------------------------------------
-
-
-def test_perception_captures_option_clusters_and_selection_controls():
-    text = ("Schutzpläne\nGuard TOP ............ 1.650,00 EUR\n"
-            "Basis (x) 350,00 EUR")
-    source = DocumentIntelligenceResult(
-        document_id="synthetic",
-        source_sha256="c" * 64,
-        canonical_text=text,
-        provenance=ProcessingProvenance(provider="native_pdf"),
-        pages=[Page(
-            page_number=1, width_pt=600, height_pt=800, text=text,
-            elements=[
-                Element(element_id="h", type="heading", text="Schutzpläne", page=1,
-                        reading_order=0, method="native"),
-                Element(element_id="p1", type="paragraph", text="Guard TOP ............ 1.650,00 EUR",
-                        page=1, reading_order=1, method="native",
-                        region=BoundingRegion(page=1, x0=50, y0=50, x1=500, y1=60)),
-                Element(element_id="cb", type="checkbox", text="", page=1, reading_order=2,
-                        method="native", region=BoundingRegion(page=1, x0=30, y0=49, x1=40, y1=59)),
-                Element(element_id="p2", type="paragraph", text="Basis (x) 350,00 EUR",
-                        page=1, reading_order=3, method="native",
-                        region=BoundingRegion(page=1, x0=50, y0=90, x1=500, y1=100)),
-            ],
-        )],
-    )
-    model = DocumentModel.build(source)
-    clusters = perceive_option_clusters(source, model)
-    assert len(clusters) == 1
-    cluster = clusters[0]
-    assert cluster.cluster_label == "Schutzpläne"
-    labels = {option.label for option in cluster.options}
-    assert labels == {"Guard TOP", "Basis"}
-    by_label = {option.label: option for option in cluster.options}
-    assert by_label["Guard TOP"].price_text == "1.650,00 EUR"
-    assert by_label["Guard TOP"].control_region is not None
-    assert by_label["Basis"].selection_hint is True
-    assert by_label["Guard TOP"].selection_hint is None
-
-
-def test_perception_never_raises_and_never_decides():
-    assert perceive_option_clusters(None, DocumentModel.build(native_document())) == []
-    assert perceive_option_clusters(native_document(), DocumentModel.build(native_document())) or True
-
-
-# ----------------------------------------------------------------------
-# deterministischer Merge der V3-Map-Oberfläche
-# ----------------------------------------------------------------------
-
-
-def test_merge_maps_v3_unions_v3_surface_losslessly():
-    a = ContractMap(selections=[SelectionRelation(cluster="plan", option="A", selected=True,
-                                                  applicability="applicable")],
-                    number_roles=[NumberRole(value="1", role="contract_number")])
-    b = ContractMap(selections=[SelectionRelation(cluster="plan", option="B", selected=False,
-                                                  applicability="alternative")],
-                    number_roles=[NumberRole(value="1", role="contract_number")],
-                    precedence=[{"document_type": "Anlage", "rank": 1}])
-    merged = _merge_maps_v3([a, b])
-    assert len(merged.selections) == 2
-    assert len(merged.number_roles) == 1  # dedupe by (value, role)
-    assert len(merged.precedence) == 1
-
-
-# ----------------------------------------------------------------------
-# HarnessV3 control flow (mocked)
-# ----------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_v3_full_native_path_records_stages_and_contract():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.supplier == "MedTech GmbH"
-    assert result.contract.costs.annual_cost.amount == 1650
-    assert result.contract.analysis.harness_version == "v3"
-    assert result.diagnostics["harness_version"] == "v3"
-    assert result.prompt_version.startswith("harness-v3")
-
-    purposes = {row.get("purpose") for row in result.diagnostics["calls"]}
-    assert "global_understanding" in purposes
-    assert any(p.startswith("understanding:") for p in purposes)
-    assert "applicability" in purposes
-    assert any(p.startswith("resolve_pack:core:") for p in purposes)
-    assert any(p.startswith("resolve_pack:commercial:") for p in purposes)
-
-    global_call = next(row for row in result.diagnostics["calls"] if row["purpose"] == "global_understanding")
-    assert global_call["stage"] == "global"
-    assert global_call["pages"] == [1]
-    assert "response_sha256" in global_call
-    assert "latency_seconds" in global_call
-    assert "usage" in global_call
-    assert result.diagnostics["selections"]
-    assert "order_number" in {n["role"] for n in result.diagnostics["number_roles"]}
-    assert result.diagnostics["precedence"] or True
-
-
-@pytest.mark.asyncio
-async def test_v3_scanned_document_batches_visual_compute_into_sections():
-    provider = FakeProvider(block_ref="p1:s1")
-    rendered = []
-    page_images = {"p": lambda p: rendered.append(p) or "img"}
-    result = await HarnessV3(v3_settings(), ai(provider, vision=True)).analyze(
-        scan_document(4),
-        image_loader=lambda block: "img",
-        page_image_loader=page_images["p"],
-    )
-    diagnostics = result.diagnostics
-    section_rows = [row for row in diagnostics["calls"] if row.get("schema") == "SectionUnderstanding"]
-    assert len(section_rows) == 2
-    assert [row["pages"] for row in section_rows] == [[1, 2], [3, 4]]
-    assert all(row["stage"] == "sections" for row in section_rows)
-    assert rendered == [1, 2, 3, 4]
-    assert len(diagnostics["section_understandings"]) == 2
-    assert diagnostics["global_understanding"] is not None
-    purposes = {row.get("purpose") for row in diagnostics["calls"]}
-    assert any(str(p).startswith("understanding:") for p in purposes)
-    vision_rows = [row for row in diagnostics["calls"] if row.get("stage") == "vision"]
-    assert len(vision_rows) == 3
-    deferred = [d for d in diagnostics["context_decisions"] if d.get("vision") == "deferred_to_page_batch"]
-    assert len(deferred) == 1
-
-
-@pytest.mark.asyncio
-async def test_v3_true_image_only_scan_produces_review_required_grounded_truth():
-    source = scan_document(3).model_copy(update={
-        "canonical_text": "",
-        "pages": [page.model_copy(update={"text": "", "elements": [
-            element.model_copy(update={"text": ""}) for element in page.elements
-        ]}) for page in scan_document(3).pages],
-    })
-    provider = FakeProvider(block_ref="p1:s1")
-    result = await HarnessV3(v3_settings(), ai(provider, vision=True)).analyze(
-        source, image_loader=lambda block: "region-image",
-        page_image_loader=lambda page: "page-image",
-    )
-    assert result.ai_call_count > 0
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.supplier == "MedTech GmbH"
-    assert result.contract.costs.annual_cost.amount == 1650
-    assert result.requires_review is True
-    assert result.diagnostics["evidence_count"] > 0
-    assert any(row.get("stage") == "vision" and row.get("pages") == [1] for row in result.diagnostics["calls"])
-    evidence = result.contract.analysis.harness["evidence"]
-    assert any(item["source"]["requires_review"] is True for item in evidence)
-
-
-@pytest.mark.asyncio
-async def test_v3_true_image_only_scan_without_vision_model_fails_fast():
-    source = scan_document(3).model_copy(update={
-        "canonical_text": "",
-        "pages": [page.model_copy(update={"text": "", "elements": [
-            element.model_copy(update={"text": ""}) for element in page.elements
-        ]}) for page in scan_document(3).pages],
-    })
-    provider = FakeProvider(block_ref="p1:s1")
-
-    result = await HarnessV3(v3_settings(), ai(provider, vision=False)).analyze(
-        source,
-        image_loader=lambda block: "region-image",
-        page_image_loader=lambda page: "page-image",
-    )
-
-    assert result.contract is None
-    assert result.ai_call_count == 0
-    assert provider.requests == []
-    assert result.prompt_version == "harness-v3"
-    assert result.diagnostics["harness_version"] == "v3"
-    assert result.diagnostics["issues"] == ["vision_capability_required"]
-    assert "Vision-Modell" in result.message
-
-
-@pytest.mark.asyncio
-async def test_v3_image_heavy_without_vision_degrades_gracefully():
-    provider = FakeProvider(block_ref="p1:s1")
-    result = await HarnessV3(v3_settings(), ai(provider, vision=False)).analyze(
-        scan_document(4), image_loader=lambda block: "img", page_image_loader=lambda p: "img"
-    )
-    assert any("Vision" in issue for issue in result.diagnostics["issues"])
-    assert result.requires_review
-    assert result.contract is not None, "deterministic recall must still succeed without vision"
-
-
-# ----------------------------------------------------------------------
-# Deterministische Anwendbarkeit (decisions 4 + 10)
-# ----------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_v3_applicable_cost_is_used_and_alternative_is_excluded():
-    provider = FakeProvider(cost_applicability="alternative")
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.costs.annual_cost is None, "alternative must never reach the contract"
-    assert result.contract.identity.supplier == "MedTech GmbH", "other grounded facts survive"
-    excluded = [d for d in result.diagnostics["context_decisions"] if "applicability_excluded" in d]
-    assert any(d["field"] == "costs.annual_cost" for d in excluded)
-    candidates = result.diagnostics["candidates"]
-    assert any(c["field"] == "costs.annual_cost" and c["applicability"] == "alternative" for c in candidates)
-
-
-@pytest.mark.asyncio
-async def test_v3_superseded_is_also_excluded():
-    provider = FakeProvider(cost_applicability="superseded")
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
     assert result.contract is not None
     assert result.contract.costs.annual_cost is None
-
-
-@pytest.mark.asyncio
-async def test_v3_number_used_as_reference_is_not_written_as_contract_number():
-    provider = FakeProvider(cost_applicability="applicable", number_decision="order_number")
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.contract_number is None, "reference number must not become contract number"
-    assert any(issue.startswith("identity.contract_number") for issue in result.diagnostics["issues"])
-    roles = {n["value"]: n["role"] for n in result.diagnostics["number_roles"]}
-    assert roles.get("452664") == "order_number"
-
-
-@pytest.mark.asyncio
-async def test_v3_no_grounded_truth_returns_none_and_durable_error():
-    provider = FakeProvider(unsupported=True)
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is None
-    assert result.requires_review
-    assert result.error and result.error.startswith("HarnessFailure")
-    assert result.diagnostics["call_count"] == len(provider.requests)
-
-
-@pytest.mark.asyncio
-async def test_v3_call_budget_is_hard():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(harness_max_calls=1), ai(provider)).analyze(native_document())
-    assert len(provider.requests) == 1
-    assert result.contract is None
-    assert result.requires_review
-    assert result.diagnostics["call_count"] == 1
-
-
-@pytest.mark.asyncio
-async def test_v3_page_images_are_only_loaded_within_budget_and_bounded():
-    provider = FakeProvider(block_ref="p1:s1")
-    rendered_pages = []
-    settings = v3_settings(harness_vision_pages_per_batch=1)
-    result = await HarnessV3(settings, ai(provider, vision=True)).analyze(
-        scan_document(5),
-        image_loader=lambda block: "img",
-        page_image_loader=lambda page: rendered_pages.append(page) or "img",
-    )
-    sections = [row["pages"] for row in result.diagnostics["calls"] if row.get("schema") == "SectionUnderstanding"]
-    assert sections == [[1], [2], [3], [4], [5]]
-    assert rendered_pages == [1, 2, 3, 4, 5]
-
-
-@pytest.mark.asyncio
-async def test_v3_existing_map_helpers_reused_for_evidence():
-    # Field catalog and strict typing are the same deterministic tower as v2.1.
-    from app.ai.harness.pipeline import field_types, _coalesce_batch
-    assert "costs.annual_cost" in field_types()
-    sample = Money(amount=1000, currency="EUR", period="annual")
-    batch = {"candidates": [{"field": "costs.annual_cost", "value": sample.model_dump(),
-                             "status": "supported", "evidence_refs": [{"block_id": "a", "quote": "1000 EUR"}]}]}
-    from app.ai.harness.models import CandidateBatch, FactCandidate, EvidenceRef
-    merged = _coalesce_batch(CandidateBatch(candidates=[FactCandidate(**batch["candidates"][0])]))
-    assert merged.candidates[0].status == "supported"
-
-
-# ----------------------------------------------------------------------
-# A - ContractMap invalid source-ref tolerance (quarantine, never remap)
-# ----------------------------------------------------------------------
-
-
-def _nine_valid_one_invalid_map() -> ContractMap:
-    document_model = DocumentModel.build(native_document())
-    observations = [
-        Observation(topic=f"t{i}", summary=f"summary {i}", block_refs=["p1:a"])
-        for i in range(9)
-    ]
-    observations.append(
-        Observation(topic="ghost", summary="phantom clause", block_refs=["p1:ghost"])
-    )
-    return ContractMap(observations=observations), document_model
-
-
-def test_a_single_invalid_observation_does_not_discard_map():
-    mapping, document = _nine_valid_one_invalid_map()
-    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
-    assert len(clean.observations) == 9
-    assert len(dropped) == 1
-    assert dropped[0]["item_type"] == "observation"
-    assert dropped[0]["invalid_refs"] == ["p1:ghost"]
-    assert dropped[0]["action"] == "dropped"
-    assert dropped[0]["requires_review"] is True
-    assert all("p1:ghost" not in obs.block_refs for obs in clean.observations)
-
-
-def test_a_invalid_selection_rejected_observations_survive():
-    mapping, document = _nine_valid_one_invalid_map()
-    mapping.selections = [
-        SelectionRelation(cluster="plan", option="sel", selected=True,
-                          applicability="applicable", block_ids=["p1:bad"])
-    ]
-    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
-    assert clean.selections == []
-    assert len(clean.observations) == 9
-    assert any(d["item_type"] == "selection" for d in dropped)
-
-
-def test_a_invalid_number_role_rejected_unrelated_semantics_survive():
-    mapping, document = _nine_valid_one_invalid_map()
-    mapping.number_roles = [
-        NumberRole(value="452664", role="order_number", block_ids=["p1:bad"]),
-        NumberRole(value="Z-2", role="reference", block_ids=["p1:a"]),
-    ]
-    mapping.selections = [
-        SelectionRelation(cluster="plan", option="sel", selected=True,
-                          applicability="applicable", block_ids=["p1:a"])
-    ]
-    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
-    assert len(clean.number_roles) == 1
-    assert clean.number_roles[0].value == "Z-2"
-    assert len(clean.selections) == 1
-    assert any(d["item_type"] == "number_role" for d in dropped)
-
-
-def test_a_invalid_ref_never_remapped_to_another_block():
-    mapping, document = _nine_valid_one_invalid_map()
-    mapping.observations = [
-        Observation(topic="phantom", summary="s", block_refs=["p1:ghost"])
-    ]
-    clean, dropped = sanitize_contract_map(document, mapping, stage="test")
-    assert clean.observations == []
-    assert all("p1:ghost" not in obs.block_refs for obs in clean.observations)
-    # Dropped, never silently rewritten to a real block id.
-    assert all("p1:a" not in obs.block_refs for obs in clean.observations)
-
-
-def test_a_sanitize_applicability_drops_only_invalid_decisions():
-    document = DocumentModel.build(native_document())
-    decisions = [
-        ApplicabilityDecision(scope="number", decision="order_number", target="x",
-                              block_ids=["p1:a"]),
-        ApplicabilityDecision(scope="option", decision="selected", target="y",
-                              block_ids=["p1:bad"]),
-    ]
-    valid, dropped = sanitize_applicability(decisions, document, stage="applicability")
-    assert len(valid) == 1 and valid[0].target == "x"
-    assert len(dropped) == 1 and dropped[0]["invalid_refs"] == ["p1:bad"]
-
-
-# ----------------------------------------------------------------------
-# B - Dynamic family prompt packing (no static magic reserves)
-# ----------------------------------------------------------------------
-
-
-def _blocks(n: int) -> list[Block]:
-    return [Block(id=f"p1:b{i}", text=" " + "x" * 600, kind="text", page=1) for i in range(n)]
-
-
-def test_b_segments_use_actual_context_and_per_block_costs():
-    planner = ContextPlanner(configured=8192, advertised=8192, output_tokens=1800)
-    overhead = "fixed instruction overhead " * 10
-    blocks = _blocks(8)
-    segments = planner.segments(blocks, overhead, purpose="resolve_segments:identity",
-                                extra_reserve=64, per_block_cost=lambda block: 0)
-    decision = next(
-        row for row in planner.decisions if row.get("purpose") == "resolve_segments:identity"
-        and "segments" in row
-    )
-    assert decision["extra_reserve"] == 64
-    assert decision["per_block_cost"] is True
-    assert decision["block_budget"] == (
-        planner.input_budget - estimate_tokens(overhead) - 64
-    )
-    assert segments  # structural blocks are packed whole
-
-
-def test_b_per_block_visual_cost_reduces_block_capacity():
-    planner = ContextPlanner(configured=4096, advertised=4096, output_tokens=1200)
-    overhead = "instruction overhead "
-    blocks = _blocks(3)
-    cheap = planner.segments(blocks, overhead, purpose="seg:identity",
-                             extra_reserve=0, per_block_cost=lambda block: 0)
-    expensive = planner.segments(blocks, overhead, purpose="seg:identity",
-                                 extra_reserve=0, per_block_cost=lambda block: 900)
-    # With per-block visual observation rows counted, the same blocks no longer
-    # all fit: packing must reflect ACTUAL prompt components, not a static reserve.
-    assert len(expensive) > len(cheap)
-
-
-@pytest.mark.asyncio
-async def test_b_resolve_uses_full_structural_blocks_never_tail_clipped():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    full_block = "Vertrag 452664 MedTech GmbH Service 1.650,00 EUR"
-    assert result.contract is not None
-    resolve_texts = [
-        text for (text, images, context) in provider.requests
-        if text.startswith("Resolve this related contract-field pack in ONE pass:")
-    ]
-    assert resolve_texts
-    assert any(full_block in text for text in resolve_texts)
-
-
-@pytest.mark.asyncio
-async def test_b_every_executed_call_is_prevalidated_against_runtime_window():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    capacity = result.diagnostics["context_budget"]
-    for row in result.diagnostics["calls"]:
-        # planner.check() runs on the FINAL assembled prompt before the provider
-        # call; any overflow would have aborted the call, so every executed call
-        # fits inside the runtime window with the base reserve.
-        assert row["estimated_prompt_tokens"] <= capacity - 512
-    assert all(row.get("succeeded") for row in result.diagnostics["calls"])
-
-
-@pytest.mark.asyncio
-async def test_b_family_packing_records_small_real_reserve_not_static_magic():
-    provider = FakeProvider(block_ref="p1:e0")
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(multi_block_document(8))
-    decisions = result.diagnostics["context_decisions"]
-    row = next(
-        d for d in decisions
-        if d.get("purpose") == "resolve_pack_segments:core" and "segments" in d
-    )
-    assert row["per_block_cost"] is True
-    assert 0 <= row["extra_reserve"] < 500  # sections-bound + safety, NOT 1100/1300
-
-
-def test_b_measured_output_retry_only_for_eligible_stages():
-    assert measured_output_budget("resolve:identity:0", prompt_tokens=3000,
-                                  capacity=8192, base_output=1800) is not None
-    assert measured_output_budget("resolve_pack:core:0", prompt_tokens=3000,
-                                  capacity=8192, base_output=1800) is not None
-    assert measured_output_budget("vision:p1:a", prompt_tokens=3000,
-                                  capacity=8192, base_output=1800) is None
-    assert measured_output_budget("resolve:identity:0", prompt_tokens=7000,
-                                  capacity=8192, base_output=1800) is None
-
-
-# ----------------------------------------------------------------------
-# C - Call-budget semantics (never mislabelled as context overflow)
-# ----------------------------------------------------------------------
-
-
-def test_c_call_budget_exhaustion_is_not_context_overflow_subclass():
-    assert not issubclass(CallBudgetExhausted, ContextOverflow)
-    assert not issubclass(CallBudgetExhausted, ValueError)
-
-
-@pytest.mark.asyncio
-async def test_c_hard_budget_exhaustion_classified_separately():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(harness_max_calls=3), ai(provider)).analyze(native_document())
-    assert provider.requests and len(provider.requests) == result.diagnostics["call_count"] == 3
-    assert result.diagnostics["budget_exhausted"] is True
-    categories = result.diagnostics["failure_categories"]
-    assert categories.get("call_budget_exhausted", 0) >= 1
-    assert categories.get("context_overflow", 0) == 0
-    assert any("Call-Budget erschöpft" in issue for issue in result.diagnostics["issues"])
-    assert result.contract is None
-    assert result.error and "call_budget_exhausted" in result.error
-
-
-@pytest.mark.asyncio
-async def test_c_no_hidden_retry_after_budget_exhaustion():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(harness_max_calls=3), ai(provider)).analyze(native_document())
-    calls_after_exhaustion = [
-        c for c in result.diagnostics["calls"] if c.get("failed")
-        and c.get("error_category") == "call_budget_exhausted"
-    ]
-    # The exhaustion event is not recorded as a redundant retried call; the
-    # analysis stopped cleanly with exactly one classified budget failure.
-    assert result.diagnostics["call_count"] == 3
-    assert result.diagnostics["failure_categories"]["call_budget_exhausted"] == 1
-
-
-# ----------------------------------------------------------------------
-# D - Global-section compaction fairness (no first-sections-win)
-# ----------------------------------------------------------------------
-
-
-def _many_sections(count: int) -> list[SectionUnderstanding]:
-    sections = []
-    for i in range(count):
-        sections.append(
-            SectionUnderstanding(
-                section_index=i,
-                pages=[i + 1],
-                observations=[
-                    Observation(
-                        topic="t",
-                        summary="very long summary " + ("clause " * 200),
-                        block_refs=["p1:a"],
-                    )
-                ],
-                unresolved=["unresolved detail " + ("text " * 100)],
-            )
-        )
-    return sections
-
-
-def test_d_compact_sections_keeps_first_and_last_with_small_budget():
-    payload = compact_sections(_many_sections(8), budget=260)
-    rows = json.loads(payload)
-    indices = {row["section_index"] for row in rows}
-    assert 0 in indices and 7 in indices
-    pages = {tuple(row["pages"]) for row in rows}
-    assert (1,) in pages and (8,) in pages
-
-
-def test_d_compact_sections_preserves_page_identity():
-    payload = compact_sections(_many_sections(5), budget=300)
-    rows = json.loads(payload)
-    for row in rows:
-        assert isinstance(row["pages"], list) and int(row["pages"][0]) == row["section_index"] + 1
-
-
-def test_d_fair_allocation_never_starves_a_section():
-    caps = _fair_token_allocation(8, [1000] * 8, 400)
-    assert len(caps) == 8
-    assert all(cap >= 1 for cap in caps)
-    assert sum(map(int, caps)) == 400
-
-
-def test_d_budget_below_section_count_is_bounded():
-    # Allocator nominal caps (sum) never exceed the requested budget.
-    for n_budget_spread in ((8, 1), (8, 2), (8, 3), (8, 5)):
-        n, budget = n_budget_spread
-        caps = _fair_token_allocation(n, [1000] * n, budget)
-        assert sum(map(int, caps)) <= budget, (n, budget, sum(caps))
-    # Actual payload estimate stays within the requested budget as well.
-    for budget in (1, 2, 3, 5):
-        payload = compact_sections(_many_sections(8), budget=budget)
-        assert estimate_tokens(payload) <= budget, budget
-
-
-def test_d_budget_equal_section_count_is_bounded():
-    payload = compact_sections(_many_sections(8), budget=8)
-    assert estimate_tokens(payload) <= 8
-    json.loads(payload)  # always valid JSON
-
-
-def test_d_very_small_budget_records_incompleteness():
-    log: list = []
-    payload = compact_sections(_many_sections(8), budget=1, log=log)
-    assert estimate_tokens(payload) <= 1
-    decision = log[-1]
-    assert decision["module"] == "compact_sections"
-    assert decision["incomplete"] is True
-    assert decision["represented"] < 8
-    assert decision["bounded"] is True
-
-
-def test_d_payload_estimate_never_exceeds_requested_budget():
-    # Whenever the compactor claims bounded output, the ACTUAL generated payload
-    # must fit inside the requested budget (mathematical hard bound).
-    for budget in (1, 2, 4, 8, 16, 32, 64, 128, 256, 300, 512, 700, 900):
-        log: list = []
-        payload = compact_sections(_many_sections(8), budget=budget, log=log)
-        est = estimate_tokens(payload)
-        assert est <= budget, (budget, est)
-        assert log[-1]["module"] == "compact_sections"
-        assert log[-1]["bounded"] is True
-    for budget in (1, 60, 150, 300, 700):
-        log: list = []
-        payload = compact_sections(_many_sections(3), budget=budget, log=log)
-        assert estimate_tokens(payload) <= budget, budget
-        assert log[-1]["bounded"] is True
-
-
-# ----------------------------------------------------------------------
-# E - Output truncation handling
-# ----------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_e_truncated_output_never_silently_accepted():
-    provider = FakeProvider(truncated_titles={"GlobalContractUnderstanding"})
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    truncated_calls = [
-        row for row in result.diagnostics["calls"]
-        if row.get("done_reason") == "length"
-    ]
-    assert truncated_calls
-    for row in truncated_calls:
-        assert row.get("failed") is True
-        assert row.get("error_category") == "truncated_output"
-    # The truncated global payload was never accepted as global meaning.
-    assert result.diagnostics["global_understanding"] is None
-
-
-@pytest.mark.asyncio
-async def test_exact_grounded_facts_do_not_require_second_model_veto():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.supplier == "MedTech GmbH"
-    assert not [
-        row for row in result.diagnostics["calls"]
-        if row.get("schema") == "GroundingBatch"
-    ]
-
-
-@pytest.mark.asyncio
-async def test_unique_exact_quote_can_rebind_wrong_model_block_reference():
-    provider = FakeProvider(block_ref="p1:a")
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(two_block_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.supplier == "MedTech GmbH"
-    assert result.contract.costs.annual_cost.amount == 1650
-    rebound = result.diagnostics["evidence_rebindings"]
     assert any(
-        row.get("field") == "identity.supplier"
-        and row.get("from_block_id") == "p1:a"
-        and row.get("to_block_id") == "p1:b"
-        for row in rebound
+        row["field"] == "costs.annual_cost"
+        and row["reason"] == "applicability:alternative"
+        for row in result.diagnostics["rejected_facts"]
     )
 
 
 @pytest.mark.asyncio
-async def test_e_resolve_stage_recovers_via_measured_retry():
-    provider = FakeProvider(truncated_titles={"CandidateBatch"})
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    # The FIRST CandidateBatch resolve call truncates and is retried once with a
-    # measured output budget; the retry succeeds and grounded facts survive.
-    retries = [
-        row for row in result.diagnostics["calls"]
-        if "retried_with_output_tokens" in row and row.get("succeeded")
-    ]
-    assert retries
-    assert any(
-        d.get("decision") == "output_budget_stage_retry"
-        for d in result.diagnostics["context_decisions"]
-    )
-    assert result.contract is not None
-    assert result.contract.identity.supplier == "MedTech GmbH"
-
-
-class PersistentCommercialTruncationProvider(FakeProvider):
-    async def generate_request(self, text, system, schema, max_tokens, context_tokens, images=None):
-        if (
-            schema["title"] == "CandidateBatch"
-            and "costs, payment" in text
-            and "related contract-field pack" in text
+async def test_quote_can_bind_by_literal_source_signal_when_model_quote_is_bad():
+    class BadQuoteProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
         ):
-            self.requests.append((text, images, context_tokens))
-            self.last_done_reason = "length"
-            return '{"candidates": ['
-        return await super().generate_request(
-            text, system, schema, max_tokens, context_tokens, images
-        )
-
-
-@pytest.mark.asyncio
-async def test_e_persistent_multi_family_truncation_splits_only_failed_pack():
-    provider = PersistentCommercialTruncationProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.supplier == "MedTech GmbH"
-    assert result.contract.costs.annual_cost.amount == 1650
-
-    decisions = result.diagnostics["context_decisions"]
-    assert any(
-        row.get("decision") == "split_pack_after_output_truncation"
-        and row.get("purpose", "").startswith("resolve_pack:commercial:")
-        for row in decisions
-    )
-    assert any(
-        row.get("decision") == "split_family_recovered"
-        and "commercial-costs" in row.get("purpose", "")
-        for row in decisions
-    )
-    assert any(
-        row.get("purpose", "").startswith("resolve_pack:commercial:")
-        and row.get("error_category") == "truncated_output"
-        for row in result.diagnostics["calls"]
-    )
-
-
-def test_e_retry_bounds_are_stage_local_and_never_global():
-    # resolve/ground eligible; vision never; oversized prompts never.
-    assert measured_output_budget("ground:identity:0", 2500, 8192, 1800) == 2800
-    assert measured_output_budget("recovery:identity", 2500, 8192, 1800) == 2800
-    assert measured_output_budget("vision:p1:a", 2500, 8192, 1800) is None
-    assert measured_output_budget("section:0", 2500, 8192, 1800) is None
-    # The raise is capped well below the 8192 runtime window (no global hack).
-    assert measured_output_budget("resolve:identity:0", 3000, 8192, 1800) <= 2800
-
-
-def test_e2_retry_context_fit_explicit_window_math():
-    # prompt + raised output + prompt reserve + image reserve <= runtime capacity
-    assert _retry_fits_context(3000, 2800, 8192, 512, 0) is True
-    assert _retry_fits_context(5000, 2800, 8192, 512, 0) is False  # 5000+2800+512 > 8192
-    assert _retry_fits_context(3000, 2800, 8192, 512, 1024) is True  # 6312+1024 <= 8192
-    assert _retry_fits_context(3000, 2800, 8192, 512, 2048) is False  # 6312+2048 > 8192
-
-
-def test_e2_retry_allowed_when_new_output_budget_safely_fits():
-    plan, decision = _retry_output_plan("resolve:identity:0", 3000, 8192, 1800, 0)
-    assert plan == 2800
-    assert decision == "output_budget_stage_retry"
-
-
-def test_e2_retry_rejected_when_new_output_budget_would_exceed_window():
-    # The raised output budget together with the image reserve would exceed the
-    # runtime window -> rejected before any provider call, with a clear reason.
-    plan, decision = _retry_output_plan("resolve:identity:0", 3000, 8192, 1800, 2048)
-    assert plan is None
-    assert decision == "output_retry_skipped_context_overflow"
-
-
-def test_e2_retry_includes_image_reserve():
-    # Image reserve small enough -> retry still allowed.
-    plan, decision = _retry_output_plan("resolve:identity:0", 2500, 8192, 1800, 512)
-    assert plan == 2800 and decision == "output_budget_stage_retry"
-    # Image reserve large enough to overflow the window -> rejected.
-    plan, decision = _retry_output_plan("resolve:identity:0", 2500, 8192, 1800, 2400)
-    assert plan is None and decision == "output_retry_skipped_context_overflow"
-    # Ground/recovery stages are eligible and follow the same gate.
-    plan, decision = _retry_output_plan("ground:identity:0", 2500, 8192, 1800, 1024)
-    assert plan == 2800 and decision == "output_budget_stage_retry"
-    # Non-eligible stages never retry.
-    plan, decision = _retry_output_plan("vision:p1:a", 3000, 8192, 1800, 0)
-    assert plan is None and decision == "output_retry_not_performed"
-
-
-@pytest.mark.asyncio
-async def test_e2_no_silent_provider_call_after_failed_retry_fit():
-    # The GlobalContractUnderstanding stage is NOT eligible for retry. Truncation
-    # there must be surfaced as a failure with EXACTLY ONE provider request and
-    # a recorded skip decision, never a speculative second call.
-    provider = FakeProvider(truncated_titles={"GlobalContractUnderstanding"})
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    global_calls = [c for c in result.diagnostics["calls"] if c["purpose"] == "global_understanding"]
-    assert len(global_calls) == 1
-    assert global_calls[0].get("retried_with_output_tokens") is None
-    decisions = result.diagnostics["context_decisions"]
-    skip = [d for d in decisions if d.get("decision", "").startswith("output_retry_")]
-    assert skip and skip[0]["decision"] == "output_retry_not_performed"
-    assert skip[0]["runtime_capacity"] == 8192
-
-
-# ----------------------------------------------------------------------
-# F - Vision budget decoupled from total call budget
-# ----------------------------------------------------------------------
-
-
-def _visual_heavy_document(pages: int, blocks_per_page: int):
-    page_models = []
-    all_text = []
-    for page_number in range(1, pages + 1):
-        elements = []
-        for index in range(blocks_per_page):
-            text = f"Bildbereich {page_number}-{index}"
-            all_text.append(text)
-            elements.append(
-                Element(
-                    element_id=f"v{index}",
-                    page=page_number,
-                    reading_order=index,
-                    text=text,
-                    type="image",
-                    method="native",
-                    region=BoundingRegion(
-                        page=page_number, x0=10 + index, y0=10, x1=120 + index, y1=60
-                    ),
-                )
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
             )
-        page_models.append(
-            Page(
-                page_number=page_number,
-                width_pt=600,
-                height_pt=800,
-                text=" ".join(all_text),
-                elements=elements,
-            )
-        )
-    return DocumentIntelligenceResult(
-        document_id="synthetic",
-        source_sha256="d" * 64,
-        canonical_text=" ".join(all_text),
-        provenance=ProcessingProvenance(provider="native_pdf"),
-        pages=page_models,
+            if schema["title"] == "ProposedFactBatch" and "identity.contract_number" in text:
+                payload = json.loads(raw)
+                for fact in payload["facts"]:
+                    if fact["field"] == "identity.contract_number":
+                        fact["quote"] = "contract number 40015645"
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(settings(), ai(BadQuoteProvider())).analyze(
+        document()
     )
-
-
-@pytest.mark.asyncio
-async def test_f_vision_calls_do_not_double_when_semantic_budget_doubles():
-    source = _visual_heavy_document(8, 4)  # 32 visual blocks
-    counts = []
-    for max_calls in (32, 64):
-        provider = FakeProvider(block_ref="p1:v0")
-        result = await HarnessV3(
-            v3_settings(harness_max_calls=max_calls), ai(provider, vision=True)
-        ).analyze(
-            source,
-            image_loader=lambda block: "img",
-            page_image_loader=lambda page: "img",
-        )
-        vision_calls = [row for row in result.diagnostics["calls"] if row.get("stage") == "vision"]
-        counts.append(len(vision_calls))
-    assert counts[0] == counts[1], f"vision calls must not scale with max_calls: {counts}"
-    # Full-page section vision covers these scanned pages in both cases.
-    assert counts[0] == 0
-
-
-@pytest.mark.asyncio
-async def test_semantic_packs_reduce_resolve_stage_call_fanout():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    resolve_calls = [
-        row for row in result.diagnostics["calls"]
-        if row.get("stage") == "resolve"
-    ]
-    purposes = {row.get("purpose") for row in resolve_calls}
-    assert any(str(p).startswith("resolve_pack:core:") for p in purposes)
-    assert any(str(p).startswith("resolve_pack:commercial:") for p in purposes)
-    assert any(str(p).startswith("resolve_pack:operations:") for p in purposes)
-    assert not any(str(p).startswith("resolve:identity:") for p in purposes)
-    outcomes = {row["pack"]: row for row in result.diagnostics["pack_outcomes"]}
-    assert set(outcomes) == {"core", "commercial", "operations"}
-
-
-def test_source_has_parseable_contract_map_control_flow():
-    # Lightweight guard for accidental indentation damage in the async control flow.
-    import ast
-    from pathlib import Path
-    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
-    ast.parse(source.read_text(encoding="utf-8"))
-
-
-@pytest.mark.asyncio
-async def test_contract_map_segments_execute_after_successful_segmentation():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    map_calls = [
-        row for row in result.diagnostics["calls"]
-        if str(row.get("purpose", "")).startswith("understanding:")
-    ]
-    assert map_calls
-    assert result.diagnostics["number_roles"]
-
-
-@pytest.mark.asyncio
-async def test_stage_diagnostics_expose_call_counts_and_latency():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.diagnostics["stage_call_counts"]
-    assert "resolve" in result.diagnostics["stage_call_counts"]
-    assert "resolve" in result.diagnostics["stage_latency_seconds"]
-    assert result.diagnostics["stage_latency_seconds"]["resolve"] >= 0
-
-
-@pytest.mark.asyncio
-async def test_f_region_fallback_runs_when_page_section_is_unavailable():
-    source = _visual_heavy_document(2, 3)
-    provider = FakeProvider(
-        block_ref="p1:v0",
-        truncated_titles={"SectionUnderstanding"},
-        truncate_once=False,
-    )
-    result = await HarnessV3(
-        v3_settings(harness_max_calls=64, harness_vision_max_calls=2), ai(provider, vision=True)
-    ).analyze(
-        source,
-        image_loader=lambda block: "region",
-        page_image_loader=lambda page: "page",
-    )
-    fallback_calls = [
-        row for row in result.diagnostics["calls"]
-        if str(row.get("purpose", "")).startswith("vision_fallback:")
-    ]
-    assert len(fallback_calls) <= 2
-    assert fallback_calls
-    assert any(
-        d.get("vision") == "region_fallback_after_missing_page_section"
-        for d in result.diagnostics["context_decisions"]
-    )
-
-
-@pytest.mark.asyncio
-async def test_f_region_fallback_is_limited_to_one_call_per_uncovered_page():
-    source = _visual_heavy_document(2, 3)
-    provider = FakeProvider(
-        block_ref="p1:v0",
-        truncated_titles={"SectionUnderstanding"},
-        truncate_once=False,
-    )
-    result = await HarnessV3(
-        v3_settings(harness_max_calls=64, harness_vision_max_calls=16), ai(provider, vision=True)
-    ).analyze(
-        source,
-        image_loader=lambda block: "region",
-        page_image_loader=lambda page: "page",
-    )
-    fallback_calls = [
-        row for row in result.diagnostics["calls"]
-        if str(row.get("purpose", "")).startswith("vision_fallback:")
-    ]
-    pages = [tuple(row.get("pages") or []) for row in fallback_calls]
-    assert len(pages) == len(set(pages))
-    assert len(fallback_calls) <= 2
-    assert any(
-        d.get("vision") == "deferred_duplicate_page_fallback"
-        for d in result.diagnostics["context_decisions"]
-    )
-
-
-def test_b_ranked_pack_fallback_handles_oversized_structural_unit():
-    planner = ContextPlanner(configured=4096, advertised=4096, output_tokens=1200)
-    blocks = [
-        Block(id="p1:huge", text="x" * 12000, kind="text", page=1),
-        Block(id="p1:small", text="Service 1.650,00 EUR", kind="text", page=1),
-    ]
-    overhead = "resolve-pack-overhead"
-
-    with pytest.raises(ContextOverflow):
-        planner.segments(
-            blocks,
-            overhead,
-            purpose="resolve_pack_segments:test",
-        )
-
-    ranked = planner.pack_ranked(
-        blocks,
-        overhead,
-        purpose="resolve_pack_ranked_fallback:test",
-    )
-    assert [block.id for block in ranked] == ["p1:small"]
-    decision = next(
-        d for d in planner.decisions
-        if d.get("purpose") == "resolve_pack_ranked_fallback:test"
-    )
-    assert decision["decision"] == "ranked_pack"
-
-
-@pytest.mark.asyncio
-async def test_delivery_diagnostics_preserve_successful_native_contract():
-    source = native_document()
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(source)
-    # Baseline synthetic path must still deliver grounded truth; the unresolved
-    # visual quarantine is exercised only when a candidate actually depends on
-    # an unresolved visual observation.
     assert result.contract is not None
-    assert result.diagnostics["delivery_complete"] is True
-
-
-def test_diagnostics_delivery_fields_present_on_successful_synthetic_path():
-    # Structural guard: diagnostics expose delivery-level counters so a future
-    # benchmark can distinguish "semantic map understood" from "contract delivered".
-    import ast
-    from pathlib import Path
-    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    assert result.contract.identity.contract_number == "40015645"
+    accepted = {
+        row["field"]: row for row in result.diagnostics["accepted_facts"]
     }
-    assert {"supported_count", "excluded_count", "delivery_complete"} <= literals
-
-
-def test_final_prompt_refit_path_is_present():
-    import ast
-    from pathlib import Path
-    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert "segment_skipped_after_final_prompt_overflow" in literals
-    assert "resolve_pack_refit:" in source.read_text(encoding="utf-8")
-
-
-def test_lossless_map_union_preserves_precedence_rank_conflicts():
-    left = ContractMap(precedence=[PrecedenceRule(document_type="email", rank=1, block_ids=["p1:a"])])
-    right = ContractMap(precedence=[PrecedenceRule(document_type="email", rank=2, block_ids=["p2:b"])])
-    merged = _merge_maps_v3([left, right])
-    assert {(item.document_type, item.rank) for item in merged.precedence} == {("email", 1), ("email", 2)}
-
-
-def test_single_pass_resolve_has_lean_context_fallback_marker():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    assert "single_pass_lean_fallback" in source
-    assert "resolve_pack_single_pass_lean:" in source
-
-
-def test_precedence_conflict_quarantine_marker_is_present():
-    import ast
-    from pathlib import Path
-    source = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert "precedence_conflict_quarantined" in literals
-
-
-def test_global_map_uses_lossless_union_without_extra_model_call():
-    import ast
-    from pathlib import Path
-    source_path = Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py"
-    source = source_path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert "deterministic_lossless_union_no_extra_model_call" in literals
-    assert 'await call(\n                        "global_map"' not in source
-
-
-def test_performance_diagnostics_counters_are_present():
-    import ast
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert {
-        "provider_timeout_count",
-        "vision_fallback_call_count",
-        "resolve_pack_call_count",
-        "ground_pack_call_count",
-        "uncertain_visual_candidate_quarantined",
-    } <= literals
-
-
-def test_section_auxiliary_summary_strips_model_refs_and_number_roles():
-    section = SectionUnderstanding(
-        section_index=0,
-        pages=[1],
-        observations=[Observation(topic="identity", summary="x", block_refs=["fake"], related_refs=["fake2"])],
-        option_clusters=[OptionCluster(cluster_label="plan", options=[
-            OptionItem(label="Guard TOP", price_text="1650", block_id="fake", selection_hint=True)
-        ])],
-        numbers=[NumberRole(value="452664", role="contract_number", block_ids=["fake"], reason="model")],
-    )
-    payload = compact_sections([section], budget=300)
-    assert '"block_id"' not in payload
-    assert '"block_ids"' not in payload
-    assert '"role"' not in payload
-    assert "452664" in payload
-
-
-def test_source_first_global_and_map_guards_present():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    assert "source_first_lean_global_context" in source
-    assert "global_understanding_skipped_no_source" in source
-    assert "source_first_lean_map_segmentation" in source
-
-
-def test_shared_region_vision_attempt_budget_guard_present():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    assert "region_visual_attempts" in source
-    assert "region_visual_budget" in source
-
-
-def test_resolve_source_first_fallback_markers_present():
-    import ast
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert {
-        "source_first_lean_prompt_fallback",
-        "final_prompt_lean_refit",
-        "unhandled_context_overflow",
-    } <= literals
-
-
-def test_delivery_gate_requires_resolve_pack_attempt():
-    import ast
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    literals = {
-        node.value for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    }
-    assert "no_resolve_pack_executed" in literals
-
-
-@pytest.mark.asyncio
-async def test_semantic_pack_single_pass_bounds_resolve_calls():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    resolve_calls = [
-        row for row in result.diagnostics["calls"]
-        if row.get("stage") == "resolve"
-    ]
-    assert len(resolve_calls) <= 3
-
-
-def test_unknown_applicability_can_deliver_exact_evidence():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    assert "unknown_applicability_delivered_with_exact_evidence" in source
-
-
-def test_applicability_receives_visual_section_context():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    assert "Provisional visual section summaries" in source
-    assert "primary signed agreement/appendix material" in source
-
-
-def test_non_sensitive_unknown_applicability_does_not_force_grounding():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    start = source.index("needs_semantic_verifier = bool(")
-    end = source.index("if needs_semantic_verifier:", start)
-    verify_gate = source[start:end]
-    assert 'candidate.applicability == "unknown"' not in verify_gate
-
-
-def test_recovery_pack_is_globally_capped_to_one_call():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    assert "recovery_call_used = False" in source
-    assert "failed and not recovery_call_used" in source
-    assert '"recovery_pack_call_count"' in source
-
-
-def test_recovery_is_limited_to_supported_unresolved_candidates():
-    from pathlib import Path
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(encoding="utf-8")
-    start = source.index("failed = [")
-    end = source.index("skipped_missing = [", start)
-    recovery_slice = source[start:end]
-    assert 'candidate.status != "supported"' not in recovery_slice
-
-
-@pytest.mark.asyncio
-async def test_semantic_pack_recovery_skips_broad_missing_field_retry():
-    provider = FakeProvider()
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    skipped = [
-        d for d in result.diagnostics["context_decisions"]
-        if d.get("decision") == "recovery_skipped_unsubstantiated_missing_fields"
-    ]
-    assert skipped
-    assert all(d.get("fields") for d in skipped)
-
-
-@pytest.mark.asyncio
-async def test_f_page_batch_vision_suppresses_duplicate_region_calls():
-    source = _visual_heavy_document(4, 3)
-    provider = FakeProvider(block_ref="p1:v0")
-    result = await HarnessV3(
-        v3_settings(harness_max_calls=64, harness_vision_max_calls=16), ai(provider, vision=True)
-    ).analyze(source, image_loader=lambda block: "region", page_image_loader=lambda page: "page")
-    region_calls = [
-        row for row in result.diagnostics["calls"]
-        if row.get("stage") == "vision"
-    ]
-    section_calls = [
-        row for row in result.diagnostics["calls"]
-        if row.get("stage") == "sections"
-    ]
-    assert region_calls == []
-    assert section_calls
-    deferred = [
-        d for d in result.diagnostics["context_decisions"]
-        if d.get("vision") == "deferred_to_page_batch"
-    ]
-    assert len(deferred) == 12
-
-
-@pytest.mark.asyncio
-async def test_f_vision_budget_respects_independent_setting():
-    source = _visual_heavy_document(8, 4)
-    provider = FakeProvider(block_ref="p1:v0")
-    result = await HarnessV3(
-        v3_settings(harness_max_calls=64, harness_vision_max_calls=4), ai(provider, vision=True)
-    ).analyze(source, image_loader=lambda block: "img", page_image_loader=lambda page: "img")
-    vision_calls = [row for row in result.diagnostics["calls"] if row.get("stage") == "vision"]
-    # Because full-page SectionUnderstanding is available, the region budget is
-    # not consumed at all on this page-first fast path.
-    assert vision_calls == []
-    deferred = [
-        d for d in result.diagnostics["context_decisions"]
-        if d.get("vision") == "deferred_to_page_batch"
-    ]
-    assert len(deferred) == 32
-
-
-# ----------------------------------------------------------------------
-# G - Qwen semantic authority on the number-role path
-# ----------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_number_role_conflict_keeps_existing_role_and_forces_review():
-    provider = FakeProvider(
-        cost_applicability="applicable",
-        number_decision="contract_number",
-        map_number_role="order_number",
-    )
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.contract_number is None
-    roles = {n["role"] for n in result.diagnostics["number_roles"] if n["value"] == "452664"}
-    assert roles == {"order_number"}
-    assert any(
-        d.get("decision") == "number_role_conflict_quarantined"
-        and d.get("value") == "452664"
-        for d in result.diagnostics["context_decisions"]
-    )
-    assert any("Nummernrolle widersprüchlich" in issue for issue in result.diagnostics["issues"])
-
-
-@pytest.mark.asyncio
-async def test_g_contract_number_written_when_qwen_classifies_contract_number():
-    provider = FakeProvider(cost_applicability="applicable", number_decision="contract_number",
-                            map_number_role=None)
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    assert result.contract.identity.contract_number == "452664"
-    roles = {n["value"]: n["role"] for n in result.diagnostics["number_roles"]}
-    assert roles.get("452664") == "contract_number"
-    assert not any(issue.startswith("identity.contract_number") for issue in result.diagnostics["issues"])
-
-
-@pytest.mark.asyncio
-async def test_g_reference_classification_blocks_contract_number_without_map_role():
-    provider = FakeProvider(cost_applicability="applicable", number_decision="order_number",
-                            map_number_role=None)
-    result = await HarnessV3(v3_settings(), ai(provider)).analyze(native_document())
-    assert result.contract is not None, result.diagnostics["issues"]
-    # Deterministic code ENFORCES the Qwen classification; it never infers it.
-    assert result.contract.identity.contract_number is None
-    roles = {n["value"]: n["role"] for n in result.diagnostics["number_roles"]}
-    assert roles.get("452664") == "order_number"
-    assert any(issue.startswith("identity.contract_number") for issue in result.diagnostics["issues"])
-
-def test_v3_scan_prompt_allows_exact_visual_transcription_as_evidence():
-    from pathlib import Path
-
-    source = (Path(__file__).parents[1] / "app" / "ai" / "harness" / "v3.py").read_text(
-        encoding="utf-8"
-    )
-    assert "exact visible_text is the source transcription" in source
-    assert "Never cite a visual description, inference" in source
-    assert "visible_text may later be cited as evidence for this same block_id" in source
-
-
-def test_document_model_marks_ocr_elements_for_visual_verification():
-    from app.ai.harness.document import DocumentModel
-    from app.documents.intelligence.canonical import (
-        DocumentIntelligenceResult,
-        Element,
-        Method,
-        Page,
-        ProcessingProvenance,
-    )
-
-    source = DocumentIntelligenceResult(
-        document_id="ocr-vision-1",
-        source_sha256="f" * 64,
-        source_filename="scan.pdf",
-        source_path=None,
-        canonical_text="Jahrespreis 8.000 EUR",
-        pages_text=["Jahrespreis 8.000 EUR"],
-        pages=[
-            Page(
-                page_number=1,
-                width_pt=595,
-                height_pt=842,
-                text="Jahrespreis 8.000 EUR",
-                elements=[
-                    Element(
-                        element_id="ocr1",
-                        type="text",
-                        text="Jahrespreis 8.000 EUR",
-                        page=1,
-                        reading_order=0,
-                        method=Method.OCR,
-                    )
-                ],
-            )
-        ],
-        logical_units=[],
-        provenance=ProcessingProvenance(
-            provider="docling",
-            provider_version="test",
-            method=Method.OCR,
-            do_ocr=True,
-            do_table_structure=True,
-            geometry_provider=None,
-            config={},
-        ),
-        warnings=[],
-        processing_time_s=0.0,
-    )
-
-    document = DocumentModel.build(source)
-    assert document.blocks[0].needs_vision is True
-    assert document.visual_pages == [1]
+    assert accepted["identity.contract_number"]["page"] == 1
