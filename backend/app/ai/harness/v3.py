@@ -714,14 +714,6 @@ class HarnessV3:
             if not batch.candidates:
                 return batch
 
-            semantic_sensitive_prefixes = (
-                "identity.contract_number",
-                "dates.",
-                "termination.",
-                "costs.",
-                "payment.",
-                "sla.",
-            )
             escalate_indices: list[int] = []
             for index, candidate in enumerate(batch.candidates):
                 if candidate.status != "supported":
@@ -745,7 +737,6 @@ class HarnessV3:
                     candidate.ambiguity
                     or candidate.conflicts
                     or candidate.missing_dependencies
-                    or candidate.field.startswith(semantic_sensitive_prefixes)
                 )
                 if needs_semantic_verifier:
                     escalate_indices.append(index)
