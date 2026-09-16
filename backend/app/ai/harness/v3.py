@@ -243,9 +243,9 @@ def _signal_matches(field: str, value: Any, signal: dict) -> bool:
 class DirectContractHarness:
     """Small orchestration layer: semantic extraction once, deterministic proof once."""
 
-    def __init__(self, settings: Settings, ai: AIService):
+    def __init__(self, settings: Settings, ai: AIService | None = None):
         self.settings = settings
-        self.ai = ai
+        self.ai = ai or AIService(settings)
 
     async def analyze(self, canonical, image_loader=None, page_image_loader=None):
         from app.ai.contract_extractor import ContractAnalysisResult
@@ -660,6 +660,7 @@ class DirectContractHarness:
             )
 
 
-# Integration compatibility: the application imports HarnessV3 by name.
-# The implementation itself is the new direct harness, not the deleted V3 pipeline.
-HarnessV3 = DirectContractHarness
+# Integration compatibility: production detects the class by the historical HarnessV3 name.
+# This class contains only the new direct implementation inherited above.
+class HarnessV3(DirectContractHarness):
+    pass
