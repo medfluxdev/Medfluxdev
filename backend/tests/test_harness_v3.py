@@ -36,6 +36,7 @@ from app.ai.harness.v3 import (
     sanitize_applicability,
     sanitize_contract_map,
 )
+from app.ai.harness.source_signals import collect_source_signals
 from app.ai.harness.v3_perception import perceive_option_clusters
 from app.ai.schemas import ModelCapabilities, ModelDescriptor
 from app.core.config import Settings
@@ -344,6 +345,19 @@ def test_engine_selection_default_is_v3_and_v2_remains_explicit():
     assert get_harness_class(Settings(_env_file=None, harness_engine="v2")) is HarnessV3
     assert get_harness_class(Settings(_env_file=None, harness_engine="v2-compat")) is HarnessV2
     assert get_harness_class(v3_settings()) is HarnessV3
+
+
+def test_source_signal_layer_collects_literal_dates_money_and_contract_number():
+    source = native_document(
+        "Vertr.-Nr.: 40015645 beginnt am 01.04.2025 und kostet 8.000,00 EUR"
+    )
+    rows = collect_source_signals(DocumentModel.build(source))
+    kinds = {row["kind"] for row in rows}
+    assert "labelled_contract_number" in kinds
+    assert "date" in kinds
+    assert "money" in kinds
+    assert any(row["value"] == "40015645" for row in rows)
+    assert all(row["block_id"] == "p1:a" for row in rows)
 
 
 def test_no_business_specific_rule_strings_in_v3_source():
