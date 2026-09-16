@@ -534,6 +534,7 @@ class HarnessV3:
         candidates: list[FactCandidate] = []
         evidence_rows: list[dict] = []
         dropped_refs: list[dict] = []
+        evidence_binding_failures: list[dict] = []
         budget_exhausted = False
         contract = Contract()
         planner = ContextPlanner(
@@ -689,13 +690,29 @@ class HarnessV3:
 
         def canonicalize_evidence(candidate: FactCandidate) -> bool:
             if not candidate.evidence_refs:
+                evidence_binding_failures.append({
+                    "field": candidate.field,
+                    "reason": "no_evidence_refs",
+                })
                 return False
             for ref in candidate.evidence_refs:
                 block = document.index.get(ref.block_id)
                 if block is None:
+                    evidence_binding_failures.append({
+                        "field": candidate.field,
+                        "reason": "unknown_block_id",
+                        "block_id": ref.block_id,
+                    })
                     return False
                 resolved = resolve_evidence_quote(block, ref.quote)
                 if resolved is None:
+                    evidence_binding_failures.append({
+                        "field": candidate.field,
+                        "reason": "quote_not_found",
+                        "block_id": ref.block_id,
+                        "page": block.page,
+                        "quote": ref.quote[:240],
+                    })
                     return False
                 ref.quote = resolved[0]
             return True
@@ -2727,6 +2744,7 @@ class HarnessV3:
             "budget_exhausted": budget_exhausted,
             "failure_categories": _tally_failure_categories(calls, budget_exhausted),
             "dropped_refs": dropped_refs,
+            "evidence_binding_failures": evidence_binding_failures,
             "perception": {
                 "option_clusters": [c.model_dump() for c in clusters],
             },
