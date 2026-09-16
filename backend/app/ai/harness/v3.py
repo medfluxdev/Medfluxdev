@@ -71,8 +71,10 @@ terms from alternatives, superseded text and optional offers.
 For each fact:
 - choose only a field from the supplied field catalog;
 - return the typed value expected by that field;
-- provide the page when known;
-- quote the shortest exact source text that supports the fact;
+- ALWAYS provide page and an exact source quote for every non-ambiguous fact;
+- the quote must be copied verbatim from CONTRACT SOURCE, never paraphrased and never contain ellipses;
+- for every literal date, duration and money signal, decide its contractual role instead of silently omitting it;
+- use the exact typed shape shown by the field catalog whenever possible;
 - never output MedFlux block ids.
 The deterministic evidence resolver will locate your quote in the original
 canonical source. If wording is uncertain, set ambiguity instead of guessing.
@@ -195,6 +197,173 @@ def _money_amount(value: str) -> float | None:
         return float(f"{whole}.{decimals}")
     except ValueError:
         return None
+
+
+def _normalize_date_payload(value: Any) -> Any:
+    if isinstance(value, str):
+        iso = _date_signal_iso(value)
+        if iso:
+            return {"date": iso, "condition": None, "requires_review": False}
+        return value
+    if isinstance(value, dict):
+        cleaned = {
+            key: value.get(key)
+            for key in ("date", "condition", "requires_review")
+            if key in value
+        }
+        raw_date = cleaned.get("date")
+        if isinstance(raw_date, str):
+            cleaned["date"] = _date_signal_iso(raw_date) or raw_date
+        cleaned.setdefault("requires_review", False)
+        return cleaned
+    return value
+
+
+def _normalize_duration_payload(value: Any) -> Any:
+    if isinstance(value, str):
+        match = re.search(
+            r"(?P<value>\\d+)\\s*(?P<unit>Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?)",
+            value,
+            re.IGNORECASE,
+        )
+        if not match:
+            return value
+        unit_raw = match.group("unit").lower()
+        if unit_raw.startswith("jahr"):
+            unit = "years"
+        elif unit_raw.startswith("monat"):
+            unit = "months"
+        elif unit_raw.startswith("woche"):
+            unit = "weeks"
+        elif unit_raw.startswith("tag"):
+            unit = "days"
+        else:
+            unit = "hours"
+        return {"value": int(match.group("value")), "unit": unit}
+    if isinstance(value, dict):
+        return {
+            key: value.get(key)
+            for key in ("value", "unit")
+            if key in value
+        }
+    return value
+
+
+def _normalize_money_payload(value: Any) -> Any:
+    if isinstance(value, str):
+        amount = _money_amount(value)
+        if amount is None:
+            return value
+        currency = "EUR" if ("EUR" in value.upper() or "€" in value) else None
+        return {"amount": amount, "currency": currency, "period": None}
+    if isinstance(value, dict):
+        return {
+            key: value.get(key)
+            for key in ("amount", "currency", "period")
+            if key in value
+        }
+    return value
+
+
+_MONEY_FIELDS = {
+    "costs.total_contract_value",
+    "costs.annual_cost",
+    "costs.monthly_cost",
+    "costs.quarterly_cost",
+    "costs.semi_annual_cost",
+    "costs.one_time_cost",
+    "costs.setup_installation_cost",
+    "costs.maintenance_fee",
+    "costs.hourly_rate",
+    "costs.travel_cost",
+    "costs.material_cost",
+    "costs.spare_parts_cost",
+    "costs.additional_costs",
+    "costs.discounts",
+    "payment.advance_payment",
+}
+
+
+def _normalize_fact_value(field: str, value: Any) -> Any:
+    if field in {"dates.start_date", "dates.end_date"}:
+        return _normalize_date_payload(value)
+    if field in {
+        "dates.duration",
+        "dates.minimum_duration",
+        "termination.cancellation_period",
+        "termination.renewal_period",
+    }:
+        return _normalize_duration_payload(value)
+    if field in _MONEY_FIELDS:
+        return _normalize_money_payload(value)
+    if field == "costs.default_currency" and isinstance(value, str):
+        return value.strip().upper()
+    if field == "costs.variable_charges" and isinstance(value, list):
+        normalized = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            row = {
+                key: item.get(key)
+                for key in ("label", "amount", "unit", "condition")
+                if key in item
+            }
+            if "amount" in row:
+                row["amount"] = _normalize_money_payload(row["amount"])
+            normalized.append(row)
+        return normalized
+    if field == "costs.scheduled_prices" and isinstance(value, list):
+        normalized = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            row = {
+                key: item.get(key)
+                for key in ("period_index", "period_label", "amount", "condition")
+                if key in item
+            }
+            if "amount" in row:
+                row["amount"] = _normalize_money_payload(row["amount"])
+            normalized.append(row)
+        return normalized
+    if field in {
+        "sla.response_time",
+        "sla.resolution_time",
+        "sla.service_hours",
+        "sla.emergency_availability",
+    } and isinstance(value, dict):
+        return {
+            key: value.get(key)
+            for key in ("value", "unit", "original_text")
+            if key in value
+        }
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _literal_strings(value: Any) -> list[str]:
+    rows: list[str] = []
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) >= 4:
+            rows.append(text)
+    elif isinstance(value, dict):
+        for item in value.values():
+            rows.extend(_literal_strings(item))
+    elif isinstance(value, list):
+        for item in value:
+            rows.extend(_literal_strings(item))
+    return list(dict.fromkeys(rows))
+
+
+def _find_casefold(source: str, needle: str) -> str | None:
+    if not source or not needle:
+        return None
+    index = source.casefold().find(needle.casefold())
+    if index < 0:
+        return None
+    return source[index:index + len(needle)]
 
 
 def _signal_matches(field: str, value: Any, signal: dict) -> bool:
@@ -403,6 +572,8 @@ class DirectContractHarness:
                     f"Extract the {pack_name} contract facts from the source below. "
                     "Use Qwen semantic understanding to decide what each literal value means. "
                     "The literal source signals are observations, not final facts. "
+                    "Inspect every relevant signal and decide its contractual role. "
+                    "For every accepted fact page and exact quote are mandatory; copy the quote verbatim, without ellipses. "
                     "Do not output fields outside this catalog. Omit facts that are not actually present.\n\n"
                     "FIELD CATALOG:\n"
                     + json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
@@ -454,6 +625,27 @@ class DirectContractHarness:
                         if found is not None:
                             return (block, found[0]), False
 
+                # Missing page/quote should not kill an otherwise precise semantic
+                # fact. For literal string values (supplier, title, payment terms,
+                # etc.) locate a unique exact/case-insensitive source occurrence.
+                literal_matches: list[tuple[Block, str]] = []
+                for literal in _literal_strings(fact.value):
+                    if literal.upper() in {"EUR", "USD", "GBP"}:
+                        continue
+                    for block in document.blocks:
+                        resolved = _find_quote(block.text or "", literal)
+                        exact = resolved[0] if resolved is not None else _find_casefold(
+                            block.text or "", literal
+                        )
+                        if exact is not None:
+                            literal_matches.append((block, exact))
+                unique_literal = {
+                    (block.id, text): (block, text)
+                    for block, text in literal_matches
+                }
+                if len(unique_literal) == 1:
+                    return next(iter(unique_literal.values())), False
+
                 if fact.page is not None and fact.page in visual_readings and quote:
                     for fragment in visual_readings[fact.page].visible_text:
                         found = _find_quote(fragment, quote)
@@ -463,8 +655,17 @@ class DirectContractHarness:
 
             contract = Contract()
             supported_count = 0
+            normalizations: list[dict] = []
 
             for fact in proposals:
+                original_value = fact.value
+                fact.value = _normalize_fact_value(fact.field, fact.value)
+                if fact.value != original_value:
+                    normalizations.append({
+                        "field": fact.field,
+                        "from": original_value,
+                        "to": fact.value,
+                    })
                 if fact.field not in types:
                     rejected.append({"field": fact.field, "reason": "unknown_field"})
                     continue
@@ -579,6 +780,7 @@ class DirectContractHarness:
                 "source_sha256": canonical.source_sha256,
                 "source_signals": source_signals,
                 "semantic_proposals": [fact.model_dump() for fact in proposals],
+                "normalizations": normalizations,
                 "accepted_facts": accepted,
                 "rejected_facts": rejected,
                 "evidence_count": len(evidence_rows),
