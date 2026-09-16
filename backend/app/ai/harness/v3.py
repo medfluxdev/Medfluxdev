@@ -2851,7 +2851,15 @@ class HarnessV3:
                     f" response_sha256={last_failure.get('response_sha256') or 'none'}"
                 )
             else:
-                technical_error = "HarnessFailure purpose=unknown category=no_grounded_facts"
+                technical_error = (
+                    "HarnessFailure purpose=delivery category=no_grounded_facts"
+                    f" candidates={len(candidates)}"
+                    f" supported_status={sum(1 for item in candidates if item.status == 'supported')}"
+                    f" ambiguous={sum(1 for item in candidates if item.status == 'ambiguous')}"
+                    f" unsupported={sum(1 for item in candidates if item.status == 'unsupported')}"
+                    f" evidence_binding_failures={len(evidence_binding_failures)}"
+                    f" evidence_rebindings={len(evidence_rebindings)}"
+                )
 
         result = ContractAnalysisResult(
             document_id=canonical.document_id or "",
