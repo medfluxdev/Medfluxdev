@@ -3907,3 +3907,166 @@ For a completely fresh database, the password is supplied once via an
 interactive hidden prompt (or the one-process `MEDFLUX_LOCAL_ADMIN_PASSWORD`
 environment variable). No plaintext/default password is committed to GitHub.
 Pilot/production bootstrap is intentionally not automatic.
+
+
+## Harness V3 direct-analysis reliability & extraction-quality fix — 2026-09-17
+
+**Status:** IMPLEMENTED (code + automated tests); real-model run and official UAT pending.
+
+### Symptom (root cause of the failed UAT re-analysis)
+- Production re-analysis of `Abiomed Impella.pdf` aborted with
+  `HarnessFailure purpose=direct category=RuntimeError` (`output_truncated`,
+  `ai_call_count=3`, `groups_processed=0`).
+- Root cause: the retry budget used the over-estimated prompt token count
+  (`_estimate_tokens`, ~6968) instead of the real `prompt_eval_count` (~5255),
+  so `8192 - 6968 - 512 = 712 < 1928` made a retry impossible; the commercial
+  pack output (~5618 chars ≈ 1499 eval tokens vs the 1800 cap) proved
+  truncation is nondeterministic.
+
+### Defects found during measurement (`scripts/measure_tokens.py`,
+`scripts/run_harness_real.py`, `scripts/dump_full_diag.py`)
+1. Model returns dates as `{"year": Y, "month": M, "day": D}` -> normalizer gave
+   `{}` -> `start_date` accepted with date=None.
+2. Model returns durations as `{"years": N}` -> mapped to `{}` -> rejected.
+3. Model quotes start with leading `...` -> exact quote matching failed
+   (`evidence_not_located`).
+4. Money signal matcher was a digit-substring test (`"0"` matched any amount
+   containing a 0), so `monthly_cost=2226` was not uniquely bound.
+5. Junk acceptance: `applicability="unknown"` facts with empty quotes were
+   retroactively saved via the loose literal fallback
+   (e.g. `costs.price_adjustment_clause="nicht automatisch verlängert."`).
+6. The commercial pack saw all pages and no money-mapping guidance, so Qwen
+   missed `annual_cost=8000` and sprayed `24365796.0` over cost fields.
+7. The date/duration signal matchers shared the same substring disease: the
+   `4 Jahren` duration signal also matched `2025-04-01` because it contains a 4.
+
+### Resolution (backend/app/ai/harness/v3.py)
+- PACKS restructured to 4 packs `(name, field selectors, retrieval topics)`:
+  core / commercial / payment / operations, with `_PACK_GUIDANCE` MONEY MAPPING
+  for the commercial pack (annual_cost / scheduled_prices / variable_charges).
+- New `_pack_pages()` selects per-pack source pages deterministically from
+  signal kind + `RETRIEVAL_TERMS` keyword hits (identity page always included;
+  fallback to all pages). `_pack_source()` renders exactly those pages + vision.
+- `call()` captures `provider.last_usage["prompt_tokens"]`; the single bounded
+  retry now uses the measured prompt tokens so `8112-…`-margin fits
+  (`8192-5334-512=2346 >= 1800+128` -> retry fires).
+- Normalizers: `_normalize_date_payload` handles `{year,month,day}` (top-level
+  and nested), durations handle bare unit keys (`{years:4}` etc.), money handles
+  bare numbers.
+- `_clean_quote()` strips leading/trailing `...`/`…`; exact date/duration signal
+  matching compares value AND unit (no more digit substring collisions);
+  money signal matching is exact amount equality.
+- Literal fallback binding requires `applicability == "applicable"`.
+
+### Tests (backend/tests/test_harness_v3.py)
+- `stage_call_counts["semantic"]` expectation moved 3 -> 4 (per-pack calls).
+- New: date/duration dict-shape normalization; retry uses actual prompt tokens
+  (commercial truncation -> retry at 2680 output tokens -> success);
+  money matcher binds 8000 to `8.000,00 EUR` despite a `0 EUR` signal on the same
+  page; unknown-applicability junk with empty quote is rejected.
+- `pytest tests/test_harness_v3.py`: **12 passed**.
+- No-regression run of `test_harness_v3`, `test_harness_v2`, `test_ai_structured`,
+  `test_document_processing`, `test_document_intelligence`,
+  `test_contract_extraction`, `test_ai`, `test_contract_models`: 111 passed.
+  The 6 failures are pre-existing auth/route tests (HTTP 401, reproduced on a
+  clean `git stash` baseline) and are unrelated to the harness.
+
+### Known follow-up
+- Real-model validation via `scripts/run_harness_real.py`: all eight UAT facts
+  (ABIOMED Europe GmbH, 40015645, 01.04.2025, 31.03.2029, 4 years,
+  automatic_renewal=false, annual_cost 8.000 EUR, per_call 2.226 EUR) must reach
+  the Contract360 UI with evidence.
+- Official UAT re-analysis of `Abiomed Impella.pdf` via
+  `/api/documents/{document_version}/reanalyze`, UI screenshots, report A-T.
+
+### Progress
+- No new MVP main step; corrective reliability/quality pass on the V3 direct
+  analysis pipeline (stage: fix implementation complete, validation ongoing).
+
+---
+
+### Deterministic source-grounded money layer (2026-09-17 addendum)
+
+**Status:** IMPLEMENTED, tested, validated on real Qwen run — all 8 UAT facts land.
+
+#### Problem
+Qwen transcribed `8.000,00` as `8.0` and marked `scheduled_prices` as `alternative`
+(amounts collapsed to 2 entries with `8.0`), so `annual_cost` was never proposed.
+The model also emitted `variable_charges` with `value_str`/`currency_code` dict
+shapes that the normalizer couldn't parse → amounts dropped to `{}`.
+
+#### Deterministic German contract-language readers (generic, not per-contract)
+New helpers in v3.py:
+- `_STAGED_YEAR_RE`: matches `im N.Jahr <label> | <amount> EUR` patterns
+- `_PER_CALL_RE`: matches `per call: <amount> EUR`
+- `_staged_price_rows(text)` → list of `(row_dict, quote)`
+- `_per_call_rows(text)` → list of `(row_dict, quote)`
+- `_steady_annual_amount(rows)` → `float | None`: derives steady yearly amount
+  when rows are constant from year 2 onward (requires ≥3 rows if year 1 present)
+- Wire-in: after proposal normalization, for `scheduled_prices`/`variable_charges`
+  proposals with a valid page, parse the page text → override fact value deterministically
+- Post-loop: if `scheduled_prices` accepted and `annual_cost` is None, derive
+  `Money(steady, EUR, "annual")` from `_steady_annual_amount` and append evidence
+
+#### Bug fix found during test authoring
+`_normalize_money_payload` dict branch lost nested `currency` when amount was a
+sub-dict like `{"cents": 800000, "currency": "EUR"}` — currency was read only from
+the outer dict. Fixed to fall back to `nested.get("currency")`.
+
+#### Real Qwen run results (qwen3-vl:8b-instruct, v3, 42.2s)
+- status=partial validation=valid, ai_call_count=4, supported=12, evidence=12
+- **All 8 UAT facts:**
+  - `identity.supplier` = `ABIOMED Europe GmbH` (clean, no address)
+  - `identity.contract_number` = `40015645`
+  - `dates.start_date` = 2025-04-01
+  - `dates.end_date` = 2029-03-31
+  - `dates.duration` = 4 years
+  - `termination.automatic_renewal` = false
+  - **`costs.annual_cost` = 8000.0 EUR (annual)** — derived deterministically
+  - **`costs.variable_charges`** = per call 2226.0 EUR
+- `costs.scheduled_prices` = [(1, 0.0), (2, 8000.0), (3, 8000.0), (4, 8000.0)]
+  — exact source-grounded re-read; model's `8.0` transcription overridden
+- Junk (discounts/sla/deadline_days as `unknown` with no quote) correctly rejected
+- `customer` includes address (lower priority, not blocking)
+
+#### Tests
+- `pytest tests/test_harness_v3.py`: **17 passed** (8 original + 9 new)
+- Regression tests: dict-date/duration normalization, retry-with-actual-tokens,
+  money-fact-literal-signal-bind, unknown-applicability-junk-rejection
+- Unit tests: `_staged_price_rows`, `_per_call_rows`, `_steady_annual_amount`,
+  `_retry_output_plan`, nested `currency` preservation in `_normalize_money_payload`
+- Related suites: 39 passed across `test_harness_v3` + `test_ai_source_grounding` +
+  `test_ai_verifier_fail_closed`
+
+### Identity extraction restabilized on real canonical (2026-09-17, official UAT)
+
+**Status:** IMPLEMENTED, tested, validated on production `/reanalyze` path.
+
+#### Problem during official UAT
+The official `/reanalyze` (production cache + `region_image` loader) persisted a
+contract with `identity.supplier = null` although the isolated harness run had
+extracted `ABIOMED Europe GmbH`. The page-1 canonical text is split into 12
+layout elements (e.g. `zwischen` and `ABIOMED Europe GmbH ...` are separate
+elements), so `locate()`'s per-element `_find_quote` never found the model's
+cross-element quote; the literal fallback then failed the unique-match guard
+because `ABIOMED Europe GmbH` also occurs in the page-6 Rechnungsanschrift.
+
+#### Fix in `locate()` (v3.py)
+When per-element quote search yields no match but the fact carries a page, resolve
+the quote against the authoritative linearized page text (`page.text`), exactly
+what the model saw via `_pack_source`. This keeps evidence verbatim (no fuzzy
+matching) while bridging element boundaries. Garbled model quotes (e.g.
+`contract_title` with OCR noise `ein den` instead of `für das`) still fail
+closed → no invented values.
+
+#### Verification
+- `pytest tests/test_harness_v3.py`: **18 passed** (17 + new regression test
+  `test_quote_that_spans_layout_elements_binds_to_page_text`)
+- Related suites: 40 passed across `test_harness_v3` + `test_ai_source_grounding` +
+  `test_ai_verifier_fail_closed`
+- Real cached-canonical probe: 5/5 runs extracted supplier via production path
+- Production `/reanalyze` (66.8 s) persisted snapshot now contains all 8 UAT facts:
+  `supplier=ABIOMED Europe GmbH`, `title=Full-Service-Vertrag für das Impella®AIC
+  System`, `40015645`, start 2025-04-01, end 2029-03-31, 4 Jahre,
+  `automatic_renewal=false`, `annual_cost=8000.0 EUR (annual)`,
+  `scheduled_prices` 0/8000/8000/8000, `per_call=2226.0 EUR`

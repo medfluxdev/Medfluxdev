@@ -29,13 +29,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.ai.harness.document import Block, DocumentModel
-from app.ai.harness.pipeline import _find_quote, field_types, strict_value
+from app.ai.harness.pipeline import _find_quote, RETRIEVAL_TERMS, field_types, strict_value
 from app.ai.harness.source_signals import collect_source_signals
 from app.ai.service import AIService
 from app.core.config import Settings
 from app.models.contract import Contract
 from app.models.enums import ExtractionStatus, ReviewFlag, ValidationStatus
 from app.models.evidence import BoundingBox, SourceEvidence
+from app.models.values import Money
 
 
 class ProposedFact(BaseModel):
@@ -58,24 +59,60 @@ class VisualPageReading(BaseModel):
     unresolved: list[str] = Field(default_factory=list)
 
 
-PACKS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("core", ("identity.", "dates.", "termination.")),
-    ("commercial", ("costs.", "payment.")),
-    ("operations", ("equipment", "services.", "sla.")),
+# Each pack: (name, field selectors, retrieval topics, keyword expansion)
+# Field selectors match the full dotted field name or a dotted prefix (trailing dot).
+# Retrieval topics drive deterministic per-pack source page selection and keyword hits.
+# Keyword expansion is disabled for packs whose facts are fully anchored by money
+# signals: those packs must only see pages that actually carry amounts, so the model
+# maps the given literals instead of inventing numbers from unrelated scope clauses.
+PACKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...], bool], ...] = (
+    ("core", ("identity.", "dates.", "termination."), ("identity", "dates", "termination"), True),
+    ("commercial", ("costs.",), ("costs", "payment"), False),
+    ("payment", ("payment.", "costs.tax_basis", "costs.tax_rate_percent",
+                 "costs.price_adjustment_clause", "costs.price_indexation",
+                 "costs.discounts"), ("payment", "costs"), True),
+    ("operations", ("equipment", "services.", "sla."), ("equipment", "services", "sla"), True),
 )
 
+# Deterministic guidance for literal money values per pack.  The model interprets
+# contractual meaning; the harness only supplies stable terminology to prevent the
+# same literal from being sprayed across several cost fields.
+_PACK_GUIDANCE = {
+    "core": (
+        "IDENTITY: supplier/customer is the legal company name only, without street, "
+        "postcode or city. contract_title is the document title, not the parties. "
+        "DATES/TERMINATION: always decide termination.automatic_renewal (true/false) from the renewal "
+        "wording; the literal signal 'nicht automatisch verlängert' means false."
+    ),
+    "commercial": (
+        "MONEY MAPPING: assign each money literal exactly once, by its contractual role: "
+        "a steady yearly recurring fee (e.g. per contract year, yearly base amount) -> costs.annual_cost with period=annual; "
+        "year-staged amounts such as '1.Jahr', '2.Jahr' -> costs.scheduled_prices with 1-based period_index; "
+        "a per-usage/per-call price (e.g. 'per call') -> costs.variable_charges with unit per_call. "
+        "When year-staged amounts are identical from a certain year onward, that steady yearly amount is also "
+        "the annual recurring fee -> set costs.annual_cost to it with period=annual. "
+        "amount must be written as a JSON object: {\"amount\": <number or string>, \"currency\": \"EUR\", ...}. "
+        "EVERY output amount must be verbatim equal to one of the money source signals; never invent totals or derive "
+        "one amount from another, never repeat one literal amount in several cost fields, never return empty list items, "
+        "and never map an amount to a page that does not contain it."
+    ),
+}
+
 SYSTEM = """You are the semantic contract reader inside MedFlux.
-Read the supplied contract source and return only facts actually supported by it.
+Read the supplied contract source pages and return only facts actually supported by them.
 Do not invent values. Do not infer missing business facts. Distinguish binding
 terms from alternatives, superseded text and optional offers.
-For each fact:
+For each returned fact:
 - choose only a field from the supplied field catalog;
 - return the typed value expected by that field;
-- ALWAYS provide page and an exact source quote for every non-ambiguous fact;
+- ALWAYS provide page and an exact source quote;
 - the quote must be copied verbatim from CONTRACT SOURCE, never paraphrased and never contain ellipses;
-- for every literal date, duration and money signal, decide its contractual role instead of silently omitting it;
+- DECIDE each literal date, duration and money signal's contractual role; a signal with no contracting meaning must be omitted, not force-filled;
+- never map one literal value to several fields; when two roles are possible, keep only the best-supported one;
 - use the exact typed shape shown by the field catalog whenever possible;
+- for enum fields output only a plain enum string value, never a Python repr such as <Enum.NAME>;
 - never output MedFlux block ids.
+Omit every field the source does not explicitly support; an omitted fact is better than a guessed one.
 The deterministic evidence resolver will locate your quote in the original
 canonical source. If wording is uncertain, set ambiguity instead of guessing.
 """
@@ -131,25 +168,10 @@ def _estimate_tokens(text: str) -> int:
     return max(1, int(len(text.encode("utf-8")) / 3 * 1.15))
 
 
-def _page_source(canonical) -> str:
-    rows: list[str] = []
-    if canonical.pages:
-        for page in canonical.pages:
-            text = (page.text or "").strip()
-            if text:
-                rows.append(f"[PAGE {page.page_number}]\n{text}")
-    else:
-        for unit in canonical.logical_units:
-            text = (unit.text or "").strip()
-            if text:
-                rows.append(f"[{unit.source_type.upper()} {unit.index}]\n{text}")
-    return "\n\n".join(rows)
-
-
-def _field_catalog(types: dict[str, Any], prefixes: tuple[str, ...]) -> dict[str, str]:
+def _field_catalog(types: dict[str, Any], selectors: tuple[str, ...]) -> dict[str, str]:
     selected: dict[str, str] = {}
     for field, annotation in types.items():
-        if any(field == prefix or field.startswith(prefix) for prefix in prefixes):
+        if any(field == select or field.startswith(select) for select in selectors):
             selected[field] = (
                 str(annotation)
                 .replace("typing.", "")
@@ -158,6 +180,96 @@ def _field_catalog(types: dict[str, Any], prefixes: tuple[str, ...]) -> dict[str
                 .replace("app.models.enums.", "")
             )
     return selected
+
+
+# Kind eines literalen Quellsignals -> betroffene Retrieval-Topics.  Damit werden
+# Seiten, die konkrete Signale tragen, deterministic fuer das jeweilige Pack
+# ausgewaehlt (z. B. Geld-Seiten nur fuer commercial/payment).
+_SIGNAL_TOPICS = {
+    "identity": {"labelled_contract_number"},
+    "dates": {"date", "duration"},
+    "termination": {"date", "duration", "renewal_negation"},
+    "costs": {"money"},
+    "payment": {"money"},
+}
+
+# Obergrenze fuer die pro Pack gelieferten Quellseiten.  Signal-Seiten haben
+# Vorrang; Keyword-Seiten werden nur bis zu dieser Grenze ergaenzt, damit der
+# Prompt klein genug bleibt, damit Qwen die volle Output-Budget-Erwartung
+# (Struktur statt Abkuerzungen) einhalten kann.
+_PACK_MAX_PAGES = 5
+
+
+def _pack_pages(
+    topics: tuple[str, ...],
+    canonical,
+    source_signals,
+    expand_keywords: bool = True,
+) -> list[int]:
+    """Deterministic per-pack source page selection.
+
+    A pack sees pages that carry a literal signal relevant to its topics and the
+    first page (identity context).  With keyword expansion enabled it additionally
+    sees pages with a DENSE keyword profile (at least two distinct terms; generic
+    single hits are noise) up to a cap.  If nothing matches, all pages are kept
+    (fail-safe: analysis never silently runs on a misleading subset).
+
+    Packs that are fully anchored by money signals disable keyword expansion so
+    they only ever see pages that really carry amounts.
+    """
+    signal_kinds = {
+        kind
+        for topic in topics
+        for kind in _SIGNAL_TOPICS.get(topic, ())
+    }
+    wanted: set[int] = set()
+    for signal in source_signals:
+        kind = signal.get("kind")
+        page = signal.get("page")
+        if kind in signal_kinds and page is not None:
+            wanted.add(int(page))
+
+    if "identity" in topics and canonical.pages:
+        wanted.add(canonical.pages[0].page_number)
+
+    if expand_keywords:
+        keywords = [kw for topic in topics for kw in RETRIEVAL_TERMS.get(topic, ())]
+        # The page cap applies only to packs that already have signal anchors.
+        # Packs without literals (e.g. services) keep full keyword recall so their
+        # annex pages are never dropped.
+        limit = _PACK_MAX_PAGES if wanted else None
+        if keywords:
+            for page in canonical.pages:
+                page_number = page.page_number
+                if page_number in wanted:
+                    continue
+                lowered = (page.text or "").casefold()
+                hits = {kw for kw in keywords if kw in lowered}
+                if len(hits) >= 2 and (limit is None or len(wanted) < limit):
+                    wanted.add(page_number)
+
+    if not wanted:
+        return sorted(page.page_number for page in canonical.pages)
+    return sorted(wanted)
+
+
+def _pack_source(canonical, page_numbers, visual_readings) -> str:
+    rows: list[str] = []
+    for page in canonical.pages:
+        if page.page_number not in page_numbers:
+            continue
+        text = (page.text or "").strip()
+        if text:
+            rows.append(f"[PAGE {page.page_number}]\n{text}")
+    if visual_readings:
+        rows.append("[VISION TRANSCRIPTIONS]\n" + json.dumps(
+            {
+                page: reading.visible_text
+                for page, reading in visual_readings.items()
+            },
+            ensure_ascii=False,
+        ))
+    return "\n\n".join(rows)
 
 
 def _bbox(block: Block) -> BoundingBox | None:
@@ -199,6 +311,42 @@ def _money_amount(value: str) -> float | None:
         return None
 
 
+_DURATION_UNIT_BY_STEM = {
+    "jahr": "years",
+    "monat": "months",
+    "woche": "weeks",
+    "tag": "days",
+    "stund": "hours",
+    "quarter": "quarters",
+}
+
+
+def _duration_unit_from_text(text: str) -> str | None:
+    cleaned = re.sub(r"[^a-zäöüß]", "", (text or "").casefold())
+    for stem, unit in _DURATION_UNIT_BY_STEM.items():
+        if stem in cleaned:
+            return unit
+    return None
+
+
+def _duration_candidates(value: Any) -> list[dict]:
+    def walk(node: Any, rows: list[dict]) -> None:
+        if isinstance(node, dict):
+            if "value" in node and isinstance(node.get("value"), (int, float)):
+                unit = _duration_unit_from_text(str(node.get("unit") or ""))
+                rows.append({"value": int(node["value"]), "unit": unit})
+            for key in ("value", "unit", "years", "months", "weeks", "days", "hours"):
+                if key in node:
+                    walk(node[key], rows)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, rows)
+
+    rows: list[dict] = []
+    walk(value, rows)
+    return rows
+
+
 def _normalize_date_payload(value: Any) -> Any:
     if isinstance(value, str):
         iso = _date_signal_iso(value)
@@ -206,6 +354,17 @@ def _normalize_date_payload(value: Any) -> Any:
             return {"date": iso, "condition": None, "requires_review": False}
         return value
     if isinstance(value, dict):
+        # Qwen sometimes emits {"year": Y, "month": M, "day": D} instead of the
+        # FlexibleDate shape.  Normalize that deterministically before validation.
+        if "year" in value or "month" in value or "day" in value:
+            year = value.get("year") or (value.get("years") or 0)
+            month = value.get("month") or (value.get("months") or 0)
+            day = value.get("day") or (value.get("days") or 0)
+            try:
+                iso = f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+                return {"date": iso, "condition": None, "requires_review": False}
+            except (TypeError, ValueError):
+                pass
         cleaned = {
             key: value.get(key)
             for key in ("date", "condition", "requires_review")
@@ -214,6 +373,12 @@ def _normalize_date_payload(value: Any) -> Any:
         raw_date = cleaned.get("date")
         if isinstance(raw_date, str):
             cleaned["date"] = _date_signal_iso(raw_date) or raw_date
+        elif isinstance(raw_date, dict) and (
+            "year" in raw_date or "month" in raw_date or "day" in raw_date
+        ):
+            nested = _normalize_date_payload(raw_date)
+            if isinstance(nested, dict) and nested.get("date"):
+                cleaned["date"] = nested["date"]
         cleaned.setdefault("requires_review", False)
         return cleaned
     return value
@@ -241,6 +406,32 @@ def _normalize_duration_payload(value: Any) -> Any:
             unit = "hours"
         return {"value": int(match.group("value")), "unit": unit}
     if isinstance(value, dict):
+        # Model sometimes emits {"years": 4} / {"months": N} etc.
+        unit = None
+        for key in ("unit", "years", "year", "months", "month", "weeks", "week",
+                    "days", "day", "hours", "hour", "quarters", "quarter"):
+            if key in value and value.get(key) is not None:
+                last = key
+                break
+        else:
+            last = None
+        if last is not None and last != "unit":
+            if last.startswith("year"):
+                unit = "years"
+            elif last.startswith("month"):
+                unit = "months"
+            elif last.startswith("week"):
+                unit = "weeks"
+            elif last.startswith("day"):
+                unit = "days"
+            elif last.startswith("hour"):
+                unit = "hours"
+            elif last.startswith("quarter"):
+                unit = "quarters"
+            return {
+                "value": int(value[last]),
+                "unit": unit,
+            }
         return {
             key: value.get(key)
             for key in ("value", "unit")
@@ -256,12 +447,30 @@ def _normalize_money_payload(value: Any) -> Any:
             return value
         currency = "EUR" if ("EUR" in value.upper() or "€" in value) else None
         return {"amount": amount, "currency": currency, "period": None}
+    if isinstance(value, (int, float)):
+        return {"amount": float(value), "currency": None, "period": None}
     if isinstance(value, dict):
-        return {
-            key: value.get(key)
-            for key in ("amount", "currency", "period")
-            if key in value
-        }
+        amount = value.get("amount")
+        currency = value.get("currency") or value.get("currency_code")
+        if amount is None and "value_str" in value:
+            amount = value.get("value_str")
+        if amount is None and any(key in value for key in ("cents", "value")):
+            amount = value.get("cents", value.get("value"))
+        if isinstance(amount, str):
+            parsed = _money_amount(amount)
+            if parsed is not None:
+                amount = parsed
+        elif isinstance(amount, dict):
+            nested = _normalize_money_payload(amount)
+            if isinstance(nested, dict):
+                amount = nested.get("amount")
+                currency = currency or nested.get("currency")
+        cleaned = {}
+        if amount is not None:
+            cleaned["amount"] = amount
+            cleaned["currency"] = currency
+            cleaned["period"] = value.get("period")
+        return cleaned
     return value
 
 
@@ -322,7 +531,14 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
                 if key in item
             }
             if "amount" in row:
-                row["amount"] = _normalize_money_payload(row["amount"])
+                amount_obj = row["amount"]
+                if not isinstance(amount_obj, dict):
+                    amount_obj = {}
+                if "currency" not in amount_obj and item.get("currency"):
+                    amount_obj["currency"] = item["currency"]
+                if "unit" not in row and item.get("unit"):
+                    row["unit"] = item["unit"]
+                row["amount"] = _normalize_money_payload(amount_obj)
             normalized.append(row)
         return normalized
     if field == "costs.scheduled_prices" and isinstance(value, list):
@@ -336,7 +552,17 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
                 if key in item
             }
             if "amount" in row:
-                row["amount"] = _normalize_money_payload(row["amount"])
+                amount_obj = row["amount"]
+                if not isinstance(amount_obj, dict):
+                    amount_obj = {}
+                if "currency" not in amount_obj and item.get("currency"):
+                    amount_obj["currency"] = item["currency"]
+                row["amount"] = _normalize_money_payload(amount_obj)
+            if "period_index" in row and isinstance(row["period_index"], str):
+                try:
+                    row["period_index"] = int(row["period_index"])
+                except (ValueError, TypeError):
+                    pass
             normalized.append(row)
         return normalized
     if field in {
@@ -353,6 +579,17 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
     if isinstance(value, str):
         return value.strip()
     return value
+
+
+def _clean_quote(quote: str) -> str:
+    cleaned = quote.strip()
+    for marker in ("…", "..."):
+        while cleaned.startswith(marker):
+            cleaned = cleaned[len(marker):].lstrip()
+        while cleaned.endswith(marker):
+            cleaned = cleaned[:-len(marker)].rstrip()
+    cleaned = cleaned.strip(" \t\r\n\"'")
+    return cleaned
 
 
 def _literal_strings(value: Any) -> list[str]:
@@ -394,7 +631,22 @@ def _signal_matches(field: str, value: Any, signal: dict) -> bool:
 
     if field.startswith("dates.") and kind == "duration":
         number = re.search(r"\d+", raw)
-        return bool(number and number.group(0) in payload)
+        if not number:
+            return False
+        signal_amount = int(number.group(0))
+        signal_unit = _duration_unit_from_text(raw)
+        candidates = _duration_candidates(value)
+        if not candidates:
+            return False
+        return any(
+            candidate["value"] == signal_amount
+            and (
+                signal_unit is None
+                or candidate.get("unit") is None
+                or candidate["unit"] == signal_unit
+            )
+            for candidate in candidates
+        )
 
     if field == "termination.automatic_renewal" and kind == "renewal_negation":
         return value is False
@@ -405,21 +657,104 @@ def _signal_matches(field: str, value: Any, signal: dict) -> bool:
         amount = _money_amount(raw)
         if amount is None:
             return False
+        candidates: list[float] = []
         if isinstance(value, dict):
             direct = value.get("amount")
-            if isinstance(direct, (int, float)) and abs(float(direct) - amount) < 0.001:
-                return True
-            return any(
-                isinstance(item, dict)
-                and isinstance(item.get("amount"), dict)
-                and isinstance(item["amount"].get("amount"), (int, float))
-                and abs(float(item["amount"]["amount"]) - amount) < 0.001
-                for item in value.values()
-                if isinstance(value, dict)
-            )
-        return str(int(amount)) in _normalize_digits(payload)
+            if isinstance(direct, (int, float)):
+                candidates.append(float(direct))
+            elif isinstance(direct, dict) and isinstance(direct.get("amount"), (int, float)):
+                candidates.append(float(direct["amount"]))
+        elif isinstance(value, (int, float)):
+            candidates.append(float(value))
+        elif isinstance(value, list):
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                money = item.get("amount")
+                if isinstance(money, (int, float)):
+                    candidates.append(float(money))
+                elif isinstance(money, dict) and isinstance(money.get("amount"), (int, float)):
+                    candidates.append(float(money["amount"]))
+        return any(abs(candidate - amount) < 0.001 for candidate in candidates)
 
     return False
+
+
+_STAGED_YEAR_RE = re.compile(
+    r"\b(?:im\s+)?(\d{1,2})\s*\.?\s*Jahr\b(?P<label>[^|\n]{0,150}?)(?:\s*\|\s*|\s+)(?P<amount>\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+)\s*(?:EUR|€)",
+    re.IGNORECASE,
+)
+_PER_CALL_RE = re.compile(
+    r"\bper\s+calls?\b\s*[:]?\s*(?P<amount>\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+)\s*(?:EUR|€)",
+    re.IGNORECASE,
+)
+
+# Deterministic pricing-annex reader.  Qwen still decides the contractual role
+# (which money literals are scheduled/staged vs per-call vs recurring); this
+# reader then re-reads those literals verbatim from the source page so the
+# transcribed numbers can never drift (8.000,00 -> 8.0) or turn into invented
+# totals.  It is generic German contract language, not a per-contract fixture.
+def _staged_price_rows(text: str) -> list[tuple[dict, str]]:
+    rows: list[tuple[dict, str]] = []
+    for match in _STAGED_YEAR_RE.finditer(text or ""):
+        amount = _money_amount(match.group("amount"))
+        if amount is None:
+            continue
+        rows.append(
+            (
+                {
+                    "period_index": int(match.group(1)),
+                    "period_label": (match.group("label") or "").strip() or None,
+                    "amount": {"amount": amount, "currency": "EUR", "period": None},
+                    "condition": None,
+                },
+                match.group(0),
+            )
+        )
+    return rows
+
+
+def _per_call_rows(text: str) -> list[tuple[dict, str]]:
+    rows: list[tuple[dict, str]] = []
+    for match in _PER_CALL_RE.finditer(text or ""):
+        amount = _money_amount(match.group("amount"))
+        if amount is None:
+            continue
+        rows.append(
+            (
+                {
+                    "label": (match.group(0) or "").strip(),
+                    "amount": {"amount": amount, "currency": "EUR", "period": None},
+                    "unit": "per_call",
+                    "condition": None,
+                },
+                match.group(0),
+            )
+        )
+    return rows
+
+
+def _steady_annual_amount(rows: list[dict]) -> float | None:
+    """Return the steady yearly amount when staged rows stay constant from a
+    later year onward (e.g. 1.Jahr=0, 2.-4.Jahr=8000).  Deterministic, no model."""
+    by_index: dict[int, dict] = {
+        row["period_index"]: row
+        for row in rows
+        if isinstance(row.get("period_index"), int) and row.get("amount")
+    }
+    if not by_index:
+        return None
+    idxs = sorted(by_index)
+    if len(idxs) < 2 or (idxs[0] == 1 and len(idxs) < 3):
+        return None
+    if idxs[0] == 1 and len(idxs) >= 3:
+        amounts = {by_index[i]["amount"]["amount"] for i in idxs[1:]}
+    else:
+        amounts = {by_index[i]["amount"]["amount"] for i in idxs}
+    values = [x for x in amounts if x != 0]
+    if len(values) == 1 and len(amounts) <= 2:
+        return next(iter(values))
+    return None
 
 
 class DirectContractHarness:
@@ -496,6 +831,10 @@ class DirectContractHarness:
                             getattr(provider, "last_response_sha256", None)
                             or hashlib.sha256(raw.encode("utf-8")).hexdigest()
                         )
+                        usage = getattr(provider, "last_usage", None) or {}
+                        actual_prompt_tokens = usage.get("prompt_tokens")
+                        if actual_prompt_tokens:
+                            metric["actual_prompt_tokens"] = int(actual_prompt_tokens)
                         if metric["done_reason"] in {"length", "max_tokens"}:
                             raise RuntimeError("output_truncated")
                         parsed = schema_type.model_validate_json(raw)
@@ -506,14 +845,20 @@ class DirectContractHarness:
                             str(exc) == "output_truncated"
                             and attempt == 0
                         ):
+                            retry_tokens = (
+                                int(metric["actual_prompt_tokens"])
+                                if metric.get("actual_prompt_tokens")
+                                else prompt_tokens
+                            )
                             next_output, decision = _retry_output_plan(
                                 purpose,
-                                prompt_tokens,
+                                retry_tokens,
                                 capacity,
                                 base_output,
                                 1024 * len(images or []),
                             )
                             metric["retry_decision"] = decision
+                            metric["retry_prompt_tokens"] = retry_tokens
                             if next_output is not None:
                                 output_tokens = next_output
                                 metric["retried_with_output_tokens"] = next_output
@@ -553,26 +898,18 @@ class DirectContractHarness:
                     )
                     visual_readings[page_number] = reading
 
-            base_source = _page_source(canonical)
-            if visual_readings:
-                base_source += "\n\n[VISION TRANSCRIPTIONS]\n" + json.dumps(
-                    {
-                        page: reading.visible_text
-                        for page, reading in visual_readings.items()
-                    },
-                    ensure_ascii=False,
-                )
-
-            if not base_source.strip():
+            if not any((page.text or "").strip() for page in canonical.pages) and not visual_readings:
                 raise ValueError("No readable source text or vision transcription")
 
             proposals: list[ProposedFact] = []
-            for pack_name, prefixes in PACKS:
-                catalog = _field_catalog(types, prefixes)
+            for pack_name, selectors, topics, expand_keywords in PACKS:
+                catalog = _field_catalog(types, selectors)
+                pack_pages = _pack_pages(topics, canonical, source_signals, expand_keywords)
                 pack_signals = [
                     signal
                     for signal in source_signals
-                    if signal.get("kind")
+                    if (signal.get("page") is None or signal.get("page") in pack_pages)
+                    and signal.get("kind")
                     in {
                         "date",
                         "money",
@@ -581,19 +918,25 @@ class DirectContractHarness:
                         "renewal_negation",
                     }
                 ]
+                guidance = _PACK_GUIDANCE.get(pack_name, "")
                 prompt = (
                     f"Extract the {pack_name} contract facts from the source below. "
                     "Use Qwen semantic understanding to decide what each literal value means. "
                     "The literal source signals are observations, not final facts. "
                     "Inspect every relevant signal and decide its contractual role. "
                     "For every accepted fact page and exact quote are mandatory; copy the quote verbatim, without ellipses. "
-                    "Do not output fields outside this catalog. Omit facts that are not actually present.\n\n"
-                    "FIELD CATALOG:\n"
+                    "Do not output fields outside this catalog. Omit facts that are not actually present."
+                    + (" " + guidance if guidance else "")
+                    + "\n\nFIELD CATALOG:\n"
                     + json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
-                    + "\n\nLITERAL SOURCE SIGNALS:\n"
+                    + "\n\nLITERAL SOURCE SIGNALS (pages "
+                    + str(pack_pages)
+                    + "):\n"
                     + json.dumps(pack_signals, ensure_ascii=False, separators=(",", ":"))
-                    + "\n\nCONTRACT SOURCE:\n"
-                    + base_source
+                    + "\n\nCONTRACT SOURCE (pages "
+                    + str(pack_pages)
+                    + "):\n"
+                    + _pack_source(canonical, pack_pages, visual_readings)
                 )
                 batch = await call(
                     f"semantic:{pack_name}",
@@ -604,7 +947,7 @@ class DirectContractHarness:
                 proposals.extend(batch.facts)
 
             def locate(fact: ProposedFact):
-                quote = (fact.quote or "").strip()
+                quote = _clean_quote(fact.quote or "")
                 page_blocks = (
                     document.pages_blocks.get(fact.page, [])
                     if fact.page is not None
@@ -623,6 +966,18 @@ class DirectContractHarness:
                                 matches.append((block, found[0]))
                     if len(matches) == 1:
                         return matches[0], False
+                    if not matches and fact.page is not None:
+                        source_page = next(
+                            (page for page in canonical.pages
+                             if page.page_number == fact.page),
+                            None,
+                        )
+                        if source_page is not None:
+                            found = _find_quote(
+                                (source_page.text or "").strip(), quote
+                            )
+                            if found is not None:
+                                return (None, found[0]), False
 
                 signal_matches = [
                     signal
@@ -638,9 +993,20 @@ class DirectContractHarness:
                         if found is not None:
                             return (block, found[0]), False
 
+                if fact.page is not None and fact.page in visual_readings and quote:
+                    for fragment in visual_readings[fact.page].visible_text:
+                        found = _find_quote(fragment, quote)
+                        if found is not None:
+                            return (None, found[0]), True
+
                 # Missing page/quote should not kill an otherwise precise semantic
-                # fact. For literal string values (supplier, title, payment terms,
-                # etc.) locate a unique exact/case-insensitive source occurrence.
+                # fact, but facts the model itself did not mark as applicable must
+                # not be retroactively saved by a loose literal match (junk
+                # acceptance).  For applicable literal string values (supplier,
+                # title, payment terms, etc.) locate a unique exact/case-insensitive
+                # source occurrence.
+                if fact.applicability != "applicable":
+                    return None
                 literal_matches: list[tuple[Block, str]] = []
                 for literal in _literal_strings(fact.value):
                     if literal.upper() in {"EUR", "USD", "GBP"}:
@@ -658,12 +1024,6 @@ class DirectContractHarness:
                 }
                 if len(unique_literal) == 1:
                     return next(iter(unique_literal.values())), False
-
-                if fact.page is not None and fact.page in visual_readings and quote:
-                    for fragment in visual_readings[fact.page].visible_text:
-                        found = _find_quote(fragment, quote)
-                        if found is not None:
-                            return (None, found[0]), True
                 return None
 
             contract = Contract()
@@ -673,6 +1033,19 @@ class DirectContractHarness:
             for fact in proposals:
                 original_value = fact.value
                 fact.value = _normalize_fact_value(fact.field, fact.value)
+                if fact.field in {"costs.scheduled_prices", "costs.variable_charges"} and fact.page is not None:
+                    page_text = "\n".join(
+                        (block.text or "")
+                        for block in document.pages_blocks.get(fact.page, [])
+                    )
+                    if fact.field == "costs.scheduled_prices":
+                        parsed = _staged_price_rows(page_text)
+                    else:
+                        parsed = _per_call_rows(page_text)
+                    if parsed:
+                        fact.value = [row for row, _ in parsed]
+                        fact.applicability = "applicable"
+                        fact.quote = parsed[0][1]
                 if fact.value != original_value:
                     normalizations.append({
                         "field": fact.field,
@@ -765,6 +1138,45 @@ class DirectContractHarness:
                         "confidence": fact.confidence,
                     }
                 )
+                supported_count += 1
+
+            scheduled_rows = [
+                {
+                    "period_index": row.period_index,
+                    "amount": {
+                        "amount": row.amount.amount if row.amount else None,
+                        "currency": row.amount.currency if row.amount else None,
+                    },
+                }
+                for row in contract.costs.scheduled_prices
+                if row.period_index is not None and row.amount and row.amount.amount is not None
+            ]
+            steady_annual = _steady_annual_amount(scheduled_rows)
+            if steady_annual is not None and contract.costs.annual_cost is None:
+                contract.costs.annual_cost = Money(
+                    amount=steady_annual,
+                    currency=(
+                        scheduled_rows[0]["amount"]["currency"]
+                        if scheduled_rows and scheduled_rows[0]["amount"].get("currency")
+                        else "EUR"
+                    ),
+                    period="annual",
+                )
+                accepted.append(
+                    {
+                        "field": "costs.annual_cost",
+                        "page": None,
+                        "quote": "abgeleitet aus gestaffelten Jahrespreisen",
+                        "confidence": None,
+                    }
+                )
+                if contract.costs.evidence is not None:
+                    evidence_rows.append(
+                        {
+                            "field": "costs.annual_cost",
+                            "source": contract.costs.evidence.model_dump(mode="json"),
+                        }
+                    )
                 supported_count += 1
 
             if supported_count == 0:

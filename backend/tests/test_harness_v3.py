@@ -6,7 +6,15 @@ import pytest
 from app.ai.harness import get_harness_class
 from app.ai.harness.document import DocumentModel
 from app.ai.harness.source_signals import collect_source_signals
-from app.ai.harness.v3 import DirectContractHarness, HarnessV3
+from app.ai.harness.v3 import (
+    DirectContractHarness,
+    HarnessV3,
+    _normalize_money_payload,
+    _per_call_rows,
+    _retry_output_plan,
+    _staged_price_rows,
+    _steady_annual_amount,
+)
 from app.ai.schemas import ModelCapabilities, ModelDescriptor
 from app.core.config import Settings
 from app.documents.intelligence.canonical import (
@@ -258,7 +266,7 @@ async def test_direct_harness_delivers_grounded_contract_without_block_ids():
     assert contract.costs.variable_charges[0].amount.amount == 2226
     assert result.diagnostics["supported_count"] >= 8
     assert result.diagnostics["evidence_count"] >= 8
-    assert result.diagnostics["stage_call_counts"]["semantic"] == 3
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 4
 
 
 @pytest.mark.asyncio
@@ -288,6 +296,82 @@ async def test_alternative_fact_never_projects():
         and row["reason"] == "applicability:alternative"
         for row in result.diagnostics["rejected_facts"]
     )
+
+
+@pytest.mark.asyncio
+async def test_quote_that_spans_layout_elements_binds_to_page_text():
+    class SplitElementProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "identity.supplier" in text:
+                payload = json.loads(raw)
+                for fact in payload["facts"]:
+                    if fact["field"] == "identity.supplier":
+                        fact["quote"] = (
+                            "zwischen\nABIOMED Europe GmbH Neuenhofer Weg 3 "
+                            "D-52074 Aachen"
+                        )
+                return json.dumps(payload)
+            return raw
+
+    pages = [
+        *document().pages,
+    ]
+    doc = document()
+    doc.pages[0] = Page(
+        page_number=1,
+        width_pt=600,
+        height_pt=800,
+        text=(
+            "Vertr.-Nr.: 40015645 zwischen\n"
+            "ABIOMED Europe GmbH Neuenhofer Weg 3 D-52074 Aachen"
+        ),
+        elements=[
+            Element(
+                element_id="el1",
+                page=1,
+                reading_order=0,
+                text="Vertr.-Nr.: 40015645",
+                type="paragraph",
+                method="ocr",
+            ),
+            Element(
+                element_id="el2",
+                page=1,
+                reading_order=1,
+                text="zwischen",
+                type="paragraph",
+                method="ocr",
+            ),
+            Element(
+                element_id="el3",
+                page=1,
+                reading_order=2,
+                text="ABIOMED Europe GmbH Neuenhofer Weg 3 D-52074 Aachen",
+                type="paragraph",
+                method="ocr",
+            ),
+        ],
+    )
+    doc.canonical_text = "\n".join(page.text for page in doc.pages)
+
+    result = await DirectContractHarness(settings(), ai(SplitElementProvider())).analyze(
+        doc
+    )
+    assert result.contract is not None, result.error
+    accepted = {
+        row["field"]: row for row in result.diagnostics["accepted_facts"]
+    }
+    assert accepted["identity.supplier"]["page"] == 1
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    source = result.contract.identity.evidence
+    assert source is not None
+    assert source.page == 1
+    assert "ABIOMED Europe GmbH" in source.source_text
 
 
 @pytest.mark.asyncio
@@ -417,3 +501,214 @@ async def test_known_time_value_drops_unknown_model_properties_before_validation
     ]
     assert rows
     assert rows[0]["reason"] == "evidence_not_located"
+
+
+@pytest.mark.asyncio
+async def test_money_fact_binds_by_literal_source_signal_when_model_quote_is_bad():
+    class BadMoneyQuoteProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "costs.annual_cost" in text:
+                payload = json.loads(raw)
+                payload["facts"].append(
+                    {
+                        "field": "costs.monthly_cost",
+                        "value": {
+                            "amount": 8000,
+                            "currency": "EUR",
+                            "period": None,
+                        },
+                        "page": 8,
+                        "quote": "8000 EUR",
+                        "applicability": "applicable",
+                    }
+                )
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(
+        settings(), ai(BadMoneyQuoteProvider())
+    ).analyze(document())
+    assert result.contract is not None
+    assert result.contract.costs.monthly_cost.amount == 8000
+    assert result.contract.costs.evidence is not None
+    assert result.contract.costs.evidence.page == 8
+
+
+@pytest.mark.asyncio
+async def test_dict_shapes_for_dates_and_duration_are_normalized():
+    class DictShapeProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch":
+                payload = json.loads(raw)
+                for fact in payload["facts"]:
+                    if fact["field"] == "dates.start_date":
+                        fact["value"] = {"year": 2025, "month": 4, "day": 1}
+                    if fact["field"] == "dates.duration":
+                        fact["value"] = {"years": 4}
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(
+        settings(), ai(DictShapeProvider())
+    ).analyze(document())
+    assert result.contract is not None, result.error
+    assert str(result.contract.dates.start_date.date) == "2025-04-01"
+    assert result.contract.dates.duration.value == 4
+    assert result.contract.dates.duration.unit == "years"
+    normalized_fields = {
+        row["field"] for row in result.diagnostics["normalizations"]
+    }
+    assert "dates.start_date" in normalized_fields
+    assert "dates.duration" in normalized_fields
+
+
+@pytest.mark.asyncio
+async def test_truncated_output_is_retried_with_reduced_output_budget():
+    class TruncatingProvider(FakeProvider):
+        def __init__(self):
+            super().__init__()
+            self.semantic_calls = 0
+
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if schema["title"] == "ProposedFactBatch":
+                self.semantic_calls += 1
+                if self.semantic_calls == 1:
+                    self.last_done_reason = "length"
+                    self.last_usage = {
+                        "prompt_tokens": 3000,
+                        "completion_tokens": 1800,
+                    }
+                    return await super().generate_request(
+                        text, system, schema, max_tokens, context_tokens, images
+                    )
+                self.last_done_reason = None
+                self.last_usage = {"prompt_tokens": 3000}
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(TruncatingProvider())
+    ).analyze(document())
+    assert result.contract is not None, result.error
+    assert result.diagnostics["failure_count"] == 0
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 4
+    assert any(
+        row.get("retried_with_output_tokens") for row in result.diagnostics["calls"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_unknown_applicability_junk_without_quote_is_not_auto_bound():
+    class JunkProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "identity.contract_number" in text:
+                payload = json.loads(raw)
+                payload["facts"].append(
+                    {
+                        "field": "identity.supplier",
+                        "value": "ABIOMED Europe GmbH",
+                        "page": None,
+                        "quote": "",
+                        "applicability": "unknown",
+                    }
+                )
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(
+        settings(), ai(JunkProvider())
+    ).analyze(document())
+    assert result.contract is not None
+    assert any(
+        row["field"] == "identity.supplier"
+        and row["reason"] == "evidence_not_located"
+        for row in result.diagnostics["rejected_facts"]
+    )
+
+
+def test_money_normalizer_rescues_value_str_and_currency_code_shapes():
+    normalized = _normalize_money_payload(
+        {"value_str": "8.000,00", "currency_code": "eur"}
+    )
+    assert normalized["amount"] == 8000
+    assert normalized["currency"] == "eur"
+
+    normalized = _normalize_money_payload(
+        {"amount": {"cents": 800000, "currency": "EUR"}}
+    )
+    assert normalized["amount"] == 800000
+    assert normalized["currency"] == "EUR"
+
+
+def test_staged_price_rows_parse_german_pricing_annex():
+    rows = _staged_price_rows(
+        "1.Jahr 0 EUR | 2.Jahr 8.000,00 EUR | 3.Jahr 8.000,00 EUR | 4.Jahr 8.000,00 EUR"
+    )
+    assert [row["period_index"] for row, _ in rows] == [1, 2, 3, 4]
+    assert [row["amount"]["amount"] for row, _ in rows] == [
+        0.0,
+        8000.0,
+        8000.0,
+        8000.0,
+    ]
+    assert all(row["amount"]["currency"] == "EUR" for row, _ in rows)
+    assert all(quote for _, quote in rows)
+
+
+def test_per_call_rows_parse_fixed_rate():
+    rows = _per_call_rows("Fixed per call: 2.226,00 EUR.")
+    assert len(rows) == 1
+    row, quote = rows[0]
+    assert row["amount"]["amount"] == 2226.0
+    assert row["unit"] == "per_call"
+    assert "2.226,00 EUR" in quote
+
+
+def test_steady_annual_amount_derives_recurring_fee():
+    rows = [
+        {"period_index": 1, "amount": {"amount": 0.0}},
+        {"period_index": 2, "amount": {"amount": 8000.0}},
+        {"period_index": 3, "amount": {"amount": 8000.0}},
+        {"period_index": 4, "amount": {"amount": 8000.0}},
+    ]
+    assert _steady_annual_amount(rows) == 8000.0
+
+    assert (
+        _steady_annual_amount(
+            [
+                {"period_index": 1, "amount": {"amount": 0.0}},
+                {"period_index": 2, "amount": {"amount": 8000.0}},
+            ]
+        )
+        is None
+    )
+    assert _steady_annual_amount(
+        [{"period_index": 1, "amount": {"amount": 8000.0}}]
+    ) is None
+
+
+def test_retry_output_plan_uses_measured_budget():
+    plan = _retry_output_plan("semantic:core", 3000, 8192, 1800)
+    assert plan[0] is not None
+    assert plan[1] == "output_budget_stage_retry"
+
+    plan = _retry_output_plan("semantic:core", 7600, 8192, 1800)
+    assert plan[0] is None
