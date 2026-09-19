@@ -21,6 +21,9 @@ export interface ProcessingJob {
   processed_at: string | null;
   success_count: number | null;
   failure_count: number | null;
+  /** UAT Round 2: deutsche, sichere Status-/Ergebnis-Labels (nie rohe KI-Fehler). */
+  status_label_de?: string | null;
+  result_label_de?: string | null;
 }
 
 export interface ProcessingJobsResponse {

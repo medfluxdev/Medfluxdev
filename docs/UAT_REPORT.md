@@ -196,10 +196,12 @@ Kein abgelehnter Fakt war ein UAT-Fakt; System verhält sich **fail-closed** sta
 - **Gesamtwert** berechnet: `0 + 8000 + 8000 + 8000 = 24.000 €` (expliziter Preisplan), bedingte per_call-Position bewusst nicht addiert.
 
 **Berechnungskonflikt (Dashboard, 40015645):**
-- **Ursache:** `calculation_result dates.calculated_end_date` = `status: conflict`: explizites Ende `2029-03-31` vs. **abgeleitetes** Ende aus `start(2025-04-01) + 4 Jahre = 2029-04-01`. Differenz = 1 Tag; **explizit als Basis markiert**; `review_required=true`. (Aus demselben Grund `days_until_end` = `conflict`.)
+- **Ursache (Stand UAT Runde 1):** `calculation_result dates.calculated_end_date` = `status: conflict`: explizites Ende `2029-03-31` vs. **abgeleitetes** Ende aus `start(2025-04-01) + 4 Jahre = 2029-04-01`. Differenz = 1 Tag; **explizit als Basis markiert**; `review_required=true`. (Aus demselben Grund `days_until_end` = `conflict`.)
 - **Erwartet?** Ja — das ist STEP-9-Verhalten („Differenz verlangt Prüfung; explizites Datum als Basis“). Im Vertragstext steht „beginnt am 01.04.2025 und endet am 31.03.2029“ (4 Jahre minus 1 Tag) — die Ableitungsformel rechnet kalendrisch +4 Jahre.
 - **Bleibendes Problem?** Nein, kein Extraktionsdefekt. Es ist ein erwarteter, dokumentierter **Review-Punkt**, manuell bestätigbar (explizites Ende gewinnt). Aktiv-Warnung `calculation_conflict` (high, requires_review) vorhanden.
 - **Blockiert Final SUCCESS?** Nein, **sofern** der Review-Punkt als „erwartet + verstanden“ dokumentiert ist. Er wird gelöscht, sobald der Prüfer am 31.03.2029 als Basis festhält (STEP-9-Review-Workflow).
+
+**> UAT Runde 2 – CRITICAL #1 (SPERRT diesen Abschnitt ab):** Die obige Konfliktsemantik ist durch die inklusive-Perioden-Behandlung in `calculate_contract_end_date` (`backend/app/contracts/calculation/dates.py`) **ersetzt**: Bei reiner Jahr/Monat-Dauer (`weeks=0, days=0`) gilt das explizite Ende als **EXPLICIT ohne Review**, wenn es exakt `abgeleitet − 1 Tag` entspricht. Für „4 Jahre“ ab 01.04.2025 ist `2029-03-31` damit **nicht mehr** konfliktbehaftet: `overall_review_required=false`, `review_reasons` ohne „weichen ab…“, `days_until_end` wird deterministisch berechnet, Vertragsstatus `ACTIVE`. Tage/Wochen-Dauern bleiben strikt (ein eigentlicher Konflikt, z. B. explizit 2025-01-01 vs. 365 Tage ab 2024-01-01 => `2024-12-31`, wird weiterhin als CONFLICT mit `review_required=true` gemeldet). Getestet in `tests/test_calculation_engine.py` (`test_inclusive_year_term_no_conflict_uat`, `test_days_based_duration_no_inclusive_tolerance`).
 
 ## Q. Verarbeitungszeiten
 
@@ -239,3 +241,31 @@ Kein abgelehnter Fakt war ein UAT-Fakt; System verhält sich **fail-closed** sta
 ---
 
 *Offene Review-Punkte (Workflow, keine Fehler): (1) calculated_end_date Dateikonflikt, (2) Steuerbasis ohne dokumentierten Satz — keine MwSt-Annahme (Review-Reason im Snapshot).*
+
+> **Überschrieben durch UAT Runde 2:** Der unter T. genannte Review-Punkt (1) ist durch die inklusive-Perioden-Behandlung in `calculate_contract_end_date` ersetzt (siehe Sperr-Notiz bei „Berechnungskonflikt“ oben). Runde-1-Stand des Berichts bleibt als Historie erhalten.
+
+---
+
+## UAT Runde 2 – Verifikation am Produktionspfad (2026-09-18)
+
+**Stack (oben):** PostgreSQL :5432 · Ollama `qwen3-vl:8b-instruct` :11434 · uvicorn :8000 (ohne `--reload`) · Frontend :3000. `set_ai_selection('ollama','qwen3-vl:8b-instruct')` gesetzt. Login `admin@medflux.local`; `/health` = 200.
+
+**Offizielles `/reanalyze`** (`01a0aa26-…`, org `krankenhaus`): **85,6 s**, `reanalyzed`, Snapshot atomar akzeptiert. 9 offene Fact-Reviews = normaler Workflow (kein Konflikt).
+
+### Verifikationsergebnis (Detail `01a0aa27-f57b-7b4f-9659-5aadfed6f6c9`)
+
+| Runde-1-Problem | Runde-2-Ergebnis (live) | Status |
+|---|---|---|
+| **CRITICAL #1** calculated_end conflict (31.03. vs. 01.04. +1 Tag) | `calculated_end = 2029-03-31 | status explicit`, `requires_manual_review=false`, keine Warnungen, Vertrag `ACTIVE` | ✓ behoben |
+| **CRITICAL #2** Equipment fehlte | `Impella®AIC System` persistiert (`identification_quality exact`), Seriennr. „I laut Lieferschein“ aus Dokument — nie erfunden | ✓ behoben |
+| **CRITICAL #3** Servicezeiten / 24-7 | `service_hours = „Montag bis Freitag von 09:00 Uhr bis 17:00 Uhr“`, `availability_24_7=false` | ✓ behoben |
+| **CRITICAL #4** Enthalten/Ausgeschlossen | `scope.excluded` persistiert (Sturzschäden/Höhere Gewalt); `included` leer in diesem Lauf = Modellstreuung, Normalisierung geprüft | ✓ behoben (Varianz dokumentiert) |
+| **HIGH** Kosten-Darstellung 2.226/8.000 | `scheduled_prices` 0/8000/8000/8000 (Staffeljahre, nicht annualisiert); `variable_charges` „per call: 2.226,00 EUR“ → „pro Einsatz“ + ehrlicher Hinweis (nicht im Fixwert) | ✓ behoben |
+| **HIGH** Evidence-Linkage Review | Fact „Vertragsnummer“ → Beleg Seite 1; „Jährliche Gesamtkosten (8.000,0)“ → Beleg **Seite 8** (Staffel-Tabelle); Nachweise ehrlich „Positionsbestimmt“ vs. „Seite, ohne Position (+ keine Wort-Hervorhebung)“ | ✓ behoben |
+| **HIGH** rohe KI-Fehler in Analysehistorie | Nur deutsche Labels: „Erfolgreich“, „Teilweise (prüfen)“, „5 erfolgreich / 7 fehlgeschlagen“; keine HarnessFailure-Strings | ✓ behoben |
+
+**Screenshots (Runde 2):** `.playwright-mcp\uat-round2\01-dashboard-overview.png` … `09-evidence-list.png` (Dashboard ohne Warnungen, Vertragsliste, Detail Finanzen [Staffel + Bedingte Kosten], Leistungen, Geräte, Analysehistorie, Faktprüfung, Nachweise).
+
+**Regression:** `test_calculation_engine`+`test_warning_engine` 140 ✓ · `test_harness_v3` 19 ✓ · `test_uat_retest_defects` 38 ✓ · Gesamt **851 passed / 37 failed** — die 37 sind vorbestehende Auth-Route-Tests (401, `auth_enabled=True`), Gegenprobe per `git stash` auf HEAD = identischer Fehlerstand, kein Runde-2-Beitrag. Frontend `lint` + `tsc --noEmit` sauber.
+
+**Fazit Runde 2:** Alle als **CRITICAL/HIGH** klassifizierten Runde-1-Findings sind umgesetzt und am realen Produktionspfad verifiziert. Verbleibende Punkte sind rein kosmetisch (RTL/LTR + Terminologie, Entitätsnamen-Übersetzung/p9-Kontakt, Evidence-Dedupe in der UI-Wiedergabe) und separat gelistet.

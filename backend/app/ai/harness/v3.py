@@ -96,6 +96,18 @@ _PACK_GUIDANCE = {
         "one amount from another, never repeat one literal amount in several cost fields, never return empty list items, "
         "and never map an amount to a page that does not contain it."
     ),
+    "operations": (
+        "OPERATIONS: equipment is a list of typed objects "
+        "{device_name,manufacturer,model,serial_number,inventory_number,system_name,"
+        "service_scope,included_services:list,excluded_services:list}. "
+        "Copy the exact device/system name verbatim from the source; set serial_number only when the "
+        "document states it, otherwise omit the field (never invent a serial). "
+        "services.included_services and services.excluded_services are verbatim clause items "
+        "(one entry per service), never paraphrases. "
+        "sla.availability_24_7 must be false whenever the contract states an explicit service window "
+        "such as 'Montag bis Freitag 09:00-17:00' (no weekend/holiday coverage). "
+        "sla.service_hours captures that window text verbatim as original_text."
+    ),
 }
 
 SYSTEM = """You are the semantic contract reader inside MedFlux.
@@ -501,6 +513,151 @@ _MONEY_PERIOD_BY_FIELD = {
 }
 
 
+# Zulaessige Felder eines Equipment-Objekts (vgl. app.models.contract.Equipment).
+# Alles andere (v. a. 'evidence') wird verworfen – die Evidenz bindet der Harness
+# deterministisch aus der gefundenen Quelle.
+_EQUIPMENT_KEEP = {
+    "device_name",
+    "manufacturer",
+    "model",
+    "serial_number",
+    "inventory_number",
+    "system_name",
+    "equipment_category",
+    "equipment_type",
+    "location",
+    "department",
+    "service_scope",
+    "included_services",
+    "excluded_services",
+    "coverage_start",
+    "coverage_end",
+    "sla_notes",
+}
+
+_EQUIPMENT_ALIASES = {
+    "deviceName": "device_name",
+    "serialNumber": "serial_number",
+    "seriennr": "serial_number",
+    "seriennummer": "serial_number",
+    "inventarnr": "inventory_number",
+    "systemName": "system_name",
+    "equipmentCategory": "equipment_category",
+    "equipmentType": "equipment_type",
+}
+
+
+def _normalize_equipment_item(item: Any) -> Optional[dict]:
+    """Normalisiert ein einzelnes Equipment-Proposal deterministisch.
+
+    Nimmt Strings (reines Geräte-/Systemmodell) wie Dicts an und gibt ein
+    Equipment-taugliches Dict nur mit bekannten Feldern zurueck. Fehlende
+    Seriennummern werden NICHT erfunden; sie bleiben einfach weg (None).
+    """
+    if isinstance(item, str):
+        name = item.strip()
+        return {"device_name": name} if name else None
+    if not isinstance(item, dict):
+        return None
+    cleaned: dict[str, Any] = {}
+    for raw_key, val in item.items():
+        key = _EQUIPMENT_ALIASES.get(raw_key, raw_key)
+        if key not in _EQUIPMENT_KEEP or val is None:
+            continue
+        if isinstance(val, str):
+            stripped = val.strip()
+            if stripped:
+                cleaned[key] = stripped
+        elif isinstance(val, list):
+            items = [str(x).strip() for x in val if str(x).strip()]
+            if items:
+                cleaned[key] = items
+        else:
+            cleaned[key] = val
+    return cleaned or None
+
+
+def _normalize_equipment_payload(value: Any) -> Any:
+    """Bringt Equipment-Proposals in das Schema `list[Equipment]`-taugliche Format.
+
+    Behebt den UAT-Defekt „Geräte fehlen": Qwen lieferte frueher
+    `["Impella\u00aeAIC System"]` – ein List-of-Strings – das bei der strikten
+    Schema-Validierung als `schema_validation_failed` verworfen wurde.
+    """
+    if isinstance(value, str):
+        normalized = _normalize_equipment_item(value)
+        return [normalized] if normalized else []
+    if isinstance(value, list):
+        out: list[dict] = []
+        for item in value:
+            normalized = _normalize_equipment_item(item)
+            if normalized is not None:
+                out.append(normalized)
+        return out
+    if isinstance(value, dict):
+        normalized = _normalize_equipment_item(value)
+        return [normalized] if normalized else []
+    return value
+
+
+_SLA_TIMEVALUE_FIELDS = {
+    "sla.response_time",
+    "sla.resolution_time",
+    "sla.service_hours",
+    "sla.emergency_availability",
+}
+
+
+def _normalize_timevalue_payload(value: Any) -> Any:
+    """Normalisiert SLA-TimeValue-Proposals (value/unit/original_text).
+
+    Behandelt die Window-Semantik von `sla.service_hours`: Qwen liefert oft
+    `{"start_time": "09:00", "end_time": "17:00", "days": ...}`. Diese Keys werden
+    deterministisch zu einem `original_text` zusammengesetzt statt verworfen –
+    die bisherige Key-Filterung liess sie zu `{}` kollabieren und der Fakt wurde
+    als „Supported fact has no value" verworfen (UAT-Defekt Service Hours).
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        return (
+            {"value": None, "unit": None, "original_text": text} if text else None
+        )
+    if isinstance(value, (int, float)):
+        return {"value": float(value), "unit": None, "original_text": None}
+    if not isinstance(value, dict):
+        return value
+    cleaned: dict[str, Any] = {
+        key: value.get(key)
+        for key in ("value", "unit", "original_text")
+        if value.get(key) is not None
+    }
+    original = cleaned.get("original_text")
+    if original is None:
+        start = value.get("start_time") or value.get("start")
+        end = value.get("end_time") or value.get("end")
+        days = value.get("days") or value.get("weekdays")
+        if start or end or days:
+            parts: list[str] = []
+            if days:
+                if isinstance(days, str):
+                    parts.append(days.strip())
+                else:
+                    joined = ", ".join(str(d) for d in days if d)
+                    if joined:
+                        parts.append(joined)
+            if start and end:
+                parts.append(f"{start}-{end}")
+            elif start:
+                parts.append(f"ab {start}")
+            elif end:
+                parts.append(f"bis {end}")
+            if parts:
+                original = " ".join(p for p in parts if p)
+    if original:
+        cleaned["original_text"] = str(original)
+    return cleaned or None
+
+
 def _normalize_fact_value(field: str, value: Any) -> Any:
     if field in {"dates.start_date", "dates.end_date"}:
         return _normalize_date_payload(value)
@@ -565,17 +722,10 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
                     pass
             normalized.append(row)
         return normalized
-    if field in {
-        "sla.response_time",
-        "sla.resolution_time",
-        "sla.service_hours",
-        "sla.emergency_availability",
-    } and isinstance(value, dict):
-        return {
-            key: value.get(key)
-            for key in ("value", "unit", "original_text")
-            if key in value
-        }
+    if field == "equipment":
+        return _normalize_equipment_payload(value)
+    if field in _SLA_TIMEVALUE_FIELDS:
+        return _normalize_timevalue_payload(value)
     if isinstance(value, str):
         return value.strip()
     return value

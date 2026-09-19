@@ -108,6 +108,28 @@ class MoneyValue(BaseModel):
     explanation: Optional[str] = None
 
 
+class ScheduledPriceDto(BaseModel):
+    """Explizite Preisstufe (belegtes Vertragsjahr), nie annualisiert."""
+
+    period_index: Optional[int] = None
+    period_label: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    condition: Optional[str] = None
+
+
+class VariableChargeDto(BaseModel):
+    """Bedingte/verbrauchsabhaengige Position, nie zum Fixwert addiert."""
+
+    label: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    unit: Optional[str] = None
+    unit_label_de: Optional[str] = None
+    condition: Optional[str] = None
+    note_de: Optional[str] = None
+
+
 class CalcBasis(BaseModel):
     """Berechnungsgrundlage eines autoritativen berechneten Feldes.
 
@@ -288,6 +310,10 @@ class ContractCostsSection(BaseModel):
     # UAT Defect Batch C: ehrliche Kosten-Erklaerung, wenn KEIN verlaesslicher
     # Jahresbetrag vorliegt (z. B. Preise je Vertragsjahr, kein Einheitsbetrag).
     availability: Optional[CostAvailabilityDto] = None
+    # UAT Round 2: belegter Preisplan (Staffel) + bedingte Positionen sichtbar
+    # und ehrlich getrennt vom wiederkehrenden Fixwert.
+    scheduled_prices: list[ScheduledPriceDto] = Field(default_factory=list)
+    variable_charges: list[VariableChargeDto] = Field(default_factory=list)
 
 
 class ScopeStatusItem(BaseModel):

@@ -167,6 +167,63 @@ class TestEndDate:
         # 01.01.2024 + 12 Monate = 01.01.2025 == explizites Ende -> Korroboration
         assert r.dates.calculated_end_date.status in (CS.EXPLICIT, CS.CALCULATED)
 
+    def test_inclusive_year_term_no_conflict_uat(self):
+        # UAT Re-Test Defect 1: 01.04.2025 + 4 Vertragsjahre -> 31.03.2029
+        # (inklusive Vertragslaufzeit = letzter Tag vor dem Jahrestag 01.04.2029).
+        # Das ist KEIN Konflikt: kein Review-Flag, kein Warning, kein Risiko.
+        c = make_contract(
+            start=date(2025, 4, 1),
+            end=date(2029, 3, 31),
+            duration=(4, TimeUnit.YEARS),
+        )
+        r = calculate_contract(c, as_of_date=date(2026, 6, 1))
+        end = r.dates.calculated_end_date
+        assert end.status == CS.EXPLICIT
+        assert end.value == date(2029, 3, 31)
+        assert end.review_required is False
+        assert not any("weichen ab" in reason for reason in r.review_reasons)
+        assert r.dates.days_until_end.status == CS.CALCULATED
+        assert r.dates.current_contract_status.status == ContractStatus.ACTIVE
+
+    def test_inclusive_months_term_no_conflict(self):
+        # Monatsbasierte inklusive Laufzeit: 01.04.2025 + 3 Monate -> 30.06.2025.
+        c = make_contract(
+            start=date(2025, 4, 1),
+            end=date(2025, 6, 30),
+            duration=(3, TimeUnit.MONTHS),
+        )
+        r = calculate_contract(c, as_of_date=date(2025, 5, 1))
+        end = r.dates.calculated_end_date
+        assert end.status == CS.EXPLICIT
+        assert end.value == date(2025, 6, 30)
+        assert end.review_required is False
+
+    def test_one_day_after_derived_still_conflict(self):
+        # Explizites Ende EINEN Tag NACH dem Jahrestag ist KEIN inklusiver
+        # Laufzeittag, sondern ein echter Konflikt.
+        c = make_contract(
+            start=date(2025, 4, 1),
+            end=date(2029, 4, 2),
+            duration=(4, TimeUnit.YEARS),
+        )
+        r = calculate_contract(c, as_of_date=date(2026, 1, 1))
+        assert r.dates.calculated_end_date.status == CS.CONFLICT
+        assert r.dates.calculated_end_date.review_required is True
+
+    def test_days_based_duration_no_inclusive_tolerance(self):
+        # Tagesbasierte Dauer (Wochen/Tage) kennt die inklusive Jahrestags-Regel
+        # NICHT: 2024-01-01 + 365 Tage (Schaltjahr) = 2024-12-31; explizit
+        # 2025-01-01 (= 366 Tage) bleibt ein echter Konflikt, kein stiller
+        # Ein-Tages-Spielraum.
+        c = make_contract(
+            start=date(2024, 1, 1),
+            end=date(2025, 1, 1),
+            duration=(365, TimeUnit.DAYS),
+        )
+        r = calculate_contract(c, as_of_date=date(2024, 3, 1))
+        assert r.dates.calculated_end_date.status == CS.CONFLICT
+        assert r.dates.calculated_end_date.review_required is True
+
 
 # ============================================================ Status / days
 

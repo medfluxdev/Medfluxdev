@@ -283,6 +283,81 @@ def complete_review(
     return review
 
 
+# UAT Defect Batch F (generisch): materiale Fakten tragen ihre Evidenz unter
+# unterschiedlichen, deterministischen field_ref-Formen:
+#   - exakt: `identity.contract_number` (recovered:...-Belege)
+#   - Harness-Zeilen: `identity.contract_number.evidence.0`
+#   - Aliase (Harness-Feldname != Material-Key): `termination.automatic_renewal`
+#     fuer `termination.auto_renewal`, `costs.annual_cost` fuer `costs.annual`
+#   - gewachsene Praefixe: `identity_equipment.evidence.0` fuer equipment.*,
+#     `sla.*`/`scope.*` fuer `services.coverage`
+# Gruppen-Zeilen (`dates.evidence`, `costs.evidence`, ...) dienen als
+# Rueckfall, damit ein vorliegender Fakt nie grundlos „Kein Quellen-Beleg"
+# zeigt – sie zaehlen aber nicht, wenn ein feldspezifischer Beleg existiert.
+_FACT_EVIDENCE_ALIASES: dict[str, tuple[str, ...]] = {
+    "termination.auto_renewal": ("termination.automatic_renewal",),
+    "costs.annual": ("costs.annual_cost",),
+    "costs.monthly_recurring": (
+        "costs.monthly_cost",
+        "costs.quarterly_cost",
+        "costs.semi_annual_cost",
+    ),
+    "costs.monthly_net": ("costs.tax_table.net",),
+    "costs.vat_rate": ("costs.tax_table.vat",),
+    "costs.vat_amount": ("costs.tax_table.vat",),
+    "costs.monthly_gross": ("costs.tax_table.gross",),
+    "services.coverage": (
+        "services.included_services",
+        "services.excluded_services",
+    ),
+}
+
+_FACT_EVIDENCE_PREFIXES: dict[str, tuple[str, ...]] = {
+    "equipment.identity": (
+        "identity_equipment.evidence",
+        "equipment.evidence",
+        "identity.system_identity",
+    ),
+    "equipment.serial": (
+        "identity_equipment.evidence",
+        "equipment.evidence",
+        "identity.system_identity",
+    ),
+    "services.coverage": ("scope.", "sla."),
+}
+
+
+def _link_fact_evidence(fact_key: str, evidence_by_ref: dict[str, list[dict]]):
+    """Ordnet einem materialen Fakt deterministisch seine Belege zu.
+
+    Liefert (specific, group_fallback). specific enthaelt alle wörtlich
+    passenden Belege (exakt, Harness-Zeile, Alias, Praefix); group_fallback
+    enthaelt die Gruppen-Zeile (z. B. `costs.evidence`) nur, wenn es keinen
+    spezifischen Beleg gibt.
+    """
+    specific: list[dict] = []
+    group_fallback: list[dict] = []
+    group = fact_key.split(".", 1)[0]
+    aliases = _FACT_EVIDENCE_ALIASES.get(fact_key, ())
+    prefixes = _FACT_EVIDENCE_PREFIXES.get(fact_key, ())
+    for ref, matches in evidence_by_ref.items():
+        if not ref:
+            continue
+        if (
+            ref == fact_key
+            or ref.startswith(fact_key + ".evidence")
+            or any(
+                ref == alias or ref.startswith(alias + ".evidence")
+                for alias in aliases
+            )
+            or any(ref.startswith(pre) for pre in prefixes)
+        ):
+            specific.extend(matches)
+        elif ref == f"{group}.evidence":
+            group_fallback.extend(matches)
+    return specific, ([] if specific else group_fallback)
+
+
 def build_fact_review_states(
     session, *, organization_id, contract_id, data: dict
 ) -> list[dict]:
@@ -294,15 +369,6 @@ def build_fact_review_states(
     for ev in data.get("evidence") or []:
         evidence_by_ref.setdefault(ev.get("field_ref"), []).append(ev)
 
-    # UAT Defect Batch F: einige materiale Fakten tragen ihre Evidenz unter
-    # gewachsenen field_ref-Praefixen (z. B. `identity_equipment.evidence.0`
-    # fuer `equipment.identity`, `sla.*`/`scope.*` fuer `services.coverage`).
-    _FACT_EVIDENCE_PREFIXES = {
-        "equipment.identity": ("identity_equipment.evidence",),
-        "equipment.serial": ("identity_equipment.evidence",),
-        "services.coverage": ("sla.", "scope."),
-    }
-
     states: list[dict] = []
     for fact_key, info in report.items():
         row = latest.get(fact_key)
@@ -310,15 +376,8 @@ def build_fact_review_states(
         if row is not None and row.action == "reopened":
             state = "unreviewed"
 
-        exact = evidence_by_ref.get(fact_key, [])
-        prefixes = _FACT_EVIDENCE_PREFIXES.get(fact_key, ())
-        prefixed = [
-            ev
-            for ref, matches in evidence_by_ref.items()
-            for ev in matches
-            if any(ref.startswith(pre) for pre in prefixes)
-        ] if prefixes else []
-        evidence_list = exact + prefixed
+        specific, group_fallback = _link_fact_evidence(fact_key, evidence_by_ref)
+        evidence_list = specific or group_fallback
         # UAT Re-Test (Defect 1): wiederhergestellte, wörtlich belegte Quellen
         # (evidence_id "recovered:...") vor dekorativen Sammel-/Extraktions-
         # Refs – so zeigt der "Seite N"-Beleg des Reviews die kanonische Seite.

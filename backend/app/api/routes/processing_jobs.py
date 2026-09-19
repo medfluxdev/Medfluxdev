@@ -17,8 +17,50 @@ from app.database.models import ContractDocument, ProcessingRun, ProcessingSumma
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
+from app.documents.status import safe_failure_message
 
 router = APIRouter(prefix="/api/processing-jobs", tags=["processing-jobs"])
+
+
+_STATUS_LABELS_DE = {
+    "queued": "Warteschlange",
+    "running": "Wird verarbeitet",
+    "succeeded": "Erfolgreich",
+    "partial": "Teilweise (prüfen)",
+    "failed": "Fehlgeschlagen",
+    "reanalyzed": "Neu analysiert",
+}
+
+_KNOWN_KI_ERRORS = [
+    ("AIUnavailableError", "Lokale KI nicht verfügbar."),
+    ("AIUnavailable", "Lokale KI nicht verfügbar."),
+    ("nicht verf", "Lokale KI nicht verfügbar."),
+    ("RuntimeError", "Verarbeitung fehlgeschlagen."),
+    ("Timeout", "Die lokale KI hat nicht rechtzeitig geantwortet."),
+    ("Zeitüberschreitung", "Die lokale KI hat nicht rechtzeitig geantwortet."),
+    ("HarnessFailure", "KI-Analyse konnte nicht abgeschlossen werden."),
+    ("AIError", "KI-Analyse konnte nicht abgeschlossen werden."),
+    ("ExtractionError", "KI-Analyse konnte nicht abgeschlossen werden."),
+]
+
+
+def _status_label_de(status: str) -> str:
+    return _STATUS_LABELS_DE.get(status, status.replace("_", " ").title())
+
+
+def _result_label_de(row: ProcessingRun, summary: ProcessingSummary | None) -> str:
+    """Sichere deutsche Ergebnisbeschreibung – nie rohe interne Fehlertexte."""
+    ok = summary.success_count if summary else None
+    fail = summary.failure_count if summary else None
+    if row.status == "succeeded":
+        return f"{ok or 0} erfolgreich / {fail or 0} fehlgeschlagen"
+    if row.status == "partial" and ok:
+        return f"Teilweise analysiert – {ok} erfolgreich / {fail or 0} fehlgeschlagen"
+    error = row.error or ""
+    for needle, text in _KNOWN_KI_ERRORS:
+        if needle in error:
+            return text
+    return safe_failure_message(message=row.message, error=row.error)
 
 
 def _serialize(row: ProcessingRun, summary: ProcessingSummary | None = None) -> dict:
@@ -43,6 +85,8 @@ def _serialize(row: ProcessingRun, summary: ProcessingSummary | None = None) -> 
         "processed_at": summary.processed_at if summary else None,
         "success_count": summary.success_count if summary else None,
         "failure_count": summary.failure_count if summary else None,
+        "status_label_de": _status_label_de(row.status),
+        "result_label_de": _result_label_de(row, summary),
     }
 
 

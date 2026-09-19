@@ -817,10 +817,15 @@ def _costs_section(calc, snapshot=None, ov_effective=None, evidence_texts=None, 
         },
         "price_development": [],
         "notes": [],
+        "scheduled_prices": [],
+        "variable_charges": [],
     }
     if calc is None:
         return {**empty, "availability": _cost_availability(snapshot, evidence_texts, recovered)}
     costs = calc.costs
+    snapshot_costs = (
+        snapshot.get("costs") if isinstance(snapshot, dict) else None
+    )
     ann = costs.normalized_recurring.annual
     monthly = _resolve_monthly(costs.normalized_recurring.monthly, ann)
 
@@ -962,8 +967,64 @@ def _costs_section(calc, snapshot=None, ov_effective=None, evidence_texts=None, 
         },
         "price_development": _price_development_items(costs, snapshot),
         "notes": list(costs.notes or []),
+        "scheduled_prices": _price_schedule_items(snapshot_costs),
+        "variable_charges": _variable_charge_items(snapshot_costs),
         "availability": availability,
     }
+
+
+_VARIABLE_UNIT_LABELS = {
+    "per_call": "pro Einsatz",
+    "per_hour": "pro Stunde",
+    "per_device": "pro Gerät",
+}
+
+_VARIABLE_CHARGE_NOTE = (
+    "Bedingte / verbrauchsabhängige Position – wird nie zum Fixwert addiert "
+    "und ist nicht im wiederkehrenden Jahresbetrag enthalten."
+)
+
+
+def _price_schedule_items(costs_dict: Optional[dict]) -> list[dict]:
+    """Belegter Preisplan (Staffeljahre) als deterministische Anzeige-Liste."""
+    items: list[dict] = []
+    for entry in (costs_dict or {}).get("scheduled_prices") or []:
+        if not isinstance(entry, dict):
+            continue
+        amount = entry.get("amount") or {}
+        if amount.get("amount") is None:
+            continue
+        items.append({
+            "period_index": entry.get("period_index"),
+            "period_label": entry.get("period_label"),
+            "amount": amount.get("amount"),
+            "currency": amount.get("currency") or "EUR",
+            "condition": entry.get("condition"),
+        })
+    items.sort(key=lambda i: (i["period_index"] is None, i["period_index"] or 0))
+    return items
+
+
+def _variable_charge_items(costs_dict: Optional[dict]) -> list[dict]:
+    """Bedingte Positionen (z. B. „Fixed per call") ehrlich getrennt anzeigen."""
+    items: list[dict] = []
+    for entry in (costs_dict or {}).get("variable_charges") or []:
+        if not isinstance(entry, dict):
+            continue
+        amount = entry.get("amount") or {}
+        if amount.get("amount") is None:
+            continue
+        unit = entry.get("unit")
+        items.append({
+            "label": entry.get("label") or "Variable Position",
+            "amount": amount.get("amount"),
+            "currency": amount.get("currency") or "EUR",
+            "unit": unit,
+            "unit_label_de": _VARIABLE_UNIT_LABELS.get(unit, unit),
+            "condition": entry.get("condition"),
+            "note_de": _VARIABLE_CHARGE_NOTE,
+        })
+    return items
 
 
 def _format_amount(amount, currency=None):

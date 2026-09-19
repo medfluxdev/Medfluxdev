@@ -296,6 +296,27 @@ def test_review_required_deduplication():
     assert len([w for w in r.warnings if w.warning_type in review_types]) <= 3
 
 
+def test_uat_inclusive_year_term_no_conflict_warning():
+    # UAT Re-Test Defect 1: 01.04.2025 + 4 Jahre -> 31.03.2029 (inklusive
+    # Laufzeit) darf KEINE CALCULATION_CONFLICT-Warnung und kein Review-Need
+    # aus dem Enddatum erzeugen.
+    c = Contract(
+        id="UAT4Y",
+        dates=ContractDates(
+            start_date=FlexibleDate(date=date(2025, 4, 1)),
+            end_date=FlexibleDate(date=date(2029, 3, 31)),
+            duration=Duration(value=4, unit=TimeUnit.YEARS),
+        ),
+        costs=Costs(default_currency="EUR", annual_cost=Money(amount="8000", currency="EUR")),
+    )
+    calc = calculate_contract(c, as_of_date=date(2026, 6, 1))
+    r = evaluate_contract_warnings(c, calc)
+    assert calc.dates.calculated_end_date.review_required is False
+    assert WarningType.CALCULATION_CONFLICT not in _types(r)
+    assert WarningType.CONTRACT_END_APPROACHING not in _types(r)
+    assert calc.dates.current_contract_status.status == ContractStatus.ACTIVE
+
+
 # ============================================================ Costs
 
 

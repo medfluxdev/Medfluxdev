@@ -41,7 +41,7 @@ C) Konflikt-Propagation – keine falsche Sicherheit
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from app.contracts.calculation.calendar_ import add_duration, subtract_duration
@@ -172,6 +172,41 @@ def calculate_contract_end_date(contract: Contract) -> DateTimeResult:
 
     # Explizites Ende vorhanden
     if derived is not None and derived != explicit_end:
+        # Inklusive Vertragslaufzeit (UAT Re-Test Defect 1): Eine kalenderbasierte
+        # Laufzeit (Jahre/Monate, ohne Wochen-/Tage-Komponente) umfasst laut
+        # deutscher Vertragskonvention den letzten Tag VOR dem abgeleiteten
+        # Jahrestag: „beginnt am 01.04.2025, Laufzeit 4 Jahre" endet am
+        # 31.03.2029 (= 01.04.2029 minus 1 Tag). Ein explizites Ende genau auf
+        # diesem inklusiven letzten Laufzeittag ist KEIN Konflikt, sondern
+        # Korroboration – es erzeugt weder Warning noch Review-Flag.
+        inclusive_end = (
+            derived - timedelta(days=1)
+            if (
+                duration is not None
+                and duration.weeks == 0
+                and duration.days == 0
+            )
+            else None
+        )
+        if inclusive_end is not None and explicit_end == inclusive_end:
+            return DateTimeResult(
+                value=explicit_end,  # explizit bleibt autoritativ
+                status=CalculationStatus.EXPLICIT,
+                kind=DateCalculationKind.EXPLICIT,
+                explanation=(
+                    "Explizites Ende stimmt mit der kalenderbasierten inklusiven "
+                    "Laufzeit ueberein: start+duration ergibt den Jahrestag "
+                    f"{derived}; der inklusive letzte Laufzeittag ist {inclusive_end}. "
+                    "Kein Konflikt; expliziter Wert massgeblich."
+                ),
+                inputs={
+                    "end_date": str(explicit_end),
+                    "derived_end_date": str(derived),
+                    "inclusive_end_date": str(inclusive_end),
+                    "start_date": str(start) if start else "-",
+                    "duration": _duration_str(dates.duration),
+                },
+            )
         return DateTimeResult(
             value=explicit_end,  # explizit bleibt autoritativ, aber als Konflikt markiert
             status=CalculationStatus.CONFLICT,

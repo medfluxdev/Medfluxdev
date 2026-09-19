@@ -198,6 +198,28 @@ export interface ContractCostsSection {
    * verlässlicher Jahresbetrag vorliegt (z. B. Preise je Vertragsjahr).
    */
   availability: CostAvailabilityDto | null;
+  /** UAT Round 2: belegter Preisplan (Staffeljahre), nie annualisiert. */
+  scheduled_prices: ScheduledPriceDto[];
+  /** UAT Round 2: bedingte/verbrauchsabhängige Positionen, getrennt. */
+  variable_charges: VariableChargeDto[];
+}
+
+export interface ScheduledPriceDto {
+  period_index: number | null;
+  period_label: string | null;
+  amount: string | number | null;
+  currency: string | null;
+  condition: string | null;
+}
+
+export interface VariableChargeDto {
+  label: string;
+  amount: string | number | null;
+  currency: string | null;
+  unit: string | null;
+  unit_label_de: string | null;
+  condition: string | null;
+  note_de: string | null;
 }
 
 /** Ein belegter Kosten-Baustein der ehrlichen Kosten-Erklärung. */

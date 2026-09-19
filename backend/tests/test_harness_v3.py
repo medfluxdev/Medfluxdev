@@ -56,6 +56,30 @@ def document():
             ],
         ),
         Page(
+            page_number=3,
+            width_pt=600,
+            height_pt=800,
+            text=(
+                "Impella\u00ae AIC System (Konsoleneinheit). "
+                "Servicezeiten: Montag bis Freitag 09:00 bis 17:00, an Wochenenden "
+                "und Feiertagen kein Service."
+            ),
+            elements=[
+                Element(
+                    element_id="p3",
+                    page=3,
+                    reading_order=0,
+                    text=(
+                        "Impella\u00ae AIC System (Konsoleneinheit). "
+                        "Servicezeiten: Montag bis Freitag 09:00 bis 17:00, an Wochenenden "
+                        "und Feiertagen kein Service."
+                    ),
+                    type="paragraph",
+                    method="ocr",
+                )
+            ],
+        ),
+        Page(
             page_number=5,
             width_pt=600,
             height_pt=800,
@@ -71,6 +95,32 @@ def document():
                     text=(
                         "Der Vertrag beginnt am 01.04.2025 und endet am 31.03.2029. "
                         "Die Laufzeit beträgt 4 Jahren. Der Vertrag wird nicht automatisch verlängert."
+                    ),
+                    type="paragraph",
+                    method="ocr",
+                )
+            ],
+        ),
+        Page(
+            page_number=7,
+            width_pt=600,
+            height_pt=800,
+            text=(
+                "Im Vertragsumfang enthalten: Reparaturen und Instandsetzung, "
+                "Inspektionen, Ersatzteilversorgung. Nicht enthalten: Wartung an "
+                "Wochenenden und Feiertagen, Instandhaltungsarbeiten durch "
+                "unsachgemäße Bedienung."
+            ),
+            elements=[
+                Element(
+                    element_id="p7",
+                    page=7,
+                    reading_order=0,
+                    text=(
+                        "Im Vertragsumfang enthalten: Reparaturen und Instandsetzung, "
+                        "Inspektionen, Ersatzteilversorgung. Nicht enthalten: Wartung an "
+                        "Wochenenden und Feiertagen, Instandhaltungsarbeiten durch "
+                        "unsachgemäße Bedienung."
                     ),
                     type="paragraph",
                     method="ocr",
@@ -208,6 +258,65 @@ class FakeProvider:
                         ]
                     }
                 )
+            if "sla.service_hours" in text:
+                return json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "field": "equipment",
+                                "value": ["Impella\u00ae AIC System"],
+                                "page": 3,
+                                "quote": "Impella\u00ae AIC System (Konsoleneinheit)",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "sla.service_hours",
+                                "value": {
+                                    "start_time": "09:00",
+                                    "end_time": "17:00",
+                                    "days": ["Mo", "Di", "Mi", "Do", "Fr"],
+                                },
+                                "page": 3,
+                                "quote": "Montag bis Freitag 09:00 bis 17:00",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "sla.availability_24_7",
+                                "value": False,
+                                "page": 3,
+                                "quote": "an Wochenenden und Feiertagen kein Service",
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "services.included_services",
+                                "value": [
+                                    "Reparaturen und Instandsetzung",
+                                    "Inspektionen",
+                                    "Ersatzteilversorgung",
+                                ],
+                                "page": 7,
+                                "quote": (
+                                    "Im Vertragsumfang enthalten: Reparaturen und "
+                                    "Instandsetzung"
+                                ),
+                                "applicability": "applicable",
+                            },
+                            {
+                                "field": "services.excluded_services",
+                                "value": [
+                                    "Wartung an Wochenenden und Feiertagen",
+                                    "Instandhaltungsarbeiten durch unsachgemäße Bedienung",
+                                ],
+                                "page": 7,
+                                "quote": (
+                                    "Nicht enthalten: Wartung an Wochenenden und "
+                                    "Feiertagen"
+                                ),
+                                "applicability": "applicable",
+                            },
+                        ]
+                    }
+                )
             return '{"facts":[]}'
         if title == "VisualPageReading":
             return json.dumps({"page": 1, "visible_text": [], "unresolved": []})
@@ -267,6 +376,48 @@ async def test_direct_harness_delivers_grounded_contract_without_block_ids():
     assert result.diagnostics["supported_count"] >= 8
     assert result.diagnostics["evidence_count"] >= 8
     assert result.diagnostics["stage_call_counts"]["semantic"] == 4
+
+
+@pytest.mark.asyncio
+async def test_equipment_and_service_hours_and_service_scope_normalize():
+    # UAT-Defekte: (1) equipment als List-of-Strings verworfen, (2)
+    # sla.service_hours mit start/end_time/days zu {} kollabiert und verworfen,
+    # (3) included/excluded services nicht projiziert. Alles muss durch die
+    # Deterministic-Normalisierung durchlaufen und im Contract ankommen.
+    result = await DirectContractHarness(settings(), ai()).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert [
+        item.device_name for item in result.contract.equipment
+    ] == ["Impella\u00ae AIC System"]
+    assert result.contract.equipment[0].evidence is not None
+    assert result.contract.equipment[0].evidence.page == 3
+    assert result.contract.equipment[0].serial_number is None
+
+    sla = result.contract.sla
+    assert sla.service_hours is not None
+    assert sla.service_hours.value is None
+    assert "09:00" in sla.service_hours.original_text
+    assert "17:00" in sla.service_hours.original_text
+    assert sla.availability_24_7 is False
+    assert sla.evidence is not None
+    assert sla.evidence.page == 3
+
+    services = result.contract.services
+    assert "Reparaturen und Instandsetzung" in services.included_services
+    assert "Ersatzteilversorgung" in services.included_services
+    assert "Wartung an Wochenenden und Feiertagen" in services.excluded_services
+    assert services.evidence is not None
+
+    rejected_by = {
+        row["field"]: row["reason"]
+        for row in result.diagnostics["rejected_facts"]
+    }
+    assert "equipment" not in rejected_by
+    assert "sla.service_hours" not in rejected_by
+    assert "sla.availability_24_7" not in rejected_by
+    assert "services.included_services" not in rejected_by
+    assert "services.excluded_services" not in rejected_by
 
 
 @pytest.mark.asyncio

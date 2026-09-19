@@ -4070,3 +4070,145 @@ closed → no invented values.
   System`, `40015645`, start 2025-04-01, end 2029-03-31, 4 Jahre,
   `automatic_renewal=false`, `annual_cost=8000.0 EUR (annual)`,
   `scheduled_prices` 0/8000/8000/8000, `per_call=2226.0 EUR`
+
+---
+
+## Runde 2 – Critical Fixes, Evidence-Linkage, Preispraesentation, UAT-Abschluss
+
+**Status:** IMPLEMENTIERT + offiziell im Produktionspfad verifiziert (kein Commit vor Freigabe) |
+**Datum:** 2026-09-18 | **Fortschritt:** 18/18 (MVP-Core), Runde-2-UAT abgeschlossen, A–R-Bericht/Stopp vor Commit
+
+#### Implementiertes
+- **CRITICAL #1 – Falsch-Positiv direkter Konflikte durch Tag-1-Differenz:**
+  `calculate_contract_end_date` (`backend/app/contracts/calculation/dates.py`)
+  behandelt reine Jahr/Monat-Dauern jetzt inklusiv: entspricht das explizite
+  Ende exakt `abgeleitet − 1 Tag`, gilt es als **EXPLICIT ohne Review**
+  (`overall_review_required=false`, kein „weichen ab…“ in `review_reasons`,
+  `days_until_end` deterministisch berechnet, Status `ACTIVE`). Tage/Wochen-
+  Dauern bleiben strikt; ein echter Konflikt (explizit 2025-01-01 vs. 365 Tage
+  ab 2024-01-01 => abgeleitet 2024-12-31) bleibt CONFLICT mit `review_required=true`.
+- **CRITICAL #2 – Equipment-Persistenz:** `backend/app/ai/harness/v3.py`
+  normalisiert `equipment` deterministisch ueber `_normalize_equipment_payload`
+  (akzeptiert str/list[str]/list[dict]; unbekannte Keys wie `evidence` werden
+  **nicht** persistiert; Seriennummer wird nie erfunden; Geraeate-Identitaet
+  „Impella AIC System“ vor Komponenten). Operations-Pack-Guidance ergaenzt.
+- **CRITICAL #3 – Servicezeiten / 24-7:** `_normalize_timevalue_payload` fuer
+  `sla.response_time/resolution_time/service_hours/emergency_availability`
+  (str/int/dict; `original_text` wird aus start/end/days synthetisiert, z. B.
+  „Mo, Di, Mi, Do, Fr 09:00-17:00“); `availability_24_7=false` bleibt bei
+  explizitem Zeitfenster erhalten. Evidence haengt am Gruppen-Halter
+  (`contract.sla.evidence`), nicht am TimeValue.
+- **CRITICAL #4 – Enthaltene/ausgeschlossene Leistungen:** Harness-Normalisierung
+  + Operations-Pack-Guidance; Read-Model-Projektion `_scope_section` liest die
+  Snapshot-Listen `included_services`/`excluded_services` aus.
+- **HIGH – Evidence-Linkage im Review-Prueffluss:** `_link_fact_evidence`
+  (`backend/app/contracts/review/service.py`) bindet materiale Fakten
+  deterministisch an Belege: exakt, Harness-Zeile (`fact_key.evidence`),
+  Alias (z. B. `costs.annual_cost`, `costs.tax_table.net/vat/gross`,
+  `termination.automatic_renewal`, `services.included/excluded_services`) und
+  Praefixe (`equipment.*`/`identity.system_identity`, `scope.`/`sla.` fuer
+  `services.coverage`). Gruppenzeile (`{group}.evidence`) nur als Fallback,
+  leer bei vorhandenem spezifischen Beleg.
+- **HIGH – Interne KI-Fehler verbergen + Analysehistorie mit sicheren deutschen
+  Labels:** `_serialize` in `backend/app/api/routes/processing_jobs.py` gibt nie
+  rohe `row.error`-Strings zurueck; stattdessen `status_label_de`
+  (`_STATUS_LABELS_DE`) und `result_label_de` (`_result_label_de` +
+  `_KNOWN_KI_ERRORS`-Map ueber `AIUnavailableError`/`RuntimeError`/
+  `HarnessFailure`/`Timeout`, Fallback `app.documents.status.safe_failure_message`).
+  Frontend rendert die sicheren Labels
+  (`frontend/lib/domain-api/processingJobs.ts`,
+  `frontend/components/contracts/detail/ContractBackendAnalysisPanel.tsx`).
+- **HIGH – Kosten-Praesentation (2.226 € per call / 8.000 €-Staffel):**
+  `ContractCostsSection` (+ DTOs `ScheduledPriceDto`/`VariableChargeDto` in
+  `backend/app/contracts/detail/models.py`) projiziert jetzt
+  `scheduled_prices` (Staffeljahre, nie annualisiert) und `variable_charges`
+  (label/amount/unit/condition + ehrlicher `note_de`: nie zum Fixwert addiert)
+  aus dem Snapshot (`_price_schedule_items`/`_variable_charge_items` in
+  `backend/app/contracts/detail/service.py`). Frontend-Finanzbereich
+  (`frontend/components/contracts/detail/ContractWorkspace.tsx`) zeigt beide
+  Bereiche getrennt vom wiederkehrenden Jahresbetrag; Typen in
+  `frontend/lib/contract-detail-types.ts`.
+
+#### Dateien
+- `backend/app/contracts/calculation/dates.py`
+- `backend/app/ai/harness/v3.py`
+- `backend/app/contracts/review/service.py`
+- `backend/app/contracts/detail/models.py`
+- `backend/app/contracts/detail/service.py`
+- `backend/app/api/routes/processing_jobs.py`
+- `frontend/components/contracts/detail/ContractWorkspace.tsx`
+- `frontend/components/contracts/detail/ContractBackendAnalysisPanel.tsx`
+- `frontend/lib/contract-detail-types.ts`
+- `frontend/lib/domain-api/processingJobs.ts`
+- Tests: `backend/tests/test_calculation_engine.py`, `test_warning_engine.py`,
+  `test_harness_v3.py`, `test_uat_retest_defects.py`
+
+#### Tests / Ergebnis
+- `test_calculation_engine.py` + `test_warning_engine.py`: **140 passed**
+  (inkl. `test_inclusive_year_term_no_conflict_uat` und
+  `test_days_based_duration_no_inclusive_tolerance`)
+- `test_harness_v3.py`: **19 passed**
+- `test_uat_retest_defects.py`: **38 passed** (inkl. `TestFactEvidenceLinking`
+  mit 8 Faellen, `TestPriceScheduleAndVariableCharges` mit 6 Faellen und
+  `TestAnalysisHistorySafeLabels` mit 6 Faellen)
+- Gesamt-Backend (DB laeuft, plain pytest): **851 passed, 37 failed** – die 37
+  sind **vorbestehende Route-Test-Fehlschlaege** (alle `401 Anmeldung
+  erforderlich.` wegen `auth_enabled=True` in `backend/.env` im Dev-Betrieb;
+  `LocalAuthMiddleware` erlaubt nur `/api/health` + `/api/auth/login`). Gegenprobe
+  per `git stash`: identische Fehler auf HEAD ohne Aenderungen – **kein** neuer
+  Regression-Beitrag aus Runde 2. (Ein 38. Fehlschlag in einem Zwischenlauf war
+  flaky und bestand beim Wiederholen nicht; Fehlerliste identisch zur
+  vorbestehenden 37er-Liste.)
+- Frontend: `npm run lint` sauber (nur vorbestehende Warnungen),
+  `npx tsc --noEmit` ohne Fehler.
+
+#### Produktions-UAT Runde 2 (offiziell, Stack oben)
+- Stack: PostgreSQL (PID 20276, :5432), Ollama `qwen3-vl:8b-instruct` (PID 8452,
+  :11434), uvicorn (PID 9680, :8000, ohne `--reload`), Frontend `next dev`
+  (PID 20652, :3000). `set_ai_selection('ollama','qwen3-vl:8b-instruct')` gesetzt.
+- Login `admin@medflux.local`/Sessions-Cookie; Health `GET /health` = 200.
+- Offizielles `/reanalyze` auf `01a0aa26-dcd1-7617-baaf-e89432e5f854`
+  (org `krankenhaus`): **85,6 s**, `status: reanalyzed`, atomar akzeptierter
+  Snapshot (alter akzeptierter Snapshot trug den alten Konflikt bis zur
+  Re-Analyse). Danach 9 offene Fact-Reviews (normaler Workflow, kein Konflikt).
+- **Verifiziert live (Detail `01a0aa27-f57b-7b4f-9659-5aadfed6f6c9`):**
+  - CRITICAL #1: `calculated_end 2029-03-31 | status explicit`,
+    `requires_manual_review false`, keine Warnungen, Vertrag `ACTIVE`.
+  - CRITICAL #2/#3/#4: `equipment` = Impella®AIC System (`identification_quality
+    exact`, Seriennr. „I laut Lieferschein“ aus dem Dokument, nie erfunden);
+    `sla.service_hours` = „Montag bis Freitag von 09:00 Uhr bis 17:00 Uhr“;
+    `scope.excluded` persistiert (Sturzschaeden/Hoehere Gewalt; `included` in
+    diesem Lauf leer = Modellstreuung, Normalisierung funktioniert).
+  - Finanzen: `scheduled_prices` = 0/8000/8000/8000 EUR (Staffeljahre 1–4,
+    Labels „(zuzueglich der jeweils geltenden gesetzlichen MwSt“-Variante);
+    `variable_charges` = „per call: 2.226,00 EUR“ / `unit_label_de` „pro
+    Einsatz“ / ehrlicher Hinweis (nie zum Fixwert addiert). Preisplan wird
+    nicht annualisiert.
+  - Evidence-Linkage im Review-Fluss: Fakten tragen „Quellen-Beleg“-Buttons,
+    z. B. Vertragsnummer → Seite 1, Jaehrliche Gesamtkosten (8.000,0) →
+    Seite 8 (Staffel-Tabelle).
+  - Nachweise-Liste (23 Belege) mit ehrlicher Praezision: „Positionsbestimmt“
+    vs. „Seite, ohne Position“ + Hinweis „…, aber ohne exakte Position (keine
+    Wort-Hervorhebung)“ (bbox-Honesty); `supports_exact_navigation` korrekt.
+  - Analysehistorie: nur deutsche Labels („Erfolgreich“, „Teilweise (prüfen)“,
+    „5 erfolgreich / 7 fehlgeschlagen“ …), keine rohen Harness-Fehlerstrings.
+- Screenshots (UAT Runde 2): `.playwright-mcp\uat-round2\01-dashboard-overview.png`
+  bis `09-evidence-list.png` (Dashboard, Vertragsliste, Detail Finanzen/
+  Leistungen/Geräte/Analysehistorie/Faktprüfung/Nachweise).
+
+#### Bekannte Probleme / offen
+- 37 vorbestehende Auth-Route-Tests (401): dokumentiert, kein Code-Fix (Auth
+  nicht abschwaechen). Fuer die UAT werden die Fehlerberichte als
+  „erwartet bis Auth-Testseite“ ausgewiesen.
+- Offene kosmetische UX-Punkte (separate Checkliste, bewusst offen):
+  RTL/LTR + Terminologie, Uebersetzung rechtlicher Entitaetsnamen +
+  Service-Kontakt (p9), Evidence-Dedupe in der UI-Darstellung (Backend
+  canonical-Settle existiert; UI praesentiert die gepaarten Belege bereits
+  faktenbezogen). Die zwei urspruenglich offenen Punkte „interne KI-Fehler
+  verbergen“ und „Analysehistorie-Statuslogik“ sind in dieser Runde
+  umgesetzt und live verifiziert.
+
+#### Naechster Schritt
+- A–R-Bericht Runde 2 fertigstellen und `git diff/status`-Stopp vor Commit –
+  kein Commit/Push ohne Freigabe. Danach optional die drei kosmetischen
+  UX-Punkte (RTL/LTR, Entitaetsnamen/p9-Kontakt, Evidence-Dedupe-UI).

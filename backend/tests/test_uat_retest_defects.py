@@ -22,9 +22,11 @@ from app.contracts.detail.recovery import (  # noqa: E402
 from app.contracts.detail.service import (  # noqa: E402
     _SCOPE_TERMS,
     _dates_section,
+    _price_schedule_items,
     _scope_concept_verdict,
     _scope_text_analysis,
     _settle_canonical_evidence,
+    _variable_charge_items,
 )
 from app.contracts.review import material as mat  # noqa: E402
 
@@ -259,3 +261,230 @@ class TestGermanLabels:
         assert mat.fact_label("termination.auto_renewal") == "Automatische Verlängerung"
         assert mat.fact_label("equipment.identity") == "Geräte-Identität"
         assert mat.fact_label("unbekannt.key") == "unbekannt.key"
+
+
+# ---------------------------------------------------------------------------
+# UAT Defect Batch F – generische Evidence-Linkage (Review)
+# ---------------------------------------------------------------------------
+class TestFactEvidenceLinking:
+    @staticmethod
+    def _by_ref(refs):
+        out = {}
+        for ref in refs:
+            out.setdefault(ref, []).append({"field_ref": ref, "page": 3})
+        return out
+
+    def test_exact_matches_first(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref(["dates.start_date"])
+        specific, fallback = _link_fact_evidence("dates.start_date", by_ref)
+        assert [e["page"] for e in specific] == [3]
+        assert fallback == []
+
+    def test_harness_per_fact_rows_bind(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref(["identity.supplier.evidence.0"])
+        specific, _ = _link_fact_evidence("identity.supplier", by_ref)
+        assert len(specific) == 1
+
+    def test_harness_field_alias_binds_to_material_key(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref([
+            "termination.automatic_renewal.evidence.0",
+            "costs.annual_cost.evidence.1",
+        ])
+        specific, _ = _link_fact_evidence("termination.auto_renewal", by_ref)
+        assert len(specific) == 1
+        specific, _ = _link_fact_evidence("costs.annual", by_ref)
+        assert len(specific) == 1
+
+    def test_cost_tax_recovered_rows_bind(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref([
+            "costs.tax_table.net",
+            "costs.tax_table.vat",
+            "costs.tax_table.gross",
+        ])
+        assert len(_link_fact_evidence("costs.monthly_net", by_ref)[0]) == 1
+        assert len(_link_fact_evidence("costs.vat_rate", by_ref)[0]) == 1
+        assert len(_link_fact_evidence("costs.monthly_gross", by_ref)[0]) == 1
+
+    def test_equipment_prefixes_bind(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref([
+            "identity_equipment.evidence.0",
+            "equipment.evidence.1",
+            "identity.system_identity",
+        ])
+        for fact_key in ("equipment.identity", "equipment.serial"):
+            specific, _ = _link_fact_evidence(fact_key, by_ref)
+            assert len(specific) == 3
+
+    def test_services_coverage_binds_scope_sla_and_service_rows(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref([
+            "scope.included_services",
+            "scope.excluded_services",
+            "sla.service_hours.evidence.0",
+            "services.included_services.evidence.2",
+            "services.excluded_services.evidence.1",
+        ])
+        specific, _ = _link_fact_evidence("services.coverage", by_ref)
+        assert len(specific) == 5
+
+    def test_group_row_only_as_fallback(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        only_group = self._by_ref(["costs.evidence"])
+        specific, fallback = _link_fact_evidence("costs.annual", only_group)
+        assert specific == []
+        assert len(fallback) == 1
+        assert fallback[0]["field_ref"] == "costs.evidence"
+
+        with_specific = self._by_ref(["costs.evidence", "costs.annual_cost.evidence.0"])
+        specific, fallback = _link_fact_evidence("costs.annual", with_specific)
+        assert len(specific) == 1
+        assert fallback == []
+
+    def test_unrelated_refs_never_bind(self):
+        from app.contracts.review.service import _link_fact_evidence
+
+        by_ref = self._by_ref(["identity.contract_title", "dates.duration"])
+        specific, fallback = _link_fact_evidence("identity.contract_number", by_ref)
+        assert specific == []
+        assert fallback == []
+
+
+class TestAnalysisHistorySafeLabels:
+    """Round-2: Analysehistorie zeigt deutsche, sichere Labels statt roher KI-Fehler."""
+
+    def _run(self, status="partial", message=None, error=None):
+        class R:
+            pass
+
+        r = R()
+        r.status = status
+        r.message = message
+        r.error = error
+        return r
+
+    def _summary(self, success=0, failure=0):
+        class S:
+            pass
+
+        s = S()
+        s.success_count = success
+        s.failure_count = failure
+        s.page_count = 9
+        s.doc_type = "pdf"
+        s.processed_at = None
+        return s
+
+    def test_status_labels_german(self):
+        from app.api.routes.processing_jobs import _status_label_de
+
+        assert _status_label_de("succeeded") == "Erfolgreich"
+        assert _status_label_de("partial") == "Teilweise (prüfen)"
+        assert _status_label_de("failed") == "Fehlgeschlagen"
+        assert _status_label_de("running") == "Wird verarbeitet"
+
+    def test_harness_failure_ai_unavailable_maps_to_safe_text(self):
+        from app.api.routes.processing_jobs import _result_label_de
+
+        r = self._run(error="HarnessFailure purpose=direct category=AIUnavailableError")
+        label = _result_label_de(r, self._summary())
+        assert label == "Lokale KI nicht verfügbar."
+        assert "HarnessFailure" not in label
+
+    def test_runtime_error_maps_to_safe_text(self):
+        from app.api.routes.processing_jobs import _result_label_de
+
+        r = self._run(error="RuntimeError: something internal")
+        label = _result_label_de(r, self._summary())
+        assert label == "Verarbeitung fehlgeschlagen."
+        assert "RuntimeError" not in label
+
+    def test_unknown_error_never_leaks_raw_text(self):
+        from app.api.routes.processing_jobs import _result_label_de
+
+        r = self._run(error="zoneinfo.ZoneInfoNotFoundError: 'Europe/Berlin' traceback ...")
+        label = _result_label_de(r, self._summary())
+        assert "zoneinfo" not in label.lower()
+        assert "ZoneInfoNotFoundError" not in label
+
+    def test_succeeded_run_shows_counts(self):
+        from app.api.routes.processing_jobs import _result_label_de
+
+        r = self._run(status="succeeded")
+        label = _result_label_de(r, self._summary(success=5, failure=7))
+        assert label == "5 erfolgreich / 7 fehlgeschlagen"
+
+    def test_partial_run_with_successes_stays_honest(self):
+        from app.api.routes.processing_jobs import _result_label_de
+
+        r = self._run(status="partial")
+        label = _result_label_de(r, self._summary(success=3, failure=2))
+        assert "Teilweise analysiert – 3 erfolgreich / 2 fehlgeschlagen" == label
+
+
+class TestPriceScheduleAndVariableCharges:
+    """Round-2: belegter Preisplan + bedingte Positionen ehrlich getrennt."""
+
+    def test_price_schedule_rows(self):
+        costs = {
+            "scheduled_prices": [
+                {"period_index": 1, "period_label": "1. Jahr", "amount": {"amount": "0", "currency": "EUR"}},
+                {"period_index": 4, "period_label": "4. Jahr", "amount": {"amount": 8000, "currency": "EUR"}},
+                {"period_index": 2, "period_label": "2. Jahr", "amount": {"amount": 8000, "currency": "EUR"}},
+                {"period_index": 3, "period_label": "3. Jahr", "amount": {"amount": 8000, "currency": "EUR"}},
+            ]
+        }
+        rows = _price_schedule_items(costs)
+        assert [r["period_index"] for r in rows] == [1, 2, 3, 4]
+        assert rows[0]["amount"] == "0"
+        assert rows[1]["amount"] == 8000
+        assert rows[3]["currency"] == "EUR"
+
+    def test_price_schedule_skips_empty_entries(self):
+        costs = {
+            "scheduled_prices": [
+                {"period_index": 5, "amount": {"amount": None, "currency": "EUR"}},
+                {"period_index": 5, "amount": {}},
+                "bogus",
+            ]
+        }
+        assert _price_schedule_items(costs) == []
+
+    def test_price_schedule_empty(self):
+        assert _price_schedule_items(None) == []
+        assert _price_schedule_items({}) == []
+
+    def test_variable_charge_unit_label(self):
+        costs = {
+            "variable_charges": [
+                {"label": "Fixed per call", "amount": {"amount": "2226.00", "currency": "EUR"}, "unit": "per_call", "condition": "Einsatz ausserhalb der Servicezeiten"},
+            ]
+        }
+        items = _variable_charge_items(costs)
+        assert len(items) == 1
+        assert items[0]["amount"] == "2226.00"
+        assert items[0]["unit_label_de"] == "pro Einsatz"
+        assert items[0]["condition"] == "Einsatz ausserhalb der Servicezeiten"
+        assert "nie zum Fixwert addiert" in items[0]["note_de"]
+
+    def test_variable_charge_defaults(self):
+        costs = {"variable_charges": [{"amount": {"amount": 50, "currency": "EUR"}}]}
+        items = _variable_charge_items(costs)
+        assert items[0]["label"] == "Variable Position"
+        assert items[0]["unit"] is None
+        assert items[0]["unit_label_de"] is None
+
+    def test_variable_charge_empty(self):
+        assert _variable_charge_items(None) == []
+        assert _variable_charge_items({"variable_charges": []}) == []
