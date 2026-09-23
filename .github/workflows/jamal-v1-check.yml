@@ -1,0 +1,52 @@
+name: JAMAL v1 Check
+
+on:
+  push:
+    branches:
+      - JAMAL-v1
+  workflow_dispatch:
+
+concurrency:
+  group: jamal-v1-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-targeted:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: test
+      AUTH_ENABLED: "false"
+      PYTHONPATH: .
+    defaults:
+      run:
+        working-directory: JAMAL v1/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: JAMAL v1/backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile backend
+        run: python -m compileall -q app tests
+      - name: Run hybrid scanned-contract tests
+        run: pytest -q tests/test_hybrid_scanned_pipeline.py tests/test_hybrid_vision_runtime.py
+      - name: Run harness tests
+        run: pytest -q tests -k "harness or vision or document"
+
+  frontend-verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: JAMAL v1/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: JAMAL v1/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run verify
