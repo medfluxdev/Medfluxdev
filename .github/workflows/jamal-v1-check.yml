@@ -16,6 +16,7 @@ jobs:
     env:
       APP_ENV: test
       AUTH_ENABLED: "false"
+      MEDFLUX_UNIT_ONLY: "1"
       PYTHONPATH: .
     defaults:
       run:
