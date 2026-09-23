@@ -637,15 +637,31 @@ class DocumentProcessingService:
                 analysis = asyncio.run(self._analysis.analyze(extraction))
             else:
                 from app.ai.harness import get_harness_class
-                from app.ai.harness.vision import page_image, region_image
+                from app.documents.intelligence.hybrid_runtime import HybridVisionRuntime
+
                 harness_cls = get_harness_class(settings)
                 using_v3 = harness_cls.__name__ == "HarnessV3"
+                hybrid_runtime = (
+                    HybridVisionRuntime(
+                        path,
+                        canonical,
+                        longest_side=settings.harness_vision_batch_scale,
+                    )
+                    if using_v3 and getattr(settings, "hybrid_scanned_contracts_enabled", True)
+                    else None
+                )
                 analysis = asyncio.run(harness_cls(settings).analyze(
                     canonical,
-                    image_loader=lambda block: region_image(path, block),
-                    page_image_loader=lambda page: page_image(
-                        path, page, longest_side=settings.harness_vision_batch_scale
-                    ) if using_v3 else None,
+                    image_loader=(
+                        hybrid_runtime.render_region
+                        if hybrid_runtime is not None
+                        else None
+                    ),
+                    page_image_loader=(
+                        hybrid_runtime.render_page
+                        if hybrid_runtime is not None
+                        else None
+                    ),
                 ))
             if analysis.contract is None:
                 placeholder_id = self._persist_failed_analysis(
