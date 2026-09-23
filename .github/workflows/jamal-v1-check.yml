@@ -13,10 +13,24 @@ concurrency:
 jobs:
   backend-targeted:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: medflux
+          POSTGRES_PASSWORD: medflux_ci
+          POSTGRES_DB: medflux
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medflux -d medflux"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       APP_ENV: test
       AUTH_ENABLED: "false"
-      MEDFLUX_UNIT_ONLY: "1"
+      DATABASE_URL: postgresql+psycopg://medflux:medflux_ci@127.0.0.1:5432/medflux
       PYTHONPATH: .
     defaults:
       run:
@@ -36,6 +50,10 @@ jobs:
         run: pytest -q tests/test_hybrid_scanned_pipeline.py tests/test_hybrid_vision_runtime.py
       - name: Run harness and document-intelligence tests
         run: pytest -q tests/test_harness_v3.py tests/test_document_intelligence.py
+      - name: Run document-processing integration tests
+        run: pytest -q tests/test_document_processing.py tests/test_document_import.py
+      - name: Run full backend regression suite
+        run: pytest -q
 
   frontend-verify:
     runs-on: ubuntu-latest
