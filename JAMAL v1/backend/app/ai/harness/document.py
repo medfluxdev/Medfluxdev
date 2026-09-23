@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.documents.intelligence.canonical import DocumentIntelligenceResult, Element, Method
+from app.documents.intelligence.hybrid import visual_candidate_pages
 
 
 @dataclass
@@ -156,14 +157,19 @@ class DocumentModel:
 
     @property
     def visual_pages(self) -> list[int]:
-        return sorted(
-            {
-                page
-                for page, blocks in self.pages_blocks.items()
-                if any(block.needs_vision for block in blocks)
-                or not any((block.text or "").strip() for block in blocks)
-            }
+        """Pages where visual compute can add information beyond clean native text.
+
+        JAMAL v1 centralizes this decision in the deterministic hybrid page
+        classifier so DocumentModel and Harness V3 use the same routing rule.
+        """
+        routed = set(visual_candidate_pages(self.canonical))
+        routed.update(
+            page
+            for page, blocks in self.pages_blocks.items()
+            if any(block.needs_vision for block in blocks)
+            or not any((block.text or "").strip() for block in blocks)
         )
+        return sorted(routed)
 
     @property
     def is_image_heavy(self) -> bool:
