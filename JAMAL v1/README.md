@@ -1,60 +1,89 @@
-# JAMAL v1 — Scanned Contract Intelligence Sandbox
+# Medflux
 
-This folder is an isolated experiment for MedFlux scanned/image-only contracts.
+Lokales, schlankes KI-System für deutsche Krankenhäuser zur Analyse und Überwachung von Wartungs- und Serviceverträgen.
 
-## Purpose
+Medflux importiert Verträge lokal (PDF/DOCX), analysiert sie vollständig lokal mit einer austauschbaren KI-Schicht und extrahiert strukturierte Vertragsdaten, überwacht Kündigungsfristen und wertet Kosten aus – ganz ohne externe KI-API.
 
-Improve extraction quality for signed hospital contracts that arrive as scanned PDFs without changing the current production pipeline.
+## Funktionen (MVP-Roadmap)
 
-The sandbox must preserve the MedFlux trust model:
+- Lokaler Import mehrerer PDF/DOCX-Verträge
+- Vollständig lokale KI-Analyse (Ollama)
+- Strukturierte Extraktion von Vertragsdaten (Quelle + Seite + Confidence)
+- Überwachung von Vertragsende und Kündigungsfristen
+- Jährliche/monatliche/Gesamtkosten-Auswertung
+- Warnungen und Handlungsbedarf
+- Dashboard, Vertragsliste, Detailansicht mit Quellenanzeige
+- Lokaler Login & Audit (Minimalversion)
+- CSV/Excel-Export und lokales Backup
 
-> Vision understands layout → OCR contributes text → code verifies → evidence proves → Contract360 stores.
+## Technologie-Stack
 
-## Non-goals
+| Bereich        | Technologie                                   |
+|----------------|-----------------------------------------------|
+| Frontend       | Next.js / React / TypeScript                  |
+| Backend        | Python + FastAPI                              |
+| Lokale KI      | Ollama (Qwen3-VL 8B, lokal)                     |
+| Datenbank      | PostgreSQL 18                                 |
+| Produktion     | PostgreSQL (lokal / Docker)                    |
+| PDF            | PyMuPDF                                       |
+| DOCX           | python-docx                                   |
+| OCR            | lokal, nur wenn nötig                         |
 
-- No production integration yet.
-- No database/schema changes.
-- No frontend changes.
-- No cloud OCR or cloud AI.
-- No ABIOMED-specific extraction rules.
-- No silent model/provider switching.
-- No acceptance of a fact that cannot be tied back to source evidence.
+## Projektstatus
 
-## Existing MedFlux components to reuse
+Siehe [docs/PROJECT_PROGRESS.md](docs/PROJECT_PROGRESS.md) für den detaillierten Fortschritt.
 
-The current code already contains important building blocks:
+## Projektstruktur
 
-- `backend/app/ai/harness/document.py`
-  - `DocumentModel.visual_pages`
-  - `Block.needs_vision`
-- `backend/app/ai/harness/vision.py`
-  - bounded page and region rendering
-- `backend/app/ai/harness/v3_perception.py`
-  - provider-neutral perception hints
-- `backend/app/ai/harness/v3.py`
-  - semantic passes
-- current evidence verification and fail-closed behavior
+```text
+Medflux/
+├─ frontend/       # Next.js / React / TypeScript
+├─ backend/        # Python + FastAPI + Ollama
+├─ data/           # contracts, database, backups (lokal, ignoriert)
+├─ docs/           # Projekt- und Architektur-Doku
+├─ scripts/        # Hilfsskripte
+├─ .env.example    # Umgebungsvariablen-Vorlage
+├─ AGENTS.md       # Projektanweisungen für die Entwicklung
+└─ docker-compose.yml
+```
 
-JAMAL v1 does not replace these blindly. It proposes a cleaner scanned-document routing/fusion layer around them.
+## Schnellstart
 
-## Experiment target
+### Voraussetzungen
 
-Start with the ABIOMED scanned contract and compare the current pipeline against JAMAL v1 on pages that stress:
+- Node.js 20+
+- Python 3.11+
+- Ollama (Produktionspfad: installiertes Vision-Modell `qwen3-vl:8b-instruct`)
+- (optional) Docker
 
-- identity / legal names
-- service scope
-- pricing tables
-- service contact
-- evidence/page anchoring
+### Backend starten (lokal)
 
-The benchmark must measure extraction quality, evidence correctness, hallucinations, latency, and model/vision calls.
+```bash
+cd backend
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-## Files
+### Frontend starten (lokal)
 
-- `ARCHITECTURE.md` — target architecture and invariants
-- `hybrid_pipeline.py` — provider-neutral prototype/orchestration skeleton
-- `ABIOMED_BENCHMARK.md` — evaluation protocol and acceptance criteria
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Safety rule
+Dann das Frontend unter `http://localhost:3000` öffnen.
 
-Do not merge this folder into the production pipeline until OpenCode has run an isolated benchmark and produced a before/after report.
+### Umgebungsvariablen
+
+Kopiere `.env.example` nach `.env` und passe die Werte an.
+
+## Definition of Done (MVP)
+
+Siehe [docs/PROJECT_PROGRESS.md](docs/PROJECT_PROGRESS.md) – Abschnitt "Definition of Done für MVP".
+
+## Lizenz
+
+Proprietär / intern – keine externe Veröffentlichung vorgesehen.
