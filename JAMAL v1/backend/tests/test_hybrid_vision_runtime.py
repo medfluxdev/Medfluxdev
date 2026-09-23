@@ -8,6 +8,7 @@ from app.documents.intelligence.canonical import (
     ElementType,
     Method,
     Page,
+    ProcessingProvenance,
 )
 from app.documents.intelligence.hybrid_runtime import HybridVisionRuntime
 
@@ -51,6 +52,7 @@ def _canonical():
         source_sha256="a" * 64,
         source_filename="contract.pdf",
         pages=[native, scanned],
+        provenance=ProcessingProvenance(provider="test", method=Method.OCR),
     )
 
 
