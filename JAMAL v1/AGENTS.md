@@ -106,3 +106,21 @@ npm run lint
 - Lokale KI: Die KI extrahiert **Fakten**; Berechnungen (Fristen, Kostenaggregation, Warnstufen) macht **Code**, nicht die KI.
 - Keine erfundenen Werte: "nicht gefunden" statt Halluzination.
 - Sensible Daten (Zugänge, Secrets) nie committen; nur über `.env.example` dokumentieren.
+
+
+## JAMAL v1 — Scanned contracts
+
+In this experimental copy, scanned/image-only hospital contracts are first-class inputs.
+
+Engineering rule:
+
+> Native/OCR text preserves literals → vision restores layout relationships → code verifies → evidence proves → Contract360 stores.
+
+- Use deterministic page routing from `app.documents.intelligence.hybrid`.
+- Clean text-native pages stay text-only.
+- OCR/layout-heavy pages may use bounded local vision.
+- Vision observations never bypass source/evidence verification.
+- No ABIOMED-specific hardcoding.
+- No cloud AI/OCR dependency.
+- No silent provider/model switching.
+- Calculations remain deterministic.
