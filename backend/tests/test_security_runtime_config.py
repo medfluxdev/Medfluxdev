@@ -16,9 +16,40 @@ def _settings(**overrides) -> Settings:
     return Settings(_env_file=None, **base)
 
 
-def test_development_may_explicitly_run_without_auth():
-    settings = _settings()
+def test_development_may_run_without_auth_only_with_explicit_opt_in():
+    settings = _settings(medflux_insecure_dev=True)
     settings.validate_auth_runtime()
+    with pytest.raises(RuntimeError, match="MEDFLUX_INSECURE_DEV=true"):
+        Settings(
+            _env_file=None,
+            app_env="development",
+            auth_enabled=False,
+            medflux_insecure_dev=False,
+        ).validate_auth_runtime()
+
+
+def test_insecure_dev_opt_in_rejected_for_pilot():
+    settings = _settings(
+        app_env="pilot",
+        auth_enabled=True,
+        app_secret_key="test-secret-not-default",
+        auth_cookie_secure=True,
+        medflux_insecure_dev=True,
+    )
+    with pytest.raises(RuntimeError, match="MEDFLUX_INSECURE_DEV=true"):
+        settings.validate_auth_runtime()
+
+
+def test_insecure_dev_opt_in_rejected_for_production():
+    settings = _settings(
+        app_env="production",
+        auth_enabled=True,
+        app_secret_key="production-secret-placeholder-for-test",
+        auth_cookie_secure=True,
+        medflux_insecure_dev=True,
+    )
+    with pytest.raises(RuntimeError, match="MEDFLUX_INSECURE_DEV=true"):
+        settings.validate_auth_runtime()
 
 
 def test_production_cannot_run_without_auth():

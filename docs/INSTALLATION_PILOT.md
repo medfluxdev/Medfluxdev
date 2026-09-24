@@ -32,6 +32,23 @@ AUTH_COOKIE_SECURE=true
 
 `APP_SECRET_KEY=change-me` ist bei aktivierter Authentifizierung nicht erlaubt.
 
+Fail-closed-Defaults (Security Phase-1):
+
+- `BACKEND_HOST` lauscht standardmaessig nur auf `127.0.0.1`. Fuer eine
+  Exposition im LAN/Pilot explizit auf `0.0.0.0` setzen.
+- `AUTH_ENABLED` ist standardmaessig `true`. Ein unauthentifizierter
+  Entwicklungs-/Testbetrieb erfordert explizit `AUTH_ENABLED=false` UND
+  `MEDFLUX_INSECURE_DEV=true` (nur `development`/`test`; `pilot`/`production`
+  lehnen beides ab).
+- PostgreSQL-TLS: Bei einer entfernten Datenbank verlangt
+  `pilot`/`production` eine gesicherte `sslmode`-Stufe in der `DATABASE_URL`
+  (empfohlen `sslmode=verify-full`, bei Bedarf mit `sslrootcert`). Loopback-
+  und Unix-Socket-Verbindungen bleiben ohne TLS zulaessig. Beispiel:
+
+  ```text
+  DATABASE_URL=postgresql+psycopg://<user>:<password>@db.example.org:5432/medflux?sslmode=verify-full
+  ```
+
 ## 3. Backend
 
 Aus dem Repository-Root:
@@ -87,7 +104,7 @@ binden.
 
 Vor echten Daten:
 
-1. `/api/health` erreichbar
+1. `/health` erreichbar (alternative Liveness-Url `/live`, Readiness-Url `/ready`)
 2. Login mit lokalem Benutzer
 3. `/api/auth/me` zeigt Benutzer/Organisation/Rolle
 4. Testvertrag importieren

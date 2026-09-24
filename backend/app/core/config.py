@@ -3,6 +3,7 @@
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine.url import make_url
 
 
 class Settings(BaseSettings):
@@ -16,7 +17,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: str = "development"
 
-    backend_host: str = "0.0.0.0"
+    # Fail-closed default: nur Loopback. Fuer Exposition im Netz muss der
+    # Betreiber BACKEND_HOST explizit setzen (und Auth zwingend aktivieren).
+    backend_host: str = "127.0.0.1"
     backend_port: int = 8000
 
     # STEP 10: PostgreSQL ist die Ziel-DB. Credentials NIE hier hartkodieren –
@@ -77,11 +80,17 @@ class Settings(BaseSettings):
 
     # STEP 16 + integriertes Ahmad-Accountmodell.
     app_secret_key: str = "change-me"
-    auth_enabled: bool = False
+    # Fail-closed Default: Authentifizierung ist AKTIV, wenn sie nicht explizit
+    # fuer die lokale Entwicklung deaktiviert wird. Eine frisch installierte
+    # Instanz startet daher nie unauthentifiziert im Netz.
+    auth_enabled: bool = True
     auth_cookie_name: str = "medflux_session"
     auth_session_ttl_seconds: int = 8 * 60 * 60
     auth_session_days: int = 14
     development_auth_mode: bool = True
+    # Expliziter Opt-in fuer unauthentifizierten Lokalbetrieb. Nie im
+    # Pilot-/Produktionsbetrieb verwenden (siehe validate_auth_runtime).
+    medflux_insecure_dev: bool = False
     auth_cookie_secure: bool = False
     auth_cookie_samesite: str = "lax"
 
@@ -120,7 +129,46 @@ class Settings(BaseSettings):
                 "CORS-Wildcard-Origin ist nicht erlaubt, weil der "
                 "Frontend-Client Requests mit Credentials sendet."
             )
+        if self.medflux_insecure_dev and env in {"pilot", "production"}:
+            raise RuntimeError(
+                "MEDFLUX_INSECURE_DEV=true ist in pilot/production nicht erlaubt."
+            )
+        if (
+            env in {"development", "test"}
+            and not self.auth_enabled
+            and not self.medflux_insecure_dev
+        ):
+            raise RuntimeError(
+                "AUTH_ENABLED=false in development/test erfordert den expliziten "
+                "lokalen Opt-in MEDFLUX_INSECURE_DEV=true (niemals pilot/production)."
+            )
+
+    def validate_database_tls(self) -> None:
+        """Erzwingt TLS fuer entfernte PostgreSQL-Verbindungen im Pilot-Betrieb.
+
+        Nur policy-validierend: Die DATABASE_URL wird nie umgeschrieben. Lokale
+        (Loopback-/Unix-Socket-)Verbindungen bleiben ohne TLS zulaessig.
+        """
+        env = self.app_env.strip().casefold()
+        if env not in {"pilot", "production"}:
+            return
+        url = make_url(self.database_url)
+        if url.get_backend_name() != "postgresql":
+            return
+        host = (url.host or "").strip().lower().strip("[]")
+        local_hosts = {"", "localhost", "127.0.0.1", "::1"}
+        if host in local_hosts:
+            return
+        sslmode = (url.query.get("sslmode") or "").strip().lower()
+        if sslmode not in {"require", "verify-ca", "verify-full"}:
+            raise RuntimeError(
+                "APP_ENV=pilot/production erfordert fuer einen entfernten "
+                "PostgreSQL-Server eine gesicherte TLS-Stufe in DATABASE_URL "
+                "(sslmode=require, sslmode=verify-ca oder sslmode=verify-full; "
+                "bei verify-full ggf. zusaetzlich sslrootcert angeben)."
+            )
 
 
 settings = Settings()
 settings.validate_auth_runtime()
+settings.validate_database_tls()

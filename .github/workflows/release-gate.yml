@@ -34,6 +34,9 @@ jobs:
       DATABASE_URL: postgresql+psycopg://medflux:medflux_ci@127.0.0.1:5432/medflux
       APP_ENV: test
       AUTH_ENABLED: "false"
+      # Tests laufen bewusst unauthentifiziert; Auth-fail-closed verlangt dafuer
+      # den expliziten lokalen/'test'-Opt-in (Security Phase-1, P0-1).
+      MEDFLUX_INSECURE_DEV: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -43,6 +46,8 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install backend
         run: pip install -r requirements.txt
+      - name: Security posture regression tests
+        run: pytest -q tests/test_runtime_security_posture.py tests/test_security_runtime_config.py
       - name: Migration smoke test
         run: alembic upgrade head
       - name: Backend tests
