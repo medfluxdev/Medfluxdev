@@ -39,6 +39,8 @@ class ContractIdentity(BaseModel):
     contractor: Optional[str] = None
     customer: Optional[str] = None
     contact_person: Optional[str] = None
+    service_email: Optional[str] = None
+    service_phone: Optional[str] = None
     customer_number: Optional[str] = None
     department: Optional[str] = None
     location: Optional[str] = None

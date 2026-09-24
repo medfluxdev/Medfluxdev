@@ -141,12 +141,21 @@ def candidate_schema() -> dict:
     return schema
 
 
+_ELLIPSIS_MARKERS = ("...", "…")
+
+
 def _find_quote(source: str, quote: str) -> tuple[str, int, int] | None:
     """Resolve a model quote back to the exact canonical source substring.
 
     Direct equality is preferred.  The only tolerated transformation is whitespace
     folding, because OCR/layout serializers commonly change line breaks.  We do not
     perform fuzzy semantic matching: evidence must remain source-grounded.
+
+    When a model quote explicitly carries an interiors ellipsis (``...``/``…``),
+    a conservative fallback additionally tolerates that the *source* separates the
+    quoted pieces by whitespace and ellipsis markers only.  No other words may be
+    bridged, so a paraphrase still fails to locate (fail-closed).  Positions always
+    refer to the original ``source`` string.
     """
     if not source or not quote:
         return None
@@ -159,7 +168,24 @@ def _find_quote(source: str, quote: str) -> tuple[str, int, int] | None:
         return None
     pattern = r"\s+".join(re.escape(piece) for piece in pieces)
     match = re.search(pattern, source)
-    if not match:
+    if match is not None:
+        return match.group(0), match.start(), match.end()
+
+    if not any(piece in _ELLIPSIS_MARKERS for piece in pieces):
+        return None
+    return _find_quote_ellipsis_bridge(source, pieces)
+
+
+def _find_quote_ellipsis_bridge(
+    source: str, pieces: list[str]
+) -> tuple[str, int, int] | None:
+    tokens = [piece for piece in pieces if piece not in _ELLIPSIS_MARKERS]
+    if len(tokens) < 2:
+        return None
+    gap = r"\s*(?:(?:\.{3}|…)\s*)*"
+    pattern = gap.join(re.escape(token) for token in tokens)
+    match = re.search(pattern, source)
+    if match is None:
         return None
     return match.group(0), match.start(), match.end()
 

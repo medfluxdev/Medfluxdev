@@ -80,7 +80,10 @@ PACKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...], bool], ...] = (
 _PACK_GUIDANCE = {
     "core": (
         "IDENTITY: supplier/customer is the legal company name only, without street, "
-        "postcode or city. contract_title is the document title, not the parties. "
+        "postcode or city; keep the company form verbatim (e.g. GmbH, AG) and never "
+        "translate or shorten it. contract_title is the document title, not the parties. "
+        "If the contract states a service contact, extract the email into service_email "
+        "and the phone number into service_phone exactly as written; never guess them. "
         "DATES/TERMINATION: always decide termination.automatic_renewal (true/false) from the renewal "
         "wording; the literal signal 'nicht automatisch verlängert' means false."
     ),
@@ -103,7 +106,11 @@ _PACK_GUIDANCE = {
         "Copy the exact device/system name verbatim from the source; set serial_number only when the "
         "document states it, otherwise omit the field (never invent a serial). "
         "services.included_services and services.excluded_services are verbatim clause items "
-        "(one entry per service), never paraphrases. "
+        "(one entry per service), never paraphrases. Also set the boolean service facts "
+        "(maintenance, inspection, repair, calibration, software_updates, remote_support, "
+        "technical_support, spare_parts_included, consumables_included, emergency_service) "
+        "to true exactly when the contract page states that service is included, and mirror "
+        "those services in services.included_services. "
         "sla.availability_24_7 must be false whenever the contract states an explicit service window "
         "such as 'Montag bis Freitag 09:00-17:00' (no weekend/holiday coverage). "
         "sla.service_hours captures that window text verbatim as original_text."
@@ -546,6 +553,8 @@ _EQUIPMENT_ALIASES = {
     "equipmentType": "equipment_type",
 }
 
+_EQUIPMENT_SCOPE_LIST_KEYS = {"included_services", "excluded_services"}
+
 
 def _normalize_equipment_item(item: Any) -> Optional[dict]:
     """Normalisiert ein einzelnes Equipment-Proposal deterministisch.
@@ -567,9 +576,14 @@ def _normalize_equipment_item(item: Any) -> Optional[dict]:
         if isinstance(val, str):
             stripped = val.strip()
             if stripped:
-                cleaned[key] = stripped
+                cleaned[key] = (
+                    [stripped] if key in _EQUIPMENT_SCOPE_LIST_KEYS else stripped
+                )
         elif isinstance(val, list):
-            items = [str(x).strip() for x in val if str(x).strip()]
+            if key in _EQUIPMENT_SCOPE_LIST_KEYS:
+                items = _normalize_scope_list(val)
+            else:
+                items = [str(x).strip() for x in val if str(x).strip()]
             if items:
                 cleaned[key] = items
         else:
@@ -726,9 +740,93 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
         return _normalize_equipment_payload(value)
     if field in _SLA_TIMEVALUE_FIELDS:
         return _normalize_timevalue_payload(value)
+    if field in {"services.included_services", "services.excluded_services"}:
+        return _normalize_scope_list(value)
     if isinstance(value, str):
         return value.strip()
     return value
+
+
+_SCOPE_LIST_ITEM_KEYS = ("name", "label", "description", "text", "value")
+
+
+def _normalize_scope_list(value: Any) -> list[str]:
+    """Normalisiert Leistungs-Listen deterministisch auf `list[str]`.
+
+    Die strikte Schema-Validierung verwarf bisher jede Proposal-Form ausser
+    `list[str]` (list-of-dicts, einzelner String, Leereintraege). Diese
+    Normalisierung ist konservativ: ein dict traegt nur den ersten belegten
+    Text-Key (name/label/description/text/value), Strings werden gestrippt,
+    Leereintraege verworfen und Duplikate (Reihenfolge-erhaltend) entfernt.
+    Es wird nie ein Leistungs-Item erfunden.
+    """
+    rows: list[str] = []
+    if isinstance(value, str):
+        item = value.strip()
+        if item:
+            rows.append(item)
+    elif isinstance(value, list):
+        for entry in value:
+            if isinstance(entry, str):
+                item = entry.strip()
+            elif isinstance(entry, dict):
+                item = None
+                for key in _SCOPE_LIST_ITEM_KEYS:
+                    candidate = entry.get(key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        item = candidate.strip()
+                        break
+            else:
+                item = None
+            if item:
+                rows.append(item)
+    return list(dict.fromkeys(rows))
+
+
+# Deterministische, generische (nicht vertragsspezifische) Zuordnung eines
+# evidengestuetzten Bool-Leistungsfakts zu seinem kanonischen deutschen
+# Leistungs-Begriff. Reine Faelle: Reihenfolge ist fest, kein ABIOMED-Bezug.
+_SERVICE_FACT_KEYS = (
+    "maintenance", "inspection", "repair", "calibration", "software_updates",
+    "remote_support", "technical_support", "spare_parts_included",
+    "consumables_included", "emergency_service",
+)
+
+_SERVICE_FACT_LABELS_DE = {
+    "maintenance": "Wartung",
+    "inspection": "Sichtprüfung / Inspektion",
+    "repair": "Reparatur",
+    "calibration": "Kalibrierung",
+    "software_updates": "Softwareupdates",
+    "remote_support": "Fernwartung / Remote-Support",
+    "technical_support": "Technischer Support",
+    "spare_parts_included": "Ersatzteile",
+    "consumables_included": "Verbrauchsmaterial",
+    "emergency_service": "Notdienst",
+}
+
+
+def _merge_service_scope_facts(services: Any) -> None:
+    """Projiziert evidengestuetzte Bool-Leistungsfakten deterministisch in
+    `services.included_services`.
+
+    Die KI entscheidet sowohl die Bool-Fakten als auch (manchmal) die Liste
+    ; sobald ein Bool-Fakt mit Quellen-Beleg TRUE ist, darf der zugehoerige
+    Leistungs-Begriff nicht verloren gehen, nur weil die Proposal-Form der
+    Liste von Lauf zu Lauf wechselt. Es werden NUR accepted Fakten (True)
+    uebernommen – False/None bleiben aussen (fail-closed), Duplikate bleiben
+    einmalig und die vorherige Listen-Reihenfolge bleibt erhalten.
+    """
+    if services is None:
+        return
+    included = list(getattr(services, "included_services") or [])
+    for key in _SERVICE_FACT_KEYS:
+        if getattr(services, key, None) is not True:
+            continue
+        label = _SERVICE_FACT_LABELS_DE.get(key)
+        if label and label not in included:
+            included.append(label)
+    services.included_services = included
 
 
 def _clean_quote(quote: str) -> str:
@@ -1289,6 +1387,8 @@ class DirectContractHarness:
                     }
                 )
                 supported_count += 1
+
+            _merge_service_scope_facts(getattr(contract, "services", None))
 
             scheduled_rows = [
                 {

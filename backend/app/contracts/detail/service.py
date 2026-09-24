@@ -466,22 +466,24 @@ def build_contract_detail(
         "warnings": [_warning_item(w) for w in warnings],
         "work_items": [_work_item_item(w) for w in work_items],
         "documents": docs,
-        "evidence": _settle_canonical_evidence(
-            [
-                _evidence_ref(
-                    e, version_to_file, evidence_version_id,
-                    resolved_page=evidence_page.get(e.id),
+        "evidence": _dedupe_evidence(
+            _settle_canonical_evidence(
+                [
+                    _evidence_ref(
+                        e, version_to_file, evidence_version_id,
+                        resolved_page=evidence_page.get(e.id),
+                    )
+                    for e in evidences
+                ]
+                + _recovered_evidence_refs(
+                    recovered,
+                    version_to_file,
+                    ext.document_version_id if ext else None,
+                    supplier=contract.supplier,
+                    supplier_ref=supplier_ref,
                 )
-                for e in evidences
-            ]
-            + _recovered_evidence_refs(
-                recovered,
-                version_to_file,
-                ext.document_version_id if ext else None,
-                supplier=contract.supplier,
-                supplier_ref=supplier_ref,
+                + scope_evidence_refs
             )
-            + scope_evidence_refs
         ),
         "overrides": [
             {
@@ -538,7 +540,8 @@ def _identity_section(snapshot, contract_number=None, recovered_identity=None):
         identity = {}
     keys = [
         "contract_number", "contract_type", "contractor", "customer",
-        "contact_person", "customer_number", "department", "location",
+        "contact_person", "service_email", "service_phone",
+        "customer_number", "department", "location",
     ]
     out = {k: identity.get(k) for k in keys if identity.get(k) is not None}
     # UAT Re-Test: wiederhergestellte kanonische Vertragsnummer (wenn die
@@ -1827,6 +1830,92 @@ def _settle_canonical_evidence(refs):
         if is_rec and not existing_rec:
             settled[existing_idx] = r
     return settled
+
+
+def _dedupe_key(ref: dict) -> tuple:
+    """Deterministischer Duplikats-Schluessel fuer die Read-Layer-Dedupe.
+
+    Zwei Belege sind NUR Duplikate, wenn sie denselben Fakt (`field_ref`)
+    an derselben physischen Quelle (Dokument, Seite, Paragraf-/Tabellen-Index,
+    `source_type`) mit derselben normalisierten Aussage (Snippet) tragen.
+    Unterschiedliche Fakten, Seiten, Quellen oder Aussagen bilden bewusst
+    verschiedene Schluessel – sie werden nie zusammengefuehrt.
+    """
+    return (
+        ref.get("field_ref") or "",
+        ref.get("document_version_id"),
+        ref.get("page"),
+        ref.get("paragraph_index"),
+        ref.get("table_index"),
+        ref.get("source_type"),
+        " ".join(str(ref.get("snippet") or "").split()).casefold(),
+    )
+
+
+def _is_recovered_ref(ref: dict) -> bool:
+    return str(ref.get("evidence_id") or "").startswith("recovered:")
+
+
+def _ref_confidence(ref: dict) -> float:
+    try:
+        return float(ref["confidence"]) if ref.get("confidence") is not None else -1.0
+    except (TypeError, ValueError):
+        return -1.0
+
+
+def _merge_evidence_duplicate(target: dict, other: dict) -> None:
+    """Aggregiert eine exakte Duplikat-Zeile in den kanonischen Repraesentanten.
+
+    Es wird nichts geloescht/erfunden: `requires_review` wird ODER-verkntuepft,
+    der woeertlich belegte (`recovered:`) Beleg bevorzugt, hoehere Konfidenz
+    und eine vorhandene Geometrie uebernehmen.
+    """
+    target["requires_review"] = bool(
+        target.get("requires_review") or other.get("requires_review")
+    )
+    if _is_recovered_ref(other) and not _is_recovered_ref(target):
+        target["evidence_id"] = other.get("evidence_id")
+    if _ref_confidence(other) > _ref_confidence(target):
+        target["confidence"] = other.get("confidence")
+    if (target.get("bbox") is None) and other.get("bbox") is not None:
+        target["bbox"] = other.get("bbox")
+        target["precision"] = other.get("precision")
+        target["geometry_normalized"] = other.get("geometry_normalized")
+        target["bbox_space"] = other.get("bbox_space")
+
+
+def _dedupe_evidence(refs: list[dict]) -> list[dict]:
+    """UAT Round-3 Fix 3: deterministische Read-Layer-Dedupe der Detail-Antwort.
+
+    Jeder physische Quellen-Beleg erscheint dem Nutzer genau einmal – auch wenn
+    persistierte (Audit-)Zeilen Duplikate tragen. Die zugrunde liegenden
+    Extraktions-/Audit-Zeilen bleiben in der Datenbank unveraendert. Sortierung
+    und Merge sind deterministisch (von der DB-Lieferreihenfolge unabhaengig).
+    """
+    if not refs:
+        return []
+    sorted_refs = sorted(
+        refs,
+        key=lambda ref: (_dedupe_key(ref), str(ref.get("evidence_id") or "")),
+    )
+    merged: list[dict] = []
+    index: dict[tuple, int] = {}
+    for ref in sorted_refs:
+        key = _dedupe_key(ref)
+        existing_index = index.get(key)
+        if existing_index is None:
+            index[key] = len(merged)
+            merged.append(dict(ref))
+            continue
+        _merge_evidence_duplicate(merged[existing_index], ref)
+    deterministic = sorted(
+        merged,
+        key=lambda ref: (_dedupe_key(ref), str(ref.get("evidence_id") or "")),
+    )
+    for ref in deterministic:
+        if ref.get("bbox") is not None:
+            ref["supports_exact_navigation"] = bool(ref.get("page") is not None)
+    return deterministic
 
 
 def _recovered_evidence_refs(recovered, version_to_file, document_version_id, *, supplier=None, supplier_ref=None):

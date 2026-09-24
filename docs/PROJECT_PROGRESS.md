@@ -4212,3 +4212,83 @@ closed → no invented values.
 - A–R-Bericht Runde 2 fertigstellen und `git diff/status`-Stopp vor Commit –
   kein Commit/Push ohne Freigabe. Danach optional die drei kosmetischen
   UX-Punkte (RTL/LTR, Entitaetsnamen/p9-Kontakt, Evidence-Dedupe-UI).
+
+## Runde 3 – Included-Services deterministisch, Rechtsnamen/p9-Kontakt, Evidence-Dedupe
+
+**Status:** CODE + TESTS ABGESCHLOSSEN; offizielles /reanalyze + Live-DB/API-Verifikation noch ausstehend (Produktions-DB voruebergehend nicht startbar, siehe „Bekannte Probleme“)
+**Datum:** 2026-09-21 | **Fortschritt:** 18/18 (MVP-Core; Runde-3-Fix-Round, kein neuer Hauptschritt)
+
+#### Implementiertes
+- **Fix 1 – included_services deterministisch (nicht mehr Modell-Varianz):**
+  - `_normalize_scope_list` (Harness) bildet beliebige Proposal-Formen
+    (list-of-dicts, einzelner String, Leereintraege) konservativ auf
+    `list[str]` ab (strip, Reihenfolge-erhaltendes Dedupe; niemals erfundene Items).
+  - `_merge_service_scope_facts`: evidence-gestuetzte Bool-Service-Fakten (`True`)
+    werden deterministisch in `services.included_services` projiziert
+    (generischer kanonischer DE-Leistungsbegriff, feste Reihenfolge, idempotent).
+    `False`/`None`/nicht lokaalisierte Fakten bleiben aussen (fail-closed).
+    Kein ABIOMED-Bezug in der Mapping-Logik.
+  - Equipment-`included_services`/`excluded_services` nutzen dieselbe Normalisierung.
+  - Zitat-Resolver (`_find_quote`): toleriert Innen-Ellipsen (`...`/`…`) des
+    Modells, bridging nur Whitespace/Ellipsen-Marker, nie andere Worte
+    (kein Fuzzy-Matching); Positionen bleiben original (bbox-tauglich).
+  - Guidance-Text (Operations-Pack): Bool-Fakten + Liste spiegeln sich.
+- **Fix 2 – Rechtsnamen wörtlich + Service-Kontakt (Seite 9):**
+  - Produktionspfad normalisiert `identity.supplier/customer/contractor` nur per
+    `strip()` (keine Uebersetzung/Transliteration/Qualifier-Rewrite) – jetzt
+    per Tests abgesichert; Guidance ergaenzt (Rechtsform wörtlich, ohne Strasse).
+  - Schema-Luecke dokumentiert und minimal generisch geschlossen:
+    `identity.service_email` + `identity.service_phone` (Optional[str]) in
+    `ContractIdentity` – im KI-Feldkatalog, im Snapshot (JSONB) und im
+    Detail-`identity`-Block via Backend-API. Evidence-pflichtig (fail-closed);
+    keine ABIOMED-spezifische Sonderlogik. Kein Frontend-Change noetig.
+- **Fix 3 – Evidence-Dedupe im Read-Layer:**
+  - `_dedupe_evidence` in `build_contract_detail` (nach `_settle_canonical_evidence`):
+    Duplikat nur = gleicher `field_ref` + gleiche Quelle/Seite/Paragraf-/Tabellen-
+    Index + gleiche normalisierte Aussage. Andere Seite/Quote/Fakt/Source bleiben
+    erhalten; DB-/Audit-Zeilen werden nie veraendert.
+  - Deterministisch (Sortierung nach `(key, evidence_id)`, von DB-Lieferreihenfolge
+    unabhaengig); Merge aggregiert `requires_review` (ODER), bevorzugt den
+    `recovered:`-Beleg, hoehere Konfidenz und vorhandene bbox.
+  - Gruppen-Fallback und feldspezifische Prioritaet im Review bleiben unveraendert.
+- **Tests:** 18 neue Tests in `test_harness_v3_services.py` (8),
+  `test_contract_identity_contact.py` (4), `test_evidence_dedupe.py` (6).
+
+#### Geaenderte Dateien
+- `backend/app/ai/harness/pipeline.py` – `_find_quote` Ellipsen-Fallback
+- `backend/app/ai/harness/v3.py` – Scope-List-Normalisierung, Merge, Guidance
+- `backend/app/models/contract.py` – `service_email`/`service_phone` (ContractIdentity)
+- `backend/app/contracts/detail/service.py` – `_dedupe_evidence`, Identity-Block
+- `backend/tests/test_harness_v3_services.py`, `backend/tests/test_contract_identity_contact.py`,
+  `backend/tests/test_evidence_dedupe.py` (neu)
+- `docs/PROJECT_PROGRESS.md` (dieser Eintrag)
+
+#### Tests/Ergebnis
+- Neue Tests: 18/18 bestanden.
+- Gezielte Suites (calculation_engine, warning_engine, uat_retest_defects,
+  contract_detail, evidence_dedupe, harness_v3, harness_v3_services,
+  contract_identity_contact, contract_models): 240 passed / 6 failed –
+  die 6 sind vorbestehende Auth-401-Route-Tests (identisch per `git stash`
+  auf HEAD nachgewiesen, 12 passed / 6 failed mit und ohne Aenderungen).
+- Gesamt-Backend: 869 passed / 37 failed (Baseline 851/37; +18 neue Tests,
+  Fehlerzahl identisch = die 37 vorbestehenden Route-/Auth-Fehlschlaege, kein Regress).
+- Frontend: `npm run lint` ok (nur 2 vorbestehende Warnings), `npx tsc --noEmit` exit 0.
+
+#### Bekannte Probleme / offen
+- Produktions-PostgreSQL (`C:\Program Files\PostgreSQL\18\data`, Port 5432) kann
+  aktuell nicht starten: stale Windows Shared-Memory-Block des frueher hard-
+  gekillten postmaster („pre-existing shared memory block is still in use“)
+  – Datenverzeichnis intakt („database system is shut down“), kein Prozess haelt
+  den Block; zuverlaessig nur durch Reboot aufgeloest. Die ABIOMED-Daten liegen
+  ausschliesslich dort (`data/contracts` leer; `data/backups` nur .gitkeep).
+- Daraus folgt: das geforderte EINE offizielle `/reanalyze` auf ABIOMED sowie die
+  Live-`DB/API`-Verifikation sind ausstehend (User hat Bericht ohne Live-Reanalyze
+  gewaehlt). Nach DB-Recovery ausfuehren.
+- 37 vorbestehende Auth-Route-Tests (401): weiterhin dokumentiert, kein Code-Fix.
+- RTL/LTR + Terminologie: bewusst NIE umgesetzt (User-Direktive dieser Runde).
+
+#### Naechster Schritt
+- 14-Punkte-A–R-Bericht Runde 3 abliefern (`git diff --stat`, `git status`,
+  Commit-Dateiliste) – Stopp vor Commit/Push bis Freigabe. Danach: Reboot,
+  alte DB starten, Ollama/uvicorn, ein offizielles `/reanalyze` auf ABIOMED,
+  Live-DB/API-Verifikation, PROJECT_PROGRESS-Dateigruppe nachtragen.
