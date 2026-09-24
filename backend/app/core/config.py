@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     harness_vision_batch_scale: int = 1600
     harness_vision_min_pages_for_batch: int = 2
     harness_vision_max_calls: int = 16
+    # JAMAL v1: scanned/image-heavy PDFs use hybrid OCR + bounded local vision.
+    hybrid_scanned_contracts_enabled: bool = True
     document_intelligence_atomic_geometry: bool = False
     document_intelligence_atomic_geometry_dpi: int = 200
     ollama_base_url: str = "http://127.0.0.1:11434"

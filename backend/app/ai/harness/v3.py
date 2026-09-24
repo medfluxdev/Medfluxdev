@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from app.ai.harness.document import Block, DocumentModel
 from app.ai.harness.pipeline import _find_quote, RETRIEVAL_TERMS, field_types, strict_value
 from app.ai.harness.source_signals import collect_source_signals
+from app.documents.intelligence.hybrid import route_summary, visual_candidate_pages
 from app.ai.service import AIService
 from app.core.config import Settings
 from app.models.contract import Contract
@@ -56,6 +57,7 @@ class ProposedFactBatch(BaseModel):
 class VisualPageReading(BaseModel):
     page: int
     visible_text: list[str] = Field(default_factory=list)
+    layout_relations: list[str] = Field(default_factory=list)
     unresolved: list[str] = Field(default_factory=list)
 
 
@@ -283,8 +285,12 @@ def _pack_source(canonical, page_numbers, visual_readings) -> str:
     if visual_readings:
         rows.append("[VISION TRANSCRIPTIONS]\n" + json.dumps(
             {
-                page: reading.visible_text
+                page: {
+                    "visible_text": reading.visible_text,
+                    "layout_relations": reading.layout_relations,
+                }
                 for page, reading in visual_readings.items()
+                if page in page_numbers
             },
             ensure_ascii=False,
         ))
@@ -1121,24 +1127,33 @@ class DirectContractHarness:
                         )
                         raise
 
-            # Vision is a fallback perception channel, not a mandatory reasoning stage.
-            sparse_pages = [
-                page.page_number
-                for page in canonical.pages
-                if len((page.text or "").strip()) < 60
-            ]
-            if sparse_pages and descriptor.capabilities.vision is True and page_image_loader is not None:
+            # JAMAL v1: deterministic hybrid routing. Vision is used for image-only
+            # and structurally ambiguous scanned/OCR pages, while clean native-text
+            # pages remain text-only. Routing decides compute only, never meaning.
+            candidate_pages = visual_candidate_pages(canonical)
+            page_routes = route_summary(canonical)
+            calls.append({
+                "purpose": "routing:hybrid-pages",
+                "stage": "routing",
+                "routes": page_routes,
+                "vision_candidates": candidate_pages,
+                "failed": False,
+                "succeeded": True,
+            })
+            if candidate_pages and descriptor.capabilities.vision is True and page_image_loader is not None:
                 max_visual = min(
-                    len(sparse_pages),
+                    len(candidate_pages),
                     int(getattr(self.settings, "harness_vision_max_calls", 4)),
                 )
-                for page_number in sparse_pages[:max_visual]:
+                for page_number in candidate_pages[:max_visual]:
                     image = page_image_loader(page_number)
                     reading = await call(
                         f"vision:{page_number}",
-                        "Transcribe only clearly visible contract text from this page. "
-                        "Preserve dates, numbers, currency, punctuation and negation exactly. "
-                        "Put uncertain material in unresolved. "
+                        "Read this contract page visually. Transcribe only clearly visible text exactly, "
+                        "preserving dates, numbers, currency, punctuation and negation. "
+                        "Also record only explicit visual/layout relationships needed to interpret tables, "
+                        "rows, columns, labels, selected controls, service windows or signatures; do not infer "
+                        "contractual meaning. Put uncertain material in unresolved. "
                         f"Return page={page_number}.",
                         VisualPageReading,
                         images=[image],
