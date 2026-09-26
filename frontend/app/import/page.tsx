@@ -167,7 +167,7 @@ export default function ImportPage() {
             <h2>Import-Einstellungen bestätigen</h2>
             <p>1. <strong>Für welche Abteilung ist dieser Vertrag?</strong></p>
             <p>Aktueller Arbeitsbereich: <strong>{membership?.organization_name ?? effectiveOrgSlug}</strong></p>
-            <p>Krankenhaus: <strong>{membership?.hospital_id ?? "Im Kopfbereich auswählen"}</strong> · Abteilung: <strong>{membership?.department_id ?? "Im Kopfbereich auswählen"}</strong></p>
+            <p><strong>Krankenhaus und Abteilung:</strong> die aktuelle Auswahl im Kopfbereich. Bei Administratoren kann sie von der Standardmitgliedschaft abweichen.</p>
             <p className="muted small">Bitte die berechtigte Abteilung im Arbeitsbereich oben wählen, bevor Sie die Zuordnung bestätigen. Diese Testversion verwendet die serverseitige aktuelle Bereichszuordnung; eine freie Abteilungswahl im Import wird noch umgesetzt.</p>
             <fieldset>
               <legend>2. Wie möchten Sie die Vertragsdaten erfassen?</legend>
