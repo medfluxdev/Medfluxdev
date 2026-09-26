@@ -4292,3 +4292,110 @@ closed → no invented values.
   Commit-Dateiliste) – Stopp vor Commit/Push bis Freigabe. Danach: Reboot,
   alte DB starten, Ollama/uvicorn, ein offizielles `/reanalyze` auf ABIOMED,
   Live-DB/API-Verifikation, PROJECT_PROGRESS-Dateigruppe nachtragen.
+
+## Runde 4 - Frankfurt-Scan-E2E: Harness V3 Haertung (OCR-Toleranz, Geld-Locator, Context-Budget)
+
+**Status:** CODE + TESTS + REALE E2E ABGESCHLOSSEN (kein Commit/Push; Stopp bis Freigabe)
+**Datum:** 2026-09-25 | **Fortschritt:** 18/18 (E2E-Haertungsrunde, kein neuer Hauptschritt)
+
+#### Ausgangslage (BEFORE)
+- Realer E2E auf dem gescannten Frankfurt-Vertrag (RAV-00074, PDF, 9 Seiten, HybridVision:
+  alle Seiten hybrid_required) hatte deutlich mehr nicht verortete Fakten als Grundgesamtheit.
+  Diagnose-Punkte: (1) Context-Budget - prompt+output konnte die konfigurierte num_ctx
+  (8192) nicht selbst korrigieren und lief in Output-Trim/Abbruch; (2) OCR-tolerantes
+  Evidence-Matching fehlte - Pipe-Separatoren (`|`) in Tabellenzellen und einzelne OCR-Typos
+  (z. B. "Komponeten", "Schanzenfeldstr.") verhinderten Quote-Bindungen; Geld wurde
+  potenziell ueber reine Zahlen (falsche Nicht-Geld-Zeilen) gebunden; (3) Page-Provenance -
+  block ids `p{page}:{element_id}`, canonical page == PDF page (1-basiert) waren nicht
+  ausreichend gegen die reale Verteilung geprueft. Zusaetzlich: `identity.supplier` (volle
+  Adresse) wird im Briefkopf auf mehreren Seiten wiederholt -> globale Literal-Eindeutigkeit
+  schlaegt fehl; `payment.payment_deadline_days` (30 Tage) wurde durch die ueberbreite
+  `_money_field`-Praedikatabfrage (payment.*) zu Unrecht als Geld-Feld behandelt und
+  verworfen; Datum-/Dauer-Literal-Value-Shapes (`{date_type,...}` bzw.
+  `{duration_type, literal_value}`) wurden zu {} geleert; zwei `variable_charges`-Zeilenfakten
+  ueberschrieben sich gegenseitig im Contract.
+
+#### Implementiertes (AFTER)
+- **Context-Budget:** `_effective_context` + `_CONTEXT_RESERVE=512` - hebt die effektive
+  num_ctx auf prompt+output+reserve an, gedeckelt durch die echte Modellkapazitaet
+  (descriptor.context_length); ohne gemeldete Kapazitaet bleibt der angeforderte Budget
+  (konservativ). Exakt EIN gebundener Retry bei `done_reason=length`, danach fail-closed.
+  Diagnosefelder: requested_context, output_reserve, effective_context, truncation_count,
+  retry_count, retry_decision, retried_with_output_tokens.
+- **OCR-Toleranz:** Pipeline `_TOLERANT_TOKEN_SPLIT`/`_tolerant_tokens`/
+  `_find_quote_tolerant` (Token-Split auf Pipes/Whitespace, Komma zwischen Ziffern bleibt
+  Teil des Geldtokens, <=2 buchstabengenaue OCR-Typos, Wort-Reihenfolge bleibt wichtig,
+  fehlende Woerter -> fail-closed). Geld-Literal-Regex `_MONEY_LITERAL_RE` (Praefix-/
+  Suffix-Waehrung, jeweils position), `_money_amount`, `_money_amounts_from_value`.
+- **Staged Money-Locator:** `_locate_money_staged` verankert den Betrag-Literal auf der
+  Fact-Seite und verlangt das (OCR/pipe-tolerante) Label in der Naehe; Geld wird NIE allein
+  ueber die Zahl gebunden; Ambiguitaet/falsche Seite -> `evidence_not_located` (fail-closed).
+  `_money_field` (echte Geld-Felder + Zeilenfelder) ersetzt die ueberbreite startswith-
+  Abfrage. Quote-Pfad fuer Nicht-Geld-Felder bleibt verfuegbar (payment_deadline_days bindet
+  wieder).
+- **Page-Scoped Literal-Fallback:** `_literal_evidence` sucht zunaechst nur auf der
+  Fact-Seite eindeutig, erst danach global; wiederholter Briefkopf (Seite 1 + Seite 6)
+  laesst den supplier (volle Adresse) auf seiner eigenen Seite binden.
+- **Normalisierung:** `_normalize_row_amount` erhaelt flache Betraege in Zeilen
+  ("9.500,00 EUR", "9500" + Zeilenwaehrung) statt {} zu leeren; `_normalize_duration_payload`
+  unterstuetzt `{duration_type, literal_value}`; `_normalize_date_payload` unterstuetzt
+  `{date_type, literal_value}` (start 04.06.2025 -> 2025-06-04, end -> 2029-06-03).
+- **Projektion:** zwei gleichnamige Zeilenfakten (`costs.variable_charges`,
+  `costs.scheduled_prices`) werden aneinandergehaengt statt sich zu ueberschreiben
+  (180,00 + 200,00 EUR pro Call bleiben beide erhalten).
+
+#### Geaenderte Dateien
+- `backend/app/ai/harness/pipeline.py` - _TOLERANT_TOKEN_SPLIT, _tolerant_tokens,
+  _word_distance, _find_quote_tolerant
+- `backend/app/ai/harness/source_signals.py` - `_MONEY_RE` Praefix/Suffix
+- `backend/app/ai/harness/v3.py` - _effective_context/_CONTEXT_RESERVE, call()-Retry-Schleife,
+  _MONEY_LITERAL_RE/_money_amount/_money_amounts_from_value/_money_label_phrase/
+  _locate_money_staged, _money_field, _literal_evidence, _normalize_row_amount,
+  _normalize_duration_payload/_normalize_date_payload Literal-Value-Shapes,
+  Zeilenfakten-Merge in der Projektion, locate()-Guards (money_quote_ok, staged, signal-exclude)
+- `backend/tests/test_harness_v3_money_ocr.py` - Money/OCR/Budget/Provenance-Suite + Regressionen
+- `backend/tests/test_harness_v3.py` - page-scoped supplier literial Regression
+- `docs/PROJECT_PROGRESS.md` (dieser Eintrag)
+
+#### Tests/Ergebnis
+- Gezielte Harness-Suites (test_harness_v3, test_harness_v3_services,
+  test_harness_v3_money_ocr, test_hybrid_scanned_pipeline, test_hybrid_vision_runtime): 63 passed.
+- Mit Source-Navigation (test_source_navigation, test_source_navigation_exact): 97 passed.
+- (test_document_processing / test_contract_extraction / test_document_intelligence haengen an
+  echten Docling/PDF/Local-AI/DB-Laeufen - umgebungsbedingt, ausserhalb des gruenen Scopes.)
+
+#### Reale E2E (AFTER, Frankfurt-Scan, qwen3-vl:8b-instruct, HARNESS_CONTEXT_TOKENS=8192, DB-frei)
+- 14 AI-Calls (1 routing + 9 vision + 4 semantic), 0 Truncations, 0 Retries, 0 Failures,
+  244,33 s, PARTIAL/VALID, evidence_count=15, supported_count=15, requires_review=True.
+- Akzeptierte Fakten (Feld -> GT-Wert -> Extrahiert): identity.contract_number -> RAV-00074 ->
+  RAV-00074 (S.1); identity.supplier -> Abbott Medical GmbH, Betriebsstaette Wetzlar,
+  Schanzenfeldstrasse 2, 35578 Wetzlar -> identisch als volle Adresse (S.1, page-scoped
+  literal); identity.contractor -> Krankenhaus Nordwest GmbH -> inkl. Adresse Steinbacher
+  Hohl 2-26 60488 Frankfurt (S.1); identity.customer_number -> 1000051342 -> 1000051342 (S.1);
+  dates.start_date -> 04.06.2025 -> 2025-06-04 (S.1); dates.end_date -> 03.06.2029 ->
+  2029-06-03 (S.1); dates.duration -> 48 Monate -> 48 months (S.2); dates.minimum_duration ->
+  48 Monate -> 48 months (S.2); costs.annual_cost -> 12.000,00 EUR -> 12.000,00 EUR (S.3) via
+  OCR/pipe-Zitat "Anteilige Zahlung fuer Investitionsgut: | | EUR 12.000,00";
+  costs.scheduled_prices -> 9.500,00 EUR -> 9.500,00 EUR (S.3); costs.variable_charges ->
+  180,00/200,00 EUR/Stueck -> beide 180,00 + 200,00 EUR per_call (S.5);
+  payment.payment_deadline_days -> 30 Tage -> 30 (S.6).
+- Nicht uebernommen (Modell-seitig, korrekt fail-closed): equipment (applicability unknown),
+  costs.*/payment.* als model_marked_ambiguous, services.included_services
+  (applicability:alternative). Kein Code-Eingriff in Ground Truth - Abweichungen sind
+  Modell-Proposals, kein Locator-Bug.
+
+#### Bekannte Probleme / offen
+- `equipment` (OPTIS Mobile Next Imaging System) noch nicht belegt: Modell markiert
+  applicability unknown ohne Quote; kein Locator-Fix erzwingt hier eine Falschannahme.
+- 12.000,00 EUR einmalig wird als annual_cost gefuehrt; Katalog-Entscheidung bleibt UNGELOEST
+  (advance_payment vs. annual_cost) - Modell flaggt advance_payment als ambiguous, fail-closed.
+- Die drei Document-Processing-Testdateien haengen an echten Pipeline-Laeufen (Environ), nicht
+  Teil des gruenen Scopes.
+- Harness arbeitet nur innerhalb der Facetten dieser Runde; keine DB-Migration, keine API-/
+  Frontend-Aenderungen, AHMAD unberuehrt.
+
+#### Naechster Schritt
+- BEFORE/AFTER-Bericht abliefern (git diff --stat, git status, Feldtabelle, E2E-Kennzahlen),
+  Stopp vor Commit/Push bis Freigabe. Optional danach: equipment-Lokalisierung via
+  Angebots-Deckblatt-Position praezisieren und advance_payment/annual_cost-Katalogbewertung
+  der 12.000,00-Euro-Einmalzahlung klaeren.
