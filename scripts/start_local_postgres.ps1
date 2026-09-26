@@ -6,6 +6,32 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Explicit managed PostgreSQL service takes priority on the local MedFlux machine.
+# Never silently fall back to a different cluster when the managed service exists.
+if ($Port -eq 5432) {
+    $managed = Get-Service -Name "MedFluxPostgres18" -ErrorAction SilentlyContinue
+    if ($managed) {
+        $readyExe = "C:\ProgramData\MedFlux\postgres18\bin\pg_isready.exe"
+        $dataVersion = "C:\ProgramData\MedFlux\postgres18\data\PG_VERSION"
+        if (-not (Test-Path $readyExe) -or -not (Test-Path $dataVersion)) {
+            Write-Error "Managed PostgreSQL files missing. Do not initialize or overwrite existing data."
+            exit 4
+        }
+        if ($managed.Status -ne "Running") {
+            Start-Service -Name "MedFluxPostgres18" -ErrorAction Stop
+        }
+        for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            & $readyExe -h 127.0.0.1 -p 5432 -t 1 *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Managed MedFlux PostgreSQL service is ready (127.0.0.1:5432)."
+                exit 0
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        Write-Error "Managed PostgreSQL service did not become ready; inspect MedFluxPostgres18 service."
+        exit 4
+    }
+}
 
 function Test-MedfluxPort {
     param([int]$TargetPort)
