@@ -1252,6 +1252,49 @@ def _steady_annual_amount(rows: list[dict], *, expected_years: int | None = None
         return None
     return float(later[0])
 
+
+def _warmup_image_base64() -> str:
+    """Kleines Graustufen-PNG (dep-frei via zlib/struct) fuer den Vision-Warmup."""
+    import base64
+    import struct
+    import zlib
+
+    width = height = 96
+    row = b"\x00" + b"\x80" * width
+    raw = row * height
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        block = tag + data
+        return struct.pack(">I", len(data)) + block + struct.pack(">I", zlib.crc32(block))
+
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+    return base64.b64encode(png).decode("ascii")
+
+
+async def _warm_up_vision(provider, context: int) -> None:
+    """Eine begrenzte multimodale Call-Instruktion als deterministischer Warmup.
+
+    Nach einem Modell-Load kann die erste Vision-Inferenz pathologisch lang sein
+    (kein Token fuer Minuten). Dieser Warmup traegt diese Kosten einmalig und
+    frueh; danach lesen die echten Seiten nur noch warm. Scheitert er, faellt
+    die Analyse bestimmt und frueh statt mitten in den Seitenlesungen.
+    """
+    schema = VisualPageReading.model_json_schema()
+    await provider.generate_request(
+        "You receive a blank placeholder image. Read nothing. "
+        "Return an empty reading for page 1.",
+        "Return exactly the JSON schema output.",
+        schema,
+        64,
+        min(int(context), 4096),
+        [_warmup_image_base64()],
+    )
+
 class DirectContractHarness:
     """Small orchestration layer: semantic extraction once, deterministic proof once."""
 
@@ -1259,10 +1302,12 @@ class DirectContractHarness:
         self.settings = settings
         self.ai = ai or AIService(settings)
 
-    async def analyze(self, canonical, image_loader=None, page_image_loader=None):
+    async def analyze(self, canonical, image_loader=None, page_image_loader=None,
+                      original_page_loader=None):
         from app.ai.contract_extractor import ContractAnalysisResult
 
         started = time.monotonic()
+        original_page_loader = original_page_loader or page_image_loader
         document = DocumentModel.build(canonical)
         types = field_types()
         source_signals = collect_source_signals(document)
@@ -1292,8 +1337,12 @@ class DirectContractHarness:
                 )
             )
             base_output = int(getattr(self.settings, "harness_output_tokens", 1800))
+            vision_output = min(
+                base_output,
+                int(getattr(self.settings, "harness_vision_output_tokens", base_output)),
+            )
 
-            async def call(purpose: str, prompt: str, schema_type, *, images=None, stage="semantic"):
+            async def call(purpose: str, prompt: str, schema_type, *, images=None, stage="semantic", output_budget=None):
                 schema = schema_type.model_json_schema()
                 system = SYSTEM + "\nOutput JSON schema: " + json.dumps(
                     schema, separators=(",", ":")
@@ -1309,7 +1358,7 @@ class DirectContractHarness:
                     "failed": False,
                 }
                 calls.append(metric)
-                output_tokens = base_output
+                output_tokens = base_output if output_budget is None else int(output_budget)
                 attempt = 0
                 while True:
                     image_reserve = 1024 * len(images or [])
@@ -1375,6 +1424,56 @@ class DirectContractHarness:
                         )
                         raise
 
+            visual_first_data = None
+            visual_first_rows = []
+            if getattr(self.settings, "visual_first_experiment_enabled", False):
+                if descriptor.capabilities.vision is not True:
+                    raise ValueError("Visual-First requires the selected vision model")
+                from app.ai.harness.visual_first_bridge import prepare_visual_first
+                if getattr(self.settings, "harness_vision_warmup_enabled", True):
+                    try:
+                        await _warm_up_vision(provider, capacity)
+                    except Exception as warmup_exc:
+                        raise ValueError(
+                            "Vision warm-up failed (%s): cold-start inference is "
+                            "unstable; aborting deterministically"
+                            % type(warmup_exc).__name__
+                        ) from warmup_exc
+                visual_readings, visual_first_rows, visual_first_data = await prepare_visual_first(
+                    canonical=canonical,
+                    source_signals=source_signals,
+                    page_image_loader=original_page_loader,
+                    provider=provider,
+                    context=capacity,
+                    output_tokens=vision_output,
+                    max_pages=self.settings.visual_first_max_pages,
+                    max_reviews=self.settings.visual_first_max_reviews,
+                )
+                calls.extend(
+                    {"purpose": "visual-first:%s:%s" % (item["stage"], item["page"]),
+                     "stage": item["stage"], "failed": False, "succeeded": True}
+                    for item in visual_first_data["calls"]
+                )
+                if any(item.get("rejected_page_mismatch")
+                       for item in visual_first_data["calls"]):
+                    issues.append("Visual-First page mismatch requires manual review")
+                if any(item.get("provenance_ambiguous_multipage") or
+                       item.get("provenance_ambiguous_on_other_page") or
+                       item.get("provenance_unverified_by_ocr")
+                       for item in visual_first_data["calls"]):
+                    issues.append("Visual-First ambiguous provenance requires manual review")
+                if any(item.get("rejected_invalid_region") or
+                       item.get("rejected_malformed_claim")
+                       for item in visual_first_data["calls"]):
+                    issues.append("Visual-First invalid source claim requires manual review")
+                if any(item.get("rejected_page_error") or item.get("rejected_review_error")
+                       for item in visual_first_data["calls"]):
+                    issues.append("Visual-First unreadable page requires manual review")
+                for row in visual_first_rows:
+                    if row.status != "corroborated":
+                        issues.append("Visual-First evidence requires human review")
+                        break
+
             # JAMAL v1: deterministic hybrid routing. Vision is used for image-only
             # and structurally ambiguous scanned/OCR pages, while clean native-text
             # pages remain text-only. Routing decides compute only, never meaning.
@@ -1388,7 +1487,9 @@ class DirectContractHarness:
                 "failed": False,
                 "succeeded": True,
             })
-            if candidate_pages and descriptor.capabilities.vision is True and page_image_loader is not None:
+            if (not getattr(self.settings, "visual_first_experiment_enabled", False)
+                    and candidate_pages and descriptor.capabilities.vision is True
+                    and page_image_loader is not None):
                 max_visual = min(
                     len(candidate_pages),
                     int(getattr(self.settings, "harness_vision_max_calls", 4)),
@@ -1406,6 +1507,7 @@ class DirectContractHarness:
                         VisualPageReading,
                         images=[image],
                         stage="vision",
+                        output_budget=vision_output,
                     )
                     visual_readings[page_number] = reading
 
@@ -1645,6 +1747,13 @@ class DirectContractHarness:
                     )
                     continue
 
+                if (visual_first_rows and fact.field.startswith("costs.")
+                    and any(row.page == fact.page and row.status == "disputed"
+                            for row in visual_first_rows)):
+                    rejected.append({"field": fact.field, "page": fact.page,
+                                     "reason": "visual_first_cost_dispute_manual_review"})
+                    continue
+
                 located = locate(fact)
                 if located is None:
                     rejected.append(
@@ -1802,6 +1911,11 @@ class DirectContractHarness:
                 "model": model_id,
                 "source_sha256": canonical.source_sha256,
                 "source_signals": source_signals,
+                "visual_first": visual_first_data,
+                "visual_first_evidence_statuses": [
+                    {"page": row.page, "label": row.label, "status": row.status,
+                     "reasons": row.reasons} for row in visual_first_rows
+                ],
                 "semantic_proposals": [fact.model_dump() for fact in proposals],
                 "normalizations": normalizations,
                 "accepted_facts": accepted,
