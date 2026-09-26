@@ -4399,3 +4399,61 @@ closed → no invented values.
   Stopp vor Commit/Push bis Freigabe. Optional danach: equipment-Lokalisierung via
   Angebots-Deckblatt-Position praezisieren und advance_payment/annual_cost-Katalogbewertung
   der 12.000,00-Euro-Einmalzahlung klaeren.
+
+---
+
+## STEP 3: Kontrollierte Integration (Integration-Branch, Stand 2026-09-26)
+
+**Status:** Stufe 1-2 abgeschlossen; Aenderungsflaechen-Unit-Suite gruen (98 Tests);
+breite Backend-Regression BLOCKIERT (kein isoliertes PostgreSQL etablierbar); Frankfurt-
+Benchmark offen (GPU-Koordination). KEIN Merge in JAMAL ohne finale Freigabe.
+
+**Datum:** 2026-09-26
+
+**Implementiertes (Integration-Branch `step3/integration-20260926`, Basis `356975d` origin/JAMAL):**
+
+| Commit | Inhalt |
+|--------|--------|
+| `42a7564` | chore(dev): lokaler MedFlux-Launcher + isolierte Postgres-Hilfsskripte (Runde-4) |
+| `b14bfe1` | feat(harness): Runde-4-Haertung - OCR-Toleranz, Geld-Locator, Kontextbudget |
+| `db0aa30` | docs: Runde-4-Haertung + lokaler Launcher |
+| `cb0431c` | merge(audit): Finance-Provenance - striktes `_steady_annual_amount(expected_years=)` + `derived_facts` (3-Way-V3-Semantik-Merge, Konflikt manuell geloest) |
+| `472f917` | fix(ai): lokaler Ollama-Streaming-Provider (getrennte Timeouts connect/read/write/pool, NDJSON-`_chat`, `_payload`), `keep_alive` + Vision/Visual-First-Config-Knobs |
+| `87671fc` | feat(harness): Visual-First-Seitenbild-Ablesung (12/2 pages/reviews), STEP-5-Ambiguity-Guard (multipage/other-page/unverified -> review-only, kein harter Reject nur wegen Quote auf anderer Seite), Provenance-Tests, V3-Integration (`visual_first_experiment_enabled`-Gate) |
+
+**Dateien (Aenderungsflaechen):** `backend/app/ai/providers/ollama.py`, `backend/app/core/config.py`,
+`backend/app/ai/harness/v3.py`, neu `backend/app/ai/harness/visual_first.py`,
+`backend/app/ai/harness/visual_first_bridge.py`, neu `backend/tests/test_visual_first_bridge.py`,
+`backend/tests/test_visual_first_isolated.py`, `docs/PROJECT_PROGRESS.md`.
+
+**Tests/Ergebnis:**
+- Unit-Suite (ohne DB, `MEDFLUX_UNIT_ONLY=1`, Test-Schema-Isolation unberuehrt):
+  `test_harness_v2` + `test_harness_v3` + `test_harness_v3_money_ocr` +
+  `test_harness_v3_services` + `test_visual_first_bridge` + `test_visual_first_isolated` +
+  `test_finance_provenance_audit` = **98 passed**.
+- Zusaetzlich gruen: `test_harness_v3_money_ocr` (28), `test_harness_v3_services` (8).
+
+**Bekannte Probleme / offen:**
+- Breite Backend-Regression BLOCKIERT: Die DB-tragenden Suiten (`test_ai.py`, Verifier,
+  `test_contract_extraction.py`, API/Auth-E2E) brauchen eine erreichbare PostgreSQL. Eine
+  unabhaengig provisionierte, voellig isolierte Test-Instanz (eigener Port, eigenes Data-Dir,
+  eigene Zugangsdaten; 5432/MedFluxPostgres18 unangetastet) liess sich auf dieser Maschine
+  NICHT stabil etablieren:
+  * `postgres.exe` von PostgreSQL 18.6 verweigert den Direktstart unter einem
+    Administrator-Konto ("Execution ... under a user with administrative permissions is not
+    permitted").
+  * pg_ctl gestartete Zweitinstanzen derselben Binaries kollidieren mit dem laufenden
+    5432-Service auf Windows im Shared-Memory-Adressraum (Fehler 487
+    ERROR_INVALID_ADDRESS): Backend-Spawns schlagen dauerhaft fehl; genau EIN Start gelang
+    (60 s stabil), dann Degeneration.
+  * GemSss Freigabe-Regel: bei nicht sicher etablierbarer Test-DB gilt "Unit-Tests weiter,
+    Integrationstests als blockiert berichten". Aufraeumung abgeschlossen: alle eigenen
+    Orphan-Prozesse beendet, `pgtest`-Artefakte geloescht, 5432-Service verifiziert stabil
+    ("accepting connections", Prozess-PIDs vom 2026-09-25 unveraendert).
+- `test_llama_archive*.py` (LlamaIndex) weiterhin Environment-Gap in den verfuegbaren venvs.
+
+**Naechster Schritt:**
+- Frankfurt-Benchmark gegen integrierten Stand (`visual_first_experiment_enabled=1`) erst
+  nach GPU-/Ollama-Koordination (VRAM-Check via `ollama ps`); Vergleich gegen Phase-3-Baseline.
+- Abschlussbericht: Commit-IDs, geaenderte Dateien, Tests, Benchmark-Vergleich, Restpunkte,
+  Go/No-Go-Empfehlung. Merge in `JAMAL` nur nach expliziter Freigabe.
