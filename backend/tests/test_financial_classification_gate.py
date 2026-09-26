@@ -232,10 +232,11 @@ async def test_annual_period_anchor_accepts_uncorroborated_amount_into_annual_co
     assert annual is not None and float(annual.amount) == 12000.0
 
 
-def _vision_only_rows(field_page=3, status="vision_only"):
+def _vision_only_rows(field_page=3, status="vision_only", label="Einmalige Zusatzkosten",
+                      quote="Einmalige Zusatzkosten 12.000 EUR"):
     obs = Observation(
-        page=field_page, source="vision", label="Einmalige Zusatzkosten",
-        value="12.000 EUR", quote="Einmalige Zusatzkosten 12.000 EUR",
+        page=field_page, source="vision", label=label,
+        value="12.000 EUR", quote=quote,
         region=[10, 10, 20, 20],
     )
     return [Reconciled(field_page, obs.label, obs.value, status, [obs])]
@@ -273,12 +274,29 @@ def test_classification_predicate_decision_matrix():
         annual, _vision_only_rows(status="disputed")) is False
     # Periodenanker im Zitat genuegt.
     assert _financial_classification_verified(anchored, _vision_only_rows()) is True
+    # Deterministischer Anker im Dokumenttext der Zielseite genuegt.
+    assert _financial_classification_verified(
+        annual, _vision_only_rows(),
+        page_texts={3: "Jaehrliche Verguetung 12.000 EUR pauschal."}) is True
+    assert _financial_classification_verified(
+        annual, _vision_only_rows(),
+        page_texts={2: "Jaehrliche Verguetung."}) is False
     # Falscher Periodenanker fuer dieses Feld genuegt nicht.
     assert _financial_classification_verified(quarterly_quote, _vision_only_rows()) is False
     assert _financial_classification_verified(monthly, _vision_only_rows()) is False
     assert _financial_classification_verified(monthly_anchored, _vision_only_rows()) is True
     assert _financial_classification_verified(maintenance, _vision_only_rows()) is False
     assert _financial_classification_verified(maintenance_anchored, _vision_only_rows()) is True
-    # Korrobation (OCR+Vision exakt, gleiche Seite/Region) akzeptiert ohne Anker.
+    # Korrobation OHNE Periodenanker (z.B. "Pauschale" von OCR+Vision bezeugt)
+    # beweist nur den Literal, nicht die Kostenperiode -> Ablehnung.
     assert _financial_classification_verified(
-        annual, _vision_only_rows(status="corroborated")) is True
+        annual, _vision_only_rows(status="corroborated")) is False
+    # Korrobation MIT Periodenanker in Label oder Zitat belegt die Klasse.
+    assert _financial_classification_verified(
+        annual, _vision_only_rows(status="corroborated",
+                                  label="Jaehrliche Verguetung")) is True
+    assert _financial_classification_verified(
+        annual, _vision_only_rows(status="corroborated",
+                                  quote="Jaehrliche Verguetung 12.000 EUR")) is True
+    # Auch bei korroborierter Seite entscheidet zuerst das Fakt-Zitat.
+    assert _financial_classification_verified(anchored, _vision_only_rows()) is True

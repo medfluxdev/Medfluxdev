@@ -1277,7 +1277,9 @@ _PERIOD_FIELDS: dict[str, re.Pattern[str]] = {
 }
 
 
-def _financial_classification_verified(fact, visual_first_rows) -> bool:
+def _financial_classification_verified(
+    fact, visual_first_rows, *, page_texts=None, resolved_page=None,
+) -> bool:
     """Nur mit ausreichendem, deterministischem Beleg laesst sich ein Betrag
     als wiederkehrende Kostenkategorie akzeptieren."""
     anchor = _PERIOD_FIELDS.get(fact.field)
@@ -1288,15 +1290,28 @@ def _financial_classification_verified(fact, visual_first_rows) -> bool:
     if not visual_first_rows:
         # Legacy-/Hybrid-Pfad ohne Visual-First: unveraendert (Money-OCR-Tests).
         return True
-    page_rows = [r for r in visual_first_rows if r.page == fact.page]
+    if fact.quote and anchor.search((fact.quote or "")[:400]):
+        return True
+    target_page = resolved_page if resolved_page is not None else fact.page
+    page_text = (page_texts or {}).get(target_page) or ""
+    if anchor.search(page_text[:4000]):
+        # Deterministischer Beleg direkt im Dokumenttext der Zielseite.
+        return True
+    page_rows = [r for r in visual_first_rows if r.page == target_page]
     if not page_rows:
         # Diese Seite wurde visuell nicht abgeglichen; der Locator+Quote-Beweis
         # greift weiter hinunter. Keine zusaetzliche Gate-Belastung.
         return True
-    if any(r.status == "corroborated" for r in page_rows):
-        return True
-    if fact.quote and anchor.search((fact.quote or "")[:400]):
-        return True
+    for row in page_rows:
+        if row.status != "corroborated":
+            continue
+        for observation in row.observations:
+            if (observation.quote and anchor.search(observation.quote[:400])) or (
+                observation.label and anchor.search(observation.label[:400])
+            ):
+                # Korrobation beweist, dass der Literal wirklich auf dieser Seite
+                # steht - und der bezeugte Label/Quote traegt den Perioden-Anker.
+                return True
     return False
 
 
@@ -1751,6 +1766,8 @@ class DirectContractHarness:
             supported_count = 0
             normalizations: list[dict] = []
 
+            page_texts = {int(p.page_number): (p.text or "")
+                          for p in canonical.pages}
             for fact in proposals:
                 original_value = fact.value
                 fact.value = _normalize_fact_value(fact.field, fact.value)
@@ -1801,22 +1818,6 @@ class DirectContractHarness:
                                      "reason": "visual_first_cost_dispute_manual_review"})
                     continue
 
-                if not _financial_classification_verified(fact, visual_first_rows):
-                    # GATE 1: ein nicht periodenbelegter Betrag darf weder als
-                    # annual_cost noch als eine andere wiederkehrende Kostenart in
-                    # kalkulatorische Verantwortung uebergehen (Kalkulation,
-                    # Forecast, Suche, Analytics). Nur manuelle Freigabe war.
-                    rejected.append({
-                        "field": fact.field, "page": fact.page,
-                        "reason": "financial_classification_unverified",
-                        "quote": (fact.quote or "")[:240],
-                    })
-                    issues.append(
-                        "Financial classification requires manual review: %s"
-                        % fact.field
-                    )
-                    continue
-
                 located = locate(fact)
                 if located is None:
                     rejected.append(
@@ -1826,6 +1827,28 @@ class DirectContractHarness:
                             "page": fact.page,
                             "quote": fact.quote[:240],
                         }
+                    )
+                    continue
+
+                (block, resolved_quote), visual_only = located
+                page = fact.page if block is None else block.page
+
+                if not _financial_classification_verified(
+                    fact, visual_first_rows,
+                    page_texts=page_texts, resolved_page=page,
+                ):
+                    # GATE 1: ein nicht periodenbelegter Betrag darf weder als
+                    # annual_cost noch als eine andere wiederkehrende Kostenart in
+                    # kalkulatorische Verantwortung uebergehen (Kalkulation,
+                    # Forecast, Suche, Analytics). Nur manuelle Freigabe war.
+                    rejected.append({
+                        "field": fact.field, "page": page,
+                        "reason": "financial_classification_unverified",
+                        "quote": (fact.quote or "")[:240],
+                    })
+                    issues.append(
+                        "Financial classification requires manual review: %s"
+                        % fact.field
                     )
                     continue
 
@@ -1840,9 +1863,6 @@ class DirectContractHarness:
                         }
                     )
                     continue
-
-                (block, resolved_quote), visual_only = located
-                page = fact.page if block is None else block.page
                 source = SourceEvidence(
                     document_id=canonical.document_id,
                     page=page,
