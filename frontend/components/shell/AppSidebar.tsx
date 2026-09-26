@@ -36,6 +36,8 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Übersicht", href: "/", icon: "dashboard" },
     { label: "Verträge", href: "/contracts", icon: "contracts" },
     { label: "Geräte", href: "/equipment", icon: "equipment" },
+    { label: "Kostenstellen-Suche", href: "/kostenstellen-suche", icon: "review" },
+    { label: "Ahmad-Pilotprüfung", href: "/ahmad-review", icon: "audit" },
     { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
   ]},
   { label: "Dokumente & Prüfung", items: [
