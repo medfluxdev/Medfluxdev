@@ -23,6 +23,17 @@ async function selectedFile(name = "wartung.pdf", type = "application/pdf"): Pro
 }
 
 describe("Import (FE-08)", () => {
+  it("requires explicit scope confirmation and marks future modes unavailable", async () => {
+    const view = render(<ImportPage />);
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(input, await selectedFile());
+    expect(screen.getByRole("button", { name: /Import starten/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Manuelle Eingabe/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /KI mit Richtlinien/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ich bestätige:/ }));
+    expect(screen.getByRole("button", { name: /Import starten/ })).toBeEnabled();
+  });
+
   it("zeigt Ausgangszustand und Zielbereich klar an", () => {
     render(<ImportPage />);
     expect(screen.getByRole("heading", { name: "Verträge importieren" })).toBeInTheDocument();
@@ -54,6 +65,7 @@ describe("Import (FE-08)", () => {
     const utils = render(<ImportPage />);
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, [await selectedFile("wartung.pdf"), await selectedFile("alt.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]);
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ich bestätige:/ }));
     await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
     await waitFor(() => expect(screen.getByText("Import-Ergebnis")).toBeInTheDocument());
 
@@ -91,6 +103,7 @@ describe("Import (FE-08)", () => {
     const utils = render(<ImportPage />);
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, await selectedFile("teilweise.pdf"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ich bestätige:/ }));
     await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
     await waitFor(() => expect(screen.getByText("Teilanalyse – Prüfung erforderlich")).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "Zur manuellen Prüfung" })).toHaveAttribute("href", "/contracts/contract-123?tab=documents&subtab=review");
@@ -108,6 +121,7 @@ describe("Import (FE-08)", () => {
     const utils = render(<ImportPage />);
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, await selectedFile("doppelt.pdf"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ich bestätige:/ }));
     await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
     await waitFor(() => expect(screen.getByText("Duplikat")).toBeInTheDocument());
     expect(screen.getByText("Nicht erneut analysiert")).toBeInTheDocument();
@@ -128,6 +142,7 @@ describe("Import (FE-08)", () => {
     const utils = render(<ImportPage />);
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, await selectedFile("kaputt.pdf"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ich bestätige:/ }));
     await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
     await waitFor(() => expect(screen.getByText("Import-Ergebnis")).toBeInTheDocument());
 
@@ -147,6 +162,7 @@ describe("Import (FE-08)", () => {
     const fileInput = dropzone.querySelector('input[type="file"]') as HTMLInputElement;
     apiUploadMock.mockImplementation(() => new Promise(() => {}));
     await userEvent.upload(fileInput, await selectedFile("hängt.pdf"));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Ich bestätige:/ }));
     await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
     await waitFor(() => expect(screen.getByText(/Die aktuelle API meldet keine einzelnen Live-Stufen/)).toBeInTheDocument());
     expect(screen.queryByText(/%\s*$/)).not.toBeInTheDocument();
