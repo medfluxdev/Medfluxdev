@@ -289,11 +289,13 @@ class OllamaProvider(AIProvider):
         messages: list[dict[str, Any]],
         options: dict[str, Any],
         schema: dict[str, Any] | None,
+        *,
+        stream: bool = True,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self._model(),
             "messages": messages,
-            "stream": True,
+            "stream": stream,
             "think": self.settings.ollama_think,
             "options": options,
         }
@@ -312,7 +314,7 @@ class OllamaProvider(AIProvider):
             {"role": "user", "content": text},
         ]
         return await self._chat(
-            self._payload(messages, self._options(max_tokens), None)
+            self._payload(messages, self._options(max_tokens), None, stream=False)
         )
 
     async def generate_structured(
