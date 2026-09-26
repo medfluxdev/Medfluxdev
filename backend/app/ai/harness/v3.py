@@ -1280,38 +1280,52 @@ _PERIOD_FIELDS: dict[str, re.Pattern[str]] = {
 def _financial_classification_verified(
     fact, visual_first_rows, *, page_texts=None, resolved_page=None,
 ) -> bool:
-    """Nur mit ausreichendem, deterministischem Beleg laesst sich ein Betrag
-    als wiederkehrende Kostenkategorie akzeptieren."""
+    """Require the proposed amount AND its period to share specific evidence.
+
+    Page-wide period words and unrelated corroborated rows are not proof of
+    the proposed amount's recurrence. The legacy path remains unchanged.
+    """
     anchor = _PERIOD_FIELDS.get(fact.field)
     if anchor is None:
-        # Nicht-diskretionäre Felder (identity, dates, termination, SLA-Liste,
-        # scheduled_prices/variable_charges) unterliegen ihres eigenen Schemas.
         return True
     if not visual_first_rows:
-        # Legacy-/Hybrid-Pfad ohne Visual-First: unveraendert (Money-OCR-Tests).
+        # Legacy/hybrid extraction is governed by its existing evidence checks.
         return True
-    if fact.quote and anchor.search((fact.quote or "")[:400]):
+
+    expected = _money_amounts_from_value(getattr(fact, "value", None))
+    if len(expected) != 1:
+        return False
+    amount = expected[0]
+
+    def matches_proposed_amount(text: str) -> bool:
+        # A multi-amount quote is ambiguous even when it contains a period.
+        literals = [
+            _money_amount(match.group(0))
+            for match in re.finditer(
+                r"(?<!\\w)(?:€\\s*)?\\d[\\d.\\s]*(?:,\\d{2})?\\s*(?:EUR|€)?(?!\\w)",
+                text or "", re.I,
+            )
+            if match.group(0).strip()
+        ]
+        literals = [item for item in literals if item is not None]
+        return len(literals) == 1 and round(literals[0], 2) == amount
+
+    # The quote is already source-located by the caller. Do not borrow a
+    # periodicity word from a different clause on the same page.
+    if fact.quote and anchor.search(fact.quote) and matches_proposed_amount(fact.quote):
         return True
-    target_page = resolved_page if resolved_page is not None else fact.page
-    page_text = (page_texts or {}).get(target_page) or ""
-    if anchor.search(page_text[:4000]):
-        # Deterministischer Beleg direkt im Dokumenttext der Zielseite.
-        return True
-    page_rows = [r for r in visual_first_rows if r.page == target_page]
-    if not page_rows:
-        # Diese Seite wurde visuell nicht abgeglichen; der Locator+Quote-Beweis
-        # greift weiter hinunter. Keine zusaetzliche Gate-Belastung.
-        return True
-    for row in page_rows:
-        if row.status != "corroborated":
+
+    page = resolved_page if resolved_page is not None else fact.page
+    for row in visual_first_rows:
+        if row.page != page or row.status != "corroborated":
             continue
-        for observation in row.observations:
-            if (observation.quote and anchor.search(observation.quote[:400])) or (
-                observation.label and anchor.search(observation.label[:400])
-            ):
-                # Korrobation beweist, dass der Literal wirklich auf dieser Seite
-                # steht - und der bezeugte Label/Quote traegt den Perioden-Anker.
-                return True
+        if _money_amount(row.value) != amount:
+            continue
+        # The matching corroborated row must itself state the periodicity.
+        if any(anchor.search(obs.label or "") or
+               (anchor.search(obs.quote or "") and matches_proposed_amount(obs.quote))
+               for obs in row.observations):
+            return True
     return False
 
 
