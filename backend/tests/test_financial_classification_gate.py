@@ -244,17 +244,17 @@ def _vision_only_rows(field_page=3, status="vision_only", label="Einmalige Zusat
 
 def test_classification_predicate_decision_matrix():
     annual = SimpleNamespace(field="costs.annual_cost", page=3,
-                             quote="Verguetung 12.000 EUR pauschal.")
+                             value="12.000 EUR", quote="Verguetung 12.000 EUR pauschal.")
     anchored = SimpleNamespace(field="costs.annual_cost", page=3,
-                               quote="Jaehrliche Verguetung 12.000 EUR.")
+                               value="12.000 EUR", quote="Jaehrliche Verguetung 12.000 EUR.")
     quarterly_quote = SimpleNamespace(field="costs.annual_cost", page=3,
-                                      quote="Quartalsweise 12.000 EUR.")
+                                      value="12.000 EUR", quote="Quartalsweise 12.000 EUR.")
     monthly = SimpleNamespace(field="costs.monthly_cost", page=3,
-                              quote="pauschal 12.000 EUR")
+                                  value="12.000 EUR", quote="pauschal 12.000 EUR")
     monthly_anchored = SimpleNamespace(field="costs.monthly_cost", page=3,
-                                       quote="pro Monat 12.000 EUR")
+                                  value="12.000 EUR", quote="pro Monat 12.000 EUR")
     maintenance = SimpleNamespace(field="costs.maintenance_fee", page=3,
-                                  quote="pauschal 12.000 EUR")
+                                  value="12.000 EUR", quote="pauschal 12.000 EUR")
     maintenance_anchored = SimpleNamespace(field="costs.maintenance_fee",
                                            page=3,
                                            quote="Wartung 12.000 EUR")
@@ -265,19 +265,19 @@ def test_classification_predicate_decision_matrix():
     assert _financial_classification_verified(annual, []) is True
     # Nicht-diskretionaere Felder sind nie betroffen.
     assert _financial_classification_verified(identity, _vision_only_rows(1)) is True
-    # Seite ohne visuelle Reconciliation: kein Gate-Zwang.
+    # No matching visual row: do not borrow a period from unrelated pages.
     assert _financial_classification_verified(
-        annual, _vision_only_rows(2)) is True
+        annual, _vision_only_rows(2)) is False
     # Unbestatigte visuelle Evidenz + kein Periodenanker: abgelehnt.
     assert _financial_classification_verified(annual, _vision_only_rows()) is False
     assert _financial_classification_verified(
         annual, _vision_only_rows(status="disputed")) is False
     # Periodenanker im Zitat genuegt.
     assert _financial_classification_verified(anchored, _vision_only_rows()) is True
-    # Deterministischer Anker im Dokumenttext der Zielseite genuegt.
+    # Page-wide text is NOT proof that the proposed amount is annual.
     assert _financial_classification_verified(
         annual, _vision_only_rows(),
-        page_texts={3: "Jaehrliche Verguetung 12.000 EUR pauschal."}) is True
+        page_texts={3: "Jaehrliche Verguetung 5.000 EUR; einmalig 12.000 EUR."}) is False
     assert _financial_classification_verified(
         annual, _vision_only_rows(),
         page_texts={2: "Jaehrliche Verguetung."}) is False
@@ -300,3 +300,30 @@ def test_classification_predicate_decision_matrix():
                                   quote="Jaehrliche Verguetung 12.000 EUR")) is True
     # Auch bei korroborierter Seite entscheidet zuerst das Fakt-Zitat.
     assert _financial_classification_verified(anchored, _vision_only_rows()) is True
+def test_same_page_two_amounts_must_not_cross_bind_periodicity():
+    proposed = SimpleNamespace(field="costs.annual_cost", page=3,
+                               value="12.000 EUR", quote="Einmalig 12.000 EUR")
+    annual_obs = Observation(page=3, source="vision", label="Jaehrliche Verguetung",
+                             value="5.000 EUR", quote="Jaehrliche Verguetung 5.000 EUR",
+                             region=[1, 1, 2, 2])
+    unrelated = Reconciled(3, annual_obs.label, annual_obs.value,
+                           "corroborated", [annual_obs])
+    assert not _financial_classification_verified(
+        proposed, [unrelated],
+        page_texts={3: "Jaehrliche Verguetung 5.000 EUR; einmalig 12.000 EUR"})
+    assert not _financial_classification_verified(
+        SimpleNamespace(field="costs.annual_cost", page=3,
+                        value="12.000 EUR",
+                        quote="Jaehrliche Verguetung 5.000 EUR; einmalig 12.000 EUR"),
+        [unrelated])
+
+
+def test_matching_corrob_row_must_carry_period_and_amount():
+    proposed = SimpleNamespace(field="costs.annual_cost", page=3,
+                               value="12.000 EUR", quote="12.000 EUR")
+    matching = _vision_only_rows(status="corroborated",
+                                 label="Jaehrliche Verguetung",
+                                 quote="Jaehrliche Verguetung 12.000 EUR")
+    assert _financial_classification_verified(proposed, matching)
+    matching[0].value = "5.000 EUR"
+    assert not _financial_classification_verified(proposed, matching)
