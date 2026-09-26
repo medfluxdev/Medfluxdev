@@ -4457,3 +4457,71 @@ Benchmark offen (GPU-Koordination). KEIN Merge in JAMAL ohne finale Freigabe.
   nach GPU-/Ollama-Koordination (VRAM-Check via `ollama ps`); Vergleich gegen Phase-3-Baseline.
 - Abschlussbericht: Commit-IDs, geaenderte Dateien, Tests, Benchmark-Vergleich, Restpunkte,
   Go/No-Go-Empfehlung. Merge in `JAMAL` nur nach expliziter Freigabe.
+
+### STEP 3 - Frankfurt-Benchmark (integriert), 2026-09-26
+
+**Status:** Durchgefuehrt (EIN kompletter instrumentierter Lauf, Exit 0). Regression danach
+gruen.
+
+**Lauf-Umgebung:** Ollama 0.34.0 (bereits laufend, nicht erneut installiert/konfiguriert),
+Modell `qwen3-vl:8b-instruct` (bereits installiert, 6.2 GB, 89% GPU/11% CPU), RTX 3070
+(8192 MiB), keine parallelen GPU-Workloads. Pipeline integral: Integrations-Backend
+(`step3/integration-20260926`) via PYTHONPATH, venv = `Medflux-Integrated-Test\backend\.venv`,
+`real_frankfurt_full_benchmark.py`, `visual_first_experiment_enabled=True`,
+`max_pages=9`, `max_reviews=2`, `context=8192`, `vision_output=600`, Timeout 300s,
+Gesamtbudget 1500s. Frankfurt-Original verifiziert (9 Seiten, sha256/Storage-Key-Read-only-Rückfrage,
+Rollback - keine DB-Aenderung, nichts hochgeladen).
+
+**Ergebnisse (integriert):**
+
+| Metrik | Phase-3-Baseline | Integriert | Diff |
+|---|---|---|---|
+| Analyse-Laufzeit (FULL_REAL_ELAPSED_SECONDS) | 278.8 s | 320.2 s | +41.4 s (+15%) |
+| AI-Calls (result.ai_call_count, identische Instrumentierung) | 36 | 57 | +21 |
+| Provider-Requests (Stages summiert: warmup+vf9+review2+semantic4) | - | 16 | (Instrumentierung Detail) |
+| Timeouts | 0 | 0 | 0 |
+| Retries (retried_with_output_tokens) | - | 0 | 0 |
+| Truncated vision reads (ohne Retry-Explosion) | - | 3 | tolerant |
+| Peak VRAM (max MiB / 8192) | 7791 | 7851 | +60 |
+| Visuelle Beobachtungen (Visual-First vision_count) | 21 | 21 | 0 |
+| Beobachtungs-Seiten | {2,3,4,6,7,8} | {2:10,3:4,4:1,6:1,7:2,8:5} | gleich |
+| Akzeptierte Felder | 7 | 7 | 0 |
+| Akzeptierte Seiten-Referenzen | {1,2,3,6} | {1:4,2:1,3:1,6:1} | gleich |
+| Analyse-Status / requires_review | partial / True | partial / True | gleich |
+| Reject-Reasons | - | superseded 1, evidence_not_located 4, model_marked_ambiguous 5, alternative 1 | - |
+| Reconciliation | - | uncertain 25, ocr_only 10, vision_only 1 | - |
+| Docling (OCR/Preprocessing) | - | 60.1 s | - |
+
+**Provenance-Guard (STEP 5) verifiziert:**
+- Kein einziger harter Reject nur wegen "Quote auf anderer Seite" (`rejected_page_mismatch`
+  fehlt in FULL_REAL_VISUAL_REJECTED = 0) - Ambiguity-Flaechen bleiben review-pflichtig.
+- Abdeckung bleibt erhalten (21 Beobachtungen, gleiche Seiten) - der Guard kollabiert die
+  NOTATION nicht (Regression gegen Phase-2/3-Fruehwert: VISION_COUNT 5 verworfen).
+- Review-Trigger im Lauf: rejected_page_error 3, region_dropped 20; insgesamt
+  requires_review=True.
+- Deterministische Matcher/Guard-Wahrheitstabelle durch 12 Bridge-Unit-Tests abgedeckt
+  (duplicate literal on other page, multipage, nicht-in-OCR) - alle gruen.
+
+**Contested EUR 12,000:**
+- Wird als `costs.annual_cost` gefuehrt, akzeptiert mit Seite 3, Quote in OCR vorhanden,
+  visuell korroboriert (Seite 3: 4 Beobachtungen), `annual_cost_page_reference = 3`.
+- Gesamt-Analyse bleibt `partial` + `requires_review=True`; die 12.000er-Katalog-Ambivalenz
+  (advance_payment vs. annual_cost) ist weiterhin dokumentiert als offener Punkt.
+- Finance-Stage ist strikt (`_steady_annual_amount(expected_years=)` + `derived_facts`);
+  keine fachfremde Aggregation durch den integrierten Merge.
+
+**Regression nach Benchmark:** `test_harness_v2` + `test_harness_v3` +
+`test_harness_v3_money_ocr` + `test_harness_v3_services` + `test_visual_first_bridge` +
+`test_visual_first_isolated` + `test_finance_provenance_audit` = **98 passed**
+(`MEDFLUX_UNIT_ONLY=1`, Test-Schema-Isolation unberuehrt).
+
+**Restpunkte / offen:**
+- Breite Backend-Regression weiterhin BLOCKIERT (kein isoliertes PostgreSQL etablierbar;
+  Details im STEP-3-Abschnitt oben). DB/Produktdaten unangetastet, 5432 unveraendert.
+- `equipment`/Services/SLA weiterhin fail-closed (0/0/False); termination-Eckdaten None.
+- Gearbeitete Laufzeiten: Vision-VF 211.7 s (9 Lesevorgaenge), Semantic 96.0 s (4 Packs),
+  Review 10.3 s (2), Warmup 2.1 s - alle timeouts=0.
+
+**Naechster Schritt:**
+- Abschlussbericht (Commits, Dateien, Tests, Benchmark-Vergleich, Restpunkte, Go/No-Go).
+- Merge in `JAMAL` nur nach expliziter Freigabe; keine Bereitstellung.
