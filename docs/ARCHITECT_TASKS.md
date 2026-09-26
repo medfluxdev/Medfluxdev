@@ -32,3 +32,10 @@ Updated 2026-09-26. This checklist is intentionally isolated on `audit/finance-p
 - Outcome: **25 passed, 5 deprecation warnings**; [workflow log](https://github.com/jamallionjan-dev/JAMAL-OC-PC/actions/runs/36242489078).
 - Limitations: pipeline e2e with original nine-page PDF, financial UI, full suite and visual page source verification remain untested in this run.
 - Local inventory: experiment is on branch `master` with zero *tracked* changes (`-uno` intentionally did not examine untracked files); protected original `Medflux-Integrated-Test` has six tracked changes. Treat all local work as valuable. [Audit run](https://github.com/jamallionjan-dev/JAMAL-OC-PC/actions/runs/36242364975).
+
+## 2026-09-26 local Visual-First deterministic baseline
+
+- Ran existing local experimental `test_visual_first_bridge.py` and `test_visual_first_isolated.py` against a **Python-only copy** of the experimental application inside the runner's temp directory, NOT in the active OpenCode worktree. Tests used the existing interpreter read-only, with no actual database/Ollama/GPU.
+- **18 passed, 5 warnings**, and exact temp copy cleanup succeeded: [GitHub workflow 36242759351](https://github.com/jamallionjan-dev/JAMAL-OC-PC/actions/runs/36242759351).
+- Independently inspected the real local `visual_first.py`: its reconciler uses page + normalized label + region overlap + value matches; all its outputs still require Harness V3 source verification. The experimental bridge nevertheless silently re-anchors uniformly shifted Qwen page labels, so we must prove robust protection from wrong-page literal collisions via additional regressions, not count this baseline as full-page evidence validation.
+- Verified finance retry **25 passed, 5 warnings** AND owned temporary workspace cleanup completed: [workflow 36242610955](https://github.com/jamallionjan-dev/JAMAL-OC-PC/actions/runs/36242610955). These are **43 executed targeted tests across two suites**, not 43 unique guarantees and not a complete full-system regression.
