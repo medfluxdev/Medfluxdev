@@ -4404,9 +4404,11 @@ closed → no invented values.
 
 ## STEP 3: Kontrollierte Integration (Integration-Branch, Stand 2026-09-26)
 
-**Status:** Stufe 1-2 abgeschlossen; Aenderungsflaechen-Unit-Suite gruen (98 Tests);
-breite Backend-Regression BLOCKIERT (kein isoliertes PostgreSQL etablierbar); Frankfurt-
-Benchmark offen (GPU-Koordination). KEIN Merge in JAMAL ohne finale Freigabe.
+**Status:** Stufe 1-2 abgeschlossen; Aenderungsflaechen-Unit-Suite gruen; Gate 1
+(Finanz-Klassifikations-Guard) benchmark-verifiziert; Gate 2 (isoliertes PostgreSQL via
+WSL-PostgreSQL 18.6 auf 55432) etabliert, breite Backend-Regression erstmals GRUEN
+(988 passed / 1 Environment-Artefakt); Frankfurt-Benchmark durchgefuehrt. Abschluss-
+bewertung in `docs/STEP3_INTEGRATION_REVIEW.md`. KEIN Merge in JAMAL ohne finale Freigabe.
 
 **Datum:** 2026-09-26
 
@@ -4525,3 +4527,82 @@ Rollback - keine DB-Aenderung, nichts hochgeladen).
 **Naechster Schritt:**
 - Abschlussbericht (Commits, Dateien, Tests, Benchmark-Vergleich, Restpunkte, Go/No-Go).
 - Merge in `JAMAL` nur nach expliziter Freigabe; keine Bereitstellung.
+
+### STEP 3 - Finale Sicherheits-Gates (Gate 1 / Gate 2 / Gate 3), 2026-09-27
+
+**Status:** Alle drei Gates abgeschlossen; keine weitere Blockade. KEIN Merge, KEINE
+Bereitstellung (wie freigegeben). Der Restpunkt "kein isoliertes PostgreSQL etablierbar"
+ist damit aufgeloest.
+
+**Gate 1 - Finanz-Klassifikations-Guard (verifiziert):**
+- Problem: Ambige Betraege (Katalog-Ambivalenz advance_payment vs. annual_cost, z.B.
+  EUR 12.000, nur als Zahl + Quote ohne Zeitraum-Anker) durften NICHT in
+  `costs.annual_cost` als akzeptierte jaehrliche Verpflichtung einfliessen.
+- Implementierung: `_financial_classification_verified(fact, visual_first_rows, *,
+  page_texts=None, resolved_page=None)` in `app/ai/harness/v3.py`. Akzeptanz NUR via
+  Zeitraum-Anker im `fact.quote`, deterministischen Seitentext-Anker
+  (`page_texts[target_page]`) oder korroborierte Beobachtung mit Anker in Label/Quote.
+  Laeuft NACH der `locate()`-Seitenaufloesung (der urspruengliche Bypass entstand, weil
+  der Guard vor `locate()` auf einer uneingeloesten Seitenansicht lief → leere
+  Zeilenliste → True). Zurueckweisung fail-closed mit
+  `financial_classification_unverified` + Issue "Financial classification requires manual
+  review" + `continue`. `visual_first_rows` leer → True (Kontrollpfad ohne Visual-First).
+- Regressionstests: `tests/test_financial_classification_gate.py` (3 Tests inkl.
+  Praedikaten-Matrix: unverankerter Jahresbetrag abgelehnt, Anker akzeptiert,
+  Korroboration mit/ohne Anker, Seitentext-Anker).
+- Frankfurt-Re-Run (Modell `qwen3-vl:8b-instruct`, `real_frankfurt_full_benchmark.py`,
+  Log `frankfurt-gate2.log`): `FULL_REAL_CONTESTED_AMOUNT_ASSIGNED_ANNUAL False`,
+  `FULL_REAL_ANNUAL_COST_PRESENT False`, akzeptierte Felder 7→6, Rejects mit
+  `financial_classification_unverified: 1`, Seite 3 ohne korroborierte Zeilen
+  (uncertain 3 / vision_only 1 / ocr_only 5), `PAGE_TEXT_HAS_ANCHOR False`,
+  Kosten-Domain nicht mehr vorhanden, `requires_review True`.
+- Commits: `c5c9aaa` (Guard + Tests), `7696677` (Aufloesung auf Zielseite +
+  Seitentext-Anker-Evidenz).
+
+**Gate 2 - Isoliertes PostgreSQL (WSL, etabliert):**
+- Fruehere Windows-Versuche (postgres.exe unter Admin verweigert, pg_ctl-Kollision im
+  Shared-Memory, Fehler 487) wurden ersetzt durch WSL2 Ubuntu 26.04 mit vorinstalliertem
+  `postgresql-18` (18.6).
+- Eigene, voellig isolierte Cluster-Instanz: Data-Dir `/opt/medflux-test-pg/data`, Port
+  `55432`, Superuser `medflux_test` (Scram-SHA-256), `listen_addresses='127.0.0.1'`;
+  5432/`MedFluxPostgres18` unangetastet. Provisionierung: `provision_pg.sh` (Temp-Hilfs-
+  skript), Aufruf `wsl -d Ubuntu -u root -- bash /mnt/c/.../provision_pg.sh`.
+- Windows→WSL-Konnektivitaet per psycopg verifiziert:
+  `postgresql+psycopg://medflux_test:***@127.0.0.1:55432/postgres`.
+
+**Breite Backend-Regression (erstmals mit erreichbarer Test-DB, Settings unter log):
+  `DATABASE_URL=WSL-PG-55432`, `AUTH_ENABLED=false` + `MEDFLUX_INSECURE_DEV=true` 
+  (kein `MEDFLUX_UNIT_ONLY`):**
+- **988 passed / 1 failed**. Einziger Fehlschlag
+  `test_security_runtime_config.py::test_valid_production_security_posture_passes` =
+  Environment-Artefakt (Leak der Unit-Dev-Variablen in den Security-Konfig-Test); unter
+  canonical-artiger Env (`AUTH_ENABLED=true` + unverraeterter `APP_SECRET_KEY`) 11/11 grün.
+- Unter auth-ON-Umgebung: 38 API-401-Fehler (vorbestehender Env-Mismatch — API-Tests
+  erwarten auth-aus; keine Regression).
+- Zusaetzlich repariert: `generate()` sendet `stream=false` (einzeiliges JSON),
+  Harness-/Chat-Pfade behalten NDJSON-Streaming (`_payload(*, stream=True)` Default) —
+  Commit `d27550b`; behebt `test_generation_sends_think_and_stream_opts`.
+- Ergebnis fuer die Aenderungsflaechen 101 gruen (harness v2/v3/money_ocr/services +
+  visual_first bridge/isolated + finance_provenance + financial_classification_gate).
+
+**Gate 3 - Integrations-Review:**
+- Vollstaendige Bewertung (Commit-Liste, semantischer Vergleich vs. canonical JAMAL,
+  verbleibende Konfliktpunkte, Datei-Inventar added/replaced/obsolete, Rollback-
+  Prozedur, exakte Test-Matrix) in `docs/STEP3_INTEGRATION_REVIEW.md`.
+- Executable Dateien vs. canonical (SHA256): 6 added (visual_first.py,
+  visual_first_bridge.py, 4 Tests), 7 modified (v3.py, ollama.py, config.py,
+  test_contract_identity_contact.py, test_evidence_dedupe.py, test_harness_v3_services.py,
+  test_runtime_security_posture.py). Keine obsolete/ersetzten Executables.
+
+**Bekannte Probleme / offen:**
+- `test_security_runtime_config.py` reagiert auf Unit-Dev-Env-Leaks (auth-aus +
+  insecure-dev true); unter Produktions-Env-Bild gruen. Env-Abhaengigkeit dokumentiert.
+- `test_llama_archive*.py` (LlamaIndex) weiterhin Environment-Gap in den verfuegbaren venvs.
+- Frankfurt: `equipment`/Services/SLA weiterhin fail-closed; termination-Eckdaten None.
+  Die 12.000er-Katalog-Ambivalenz ist nun explizit abgewiesen (kein annual_cost) und
+  wird als Review-Punkt im Analysefeld gefuehrt.
+
+**Naechster Schritt:**
+- Abschlussbericht an den Projekteigentuemer (Gates 1-2 verifiziert, Test-Matrix, Review-
+  DoKument, Go/No-Go-Vorlage). Merge in `JAMAL` nur nach expliziter Freigabe; keine
+  Bereitstellung.
