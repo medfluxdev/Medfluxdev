@@ -988,28 +988,42 @@ def _per_call_rows(text: str) -> list[tuple[dict, str]]:
     return rows
 
 
-def _steady_annual_amount(rows: list[dict]) -> float | None:
-    """Return the steady yearly amount when staged rows stay constant from a
-    later year onward (e.g. 1.Jahr=0, 2.-4.Jahr=8000).  Deterministic, no model."""
-    by_index: dict[int, dict] = {
-        row["period_index"]: row
-        for row in rows
-        if isinstance(row.get("period_index"), int) and row.get("amount")
-    }
-    if not by_index:
-        return None
-    idxs = sorted(by_index)
-    if len(idxs) < 2 or (idxs[0] == 1 and len(idxs) < 3):
-        return None
-    if idxs[0] == 1 and len(idxs) >= 3:
-        amounts = {by_index[i]["amount"]["amount"] for i in idxs[1:]}
-    else:
-        amounts = {by_index[i]["amount"]["amount"] for i in idxs}
-    values = [x for x in amounts if x != 0]
-    if len(values) == 1 and len(amounts) <= 2:
-        return next(iter(values))
-    return None
+def _steady_annual_amount(rows: list[dict], *, expected_years: int | None = None) -> float | None:
+    """Infer a steady rate ONLY from a contiguous, complete year-price schedule.
 
+    This is a calculation, not a newly observed contract fact.  A missing period,
+    duplicate year, inconsistent currency or incomplete expected duration means
+    the yearly price cannot safely be inferred.
+    """
+    if not rows or (expected_years is not None and expected_years < 3):
+        return None
+    by_index: dict[int, dict] = {}
+    currencies: set[str] = set()
+    for row in rows:
+        idx = row.get("period_index")
+        money = row.get("amount")
+        if not isinstance(idx, int) or isinstance(idx, bool) or idx < 1:
+            return None
+        if idx in by_index or not isinstance(money, dict) or money.get("amount") is None:
+            return None
+        by_index[idx] = money
+        if money.get("currency"):
+            currencies.add(str(money["currency"]).upper())
+    if len(currencies) > 1:
+        return None
+    indices = sorted(by_index)
+    if indices[0] != 1 or indices != list(range(1, indices[-1] + 1)):
+        return None
+    if expected_years is not None and indices[-1] != expected_years:
+        return None
+    if len(indices) < 3:
+        return None
+    later = [by_index[i]["amount"] for i in indices[1:]]
+    if not later or any(amount != later[0] for amount in later):
+        return None
+    if not isinstance(later[0], (int, float)) or isinstance(later[0], bool) or later[0] <= 0:
+        return None
+    return float(later[0])
 
 class DirectContractHarness:
     """Small orchestration layer: semantic extraction once, deterministic proof once."""
@@ -1416,34 +1430,48 @@ class DirectContractHarness:
                 for row in contract.costs.scheduled_prices
                 if row.period_index is not None and row.amount and row.amount.amount is not None
             ]
-            steady_annual = _steady_annual_amount(scheduled_rows)
+            # An inferred ongoing rate is not a newly source-verified contract
+            # fact. Only derive it from a COMPLETE staged schedule whose duration
+            # and currency can be proven; never inflate supported_count or forge
+            # a quotation/evidence row for it.
+            derived_facts: list[dict] = []
+            duration = contract.dates.duration
+            unit = getattr(getattr(duration, "unit", None), "value", getattr(duration, "unit", None))
+            expected_years = None
+            if duration is not None and str(unit).lower() in {"year", "years"}:
+                try:
+                    number = float(duration.value)
+                    if number.is_integer() and number > 0:
+                        expected_years = int(number)
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            schedule_currencies = {
+                str(row["amount"]["currency"]).upper()
+                for row in scheduled_rows if row["amount"].get("currency")
+            }
+            complete_currency = (
+                len(schedule_currencies) == 1
+                and all(row["amount"].get("currency") for row in scheduled_rows)
+            )
+            steady_annual = (
+                _steady_annual_amount(scheduled_rows, expected_years=expected_years)
+                if expected_years is not None and complete_currency else None
+            )
             if steady_annual is not None and contract.costs.annual_cost is None:
                 contract.costs.annual_cost = Money(
                     amount=steady_annual,
-                    currency=(
-                        scheduled_rows[0]["amount"]["currency"]
-                        if scheduled_rows and scheduled_rows[0]["amount"].get("currency")
-                        else "EUR"
-                    ),
+                    currency=next(iter(schedule_currencies)),
                     period="annual",
                 )
-                accepted.append(
+                derived_facts.append(
                     {
                         "field": "costs.annual_cost",
-                        "page": None,
-                        "quote": "abgeleitet aus gestaffelten Jahrespreisen",
-                        "confidence": None,
+                        "derivation": "complete_staged_yearly_price_schedule",
+                        "source_fields": ["costs.scheduled_prices", "dates.duration"],
+                        "period_indexes": sorted(row["period_index"] for row in scheduled_rows),
+                        "source_verified_as_independent_fact": False,
                     }
                 )
-                if contract.costs.evidence is not None:
-                    evidence_rows.append(
-                        {
-                            "field": "costs.annual_cost",
-                            "source": contract.costs.evidence.model_dump(mode="json"),
-                        }
-                    )
-                supported_count += 1
-
             if supported_count == 0:
                 issues.append("No source-grounded contract facts were delivered")
             if rejected:
@@ -1472,6 +1500,7 @@ class DirectContractHarness:
                 "semantic_proposals": [fact.model_dump() for fact in proposals],
                 "normalizations": normalizations,
                 "accepted_facts": accepted,
+                "derived_facts": derived_facts,
                 "rejected_facts": rejected,
                 "evidence_count": len(evidence_rows),
                 "supported_count": supported_count,
