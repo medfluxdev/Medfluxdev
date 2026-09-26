@@ -9,8 +9,14 @@ if(Test-Path -LiteralPath $envPath){
  Write-Output 'Existing .env.ahmad.local kept unchanged. Review it before use.'
  exit 0
 }
-$pg=[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$key=[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+function Get-RandomBytes([int]$length) {
+  $bytes=New-Object byte[] $length
+  $rng=[Security.Cryptography.RandomNumberGenerator]::Create()
+  try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+  return ,$bytes
+}
+$pg=[BitConverter]::ToString((Get-RandomBytes 32)).Replace('-', '').ToLowerInvariant()
+$key=[BitConverter]::ToString((Get-RandomBytes 48)).Replace('-', '').ToLowerInvariant()
 [IO.File]::WriteAllText($envPath, "AHMAD_PG_PASSWORD=$pg`nAHMAD_APP_SECRET_KEY=$key`n")
 Write-Output 'Unique random credentials generated locally in .env.ahmad.local.'
 Write-Output 'KEEP THIS FILE PRIVATE. Never push it to GitHub or share with Ahmad.'
