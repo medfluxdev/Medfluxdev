@@ -38,6 +38,10 @@ Trust states: PROPOSED_AI, SOURCE_CORROBORATED, REVIEW_REQUIRED, CONFIRMED_MANUA
 
 Events (internal, persisted if operational side effects): `DocumentRevisionCreated`, `ExtractionFinished`, `FactSnapshotAccepted`, `ContractLifecycleChanged`, `ObligationDue`. Emit after relevant DB commit and use idempotency keys for email/task creation; processing retries must not duplicate notices.
 
+## Cost center number search and real hospital financial data
+
+Detailed design: [COST_CENTER_INTELLIGENCE.md](COST_CENTER_INTELLIGENCE.md). Lookup by hospital accounting number uses the existing CostCenter master and permission checks. Actual departmental budget and booked spending require versioned, approved hospital accounting data imports; contract totals alone never constitute a budget. Includes comparable monthly/yearly and before/after views, shared-contract allocation safety and drilldown to underlying sources.
+
 ## Ahmad's operational release slices
 
 1. **Extraction / confirmation:** legal parties, dates, contract term, price stages and annual/monthly payment frequency, advance/in arrears, source VAT wording and optional comparison when tax basis/rate is actually known, price increase/fixed-price clauses; per-field AI/manual/both and original source link. Allow manual confirmation and controlled auto-confirm; no guessing missing numbers.
