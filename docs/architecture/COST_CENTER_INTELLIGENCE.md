@@ -43,6 +43,37 @@ Single prominent exact `Kostenstelle` number input with authorized ambiguous-res
 - Before/after comparisons show observed changes, NOT causal attribution: seasonality, service volume, changed assets and accounting classification can contribute.
 - With contracts but **without** approved hospital budget/expense import, show `budget: unavailable`, `actual: unavailable`, and explicitly labeled **contractual forecast/commitments only**. Never populate budget from sum of contract values.
 
+## Required future-cost forecasting engine (core feature, not optional)
+
+**Purpose:** Forecast future cost center outflows month-by-month and year-by-year using approved historical financial actuals together with future contract obligations, payment timing, supplier price escalators, expiration and explicitly modeled renewals, expected maintenance or equipment costs (only if supported). Deliver confidence intervals where statistically meaningful, plus editable scenario assumptions; never represent AI-generated guesses as booked expenses or contractual facts.
+
+### Forecast horizons and outputs
+- Selectable next 3, 6, 12, 24, 36 months and annual planning horizon, aligned to the hospital fiscal calendar.
+- Per center: projected contractual commitments, forecast variable operating spend, expected aggregate spend, approved budget when imported, projected budget variance, future cash-flow due dates and source coverage/uncertainty indicators.
+- Compare prior comparable months and years, growth, seasonality, trends and before/after selected documented organizational or contract event. Breakdown to supplier, contract, equipment, spending category, hospital and department. Distinguish planned/provisional/new equipment scenarios.
+- Every future month reconciles components once: historical modeled operating spend adjusted for any contract-backed fixed costs already included; **never add the same fixed contract charges twice**.
+
+### Forecasting method and safety
+1. **Certain contractual base:** deterministic engine builds versioned future per-contract price/payment schedules from accepted start/end dates, staged price rows, billing frequency, advance vs arrears wording, supported indexation and approved renewal decisions. If due date is not actually stated, mark payment month approximate or unknown (do not fabricate an exact date).
+2. **Observed operations:** when sufficient imported budget and actual ledger history exists, fit a reproducible baseline time-series model per cost center/category. Start with seasonal naive and rolling-trend alternatives; choose methods only through temporal backtesting (e.g. rolling holdouts / MAPE caveat with near-zero actuals, WAPE/MAE); report seasonality and data sufficiency.
+3. **Scenarios:** baseline / higher cost / lower cost; explicit adjustable assumptions for annual price increases, energy/inflation sensitivity **only if institution approves assumption sources**, additional device purchase/repair, supplier change, occupancy or case volume where supplied. Provide driver attribution and sensitivity, not invented economic forecasts.
+4. **Risk/uncertainty:** separate confirmed commitments, statistically estimated variable expense, unknown renewals, unallocated contracts and unsupported assumptions. When history is too short, only present accepted contract-backed deterministic projections and clearly label missing actuals; no fabricated confidence interval.
+5. **Review and governance:** forecast snapshots reference input revision IDs, model/config version, as-of date, fiscal calendar, scenario and reviewer. Material assumption overrides require permitted role and audit trail. Current financial dashboard never conflates budget, actual, commitments, forecast or what-if scenario.
+
+### Proposed API and persistence boundaries
+- `GET /api/cost-centers/{id}/forecast?from=YYYY-MM&months=12&scenario=baseline` returns 1 row per month with separately typed commitments, operating projection, projected total, available approved budget, projected delta, data quality and method.
+- `POST /api/cost-centers/{id}/forecast-scenarios` persists scoped scenario assumptions with permission and audit; forecast runs immutable and reproducible.
+- Versioned `ForecastRun(cost_center_id, as_of, horizon, actual_revision_id?, accepted_fact_snapshot_ids, model_method, model_version, assumptions_json, data_quality, created_by)` plus `ForecastPeriod(run_id, year_month, contractual_amount?, variable_estimate?, expected_total?, lower_bound?, upper_bound?, projected_budget_gap?, currency, tax_basis)`.
+- Forecast calculations belong to the financial forecast application service. AI may produce explanations or suggest candidate drivers, but cannot invent financial inputs, bypass review, or authoritatively calculate totals.
+
+### Forecast-specific acceptance tests
+- No historical actuals: show available contract-backed future commitments only and state missing components.
+- At least 24 months of monthly actuals: compare seasonal vs simpler baseline using chronological out-of-sample backtests; report observed errors and fallback safely on sparse series.
+- Step-price change or confirmed renewal changes only relevant future periods; rejected/uncertain renewal remains scenario, never baseline certainty.
+- Each planned charge counted once even if in both contract schedule and imported actual/spend-plan data.
+- Missing tax basis/currency, unsigned assumptions, insufficient history and changing org scope result in explicit partial/unavailable statuses.
+- Same versioned data, config and as-of date produce identical forecast; unauthorized users cannot retrieve source series, forecasts or scenarios.
+
 ## Acceptance cases
 - [ ] Number with leading zeros preserved, no unauthorized data leakage and multi-hospital ambiguity resolved.
 - [ ] Authorized exact lookup -> correct scoped cost center and related contracts.
