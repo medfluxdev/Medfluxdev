@@ -8,6 +8,7 @@ Netzwerkaufrufe. Modell-Fähigkeiten werden aus autoritativen Metadaten
 
 import contextlib
 import hashlib
+import json
 import logging
 from typing import Any
 
@@ -87,9 +88,16 @@ class OllamaProvider(AIProvider):
         if self._client is not None:
             yield self._client
         else:
-            async with httpx.AsyncClient(
-                timeout=self.settings.ai_request_timeout_seconds
-            ) as c:
+            # Getrennte Zeitlimits: Connect/Write/Pool duerfen niemals eine
+            # legitime langlaufende Generierung abwuergen; nur der Read-Budget
+            # ist das (konfigurierte) Gesamtzeitlimit einer Antwort.
+            timeout = httpx.Timeout(
+                connect=10.0,
+                read=self.settings.ai_request_timeout_seconds,
+                write=30.0,
+                pool=60.0,
+            )
+            async with httpx.AsyncClient(timeout=timeout) as c:
                 yield c
 
     @property
@@ -276,21 +284,36 @@ class OllamaProvider(AIProvider):
             options["num_gpu"] = int(self.settings.ollama_num_gpu)
         return options
 
+    def _payload(
+        self,
+        messages: list[dict[str, Any]],
+        options: dict[str, Any],
+        schema: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self._model(),
+            "messages": messages,
+            "stream": True,
+            "think": self.settings.ollama_think,
+            "options": options,
+        }
+        if schema is not None:
+            payload["format"] = schema
+        keep_alive = getattr(self.settings, "ollama_keep_alive", "") or ""
+        if keep_alive and keep_alive != "0":
+            payload["keep_alive"] = keep_alive
+        return payload
+
     async def generate(
         self, text: str, system_prompt: str, max_tokens: int | None = None
     ) -> str:
-        model = self._model()
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text},
-            ],
-            "stream": False,
-            "think": self.settings.ollama_think,
-            "options": self._options(max_tokens),
-        }
-        return await self._chat(payload)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text},
+        ]
+        return await self._chat(
+            self._payload(messages, self._options(max_tokens), None)
+        )
 
     async def generate_structured(
         self,
@@ -299,21 +322,15 @@ class OllamaProvider(AIProvider):
         schema: dict[str, Any],
         max_tokens: int | None = None,
     ) -> str:
-        model = self._model()
-        payload: dict[str, Any] = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text},
-            ],
-            "stream": False,
-            "think": self.settings.ollama_think,
-            # Native strukturierte Ausgabe: Ollama erzwingt die Struktur/Enums
-            # des übergebenen (selbstenthaltenen) JSON-Schemas.
-            "format": schema,
-            "options": self._options(max_tokens),
-        }
-        return await self._chat(payload)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text},
+        ]
+        # Native strukturierte Ausgabe: Ollama erzwingt die Struktur/Enums
+        # des übergebenen (selbstenthaltenen) JSON-Schemas.
+        return await self._chat(
+            self._payload(messages, self._options(max_tokens), schema)
+        )
 
     async def generate_request(self, text, system_prompt, schema, max_tokens,
                                context_tokens, images=None) -> str:
@@ -326,12 +343,13 @@ class OllamaProvider(AIProvider):
         # ordinary chat/generation settings unchanged.
         options["temperature"] = 0.0
         options["num_ctx"] = int(context_tokens)
-        payload = {"model": self._model(), "messages": [
-            {"role": "system", "content": system_prompt}, user],
-            "stream": False, "think": self.settings.ollama_think, "options": options}
-        if schema is not None:
-            payload["format"] = schema
-        return await self._chat(payload)
+        return await self._chat(
+            self._payload(
+                [{"role": "system", "content": system_prompt}, user],
+                options,
+                schema,
+            )
+        )
 
     async def _chat(self, payload: dict[str, Any]) -> str:
         model = self._model()
@@ -350,26 +368,58 @@ class OllamaProvider(AIProvider):
         if resp.status_code != 200:
             raise AIHTTPError(resp.status_code)
 
+        # Streaming (stream=true): NDJSON-Zeilen, Token fuer Token. Der Read-
+        # Timeout gilt so nur fuer die Zeit zwischen zwei eingehenden Zeilen;
+        # eine langsam aber voranschreitende Generierung wird nie abgewuergt.
+        # Ein einzelnes JSON-Objekt (Legacy-/Test-Mock) wird als eine Zeile
+        # erkannt und identisch verarbeitet.
+        content_parts: list[str] = []
+        done_reason: Any = None
+        usage: dict[str, Any] = {}
+        parsed_any = False
         try:
-            data = resp.json()
-        except ValueError as exc:
-            raise AIMalformedResponseError() from exc
+            async for line in resp.aiter_lines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    chunk = json.loads(stripped)
+                except ValueError:
+                    continue
+                if not isinstance(chunk, dict):
+                    continue
+                parsed_any = True
+                message = chunk.get("message")
+                if isinstance(message, dict):
+                    piece = message.get("content")
+                    if isinstance(piece, str) and piece:
+                        content_parts.append(piece)
+                if chunk.get("done"):
+                    done_reason = chunk.get("done_reason")
+                    usage = {
+                        "prompt_tokens": chunk.get("prompt_eval_count"),
+                        "completion_tokens": chunk.get("eval_count"),
+                    }
+        except httpx.TimeoutException as exc:
+            logger.warning("Ollama /api/chat Timeout (Modell %s): %s", model, exc)
+            raise AITimeoutError() from exc
+        except httpx.HTTPError as exc:
+            logger.warning("Ollama /api/chat nicht erreichbar (Modell %s): %s", model, exc)
+            raise AIUnavailableError() from exc
 
-        message = data.get("message", {}) if isinstance(data, dict) else {}
-        content = message.get("content") if isinstance(message, dict) else None
-        self.last_done_reason = data.get("done_reason")
-        self.last_usage = {
-            "prompt_tokens": data.get("prompt_eval_count"),
-            "completion_tokens": data.get("eval_count"),
-        }
-        if not content or not str(content).strip():
-            self.last_response_sha256 = None
-            self.last_response_chars = 0
-            raise AIEmptyResponseError()
-        rendered = str(content).strip()
-        self.last_response_sha256 = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
-        self.last_response_chars = len(rendered)
-        return rendered
+        self.last_done_reason = done_reason
+        self.last_usage = usage
+        rendered = "".join(content_parts).strip()
+        if rendered:
+            self.last_response_sha256 = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+            self.last_response_chars = len(rendered)
+            return rendered
+
+        self.last_response_sha256 = None
+        self.last_response_chars = 0
+        if not parsed_any:
+            raise AIMalformedResponseError()
+        raise AIEmptyResponseError()
 
 
 async def detect_ollama(client: httpx.AsyncClient, base_url: str) -> bool:

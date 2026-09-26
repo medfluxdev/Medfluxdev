@@ -41,8 +41,26 @@ class Settings(BaseSettings):
     harness_vision_batch_scale: int = 1600
     harness_vision_min_pages_for_batch: int = 2
     harness_vision_max_calls: int = 16
+    # Output-Budget fuer Vision-Seitenlesungen. Gemessene reale Vision-Antworten
+    # liegen bei 200-1000 generierten Tokens; ein fester Deckel verhindert, dass
+    # einzelne Seiten wiederholt am num_predict-Limit abbrechen und so lange
+    # erneut generieren. Das grosse Semantic-Budget (harness_output_tokens)
+    # bleibt fuer Kern-/Kosten-Packs unveraendert.
+    harness_vision_output_tokens: int = 600
+    # Deterministischer Multimodal-Warmup vor der ersten Vision-Seitenlesung.
+    # Ein pathologischer Cold-Start (erste Inferenz nach Modell-Load) wird so
+    # einmal frueh und begrenzt abgefangen statt als Seitenlesung mitten im Lauf
+    # am Request-Timeout zu scheitern. Abschalten nur fuer Tests/Runs, die exakte
+    # Call-Zahlen erzwingen.
+    harness_vision_warmup_enabled: bool = True
     # JAMAL v1: scanned/image-heavy PDFs use hybrid OCR + bounded local vision.
     hybrid_scanned_contracts_enabled: bool = True
+    # Visual-First (unabhaengige Seitenbild-Ablesung + OCR-Abgleich). Default
+    # aus: der bestehende Hybrid-Routing-Pfad bleibt aktiv, bis ein Scan-Lauf
+    # explizit visual-first ausfuehren soll (Flag fuer Benchmarks/Laeufe setzen).
+    visual_first_experiment_enabled: bool = False
+    visual_first_max_pages: int = 12
+    visual_first_max_reviews: int = 2
     document_intelligence_atomic_geometry: bool = False
     document_intelligence_atomic_geometry_dpi: int = 200
     ollama_base_url: str = "http://127.0.0.1:11434"
@@ -57,6 +75,11 @@ class Settings(BaseSettings):
     ai_max_tokens: int = 256
     ai_repeat_penalty: float | None = 1.3
     ollama_think: bool = False
+    # Verweildauer des Modells im Speicher (Ollama keep_alive) je Chat-Request.
+    # Der Server-Default (5m) entlaedt das Modell in langen mehrseitigen Laeufen
+    # zwischen zwei Calls; ein laengerer Wert haelt es resident und vermeidet
+    # Mid-Run-Reloads. Leer oder "0" -> Feld wird nicht gesendet (Server-Default).
+    ollama_keep_alive: str = "30m"
     # None = Ollama entscheidet automatisch. Fuer lokale GPU-Tests kann ein
     # expliziter Layer-Wert (z. B. 999 fuer "so viele wie moeglich") gesetzt
     # werden; der Wert wird pro Request als num_gpu an Ollama uebergeben.
