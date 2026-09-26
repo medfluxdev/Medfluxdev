@@ -1,0 +1,61 @@
+# Ahmad review ONLY: isolated DB / protected documents and loopback-only ports.
+# Never combine with the original project's Docker volumes or real hospital data.
+name: medflux-ahmad-review
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: medflux_ahmad_review
+      POSTGRES_USER: medflux_ahmad
+      POSTGRES_PASSWORD: ${AHMAD_PG_PASSWORD:?Create .env.ahmad.local with a unique password}
+    volumes:
+      - ahmad_pg_20260926:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medflux_ahmad -d medflux_ahmad_review"]
+      interval: 5s
+      timeout: 5s
+      retries: 25
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_ENV: development
+      BACKEND_HOST: 0.0.0.0
+      AUTH_ENABLED: "true"
+      AUTH_COOKIE_SECURE: "false"
+      APP_SECRET_KEY: ${AHMAD_APP_SECRET_KEY:?Generate a separate secret}
+      CORS_ORIGINS: http://localhost:13000,http://127.0.0.1:13000
+      DATABASE_URL: postgresql+psycopg://medflux_ahmad:${AHMAD_PG_PASSWORD}@postgres:5432/medflux_ahmad_review
+      CONTRACTS_DIR: /ahmad-data/contracts
+      BACKUPS_DIR: /ahmad-data/backups
+      AI_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      HARNESS_ENGINE: v3
+    volumes:
+      - ahmad_contracts_20260926:/ahmad-data
+    ports:
+      - "127.0.0.1:18000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.ahmad-review
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:18000
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:18000
+    ports:
+      - "127.0.0.1:13000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  ahmad_pg_20260926:
+  ahmad_contracts_20260926:
