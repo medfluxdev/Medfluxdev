@@ -44,6 +44,8 @@ function analysisLabel(result: ImportFileResult): string {
 export default function ImportPage() {
   const { organizationSlug, membership } = useAuth();
   const [selected, setSelected] = useState<File[]>([]);
+  const [scopeConfirmed, setScopeConfirmed] = useState(false);
+  const [mode, setMode] = useState<"ai_human_review" | "manual" | "ai_direct">("ai_human_review");
   const [rejectedSelection, setRejectedSelection] = useState<string[]>([]);
   const [results, setResults] = useState<ImportFileResult[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -81,7 +83,7 @@ export default function ImportPage() {
   }, []);
 
   const handleUpload = useCallback(async () => {
-    if (selected.length === 0 || loading) return;
+    if (selected.length === 0 || loading || !scopeConfirmed || mode !== "ai_human_review") return;
     setLoading(true);
     setError(null);
     setResults(null);
@@ -95,7 +97,7 @@ export default function ImportPage() {
     } finally {
       setLoading(false);
     }
-  }, [selected, loading, effectiveOrgSlug]);
+  }, [selected, loading, effectiveOrgSlug, scopeConfirmed, mode]);
 
   const importAcceptedCount = useMemo(
     () => results?.filter((r) => r.status === "imported" || r.status === "analysis_failed").length ?? 0,
@@ -161,6 +163,21 @@ export default function ImportPage() {
             <span>Der aktuell in der Kopfzeile gewählte Krankenhaus-/Abteilungsbereich wird serverseitig dem neu angelegten Vertrag zugeordnet.</span>
           </div>
 
+          <section className="card card-pad" aria-label="Import-Einstellungen">
+            <h2>Import-Einstellungen bestätigen</h2>
+            <p>1. <strong>Für welche Abteilung ist dieser Vertrag?</strong></p>
+            <p>Aktueller Arbeitsbereich: <strong>{membership?.organization_name ?? effectiveOrgSlug}</strong></p>
+            <p>Krankenhaus: <strong>{membership?.hospital_id ?? "Im Kopfbereich auswählen"}</strong> · Abteilung: <strong>{membership?.department_id ?? "Im Kopfbereich auswählen"}</strong></p>
+            <p className="muted small">Bitte die berechtigte Abteilung im Arbeitsbereich oben wählen, bevor Sie die Zuordnung bestätigen. Diese Testversion verwendet die serverseitige aktuelle Bereichszuordnung; eine freie Abteilungswahl im Import wird noch umgesetzt.</p>
+            <fieldset>
+              <legend>2. Wie möchten Sie die Vertragsdaten erfassen?</legend>
+              <label className="import-choice"><input type="radio" name="capture-mode" value="ai_human_review" checked={mode === "ai_human_review"} onChange={() => setMode("ai_human_review")} /> KI mit menschlicher Prüfung (verfügbar)</label>
+              <label className="import-choice"><input type="radio" name="capture-mode" value="manual" disabled /> Manuelle Eingabe (geplant)</label>
+              <label className="import-choice"><input type="radio" name="capture-mode" value="ai_direct" disabled /> KI mit Richtlinien-basierter automatischer Freigabe (geplant, derzeit gesperrt)</label>
+            </fieldset>
+            <label className="import-choice"><input type="checkbox" checked={scopeConfirmed} onChange={(event) => setScopeConfirmed(event.target.checked)} /> Ich bestätige: Alle ausgewählten Dateien gehören zum aktuellen Arbeitsbereich und sollen mit KI-Unterstützung zur menschlichen Prüfung vorbereitet werden.</label>
+          </section>
+
           <div
             className="dropzone"
             role="button"
@@ -196,7 +213,7 @@ export default function ImportPage() {
                 ))}
               </ul>
               <div className="import-actions">
-                <Button variant="primary" onClick={handleUpload}>Import starten ({selected.length})</Button>
+                <Button variant="primary" disabled={!scopeConfirmed || mode !== "ai_human_review"} onClick={handleUpload}>Import starten ({selected.length})</Button>
                 <Button onClick={() => { setSelected([]); setRejectedSelection([]); }}>Alle entfernen</Button>
               </div>
             </>
