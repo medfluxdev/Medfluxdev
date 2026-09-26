@@ -29,7 +29,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.ai.harness.document import Block, DocumentModel
-from app.ai.harness.pipeline import _find_quote, RETRIEVAL_TERMS, field_types, strict_value
+from app.ai.harness.pipeline import (
+    _find_quote,
+    _find_quote_tolerant,
+    RETRIEVAL_TERMS,
+    field_types,
+    strict_value,
+)
 from app.ai.harness.source_signals import collect_source_signals
 from app.documents.intelligence.hybrid import route_summary, visual_candidate_pages
 from app.ai.service import AIService
@@ -187,6 +193,33 @@ def _retry_output_plan(
 
 def _estimate_tokens(text: str) -> int:
     return max(1, int(len(text.encode("utf-8")) / 3 * 1.15))
+
+
+_CONTEXT_RESERVE = 512
+
+
+def _effective_context(
+    prompt_tokens: int,
+    output_tokens: int,
+    requested_context: int,
+    model_capacity: int | None,
+    image_reserve: int = 0,
+    reserve: int = _CONTEXT_RESERVE,
+) -> int:
+    """Effective num_ctx for one provider call.
+
+    The operator-configured context is the preferred budget, but a prompt +
+    output expectation that exceeds it is raised to fit -- capped by the
+    selected model's real capability (descriptor.context_length).  Small-context
+    models never exceed that capability; a model without a reported context
+    length stays on the requested budget (conservative).
+    """
+    needed = int(prompt_tokens) + int(output_tokens) + int(image_reserve) + int(reserve)
+    if needed <= int(requested_context):
+        return int(requested_context)
+    if model_capacity is None:
+        return int(requested_context)
+    return min(int(model_capacity), needed)
 
 
 def _field_catalog(types: dict[str, Any], selectors: tuple[str, ...]) -> dict[str, str]:
@@ -379,6 +412,20 @@ def _normalize_date_payload(value: Any) -> Any:
             return {"date": iso, "condition": None, "requires_review": False}
         return value
     if isinstance(value, dict):
+        # Qwen semantic nutzt {"date_type": "start"|"end", "literal_value":
+        # "04.06.2025"} - gleiche Form wie bei Dauer-Fakten.  Ohne Umbau leeren
+        # wir den Date-Wert zu {"requires_review": false} und verlieren das
+        # belegte Datum.  Uebernehme das Literal deterministisch.
+        if value.get("literal_value") or value.get("date_type"):
+            literal = value.get("literal_value")
+            if isinstance(literal, str):
+                iso = _date_signal_iso(literal)
+                if iso:
+                    return {
+                        "date": iso,
+                        "condition": None,
+                        "requires_review": False,
+                    }
         # Qwen sometimes emits {"year": Y, "month": M, "day": D} instead of the
         # FlexibleDate shape.  Normalize that deterministically before validation.
         if "year" in value or "month" in value or "day" in value:
@@ -431,7 +478,37 @@ def _normalize_duration_payload(value: Any) -> Any:
             unit = "hours"
         return {"value": int(match.group("value")), "unit": unit}
     if isinstance(value, dict):
-        # Model sometimes emits {"years": 4} / {"months": N} etc.
+        # Model sometimes emits {"years": 4} / {"months": N} / {"value": N,
+        # "unit": ...} / {"duration_type": "months", "literal_value": "48
+        # Monaten"} (semantic-extraction flavour).  Unify them deterministically.
+        if value.get("literal_value") or value.get("duration_type"):
+            literal = value.get("literal_value")
+            if isinstance(literal, str):
+                match = re.search(
+                    r"(?P<value>\d+)\s*(?P<unit>Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?)",
+                    literal,
+                    re.IGNORECASE,
+                )
+                if match:
+                    unit_raw = match.group("unit").lower()
+                    if unit_raw.startswith("jahr"):
+                        unit = "years"
+                    elif unit_raw.startswith("monat"):
+                        unit = "months"
+                    elif unit_raw.startswith("woche"):
+                        unit = "weeks"
+                    elif unit_raw.startswith("tag"):
+                        unit = "days"
+                    else:
+                        unit = "hours"
+                    return {"value": int(match.group("value")), "unit": unit}
+            amount = value.get("amount") or value.get("value")
+            type_raw = (value.get("duration_type") or "").lower()
+            if amount is not None and type_raw:
+                return {
+                    "value": int(float(amount)),
+                    "unit": _duration_unit_from_text(type_raw),
+                }
         unit = None
         for key in ("unit", "years", "year", "months", "month", "weeks", "week",
                     "days", "day", "hours", "hour", "quarters", "quarter"):
@@ -497,6 +574,68 @@ def _normalize_money_payload(value: Any) -> Any:
             cleaned["period"] = value.get("period")
         return cleaned
     return value
+
+
+def _literal_evidence(
+    literals: list[str],
+    blocks: list[Block],
+    document: DocumentModel | None = None,
+) -> dict[tuple[str, str], tuple[Block, str]]:
+    """Unique evidence spans for literal strings within ``blocks``.
+
+    Case-exact match preferred, casefold fallback allowed.  The caller
+    scopes ``blocks`` (fact page first, all pages as fallback), so an
+    OCR-identical address that repeats on a later page does not shadow
+    the same fact on its asserted page.
+    """
+    found: dict[tuple[str, str], tuple[Block, str]] = {}
+    for literal in literals:
+        if literal.upper() in {"EUR", "USD", "GBP"}:
+            continue
+        for block in blocks:
+            resolved = _find_quote(block.text or "", literal)
+            exact = resolved[0] if resolved is not None else _find_casefold(
+                block.text or "", literal
+            )
+            if exact is not None:
+                found.setdefault((block.id, exact), (block, exact))
+    return found
+
+
+def _money_field(field: str) -> bool:
+    """True for fields that carry a monetary amount.
+
+    Nur echte Geld-Felder (Einzelwerte + Zeilen mit Betrag, z. B.
+    scheduled_prices / variable_charges) unterliegen dem strikten
+    Geld-Locator.  Nicht-Geld-Felder unter `costs.`/`payment.` (z. B.
+    tax_basis, payment_deadline_days) duerfen weiterhin ueber ihren
+    Quelltext-Quote belegt werden.
+    """
+    if field in _MONEY_FIELDS:
+        return True
+    return field in {"costs.scheduled_prices", "costs.variable_charges"}
+
+
+def _normalize_row_amount(amount_value: Any, row_currency: Any) -> Any:
+    """Normalise pro-Zeile Betraege (scheduled_prices / variable_charges).
+
+    Der Betrag kann als Money-Objekt, flacher String ("9.500,00 EUR", "9500")
+    oder Zahl kommen.  Flache Strings wurden frueher zu {} geleert (Betrag
+    verschwand unbegruendet); diese Deterministik erhaelt amount+currency,
+    wenn ein Betrag erkennbar ist.  Keine Betraege werden erfunden.
+    """
+    if isinstance(amount_value, dict):
+        merged = dict(amount_value)
+        if "currency" not in merged and row_currency:
+            merged["currency"] = row_currency
+        return _normalize_money_payload(merged)
+    if isinstance(amount_value, (str, int, float)):
+        money = _normalize_money_payload(amount_value)
+        if isinstance(money, dict):
+            if money.get("currency") is None and row_currency:
+                money["currency"] = row_currency
+            return money
+    return amount_value
 
 
 _MONEY_FIELDS = {
@@ -708,14 +847,9 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
                 if key in item
             }
             if "amount" in row:
-                amount_obj = row["amount"]
-                if not isinstance(amount_obj, dict):
-                    amount_obj = {}
-                if "currency" not in amount_obj and item.get("currency"):
-                    amount_obj["currency"] = item["currency"]
-                if "unit" not in row and item.get("unit"):
-                    row["unit"] = item["unit"]
-                row["amount"] = _normalize_money_payload(amount_obj)
+                row["amount"] = _normalize_row_amount(row["amount"], item.get("currency"))
+            if "unit" not in row and item.get("unit"):
+                row["unit"] = item["unit"]
             normalized.append(row)
         return normalized
     if field == "costs.scheduled_prices" and isinstance(value, list):
@@ -729,12 +863,7 @@ def _normalize_fact_value(field: str, value: Any) -> Any:
                 if key in item
             }
             if "amount" in row:
-                amount_obj = row["amount"]
-                if not isinstance(amount_obj, dict):
-                    amount_obj = {}
-                if "currency" not in amount_obj and item.get("currency"):
-                    amount_obj["currency"] = item["currency"]
-                row["amount"] = _normalize_money_payload(amount_obj)
+                row["amount"] = _normalize_row_amount(row["amount"], item.get("currency"))
             if "period_index" in row and isinstance(row["period_index"], str):
                 try:
                     row["period_index"] = int(row["period_index"])
@@ -988,6 +1117,104 @@ def _per_call_rows(text: str) -> list[tuple[dict, str]]:
     return rows
 
 
+# Money literal matcher for staged label+amount verification.  German scans
+# write "€ 12.000,00" as well as "12.000,00 EUR" and table OCR interleaves
+# pipes/spacing; both currency positions are accepted, a bare number is never
+# treated as money.
+_MONEY_LITERAL_RE = re.compile(
+    r"(?<!\w)(?:€|EUR)\s*(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?\s*(?:€|EUR)?(?!\w)"
+    r"|(?<!\w)(?:€|EUR)?\s*(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?\s*(?:€|EUR)(?!\w)",
+    re.IGNORECASE,
+)
+
+_MONEY_STOPWORDS = {
+    "der", "die", "das", "den", "dem", "des", "ein", "eine", "eines", "einer",
+    "und", "oder", "für", "fur", "in", "im", "auf", "an", "ab", "von", "mit",
+    "zum", "zur", "am", "bei", "aus", "je", "pro", "netto",
+}
+
+
+def _money_amounts_from_value(value: Any) -> list[float]:
+    """Recursively collect every monetary amount contained in a fact value."""
+    amounts: list[float] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"amount", "value"} and isinstance(item, (int, float)):
+                amounts.append(float(item))
+            elif key == "amount" and isinstance(item, str):
+                parsed = _money_amount(item)
+                if parsed is not None:
+                    amounts.append(parsed)
+            else:
+                amounts.extend(_money_amounts_from_value(item))
+    elif isinstance(value, list):
+        for item in value:
+            amounts.extend(_money_amounts_from_value(item))
+    elif isinstance(value, str):
+        parsed = _money_amount(value)
+        if parsed is not None:
+            amounts.append(parsed)
+    return list(dict.fromkeys(round(a, 2) for a in amounts if a is not None))
+
+
+def _money_label_phrase(quote: str) -> str:
+    """Label phrase from a money quote with the amount literal removed.
+
+    Pipes and other table separators are reduced to spaces so the phrase can be
+    located with the same tolerant matcher as a normal quote.
+    """
+    cleaned = _MONEY_LITERAL_RE.sub(" ", quote or "")
+    words = [
+        word
+        for word in re.findall(r"[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß0-9\-/]*", cleaned)
+        if word.casefold() not in _MONEY_STOPWORDS and len(word) >= 2
+    ]
+    return " ".join(words)
+
+
+def _locate_money_staged(
+    document: DocumentModel,
+    page_blocks: list[Block],
+    quote: str,
+    amounts: list[float],
+) -> tuple[Block, str] | None:
+    """OCR-tolerant label+amount evidence binding for money facts.
+
+    Anchors the exact amount literal on the fact's page and requires the label
+    to co-occur near it (tolerant to pipes, line breaks, whitespace and small
+    OCR typos).  The caller already restricts ``page_blocks`` to the fact's page,
+    so an amount that only exists on another page can never bind here.  A money
+    figure is never accepted by the number alone: without a matching label
+    phrase only a *unique* amount occurrence counts, and any ambiguity or
+    non-uniqueness resolves to None (fail-closed).
+    """
+    if not amounts or not page_blocks:
+        return None
+    label_phrase = _money_label_phrase(quote)
+    candidates: set[tuple[str, int, str]] = set()
+    for block in page_blocks:
+        text = block.text or ""
+        for match in _MONEY_LITERAL_RE.finditer(text):
+            amount = _money_amount(match.group(0))
+            if amount is None or not any(
+                abs(round(amount, 2) - expected) < 0.001 for expected in amounts
+            ):
+                continue
+            start = max(0, match.start() - 120)
+            end = min(len(text), match.end() + 120)
+            window = text[start:end]
+            if label_phrase and _find_quote_tolerant(window, label_phrase) is None:
+                continue
+            candidates.add((block.id, match.start(), match.group(0)))
+    if len(candidates) != 1:
+        return None
+    block_id, start, literal = next(iter(candidates))
+    block = document.index.get(block_id)
+    if block is None:
+        return None
+    return block, literal.strip()
+
+
 def _steady_annual_amount(rows: list[dict]) -> float | None:
     """Return the steady yearly amount when staged rows stay constant from a
     later year onward (e.g. 1.Jahr=0, 2.-4.Jahr=8000).  Deterministic, no model."""
@@ -1063,11 +1290,21 @@ class DirectContractHarness:
                     "stage": stage,
                     "schema": schema_type.__name__,
                     "estimated_prompt_tokens": prompt_tokens,
+                    "requested_context": capacity,
+                    "output_reserve": _CONTEXT_RESERVE,
                     "failed": False,
                 }
                 calls.append(metric)
                 output_tokens = base_output
-                for attempt in range(2):
+                attempt = 0
+                while True:
+                    image_reserve = 1024 * len(images or [])
+                    effective_context = _effective_context(
+                        prompt_tokens, output_tokens, capacity, descriptor.context_length, image_reserve
+                    )
+                    if attempt == 0:
+                        metric["effective_context"] = effective_context
+                    metric["retry_count"] = attempt
                     begin = time.monotonic()
                     try:
                         raw = await provider.generate_request(
@@ -1075,7 +1312,7 @@ class DirectContractHarness:
                             system,
                             schema,
                             output_tokens,
-                            capacity,
+                            effective_context,
                             images,
                         )
                         metric["latency_seconds"] = round(time.monotonic() - begin, 3)
@@ -1089,34 +1326,31 @@ class DirectContractHarness:
                         actual_prompt_tokens = usage.get("prompt_tokens")
                         if actual_prompt_tokens:
                             metric["actual_prompt_tokens"] = int(actual_prompt_tokens)
+                            prompt_tokens = int(actual_prompt_tokens)
                         if metric["done_reason"] in {"length", "max_tokens"}:
                             raise RuntimeError("output_truncated")
                         parsed = schema_type.model_validate_json(raw)
                         metric["succeeded"] = True
                         return parsed
                     except Exception as exc:
-                        if (
-                            str(exc) == "output_truncated"
-                            and attempt == 0
-                        ):
-                            retry_tokens = (
-                                int(metric["actual_prompt_tokens"])
-                                if metric.get("actual_prompt_tokens")
-                                else prompt_tokens
-                            )
+                        if str(exc) == "output_truncated" and attempt == 0:
+                            metric["truncation_count"] = 1
                             next_output, decision = _retry_output_plan(
                                 purpose,
-                                retry_tokens,
-                                capacity,
+                                prompt_tokens,
+                                effective_context,
                                 base_output,
                                 1024 * len(images or []),
                             )
                             metric["retry_decision"] = decision
-                            metric["retry_prompt_tokens"] = retry_tokens
+                            metric["retry_prompt_tokens"] = prompt_tokens
+                            metric["retry_effective_context"] = effective_context
                             if next_output is not None:
                                 output_tokens = next_output
                                 metric["retried_with_output_tokens"] = next_output
+                                attempt += 1
                                 continue
+                            metric["retry_not_performed"] = True
                         metric["failed"] = True
                         metric["succeeded"] = False
                         metric["error_type"] = type(exc).__name__
@@ -1209,85 +1443,146 @@ class DirectContractHarness:
                 )
                 proposals.extend(batch.facts)
 
-            def locate(fact: ProposedFact):
-                quote = _clean_quote(fact.quote or "")
-                page_blocks = (
-                    document.pages_blocks.get(fact.page, [])
-                    if fact.page is not None
-                    else document.blocks
-                )
-                if quote:
-                    matches: list[tuple[Block, str]] = []
-                    for block in page_blocks:
-                        found = _find_quote(block.text or "", quote)
-                        if found is not None:
-                            matches.append((block, found[0]))
-                    if not matches and fact.page is not None:
-                        for block in document.blocks:
+                def locate(fact: ProposedFact):
+                    quote = _clean_quote(fact.quote or "")
+                    page_blocks = (
+                        document.pages_blocks.get(fact.page, [])
+                        if fact.page is not None
+                        else document.blocks
+                    )
+                    money_field = _money_field(fact.field)
+                    money_amounts = _money_amounts_from_value(fact.value) if money_field else []
+                    # A generic quote match may only bind money facts when the quote
+                    # itself carries a money literal matching the proposed amount.
+                    # Otherwise the number field could be accepted by irrelevant
+                    # tables ("120 Stueck") and hallucinated amounts pass through.
+                    money_quote_ok = False
+                    if money_field and money_amounts:
+                        for m in _MONEY_LITERAL_RE.finditer(quote):
+                            if _money_amount(m.group(0)) is not None and any(
+                                abs(round(_money_amount(m.group(0)), 2) - expected) < 0.001
+                                for expected in money_amounts
+                            ):
+                                money_quote_ok = True
+                                break
+                    if quote and (not money_field or money_quote_ok):
+                        matches: list[tuple[Block, str]] = []
+                        for block in page_blocks:
                             found = _find_quote(block.text or "", quote)
                             if found is not None:
                                 matches.append((block, found[0]))
-                    if len(matches) == 1:
-                        return matches[0], False
-                    if not matches and fact.page is not None:
-                        source_page = next(
-                            (page for page in canonical.pages
-                             if page.page_number == fact.page),
-                            None,
-                        )
-                        if source_page is not None:
-                            found = _find_quote(
-                                (source_page.text or "").strip(), quote
+                        if not matches and fact.page is not None:
+                            for block in document.blocks:
+                                found = _find_quote(block.text or "", quote)
+                                if found is not None:
+                                    matches.append((block, found[0]))
+                        if len(matches) == 1:
+                            return matches[0], False
+                        if not matches and fact.page is not None:
+                            source_page = next(
+                                (page for page in canonical.pages
+                                 if page.page_number == fact.page),
+                                None,
                             )
+                            if source_page is not None:
+                                found = _find_quote(
+                                    (source_page.text or "").strip(), quote
+                                )
+                                if found is not None:
+                                    return (None, found[0]), False
+
+                        # OCR-tolerant fallback: table cells separate label and amount
+                        # with pipes/whitespace that the model quote may not reproduce
+                        # verbatim, and OCR can add a single typo.  Keeps page scope,
+                        # requires a unique match and flags review.
+                        tolerant: list[tuple[Block, str]] = []
+                        for block in page_blocks:
+                            found = _find_quote_tolerant(block.text or "", quote)
                             if found is not None:
-                                return (None, found[0]), False
+                                tolerant.append((block, found[0]))
+                        if not tolerant and fact.page is not None:
+                            for block in document.blocks:
+                                found = _find_quote_tolerant(block.text or "", quote)
+                                if found is not None:
+                                    tolerant.append((block, found[0]))
+                        if len(tolerant) == 1:
+                            return tolerant[0], True
+                        if not tolerant and fact.page is not None:
+                            source_page = next(
+                                (page for page in canonical.pages
+                                 if page.page_number == fact.page),
+                                None,
+                            )
+                            if source_page is not None:
+                                found = _find_quote_tolerant(
+                                    (source_page.text or "").strip(), quote
+                                )
+                                if found is not None:
+                                    return (None, found[0]), True
 
-                signal_matches = [
-                    signal
-                    for signal in source_signals
-                    if (fact.page is None or signal.get("page") == fact.page)
-                    and _signal_matches(fact.field, fact.value, signal)
-                ]
-                if len(signal_matches) == 1:
-                    signal = signal_matches[0]
-                    block = document.index.get(signal.get("block_id"))
-                    if block is not None:
-                        found = _find_quote(block.text or "", signal.get("quote") or "")
-                        if found is not None:
-                            return (block, found[0]), False
-
-                if fact.page is not None and fact.page in visual_readings and quote:
-                    for fragment in visual_readings[fact.page].visible_text:
-                        found = _find_quote(fragment, quote)
-                        if found is not None:
-                            return (None, found[0]), True
-
-                # Missing page/quote should not kill an otherwise precise semantic
-                # fact, but facts the model itself did not mark as applicable must
-                # not be retroactively saved by a loose literal match (junk
-                # acceptance).  For applicable literal string values (supplier,
-                # title, payment terms, etc.) locate a unique exact/case-insensitive
-                # source occurrence.
-                if fact.applicability != "applicable":
-                    return None
-                literal_matches: list[tuple[Block, str]] = []
-                for literal in _literal_strings(fact.value):
-                    if literal.upper() in {"EUR", "USD", "GBP"}:
-                        continue
-                    for block in document.blocks:
-                        resolved = _find_quote(block.text or "", literal)
-                        exact = resolved[0] if resolved is not None else _find_casefold(
-                            block.text or "", literal
+                    # Staged label+amount money locator: money must never bind by the
+                    # number alone.  Anchors the amount literal on the fact's page and
+                    # requires its label to co-occur (OCR/pipe-tolerant); ambiguity or
+                    # a wrong page leaves the fact unresolved.
+                    if _money_field(fact.field):
+                        staged = _locate_money_staged(
+                            document,
+                            page_blocks,
+                            quote,
+                            _money_amounts_from_value(fact.value),
                         )
-                        if exact is not None:
-                            literal_matches.append((block, exact))
-                unique_literal = {
-                    (block.id, text): (block, text)
-                    for block, text in literal_matches
-                }
-                if len(unique_literal) == 1:
-                    return next(iter(unique_literal.values())), False
-                return None
+                        if staged is not None:
+                            block, literal = staged
+                            return (block, literal), False
+
+                    signal_matches = [
+                        signal
+                        for signal in source_signals
+                        if (fact.page is None or signal.get("page") == fact.page)
+                        and _signal_matches(fact.field, fact.value, signal)
+                        and not (
+                            signal.get("kind") == "money"
+                            and _money_field(fact.field)
+                        )
+                    ]
+                    if len(signal_matches) == 1:
+                        signal = signal_matches[0]
+                        block = document.index.get(signal.get("block_id"))
+                        if block is not None:
+                            found = _find_quote(block.text or "", signal.get("quote") or "")
+                            if found is not None:
+                                return (block, found[0]), False
+
+                    if fact.page is not None and fact.page in visual_readings and quote and (not money_field or money_quote_ok):
+                        for fragment in visual_readings[fact.page].visible_text:
+                            found = _find_quote(fragment, quote)
+                            if found is not None:
+                                return (None, found[0]), True
+
+                    # Missing page/quote should not kill an otherwise precise semantic
+                    # fact, but facts the model itself did not mark as applicable must
+                    # not be retroactively saved by a loose literal match (junk
+                    # acceptance).  For applicable literal string values (supplier,
+                    # title, payment terms, etc.) locate a unique exact/case-insensitive
+                    # source occurrence.
+                    if fact.applicability != "applicable":
+                        return None
+                    literals = _literal_strings(fact.value)
+                    if not literals:
+                        return None
+                    # Page-scoped first: the same literal (e.g. a printer address
+                    # header) can legally repeat on later pages; its unique evidence
+                    # on the asserted page remains valid.
+                    if fact.page is not None:
+                        page_evidence = _literal_evidence(
+                            literals, document.pages_blocks.get(fact.page, [])
+                        )
+                        if len(page_evidence) == 1:
+                            return next(iter(page_evidence.values())), False
+                    unique_literal = _literal_evidence(literals, document.blocks)
+                    if len(unique_literal) == 1:
+                        return next(iter(unique_literal.values())), False
+                    return None
 
             contract = Contract()
             supported_count = 0
@@ -1383,6 +1678,16 @@ class DirectContractHarness:
                 else:
                     group, field = fact.field.split(".", 1)
                     holder = getattr(contract, group)
+                    # Mehrere Fakten fuer eine Zeilen-Liste (z. B. zwei
+                    # variable_charges-Kosten pro Seite) duerfen sich nicht
+                    # gegenseitig ueberschreiben; die Betraege werden aneinander-
+                    # gehaengt statt still verloren zu gehen.
+                    if (
+                        fact.field
+                        in {"costs.variable_charges", "costs.scheduled_prices"}
+                        and isinstance(getattr(holder, field, None), list)
+                    ):
+                        value = [*getattr(holder, field), *value]
                     setattr(holder, field, value)
                     if getattr(holder, "evidence", None) is None:
                         holder.evidence = source

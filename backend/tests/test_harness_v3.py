@@ -655,6 +655,102 @@ async def test_known_time_value_drops_unknown_model_properties_before_validation
 
 
 @pytest.mark.asyncio
+async def test_supplier_literal_binds_on_own_page_when_repeated_on_later_page():
+    # Frankfurt-Diagnose: identity.supplier ist eine vollstaendige Adresse, die
+    # als Briefkopf auf Seite 1 UND Seite 6 (Footern/Reiter) wiederkehrt. Exakt
+    # ist sie daher global nicht eindeutig; auf ihrer eigenen Seite (1) ist sie
+    # es. Der Literal-Fallback muss zuerst page-scoped suchen, bevor er global
+    # zaehlt, sonst fallt ein korrekt annotierter Lieferant in
+    # "evidence_not_located".
+    supplier_literal = (
+        "Abbott Medical GmbH Betriebsstätte Wetzlar "
+        "Schanzenfeldstraße 2 35578 Wetzlar"
+    )
+    pages = [
+        Page(
+            page_number=1,
+            width_pt=600,
+            height_pt=800,
+            text=supplier_literal + "\nVertr.-Nr.: 40015645",
+            elements=[
+                Element(
+                    element_id="p1-supplier",
+                    page=1,
+                    reading_order=0,
+                    text=supplier_literal,
+                    type="paragraph",
+                    method="ocr",
+                ),
+                Element(
+                    element_id="p1-nr",
+                    page=1,
+                    reading_order=1,
+                    text="Vertr.-Nr.: 40015645",
+                    type="paragraph",
+                    method="ocr",
+                ),
+            ],
+        ),
+        Page(
+            page_number=6,
+            width_pt=600,
+            height_pt=800,
+            text=supplier_literal + " www.abbott.com",
+            elements=[
+                Element(
+                    element_id="p6-header",
+                    page=6,
+                    reading_order=0,
+                    text=supplier_literal,
+                    type="paragraph",
+                    method="ocr",
+                )
+            ],
+        ),
+    ]
+    canonical = DocumentIntelligenceResult(
+        document_id="supplier-page-scope",
+        source_sha256="e" * 64,
+        canonical_text="\n".join(page.text or "" for page in pages),
+        provenance=ProcessingProvenance(provider="docling"),
+        pages=pages,
+    )
+
+    class FullAddressProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] != "ProposedFactBatch" or "identity.supplier" not in text:
+                return raw
+            payload = json.loads(raw)
+            for fact in payload["facts"]:
+                if fact["field"] == "identity.supplier":
+                    fact["value"] = supplier_literal
+                    fact["page"] = 1
+                    # OCR-verstuemmeltes Zitat: bindet weder exakt noch tolerant,
+                    # Fact muss ueber den page-scoped Literal-Fallback belegt werden.
+                    fact["quote"] = (
+                        "Abbott Medical GmbH Betriebsstätte Wetzlar "
+                        "Schanzenfeldstr. 2 35578V"
+                    )
+            return json.dumps(payload)
+
+    result = await DirectContractHarness(
+        settings(), ai(FullAddressProvider())
+    ).analyze(canonical)
+    assert result.contract is not None, result.error
+    assert result.contract.identity.supplier == supplier_literal
+    accepted = {
+        row["field"]: row for row in result.diagnostics["accepted_facts"]
+    }
+    assert accepted["identity.supplier"]["page"] == 1
+    assert supplier_literal in accepted["identity.supplier"]["quote"]
+
+
+@pytest.mark.asyncio
 async def test_money_fact_binds_by_literal_source_signal_when_model_quote_is_bad():
     class BadMoneyQuoteProvider(FakeProvider):
         async def generate_request(

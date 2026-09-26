@@ -7,8 +7,11 @@ from app.ai.harness.document import Block, DocumentModel
 
 
 _DATE_RE = re.compile(r"\b(?:0?[1-9]|[12]\d|3[01])[./-](?:0?[1-9]|1[0-2])[./-](?:19|20)\d{2}\b")
+# Lokale Währungszeichen können vor oder hinter dem Betrag stehen; Scans schreiben
+# "€ 12.000,00" ebenso wie "12.000,00 EUR".  Beide Formen sind ein Geld-Signal.
 _MONEY_RE = re.compile(
-    r"(?<!\w)(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?\s*(?:EUR|€)(?!\w)",
+    r"(?<!\w)(?:(?:€|EUR)\s*)?(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?\s*(?:€|EUR)(?!\w)"
+    r"|(?<!\w)(?:€|EUR)\s*(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?(?!\w)",
     re.IGNORECASE,
 )
 _DURATION_RE = re.compile(

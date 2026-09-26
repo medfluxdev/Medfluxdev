@@ -190,6 +190,110 @@ def _find_quote_ellipsis_bridge(
     return match.group(0), match.start(), match.end()
 
 
+_SPACER_SEPARATORS = re.compile(r"[\s|/\\;:\[\](){}]+", re.IGNORECASE)
+
+# Ein Komma ist nur dann Trennzeichen, wenn es NICHT zwischen zwei Ziffern
+# steht (deutsche Geldzahlen "9.500,00" bleiben ein einziges Token; Listen-
+# Kommas "a, b" trennen weiterhin).
+_TOLERANT_TOKEN_SPLIT = re.compile(
+    r"(?:[\s|/\\;:\[\](){}]+|(?<!\d),(?!\d))+"
+)
+
+
+def _tolerant_tokens(text: str) -> list[tuple[str, int]]:
+    """Tokenize for OCR-tolerant matching, tracking original offsets.
+
+    Separators (whitespace, pipes, colon, ...) are interchangeable; a comma
+    between two digits stays part of the number so money literals like
+    ``9.500,00`` survive as a single token.
+    """
+    rows: list[tuple[str, int]] = []
+    cursor = 0
+    for match in _TOLERANT_TOKEN_SPLIT.finditer(text or ""):
+        if match.start() > cursor:
+            token = text[cursor:match.start()]
+            rows.append((token, cursor))
+        cursor = match.end()
+    if cursor < len(text or ""):
+        rows.append((text[cursor:], cursor))
+    return rows
+
+
+def _word_distance(a: str, b: str) -> int:
+    """Bounded Levenshtein (case-insensitive) between two tokens.
+
+    Returns the edit distance when both tokens are long enough to judge and the
+    result is meaningful (<= 2), otherwise ``99`` so the caller can safely
+    discard the pair instead of accepting a paraphrased word.
+    """
+    a, b = a.casefold(), b.casefold()
+    if a == b:
+        return 0
+    n, m = len(a), len(b)
+    if n == 0 or m == 0 or min(n, m) <= 2:
+        return 99
+    if abs(n - m) > 2:
+        return 99
+    prev = list(range(m + 1))
+    for i in range(1, n + 1):
+        cur = [i] + [0] * m
+        for j in range(1, m + 1):
+            cur[j] = min(
+                prev[j] + 1,
+                cur[j - 1] + 1,
+                prev[j - 1] + (0 if a[i - 1] == b[j - 1] else 1),
+            )
+        prev = cur
+    d = prev[m]
+    return d if d <= 2 else 99
+
+
+def _find_quote_tolerant(
+    source: str, quote: str, max_typos: int = 2
+) -> tuple[str, int, int] | None:
+    """OCR-tolerant quote resolution for scanned/table layouts.
+
+    Table layouts separate cells with pipes/whitespace that a model quote may
+    not reproduce verbatim.  This fallback treats those separators as
+    interchangeable and keeps the word sequence intact, so missing words inside
+    the quote still fail (no paraphrase acceptance).  A bounded per-word edit
+    tolerance handles common OCR noise such as ``Einzelkomponeten`` vs
+    ``Einzelkomponenten`` (max 2 edits), but dropped words or order swaps still
+    fail closed.  Positions always refer to the original ``source`` string.
+    """
+    if not source or not quote:
+        return None
+    quote_tokens = [t for t, _ in _tolerant_tokens(quote)]
+    if not quote_tokens:
+        return None
+    source_tokens = _tolerant_tokens(source)
+    if len(source_tokens) < len(quote_tokens):
+        return None
+    for start in range(len(source_tokens) - len(quote_tokens) + 1):
+        spans: list[tuple[str, int]] = []
+        si = start
+        ok = True
+        for qtok in quote_tokens:
+            best: tuple[float, str, int, int] | None = None
+            for j in range(si, min(len(source_tokens), si + 3)):
+                d = _word_distance(source_tokens[j][0], qtok)
+                if best is None or d < best[0]:
+                    best = (d, source_tokens[j][0], source_tokens[j][1], j)
+                if d == 0:
+                    break
+            if best is None or best[0] > max_typos:
+                ok = False
+                break
+            spans.append((best[1], best[2]))
+            si = best[3] + 1
+        if not ok:
+            continue
+        first = spans[0][1]
+        last = spans[-1][1] + len(spans[-1][0])
+        return source[first:last], first, last
+    return None
+
+
 def _merge_maps(maps: list[ContractMap]) -> ContractMap:
     """Lossless deterministic union used even when semantic synthesis cannot fit."""
     if not maps:
