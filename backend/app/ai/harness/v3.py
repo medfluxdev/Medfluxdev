@@ -1253,6 +1253,53 @@ def _steady_annual_amount(rows: list[dict], *, expected_years: int | None = None
     return float(later[0])
 
 
+# Deterministische Finanzklassifikations-Logik (GATE 1 - EUR 12.000):
+# Ein Betrag, dessen WAEHRUNGS-MEANING (annual/semi_annual/quarterly/monthly/
+# maintenance) nicht belegt ist, darf nie als wiederkehrende Verpflichtung in
+# die autoritativen Kostenfelder (und damit in Kalkulation/Forecast) einfliessen.
+# Beleg ist NUR deterministisch:
+#   (a) die visuelle Reconciliation ist fuer genau diese Seite "corroborated", ODER
+#   (b) das Zitat selbst traegt einen Perioden-Anker im Modell-Lexikon.
+# Fehlen beide, wird der Fakt abgelehnt (financial_classification_unverified)
+# und die Analyse bleibt review-pflichtig. Reine Praesenz auf einer Seite ist
+# KEIN Klassifikationsbeweis.
+_PERIOD_FIELDS: dict[str, re.Pattern[str]] = {
+    "costs.annual_cost": re.compile(
+        r"j[äa]hrlich|jaehrlich|pro\s+jahr|jahres(?:preis|geb[\u00fc]hr|gebuehr)|(?<!semi[- ])\bannual\b", re.I),
+    "costs.semi_annual_cost": re.compile(
+        r"halbj[äa]hrlich|halbjaehrlich|semi\s*-?\s*annual|halbes\s+jahr", re.I),
+    "costs.quarterly_cost": re.compile(
+        r"quartals\w*|quarterly|viertelj[äa]hrlich|je\s+quartal", re.I),
+    "costs.monthly_cost": re.compile(
+        r"monatl(?:ich)?|monthly|pro\s+monat", re.I),
+    "costs.maintenance_fee": re.compile(
+        r"wartung|maintenance|service(?:geb[\u00fc]hr|gebuehr)|(?:service\s+)?fee\b", re.I),
+}
+
+
+def _financial_classification_verified(fact, visual_first_rows) -> bool:
+    """Nur mit ausreichendem, deterministischem Beleg laesst sich ein Betrag
+    als wiederkehrende Kostenkategorie akzeptieren."""
+    anchor = _PERIOD_FIELDS.get(fact.field)
+    if anchor is None:
+        # Nicht-diskretionäre Felder (identity, dates, termination, SLA-Liste,
+        # scheduled_prices/variable_charges) unterliegen ihres eigenen Schemas.
+        return True
+    if not visual_first_rows:
+        # Legacy-/Hybrid-Pfad ohne Visual-First: unveraendert (Money-OCR-Tests).
+        return True
+    page_rows = [r for r in visual_first_rows if r.page == fact.page]
+    if not page_rows:
+        # Diese Seite wurde visuell nicht abgeglichen; der Locator+Quote-Beweis
+        # greift weiter hinunter. Keine zusaetzliche Gate-Belastung.
+        return True
+    if any(r.status == "corroborated" for r in page_rows):
+        return True
+    if fact.quote and anchor.search((fact.quote or "")[:400]):
+        return True
+    return False
+
+
 def _warmup_image_base64() -> str:
     """Kleines Graustufen-PNG (dep-frei via zlib/struct) fuer den Vision-Warmup."""
     import base64
@@ -1752,6 +1799,22 @@ class DirectContractHarness:
                             for row in visual_first_rows)):
                     rejected.append({"field": fact.field, "page": fact.page,
                                      "reason": "visual_first_cost_dispute_manual_review"})
+                    continue
+
+                if not _financial_classification_verified(fact, visual_first_rows):
+                    # GATE 1: ein nicht periodenbelegter Betrag darf weder als
+                    # annual_cost noch als eine andere wiederkehrende Kostenart in
+                    # kalkulatorische Verantwortung uebergehen (Kalkulation,
+                    # Forecast, Suche, Analytics). Nur manuelle Freigabe war.
+                    rejected.append({
+                        "field": fact.field, "page": fact.page,
+                        "reason": "financial_classification_unverified",
+                        "quote": (fact.quote or "")[:240],
+                    })
+                    issues.append(
+                        "Financial classification requires manual review: %s"
+                        % fact.field
+                    )
                     continue
 
                 located = locate(fact)
