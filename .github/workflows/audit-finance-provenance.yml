@@ -1,0 +1,54 @@
+name: Isolated Finance Provenance Audit
+
+on:
+  push:
+    branches:
+      - audit/finance-provenance-20260926
+    paths:
+      - "backend/app/ai/harness/v3.py"
+      - "backend/tests/test_finance_provenance_audit.py"
+      - ".github/workflows/audit-finance-provenance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  finance-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: medflux
+          POSTGRES_PASSWORD: medflux_ci
+          POSTGRES_DB: medflux
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medflux -d medflux"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      AUTH_ENABLED: "false"
+      MEDFLUX_INSECURE_DEV: "true"
+      DATABASE_URL: postgresql+psycopg://medflux:medflux_ci@127.0.0.1:5432/medflux
+      PYTHONPATH: .
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile audit files
+        run: python -m py_compile app/ai/harness/v3.py tests/test_finance_provenance_audit.py
+      - name: Execute finance provenance regressions
+        run: pytest -q tests/test_finance_provenance_audit.py tests/test_harness_v3.py
