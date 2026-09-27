@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Index, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,6 +41,9 @@ class Department(Base):
     hospital_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("hospital.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    parent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str] = mapped_column(String(40), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
@@ -48,6 +51,9 @@ class Department(Base):
 
     __table_args__ = (
         UniqueConstraint("hospital_id", "code", name="uq_department_hospital_code"),
+        UniqueConstraint("id", "organization_id", "hospital_id", name="uq_department_id_org_hospital"),
+        ForeignKeyConstraint(["parent_id", "organization_id", "hospital_id"], ["department.id", "department.organization_id", "department.hospital_id"], name="fk_department_parent_same_scope"),
+        CheckConstraint("parent_id IS NULL OR parent_id <> id", name="ck_department_not_self_parent"),
         Index("ix_department_hospital_active", "hospital_id", "is_active"),
     )
 
