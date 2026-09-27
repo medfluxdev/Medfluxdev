@@ -28,15 +28,36 @@ class HospitalUpdate(BaseModel):
 
 
 class DepartmentCreate(BaseModel):
+    parent_id: UUID | None = None
     hospital_id: UUID
     name: str
     code: str
 
 
 class DepartmentUpdate(BaseModel):
+    parent_id: UUID | None = None
     name: str | None = None
     code: str | None = None
     is_active: bool | None = None
+
+
+def _validate_department_parent(session, *, organization_id: UUID, hospital_id: UUID, department_id: UUID | None, parent_id: UUID | None):
+    """Validate same-scope parent and prevent cycles before any mutation."""
+    if parent_id is None:
+        return
+    seen = set()
+    cursor = parent_id
+    for _ in range(1000):
+        if cursor in seen or cursor == department_id:
+            raise HTTPException(status_code=422, detail="Abteilungs-Hierarchie enthält einen Zyklus.")
+        seen.add(cursor)
+        parent = session.get(Department, cursor)
+        if parent is None or parent.organization_id != organization_id or parent.hospital_id != hospital_id:
+            raise HTTPException(status_code=422, detail="Übergeordnete Abteilung muss zum selben Krankenhaus gehören.")
+        cursor = parent.parent_id
+        if cursor is None:
+            return
+    raise HTTPException(status_code=422, detail="Abteilungs-Hierarchie ist zu tief.")
 
 
 def _organization(session, organization_slug: str):
@@ -93,7 +114,7 @@ def structure(request: Request, organization_slug: str):
         departments = session.scalars(department_stmt.order_by(Department.name.asc())).all()
         return {
             "hospitals": [{"id": str(row.id), "name": row.name, "code": row.code, "address": row.address, "is_active": row.is_active} for row in hospitals],
-            "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "is_active": row.is_active} for row in departments],
+            "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "parent_id": str(row.parent_id) if row.parent_id else None, "name": row.name, "code": row.code, "is_active": row.is_active} for row in departments],
         }
     finally:
         session.close()
@@ -146,7 +167,8 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         hospital = session.get(Hospital, payload.hospital_id)
         if hospital is None or hospital.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Krankenhaus nicht gefunden.")
-        row = Department(organization_id=organization.id, hospital_id=hospital.id, name=payload.name.strip(), code=payload.code.strip().upper(), is_active=True)
+        _validate_department_parent(session, organization_id=organization.id, hospital_id=hospital.id, department_id=None, parent_id=payload.parent_id)
+        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=payload.name.strip(), code=payload.code.strip().upper(), is_active=True)
         session.add(row)
         session.flush()
         _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code})
@@ -165,6 +187,9 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
         row = session.get(Department, department_id)
         if row is None or row.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Abteilung nicht gefunden.")
+        if "parent_id" in payload.model_fields_set:
+            _validate_department_parent(session, organization_id=organization.id, hospital_id=row.hospital_id, department_id=row.id, parent_id=payload.parent_id)
+            row.parent_id = payload.parent_id
         if payload.name is not None: row.name = payload.name.strip() or row.name
         if payload.code is not None: row.code = payload.code.strip().upper() or row.code
         if payload.is_active is not None: row.is_active = payload.is_active
