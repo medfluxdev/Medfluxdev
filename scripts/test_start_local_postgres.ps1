@@ -24,25 +24,84 @@ if ($source -match '\$PgCtlPath\s+start[^\r\n]*Out-Host') {
 }
 Write-Host "[PASS] no pg_ctl start pipeline"
 
-# 3) Already-running path: an open TCP port must return zero promptly.
-$listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
-$listener.Start()
-$port = ([Net.IPEndPoint]$listener.LocalEndpoint).Port
-try {
-    $watch = [Diagnostics.Stopwatch]::StartNew()
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $target -Port $port -SkipServiceDiscovery
+# 3) Fail-closed: a bare TCP listener (no PostgreSQL protocol) must NOT be
+#    reported as "PostgreSQL ready". A listening socket does not identify the
+#    database; only a PostgreSQL wire-protocol answer may.
+function Invoke-Launcher {
+    param([int]$Port)
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $target -Port $Port -SkipServiceDiscovery
     $code = $LASTEXITCODE
-    $watch.Stop()
-    if ($code -ne 0) { throw "ready-port path returned exit code $code" }
-    if ($watch.Elapsed.TotalSeconds -gt 5) {
-        throw "ready-port path took too long: $($watch.Elapsed.TotalSeconds)s"
+    $sw.Stop()
+    return @{ Code = $code; Seconds = $sw.Elapsed.TotalSeconds }
+}
+
+$bare = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+$bare.Start()
+$barePort = ([Net.IPEndPoint]$bare.LocalEndpoint).Port
+try {
+    $r = Invoke-Launcher -Port $barePort
+    if ($r.Code -eq 0) { throw "bare TCP listener was wrongly reported as PostgreSQL-ready" }
+    if ($r.Seconds -gt 5) { throw "bare-listener path took too long: $($r.Seconds)s" }
+} finally {
+    $bare.Stop()
+}
+Write-Host "[PASS] bare TCP listener is not PostgreSQL-ready"
+
+# 4) Positive case: a fake PostgreSQL startup-protocol responder IS detected.
+$responder = Start-Job -ArgumentList $barePort -ScriptBlock {
+    param($Port)
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
+    $listener.Start()
+    try {
+        # Bounded: the launcher opens a probe connection (Test-MedfluxPort) and
+        # one identity connection (Test-PostgresIdentity). Self-terminate so the
+        # test never has to interrupt a blocked AcceptTcpClient.
+        for ($i = 0; $i -lt 2; $i++) {
+            if (-not $listener.Pending()) {
+                Start-Sleep -Milliseconds 200
+                $i--
+                continue
+            }
+            $client = $listener.AcceptTcpClient()
+            $stream = $client.GetStream()
+            $buf = [byte[]]::new(9)
+            $read = 0
+            while ($read -lt 9) {
+                $n = $stream.Read($buf, $read, 9 - $read)
+                if ($n -le 0) { break }
+                $read += $n
+            }
+            if ($read -ge 9) {
+                # Authentication-request message: type byte 'R' (0x52).
+                $stream.Write([byte[]](0x52), 0, 1)
+            }
+            $client.Close()
+        }
+    } finally {
+        $listener.Stop()
+    }
+}
+try {
+    Start-Sleep -Milliseconds 500
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $target -Port $barePort -SkipServiceDiscovery
+    $code = $LASTEXITCODE
+    $sw.Stop()
+    if ($sw.Elapsed.TotalSeconds -gt 5) {
+        throw "PostgreSQL-protocol responder path took too long: $($sw.Elapsed.TotalSeconds)s"
+    }
+    Wait-Job $responder -Timeout 10 | Out-Null
+    if ($code -ne 0) {
+        throw "PostgreSQL-protocol responder path returned exit code $code (job state: $($responder.State))"
     }
 } finally {
-    $listener.Stop()
+    Stop-Job $responder -ErrorAction SilentlyContinue
+    Remove-Job $responder -Force -ErrorAction SilentlyContinue
 }
-Write-Host "[PASS] already-running path"
+Write-Host "[PASS] PostgreSQL-protocol responder detected"
 
-# 4) Deterministic fail path: no server + missing pg_ctl must fail, not hang.
+# 5) Deterministic fail path: no server + missing pg_ctl must fail, not hang.
 $probe = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $probe.Start()
 $unusedPort = ([Net.IPEndPoint]$probe.LocalEndpoint).Port

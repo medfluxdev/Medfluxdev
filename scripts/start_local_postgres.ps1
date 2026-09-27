@@ -61,7 +61,40 @@ function Wait-MedfluxPort {
     return $false
 }
 
-if (Test-MedfluxPort -TargetPort $Port) {
+# A listening TCP port alone does not identify PostgreSQL. A different
+# database (or any unrelated service) on the same port must never be
+# reported as "MedFlux PostgreSQL ready". This probe verifies the actual
+# PostgreSQL wire protocol: send a protocol-3.0 startup message and require
+# a protocol message byte back. Returns $true only for a real PostgreSQL.
+function Test-PostgresIdentity {
+    param([int]$TargetPort)
+    $client = $null
+    try {
+        $client = [Net.Sockets.TcpClient]::new()
+        $client.ReceiveTimeout = 1500
+        $client.SendTimeout = 1500
+        $ok = $client.ConnectAsync([Net.IPAddress]::Parse("127.0.0.1"), $TargetPort).Wait(1500)
+        if (-not $ok) { return $false }
+        # PostgreSQL startup message: total length 9 (length field + protocol
+        # 3.0 + one NUL terminating the empty parameter list).
+        $startup = [byte[]](0, 0, 0, 9, 0, 3, 0, 0, 0)
+        $stream = $client.GetStream()
+        $stream.Write($startup, 0, $startup.Length)
+        $reply = [byte[]]::new(1)
+        $read = $stream.Read($reply, 0, 1)
+        if ($read -ne 1) { return $false }
+        # PostgreSQL always answers a startup message with a protocol message
+        # whose type byte is one of R/S/E/Z/N/K; a plain TCP listener or a
+        # different database will not produce a valid protocol byte here.
+        return ($reply[0] -in @(0x52, 0x53, 0x45, 0x5A, 0x4E, 0x4B))
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $client) { $client.Dispose() }
+    }
+}
+
+if ((Test-MedfluxPort -TargetPort $Port) -and (Test-PostgresIdentity -TargetPort $Port)) {
     Write-Host "PostgreSQL already reachable on 127.0.0.1:$Port."
     exit 0
 }
@@ -76,7 +109,10 @@ if (-not $SkipServiceDiscovery) {
                 continue
             }
         }
-        if (Wait-MedfluxPort -TargetPort $Port -Attempts 20) { exit 0 }
+        if ((Test-MedfluxPort -TargetPort $Port) -and (Test-PostgresIdentity -TargetPort $Port)) {
+            Write-Host "PostgreSQL answered after service start: $($service.Name)"
+            exit 0
+        }
     }
 }
 
