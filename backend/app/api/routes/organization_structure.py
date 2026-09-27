@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth.dependencies import current_actor
 from app.core.scope_context import current_scope_context
@@ -188,6 +188,22 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
         if row is None or row.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Abteilung nicht gefunden.")
         if "parent_id" in payload.model_fields_set:
+            # Serialize all hierarchy reparenting within one hospital. The lock is
+            # transaction-scoped and released by commit/rollback; it MUST precede
+            # the fresh validation reads. Hash collisions only over-serialize.
+            session.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        func.hashtext("medflux.department.tree"),
+                        func.hashtext(str(row.hospital_id)),
+                    )
+                )
+            )
+            # Discard any ORM state loaded before waiting for another writer.
+            session.expire_all()
+            row = session.get(Department, department_id)
+            if row is None or row.organization_id != organization.id or organization.id != actor.organization_id:
+                raise HTTPException(status_code=404, detail="Abteilung nicht gefunden.")
             _validate_department_parent(session, organization_id=organization.id, hospital_id=row.hospital_id, department_id=row.id, parent_id=payload.parent_id)
             row.parent_id = payload.parent_id
         if payload.name is not None: row.name = payload.name.strip() or row.name
