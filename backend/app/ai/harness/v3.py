@@ -1150,6 +1150,8 @@ def _money_amounts_from_value(value: Any) -> list[float]:
     elif isinstance(value, list):
         for item in value:
             amounts.extend(_money_amounts_from_value(item))
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        amounts.append(float(value))
     elif isinstance(value, str):
         parsed = _money_amount(value)
         if parsed is not None:
@@ -1257,12 +1259,14 @@ def _steady_annual_amount(rows: list[dict], *, expected_years: int | None = None
 # Ein Betrag, dessen WAEHRUNGS-MEANING (annual/semi_annual/quarterly/monthly/
 # maintenance) nicht belegt ist, darf nie als wiederkehrende Verpflichtung in
 # die autoritativen Kostenfelder (und damit in Kalkulation/Forecast) einfliessen.
-# Beleg ist NUR deterministisch:
-#   (a) die visuelle Reconciliation ist fuer genau diese Seite "corroborated", ODER
-#   (b) das Zitat selbst traegt einen Perioden-Anker im Modell-Lexikon.
-# Fehlen beide, wird der Fakt abgelehnt (financial_classification_unverified)
-# und die Analyse bleibt review-pflichtig. Reine Praesenz auf einer Seite ist
-# KEIN Klassifikationsbeweis.
+# Beleg ist NUR deterministisch und bindet PERIODE + BETRAG an DIESELBE Evidenz:
+#   (a) das lokalisierte Fakt-Zitat traegt den Perioden-Anker UND genau den
+#       vorgeschlagenen Geldbetrag, ODER
+#   (b) eine korroborierte visuelle Zeile (genau diese Seite) matcht den Betrag
+#       UND bezeugt die Periodizitaet selbst (Label/Quote mit Anker), ODER
+#   (c) Legacy-/Hybrid-Pfad ohne Visual-First-Zeilen (bestehende Locator-Evidenz).
+# Ein Periodenwort irgendwo auf der Seite oder in einer unpassenden Zeile ist
+# KEIN Klassifikationsbeweis fuer den vorgeschlagenen Betrag.
 _PERIOD_FIELDS: dict[str, re.Pattern[str]] = {
     "costs.annual_cost": re.compile(
         r"j[äa]hrlich|jaehrlich|pro\s+jahr|jahres(?:preis|geb[\u00fc]hr|gebuehr)|(?<!semi[- ])\bannual\b", re.I),
@@ -1278,39 +1282,63 @@ _PERIOD_FIELDS: dict[str, re.Pattern[str]] = {
 
 
 def _financial_classification_verified(
-    fact, visual_first_rows, *, page_texts=None, resolved_page=None,
+    fact, visual_first_rows, *, resolved_page=None,
 ) -> bool:
-    """Nur mit ausreichendem, deterministischem Beleg laesst sich ein Betrag
-    als wiederkehrende Kostenkategorie akzeptieren."""
+    """Recurring-cost classification requires period AND amount to share evidence.
+
+    A period word anywhere on the page - or in a different quote / corroborated
+    row - is never accepted as proof for the proposed amount. The amount must
+    co-occur with the periodicity in the located fact quote or in a corroborated
+    visual row whose value matches the amount and whose label/quote carries the
+    anchor. The legacy/hybrid path without visual-first rows is unchanged.
+    """
     anchor = _PERIOD_FIELDS.get(fact.field)
     if anchor is None:
-        # Nicht-diskretionäre Felder (identity, dates, termination, SLA-Liste,
+        # Nicht-disretionäre Felder (identity, dates, termination, SLA-Liste,
         # scheduled_prices/variable_charges) unterliegen ihres eigenen Schemas.
         return True
     if not visual_first_rows:
         # Legacy-/Hybrid-Pfad ohne Visual-First: unveraendert (Money-OCR-Tests).
         return True
-    if fact.quote and anchor.search((fact.quote or "")[:400]):
+
+    expected = _money_amounts_from_value(getattr(fact, "value", None))
+    if len(expected) != 1:
+        # Null oder mehrere Betraege sind keine eindeutige Einzel-Referenz fuer
+        # eine Periodenkategorie; solche Fakten bleiben klassifikations-offen.
+        return False
+    amount = expected[0]
+
+    def exactly_proposed_amount(text: str) -> bool:
+        literals = [
+            parsed
+            for match in _MONEY_LITERAL_RE.finditer(text or "")
+            for parsed in [_money_amount(match.group(0))]
+            if parsed is not None
+        ]
+        return len(literals) == 1 and round(literals[0], 2) == round(amount, 2)
+
+    # (a) Das lokalisierte Zitat traegt den Anker UND genau den vorgeschlagenen
+    # Betrag. Ein Mehrfachbetrag-Klausel ("... 5.000 EUR; einmalig 12.000 EUR")
+    # bleibt ambig: ein Periodenwort darf nie auf eine andere Quantitaet im
+    # selben Zitat verweisen.
+    if fact.quote and anchor.search(fact.quote) and exactly_proposed_amount(fact.quote):
         return True
-    target_page = resolved_page if resolved_page is not None else fact.page
-    page_text = (page_texts or {}).get(target_page) or ""
-    if anchor.search(page_text[:4000]):
-        # Deterministischer Beleg direkt im Dokumenttext der Zielseite.
-        return True
-    page_rows = [r for r in visual_first_rows if r.page == target_page]
-    if not page_rows:
-        # Diese Seite wurde visuell nicht abgeglichen; der Locator+Quote-Beweis
-        # greift weiter hinunter. Keine zusaetzliche Gate-Belastung.
-        return True
-    for row in page_rows:
-        if row.status != "corroborated":
+
+    # (b) Korrobierte Zeile: beweist Label+Wert-Paar auf dieser Seite; der Wert
+    # muss dem vorgeschlagenen Betrag entsprechen UND die Zeile selbst die
+    # Periodizitaet bezeugen (Label oder eigenes Zitat).
+    page = resolved_page if resolved_page is not None else fact.page
+    for row in visual_first_rows:
+        if row.page != page or row.status != "corroborated":
+            continue
+        if _money_amount(row.value) != amount:
             continue
         for observation in row.observations:
-            if (observation.quote and anchor.search(observation.quote[:400])) or (
-                observation.label and anchor.search(observation.label[:400])
+            if anchor.search(observation.label or ""):
+                return True
+            if anchor.search(observation.quote or "") and exactly_proposed_amount(
+                observation.quote
             ):
-                # Korrobation beweist, dass der Literal wirklich auf dieser Seite
-                # steht - und der bezeugte Label/Quote traegt den Perioden-Anker.
                 return True
     return False
 
@@ -1766,8 +1794,6 @@ class DirectContractHarness:
             supported_count = 0
             normalizations: list[dict] = []
 
-            page_texts = {int(p.page_number): (p.text or "")
-                          for p in canonical.pages}
             for fact in proposals:
                 original_value = fact.value
                 fact.value = _normalize_fact_value(fact.field, fact.value)
@@ -1834,8 +1860,7 @@ class DirectContractHarness:
                 page = fact.page if block is None else block.page
 
                 if not _financial_classification_verified(
-                    fact, visual_first_rows,
-                    page_texts=page_texts, resolved_page=page,
+                    fact, visual_first_rows, resolved_page=page,
                 ):
                     # GATE 1: ein nicht periodenbelegter Betrag darf weder als
                     # annual_cost noch als eine andere wiederkehrende Kostenart in
