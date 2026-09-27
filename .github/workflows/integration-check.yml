@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - JAMAL
+      - step3/integration-20260926
   pull_request:
     branches:
       - main
