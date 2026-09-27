@@ -64,7 +64,7 @@ def norm(value: str) -> str:
 
 def amount(value: str) -> str | None:
     """Normalize unambiguous German EUR literals, not their contractual meaning."""
-    found = re.fullmatch(r"\s*(?:â‚¬\s*)?([0-9][0-9. ]*)(?:,([0-9]{2}))?\s*(?:â‚¬|EUR)?\s*", value, re.I)
+    found = re.fullmatch(r"\s*(?:\u20AC\s*)?([0-9][0-9. ]*)(?:,([0-9]{2}))?\s*(?:\u20AC|EUR)?\s*", value, re.I)
     if not found:
         return None
     whole = re.sub(r"[. ]", "", found.group(1))

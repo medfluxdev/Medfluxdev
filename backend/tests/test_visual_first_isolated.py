@@ -10,9 +10,16 @@ def item(source="vision", page=1, label="Vorauszahlung", value="12.000 EUR", reg
 
 
 def test_agree_does_not_mean_verified():
-    x = reconcile([item()], [item("ocr", value="12.000,00 â‚¬")])
+    x = reconcile([item()], [item("ocr", value="12.000,00 \u20ac")])
     assert len(x) == 1 and x[0].status == "corroborated"
     assert x[0].requires_review is True
+
+
+def test_euro_sign_variants_normalize_same_amount():
+    variants = ["12.000 \u20ac", "\u20ac 12.000", "12.000,00 EUR"]
+    for ocr_value in variants:
+        x = reconcile([item()], [item("ocr", value=ocr_value)])
+        assert len(x) == 1 and x[0].status == "corroborated", ocr_value
 
 
 def test_same_amount_different_label_never_binds():

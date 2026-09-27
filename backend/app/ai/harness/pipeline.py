@@ -190,8 +190,6 @@ def _find_quote_ellipsis_bridge(
     return match.group(0), match.start(), match.end()
 
 
-_SPACER_SEPARATORS = re.compile(r"[\s|/\\;:\[\](){}]+", re.IGNORECASE)
-
 # Ein Komma ist nur dann Trennzeichen, wenn es NICHT zwischen zwei Ziffern
 # steht (deutsche Geldzahlen "9.500,00" bleiben ein einziges Token; Listen-
 # Kommas "a, b" trennen weiterhin).
