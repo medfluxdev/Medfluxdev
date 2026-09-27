@@ -32,6 +32,7 @@ from app.contracts.calculation.models import ContractCalculationResult
 from app.database.models import (
     CalculationRun,
     Contract,
+    CostCenter,
     ContractEquipment,
     ContractExtraction,
     ContractWarning,
@@ -132,6 +133,7 @@ class SearchParams:
     archived: Optional[bool] = None
     supplier: Optional[str] = None
     contract_number: Optional[str] = None
+    cost_center_code: Optional[str] = None
     currency: Optional[str] = None
     annual_cost_min: Optional[Decimal] = None
     annual_cost_max: Optional[Decimal] = None
@@ -343,6 +345,20 @@ def _build_filters(params: SearchParams, org_id, q: str):
 
     if params.supplier:
         preds.append(func.lower(Contract.supplier) == params.supplier.strip().lower())
+
+    # An exact code lookup remains org-scoped and never expands user visibility.
+    # Workspace contract authorization is applied to the same final query.
+    if params.cost_center_code is not None:
+        code = params.cost_center_code.strip()
+        preds.append(
+            exists(
+                select(1).where(
+                    CostCenter.id == Contract.cost_center_id,
+                    CostCenter.organization_id == Contract.organization_id,
+                    CostCenter.code == code,
+                )
+            )
+        )
 
     # Finanz-Filter: NUR verlaessliche (akzeptierte) Jahreskosten, Waehrung respektiert.
     annual_reliable = and_(
