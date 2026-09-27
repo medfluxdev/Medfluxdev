@@ -26,7 +26,7 @@ from app.contracts.search import (
     build_contract_search,
 )
 from app.contracts.warnings import evaluate_contract_warnings
-from app.database.models import Contract, ContractEquipment, Organization
+from app.database.models import Contract, ContractEquipment, CostCenter, Hospital, Organization
 from app.database.services import (
     accept_calculation,
     accept_extraction,
@@ -305,6 +305,33 @@ def test_sql_injection_like_input(db):
 # ---------------------------------------------------------------------------
 # Strukturierte Filter
 # ---------------------------------------------------------------------------
+
+def test_cost_center_code_filter_is_exact_and_org_scoped(db):
+    org = _org(db)
+    other_org = _org(db)
+    hospital = Hospital(organization_id=org.id, name="Klinik A", code=f"HA-{uuid.uuid4().hex[:8]}")
+    other_hospital = Hospital(organization_id=other_org.id, name="Klinik B", code=f"HB-{uuid.uuid4().hex[:8]}")
+    db.add_all([hospital, other_hospital])
+    db.flush()
+    center = CostCenter(organization_id=org.id, hospital_id=hospital.id, code="471120", name="CT")
+    foreign_center = CostCenter(organization_id=other_org.id, hospital_id=other_hospital.id, code="471120", name="Other CT")
+    db.add_all([center, foreign_center])
+    db.flush()
+    match, _, _ = _mk_contract(db, org, contract_number="CN-CT")
+    _mk_contract(db, org, contract_number="CN-OTHER")
+    foreign, _, _ = _mk_contract(db, other_org, contract_number="CN-FOREIGN")
+    match.cost_center_id = center.id
+    foreign.cost_center_id = foreign_center.id
+    db.flush()
+    assert _numbers(_search(db, org, cost_center_code="471120")) == ["CN-CT"]
+    assert _search(db, org, cost_center_code="47112")["total_count"] == 0
+    assert _search(db, org, cost_center_code="' OR true --")["total_count"] == 0
+    restricted = build_contract_search(
+        db, SearchParams(organization_id=org.id, cost_center_code="471120"),
+        organization_id=org.id, request_as_of=AS_OF, workspace_contract_ids=[],
+    )
+    assert restricted["total_count"] == 0
+
 
 def test_status_filter(db):
     org = _org(db)
