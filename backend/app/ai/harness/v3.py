@@ -1900,6 +1900,17 @@ class DirectContractHarness:
                     box = _bbox(block)
                     if box is not None:
                         source.bounding_box = box
+                if visual_only and not any(
+                    i.startswith("Evidence requires manual review") for i in issues
+                ):
+                    # Fail-closed provenance: a fact whose only located evidence
+                    # is an unverified image reading (or an OCR-tolerant literal
+                    # match) must force the WHOLE analysis into review. The
+                    # per-row flag alone is not enough - status, review reasons
+                    # and requires_review aggregate from `issues`.
+                    issues.append(
+                        "Evidence requires manual review: %s" % fact.field
+                    )
 
                 if fact.field == "equipment":
                     contract.equipment = value or []
