@@ -4606,3 +4606,75 @@ ist damit aufgeloest.
 - Abschlussbericht an den Projekteigentuemer (Gates 1-2 verifiziert, Test-Matrix, Review-
   DoKument, Go/No-Go-Vorlage). Merge in `JAMAL` nur nach expliziter Freigabe; keine
   Bereitstellung.
+
+### STEP 3 - Issue #11 / PR #12: Financial-Provenance-Fix + Cleanup, 2026-09-27
+
+**Status:** Abgeschlossen. PR #12 (`review/financial-evidence-cleanup-20260927`, Commits
+`c4453a4`+`afc97ad`) kritisch geprueft und durch eine korrigierte Implementierung DIREKT auf
+`step3/integration-20260926` ersetzt (kein Blind-Merge). Alle Issue-#11-Punkte 1-6 umgesetzt;
+Tests gruen. KEIN Merge in JAMAL, KEINE Bereitstellung (wie freigegeben).
+
+**PR-#12-Review (Befund):** Absicht korrekt (Finanz-Klassifikation an den vorgeschlagenen
+Betrag binden, nicht an Seitenwoerter), aber Mängel: (1) eigene Money-Regex duplizierte die
+authoritative `_MONEY_LITERAL_RE`; (2) ungenutzter `page_texts`-Param blieb; (3) kein
+numerischer Wert-Handling. Daher verbessert umgesetzt statt uebernommen.
+
+**Implementiertes (Commits auf `step3/integration-20260926`):**
+- `e20126e` fix(harness): `_financial_classification_verified(fact, visual_first_rows, *,
+  resolved_page=None)` — `page_texts`-Pfad ENTFERNT (Seitenwoerter sind keine Evidenz);
+  `_money_amounts_from_value` versteht jetzt top-level int/float (nicht bool); Zitat-Pfad
+  verlangt Zeitraum-Anker + EXAKT EIN Geld-Literal gleich dem Betrag; korroborierte-Zeilen-
+  Pfad verlangt Seiten-Match + Wert-Match + Anker in Label/Quote; mehrere/keine Betraege in
+  `fact.value` → False; leere `visual_first_rows` → True (Legacy). Kommentar-Neuordnung
+  `_PERIOD_FIELDS`: (a) Anker+Betrag, (b) korroborierte Zeile Betrag+Anker, (c) Legacy ohne
+  Visual-First; Seitenwort ist NIE Evidenz.
+- `e8ef82a` fix(harness): Provenance fail-closed — nur-sichtbare Vision-Echo-Fakten erzwingen
+  jetzt `requires_review=True` + Issue "Evidence requires manual review: <field>" + PARTIAL
+  (vorher: zeilenseitig requires_review, analyse-seitig aggregierte nur issues → Echo konnte
+  als "vertrauenswuerdig" gespeichert werden).
+- `36e34d1` fix(launcher): PostgreSQL-Wire-Protocol-Identity-Probe (Startup-Message 3.0 +
+  Antwort-Byte) statt Blind-TCP-Port; bare TCP-Listener wird NICHT mehr als PostgreSQL-ready
+  gemeldet; Real-Check gegen WSL-PG 55432 ok.
+- `e34e34c` chore(harness): tote `_SPACER_SEPARATORS` entfernt; Mojibake-Eurozeichen
+  (`â‚¬` statt `€`) in `visual_first.amount()` korrigiert (echte EUR-Literale banden vorher
+  nicht) inkl. Regression.
+- `936a17a` ci: `audit-finance-provenance.yml` laeuft jetzt auch auf
+  `step3/integration-20260926` (plus Finance+Visual-Testdateien); `integration-check.yml`
+  fuehrt die Integration-Branch-Commits ebenfalls.
+- `de1e011`/`5e227e3` docs(architect): Evidence-basierte Haken in `docs/ARCHITECT_TASKS.md`.
+- Push: `9df85ee..5e227e3`.
+
+**Dateien (geaendert in dieser Runde):** `backend/app/ai/harness/v3.py`,
+`backend/tests/test_financial_classification_gate.py` (12 Tests), neu
+`backend/tests/test_visual_evidence_fail_closed.py`, `scripts/start_local_postgres.ps1`,
+`scripts/test_start_local_postgres.ps1`, `backend/app/ai/harness/visual_first.py`,
+`backend/app/ai/harness/pipeline.py`, `docs/LOCAL_LAUNCHER_AR.md`, `docs/ARCHITECT_TASKS.md`,
+`.github/workflows/audit-finance-provenance.yml`, `.github/workflows/integration-check.yml`,
+`docs/PROJECT_PROGRESS.md`.
+
+**Tests/Ergebnis:**
+- Fokussiert (nur Finanz/Harness-V3/Visual-First): 121 passed (6 Dateien: gate + money_ocr +
+  harvester/bridge/isolated/fail-closed + finance_provenance + v2 + services + evidence_dedupe
+  + contract_identity in zwei Batch-Laeufen, 87 + 34).
+- Volle Backend-Regression (DB = WSL-PG 55432, auth-aus): **999 passed / 1 failed** — der
+  einzige Fehlschlag ist das dokumentierte Environment-Artefakt
+  `test_security_runtime_config.py::test_valid_production_security_posture_passes` (Env-Leak);
+  unter Produktions-Env-Bild 11/11 gruen. 999 = 997-Baseline + 1 Fail-Closed-Test + 1
+  Euro-Variante, keine Regression.
+- Auth-ON / Tenant-Isolation (AUTH_ENABLED=true, echtes Secret, kein insecure-dev): Auth-E2E
+  + Route-Boundary + Security + Review-Provenance 20/20; Security-Config/Posture 26/26.
+- Launcher-Identity: `test_start_local_postgres.ps1` 4/4 inkl. bare-Listener-Reflexion +
+  Real-PG-Check 55432 exit 0.
+
+**Bekannte Probleme / offen:**
+- 2 Archive-Route-Probes (`test_archive_route_unknown_org_404`/`..._unarchive...`) erwarten
+  unter auth-ON 404, erhalten aber 401 (unauthentifizierter Probe → auth fail-closed zuerst);
+  Testdesign fuer auth-aus-Env, kein Code-Bug, separat gemeldet.
+- `v3_perception.py` (origin/JAMAL-Bestand) hat NULL Importeure → toter Code, aber NICHT Teil
+  des Changed-File-Inventars; Entfernung nur mit Eigentuemer-Freigabe dokumentiert.
+- `test_security_runtime_config.py` Env-Leak (wie gehabt, dokumentiert); `test_llama_archive*`
+  Environment-Gap; Frankfurt `equipment`/Services/SLA weiterhin fail-closed.
+
+**Naechster Schritt:**
+- Abschlussbericht (dieser Runde) an den Eigentuemer; Push erfolgt, PR/Branch bereit.
+- Merge in `JAMAL` nur nach expliziter Freigabe; keine Bereitstellung.
