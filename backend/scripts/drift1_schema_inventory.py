@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import inspect
+from sqlalchemy import Computed, inspect
 
 
 def build_schema_inventory(engine, metadata) -> dict:
@@ -53,8 +53,16 @@ def build_schema_inventory(engine, metadata) -> dict:
                 report["type_differences"][f"{table_name}.{name}"] = {
                     "orm": orm_type, "migration": db_type,
                 }
-            orm_default = None if model.server_default is None else str(model.server_default.arg)
-            db_default = migrated.get("default")
+            sd = model.server_default
+            if isinstance(sd, Computed):
+                # Generated columns are not ordinary server defaults. Keep
+                # their expressions visible without assuming DefaultClause.arg.
+                orm_default = {"kind": "generated", "expression": str(sd.sqltext), "persisted": sd.persisted}
+            elif sd is None:
+                orm_default = None
+            else:
+                orm_default = str(sd.arg)
+            db_default = migrated.get("computed") if isinstance(sd, Computed) else migrated.get("default")
             # Normalization is intentionally minimal; human review required.
             if (orm_default is None) != (db_default is None):
                 report["default_differences"][f"{table_name}.{name}"] = {
