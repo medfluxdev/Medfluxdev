@@ -10,8 +10,10 @@ regular MedFlux database. Only the explicitly supplied disposable DB is changed.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
+from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
@@ -91,6 +93,19 @@ def main() -> int:
             indexes = {index["name"] for index in inspector.get_indexes("contract_department", schema="public")}
             if "uq_contract_department_one_responsible" not in indexes:
                 raise RuntimeError("A2 partial unique index missing")
+            inventory_path = Path(__file__).with_name("drift1_schema_inventory.py")
+            inventory_spec = importlib.util.spec_from_file_location(
+                "medflux_drift1_schema_inventory", inventory_path
+            )
+            if inventory_spec is None or inventory_spec.loader is None:
+                raise RuntimeError("Cannot load DRIFT-1 schema inventory")
+            inventory_module = importlib.util.module_from_spec(inventory_spec)
+            inventory_spec.loader.exec_module(inventory_module)
+            inventory = inventory_module.build_schema_inventory(verify_engine, Base.metadata)
+            if inventory["missing_columns"]:
+                raise RuntimeError(f"Migration missing ORM columns: {inventory['missing_columns']}")
+            print("DRIFT1 SCHEMA INVENTORY (review differences; not automatic defects):")
+            print(inventory_module.format_inventory(inventory))
             print(f"DRIFT1 MIGRATED FIXTURE PASS: db={make_url(raw).database}, "
                   f"revision={version}, tables={len(actual)}, role_column=present, "
                   "responsible_index=present")
