@@ -29,7 +29,7 @@ def test_historic_link_role_is_nullable_and_constraint_exists():
     column = ContractDepartment.__table__.c.relation_role
     assert column.nullable is True
     assert any(
-        isinstance(item, CheckConstraint) and item.name == "ck_contract_department_relation_role"
+        isinstance(item, CheckConstraint) and item.name == "ck_contract_department_ck_contract_department_relation_role"
         for item in ContractDepartment.__table__.constraints
     )
     assert any(
