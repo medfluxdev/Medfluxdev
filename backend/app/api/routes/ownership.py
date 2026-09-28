@@ -307,8 +307,9 @@ def put_contract_department_roles(contract_id: UUID, payload: ContractDepartment
              object_type="contract", object_id=contract.id,
              context_data={"responsible_department_id": str(payload.responsible_department_id),
                            "beneficiary_department_ids": [str(x) for x in beneficiaries]})
+        response = get_contract_department_roles_payload(payload, contract.id, links)
         session.commit()
-        return get_contract_department_roles_payload(payload, contract.id, links)
+        return response
     finally:
         session.close()
 
