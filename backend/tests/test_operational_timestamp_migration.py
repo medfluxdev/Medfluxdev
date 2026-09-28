@@ -1,5 +1,6 @@
 """Guard the operational timestamp migration against accidental regression."""
-from importlib import import_module
+import importlib.util
+from pathlib import Path
 
 from app.database.models.lifecycle import EquipmentLifecycleRecord
 from app.database.models.work_item_collaboration import WorkItemCollaboration, WorkItemComment
@@ -12,7 +13,18 @@ def test_operational_timestamp_models_require_expected_columns():
 
 
 def test_operational_timestamp_migration_is_additive_and_linked():
-    migration = import_module("alembic.versions.20260928_b3c5d7e90928_operational_timestamps")
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260928_b3c5d7e90928_operational_timestamps.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "medflux_operational_timestamps_migration_test", migration_path
+    )
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    assert migration.revision == "b3c5d7e90928"
     assert migration.down_revision == "a2b4c6d80928"
-    # Actual DB upgrade/rollback and existing-row checks are mandatory
-    # external integration gates, not substituted by this structural test.
+    # DB upgrade/rollback and existing-row checks remain separate integration gates.
