@@ -39,10 +39,11 @@ logger = logging.getLogger("medflux.tests")
 TEST_SCHEMA = "medflux_test_" + uuid.uuid4().hex
 
 
-def _schema_url(base_url: str) -> str:
-    """Haengt die search_path-Option an die Basis-URL (Schema-Isolation)."""
+def _schema_url(base_url: str, *, include_public: bool = True) -> str:
+    """Test sessions need public extensions; table creation must see only test."""
     sep = "&" if "?" in base_url else "?"
-    return f"{base_url}{sep}options={quote('-csearch_path=' + TEST_SCHEMA + ',public')}"
+    search_path = TEST_SCHEMA + (",public" if include_public else "")
+    return f"{base_url}{sep}options={quote('-csearch_path=' + search_path)}"
 
 
 def pytest_sessionstart(session) -> None:
@@ -72,10 +73,26 @@ def pytest_sessionstart(session) -> None:
 
         # Alle Tabellen im Test-Schema per ORM-Metadata anlegen (identisch zum
         # Migrationsstand der Produktion, aber vollstaendig getrennt).
-        test_engine = create_engine(config.settings.database_url, pool_pre_ping=True)
-        Base.metadata.create_all(test_engine)
-        test_engine.dispose()
-        logger.info("Test-Isolation aktiv: Schema '%s' frisch fuer pytest.", TEST_SCHEMA)
+        # create_all(checkfirst=True) sees every schema on search_path.
+        # DDL must NOT see public, otherwise existing public tables suppress
+        # creation of isolated test tables. Runtime sessions retain public for
+        # pg_trgm extension functions/operators.
+        test_engine = create_engine(_schema_url(base_url, include_public=False), pool_pre_ping=True)
+        try:
+            Base.metadata.create_all(test_engine)
+            with test_engine.connect() as conn:
+                actual_tables = set(conn.execute(text(
+                    "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = :schema"
+                ), {"schema": TEST_SCHEMA}).scalars())
+                expected_tables = set(Base.metadata.tables)
+                if not expected_tables.issubset(actual_tables):
+                    raise RuntimeError(
+                        f"Test schema missing {sorted(expected_tables - actual_tables)}; "
+                        "refusing to fall through to public"
+                    )
+        finally:
+            test_engine.dispose()
+        logger.info("Test-Isolation aktiv: Schema '%s' freshly populated.", TEST_SCHEMA)
     except Exception as exc:
         raise pytest.UsageError("Test isolation unavailable; refusing database tests") from exc
 
