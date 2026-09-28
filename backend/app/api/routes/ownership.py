@@ -284,9 +284,14 @@ def put_contract_department_roles(contract_id: UUID, payload: ContractDepartment
         )).all()
         # Keep historic unclassified associations, except those explicitly selected.
         by_department = {link.department_id: link for link in links}
+        # Explicitly deselected classified links are removed. Historical NULL
+        # links are never guessed or deleted by this role-specific endpoint.
         for link in links:
             if link.relation_role is not None:
-                link.relation_role = None
+                if link.department_id not in requested:
+                    session.delete(link)
+                else:
+                    link.relation_role = None
         session.flush()  # Release partial-unique responsible slot before reassigning.
         for department_id in requested:
             link = by_department.get(department_id)
