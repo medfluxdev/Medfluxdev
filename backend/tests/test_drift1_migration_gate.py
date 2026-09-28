@@ -1,0 +1,22 @@
+"""DRIFT-1: target validation is independent of a live PostgreSQL server."""
+import pytest
+
+from scripts.verify_migrated_fixture import validate_target
+
+
+@pytest.mark.parametrize("url", [
+    "",
+    "postgresql+psycopg://medflux@127.0.0.1:5432/medflux",
+    "postgresql+psycopg://medflux@127.0.0.1:55432/medflux",
+    "postgresql+psycopg://medflux@db.example.com:55432/medflux_drift1_safe",
+    "sqlite:///medflux_drift1_safe",
+    "postgresql+psycopg://medflux@127.0.0.1:55432/postgres",
+    "postgresql+psycopg://medflux@127.0.0.1:55432/medflux_drift1_safe?options=-csearch_path=public",
+])
+def test_disposable_target_rejects_unsafe_url(url):
+    with pytest.raises(RuntimeError):
+        validate_target(url)
+
+
+def test_disposable_target_accepts_explicit_isolated_url():
+    validate_target("postgresql+psycopg://medflux@127.0.0.1:55432/medflux_drift1_fixture")
