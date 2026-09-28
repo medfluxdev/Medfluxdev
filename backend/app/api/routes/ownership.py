@@ -6,7 +6,7 @@ from sqlalchemy import select, text
 
 from app.auth.dependencies import current_actor
 from app.core.scope_context import current_scope_context
-from app.database.models import Account, AccountMembership, Contract, Equipment
+from app.database.models import Account, AccountMembership, Contract, ContractDepartment, Department, Equipment
 from app.database.models.activity_log import ActivityLog
 from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
@@ -171,6 +171,14 @@ def update_contract_ownership(contract_id: UUID, payload: ContractOwnershipUpdat
         if contract is None or contract.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
         _ensure_contract_visible(session, actor, contract)
+        # The legacy endpoint replaces every link. Once roles are classified,
+        # fail closed instead of silently destroying explicit responsibility.
+        if session.scalar(select(ContractDepartment.id).where(
+            ContractDepartment.contract_id == contract.id,
+            ContractDepartment.organization_id == actor.organization_id,
+            ContractDepartment.relation_role.is_not(None),
+        ).limit(1)) is not None:
+            raise HTTPException(status_code=409, detail="Explizite Abteilungsrollen vorhanden; Rollen zuerst gesondert verwalten.")
         _validate_responsible(session, actor.organization_id, payload.responsible_account_id)
         before = {
             "hospital_id": str(contract.hospital_id) if contract.hospital_id else None,
@@ -211,6 +219,103 @@ def update_contract_ownership(contract_id: UUID, payload: ContractOwnershipUpdat
     finally:
         session.close()
 
+
+
+
+class ContractDepartmentRolesUpdate(BaseModel):
+    """Explicit role assignment. Historical unclassified links remain until selected."""
+    responsible_department_id: UUID
+    beneficiary_department_ids: list[UUID] = Field(default_factory=list)
+
+
+@router.get("/contracts/{contract_id}/department-roles")
+def get_contract_department_roles(contract_id: UUID, request: Request, organization_slug: str):
+    actor = _actor(request, organization_slug)
+    session = create_session()
+    try:
+        contract = session.get(Contract, contract_id)
+        if contract is None or contract.organization_id != actor.organization_id:
+            raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
+        _ensure_contract_visible(session, actor, contract)
+        links = session.scalars(select(ContractDepartment).where(
+            ContractDepartment.organization_id == actor.organization_id,
+            ContractDepartment.contract_id == contract.id,
+        )).all()
+        return {
+            "contract_id": str(contract.id),
+            "responsible_department_id": next((str(x.department_id) for x in links if x.relation_role == "responsible"), None),
+            "beneficiary_department_ids": sorted(str(x.department_id) for x in links if x.relation_role == "beneficiary"),
+            "unclassified_department_ids": sorted(str(x.department_id) for x in links if x.relation_role is None),
+        }
+    finally:
+        session.close()
+
+
+@router.put("/contracts/{contract_id}/department-roles")
+def put_contract_department_roles(contract_id: UUID, payload: ContractDepartmentRolesUpdate, request: Request, organization_slug: str):
+    actor = _actor(request, organization_slug)
+    session = create_session()
+    try:
+        # Lock the contract row so competing role edits serialize. A role change
+        # cannot silently change the contract's hospital or historic links.
+        contract = session.scalar(select(Contract).where(
+            Contract.id == contract_id, Contract.organization_id == actor.organization_id,
+        ).with_for_update())
+        if contract is None:
+            raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
+        _ensure_contract_visible(session, actor, contract)
+        if contract.hospital_id is None:
+            raise HTTPException(status_code=422, detail="Vertrag benötigt zuerst ein Krankenhaus.")
+        beneficiaries = payload.beneficiary_department_ids
+        requested = [payload.responsible_department_id, *beneficiaries]
+        if len(set(requested)) != len(requested):
+            raise HTTPException(status_code=422, detail="Abteilungen dürfen keine doppelten Rollen erhalten.")
+        departments = session.scalars(select(Department).where(
+            Department.id.in_(requested),
+            Department.organization_id == actor.organization_id,
+            Department.hospital_id == contract.hospital_id,
+            Department.is_active.is_(True),
+        )).all()
+        if len(departments) != len(requested):
+            raise HTTPException(status_code=422, detail="Alle Abteilungen müssen aktiv und im selben Krankenhaus sein.")
+        links = session.scalars(select(ContractDepartment).where(
+            ContractDepartment.contract_id == contract.id,
+            ContractDepartment.organization_id == actor.organization_id,
+        )).all()
+        # Keep historic unclassified associations, except those explicitly selected.
+        by_department = {link.department_id: link for link in links}
+        for link in links:
+            if link.relation_role is not None:
+                link.relation_role = None
+        session.flush()  # Release partial-unique responsible slot before reassigning.
+        for department_id in requested:
+            link = by_department.get(department_id)
+            if link is None:
+                link = ContractDepartment(
+                    organization_id=actor.organization_id,
+                    contract_id=contract.id,
+                    department_id=department_id,
+                )
+                session.add(link)
+            link.relation_role = "responsible" if department_id == payload.responsible_department_id else "beneficiary"
+        _log(session, actor, event_name="contract.department_roles_updated",
+             object_type="contract", object_id=contract.id,
+             context_data={"responsible_department_id": str(payload.responsible_department_id),
+                           "beneficiary_department_ids": [str(x) for x in beneficiaries]})
+        session.commit()
+        return get_contract_department_roles_payload(payload, contract.id, links)
+    finally:
+        session.close()
+
+
+def get_contract_department_roles_payload(payload: ContractDepartmentRolesUpdate, contract_id: UUID, old_links: list[ContractDepartment]):
+    chosen = {payload.responsible_department_id, *payload.beneficiary_department_ids}
+    return {
+        "contract_id": str(contract_id),
+        "responsible_department_id": str(payload.responsible_department_id),
+        "beneficiary_department_ids": sorted(str(x) for x in payload.beneficiary_department_ids),
+        "unclassified_department_ids": sorted(str(x.department_id) for x in old_links if x.relation_role is None and x.department_id not in chosen),
+    }
 
 @router.patch("/equipment/{equipment_id}")
 def update_equipment_ownership(equipment_id: UUID, payload: EquipmentOwnershipUpdate, request: Request, organization_slug: str):
