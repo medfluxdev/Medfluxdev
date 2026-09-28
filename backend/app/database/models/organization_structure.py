@@ -96,7 +96,11 @@ class ContractDepartment(Base):
     department_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("department.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # NULL is a historic, unclassified association; do not guess its role.
+    relation_role: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("contract_id", "department_id", name="uq_contract_department_pair"),
+        CheckConstraint("relation_role IS NULL OR relation_role IN ('responsible', 'beneficiary')", name="ck_contract_department_relation_role"),
+        Index("uq_contract_department_one_responsible", "contract_id", unique=True, postgresql_where=(relation_role == "responsible")),
     )
