@@ -53,6 +53,15 @@ def assign_contract_ownership(
     department_ids: list[UUID],
     cost_center_id: UUID | None,
 ) -> Contract:
+    # Serialize against the role-specific PUT endpoint, including non-HTTP callers.
+    # A pre-check in the API alone would race with a concurrent role assignment.
+    session.refresh(contract, with_for_update=True)
+    if session.scalar(select(ContractDepartment.id).where(
+        ContractDepartment.organization_id == contract.organization_id,
+        ContractDepartment.contract_id == contract.id,
+        ContractDepartment.relation_role.is_not(None),
+    ).limit(1)) is not None:
+        raise OwnershipError("Explizite Abteilungsrollen vorhanden; alte Zuordnung darf diese nicht überschreiben.")
     hospital = _hospital(session, contract.organization_id, hospital_id)
     departments = _departments(session, contract.organization_id, hospital_id, department_ids)
     cost_center = _cost_center(session, contract.organization_id, hospital_id, cost_center_id)
