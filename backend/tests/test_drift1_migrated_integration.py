@@ -35,6 +35,7 @@ def test_orm_selects_on_real_migrations():
             assert (actual_name, port) == (make_url(raw).database, 55432)
             assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() == "b3c5d7e90928"
             assert set(Base.metadata.tables) <= set(inspect(conn).get_table_names(schema="public"))
+            assert len(Base.registry.mappers) == 44, "Mapped entity registration changed; review expected count"
             for mapper in sorted(Base.registry.mappers, key=lambda m: m.local_table.name):
                 conn.execute(select(mapper.class_).limit(0))
     finally:
