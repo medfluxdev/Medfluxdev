@@ -22,6 +22,8 @@ def test_real_legacy_null_and_recorded_equipment_rows_rollback():
             assert conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar_one() == "b3c5d7e90928"
             baseline = conn.execute(text("SELECT count(*) FROM public.contract_equipment")).scalar_one()
 
+            # End the implicit read transaction before starting the write scope.
+            conn.rollback()
             # One transaction for the complete FK chain, updates and assertions.
             # NEVER commit: close/rollback even if an assertion fails.
             tx = conn.begin()
