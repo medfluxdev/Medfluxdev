@@ -8,7 +8,7 @@ import os
 import pytest
 from sqlalchemy import create_engine, inspect, text
 
-from test_drift1_migrated_integration import approved_url
+from tests.test_drift1_migrated_integration import approved_url
 
 FIELDS = ("identification_quality", "relationship_quality", "requires_review")
 
