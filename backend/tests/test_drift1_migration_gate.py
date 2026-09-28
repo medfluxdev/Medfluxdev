@@ -1,7 +1,15 @@
 """DRIFT-1: target validation is independent of a live PostgreSQL server."""
+import importlib.util
+from pathlib import Path
+
 import pytest
 
-from scripts.verify_migrated_fixture import validate_target
+_GATE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "verify_migrated_fixture.py"
+_GATE_SPEC = importlib.util.spec_from_file_location("medflux_drift1_gate_test", _GATE_PATH)
+assert _GATE_SPEC is not None and _GATE_SPEC.loader is not None
+_GATE_MODULE = importlib.util.module_from_spec(_GATE_SPEC)
+_GATE_SPEC.loader.exec_module(_GATE_MODULE)
+validate_target = _GATE_MODULE.validate_target
 
 
 @pytest.mark.parametrize("url", [
