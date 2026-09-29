@@ -659,7 +659,7 @@ def contract_deletion_queue(request: Request, organization_slug: str) -> dict:
         return {
             "items": [
                 {"contract_id": str(row.id), "contract_number": row.contract_number,
-                 "contract_title": row.title, "lifecycle_state": row.lifecycle_state}
+                 "lifecycle_state": row.lifecycle_state}
                 for row in rows[:100]
             ],
             "has_more": len(rows) > 100,
