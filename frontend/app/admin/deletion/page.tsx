@@ -14,6 +14,7 @@ import {
 export default function DeletionQueuePage() {
   const { organizationSlug, role, loading } = useAuth();
   const [allowed, setAllowed] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [queue, setQueue] = useState<ContractDeletionQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -24,12 +25,16 @@ export default function DeletionQueuePage() {
 
   const refresh = useCallback(async () => {
     const current = ++generation.current;
+    setChecking(true);
     setAllowed(false);
     setQueue(null);
     setOffset(0);
     setConfirmId(null);
     setError(null);
-    if (!organizationSlug || role !== "admin") return;
+    if (!organizationSlug || role !== "admin") {
+      setChecking(false);
+      return;
+    }
     try {
       const capability = await getContractDeletionCapabilities(organizationSlug);
       if (current !== generation.current || !capability.can_delete) return;
@@ -39,6 +44,8 @@ export default function DeletionQueuePage() {
       setAllowed(true);
     } catch {
       if (current === generation.current) setError("Die Löschverwaltung ist nicht verfügbar oder nicht freigegeben.");
+    } finally {
+      if (current === generation.current) setChecking(false);
     }
   }, [organizationSlug, role]);
 
@@ -65,7 +72,7 @@ export default function DeletionQueuePage() {
   }
 
   async function act(id: string, action: "cancel" | "confirm" | "restore") {
-    if (!organizationSlug || busy) return;
+    if (!organizationSlug || busy || !allowed || checking || pageLoading) return;
     setBusy(id);
     setError(null);
     try {
@@ -88,12 +95,13 @@ export default function DeletionQueuePage() {
       <p>Nur ausdrücklich freigegebene Administratoren. Keine endgültige Datenvernichtung.</p>
     </header>
     {error && <p role="alert">{error}</p>}
-    {!allowed && !error && <p>Keine Löschberechtigung oder Daten werden geladen.</p>}
+    {checking && <p role="status">Berechtigungen werden geprüft…</p>}
+    {!checking && !allowed && !error && <p>Die Löschverwaltung ist für diese Organisation nicht freigegeben.</p>}
     {allowed && queue && <>
       {queue.items.length === 0 && <p>Keine vorgemerkten oder gelöschten Verträge.</p>}
       {queue.items.length > 0 && <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>}
       <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-        <button type="button" disabled={pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
+        <button type="button" disabled={checking || pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
         <button type="button" disabled={pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
       </div>
       {queue.items.map((item) => <section className="panel" key={item.contract_id} style={{ padding: "1rem", marginBottom: "1rem" }}>
