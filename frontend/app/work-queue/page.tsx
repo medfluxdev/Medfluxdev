@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
@@ -62,6 +62,8 @@ function deadlineKind(item: WorkItemSummary): string | null {
 
 export default function WorkQueuePage() {
   const { organizationSlug } = useAuth();
+  const requestSeq = useRef(0);
+  const contextSeq = useRef(0);
   const [items, setItems] = useState<WorkItemSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -72,9 +74,16 @@ export default function WorkQueuePage() {
   const [itemType, setItemType] = useState("");
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(null);
   const toast = useToast();
-  const effectiveOrgSlug = organizationSlug ?? "krankenhaus";
+  const effectiveOrgSlug = organizationSlug;
 
   const load = useCallback(() => {
+    const seq = ++requestSeq.current;
+    if (!effectiveOrgSlug) {
+      setItems([]);
+      setLoading(false);
+      setError(false);
+      return;
+    }
     setLoading(true);
     setError(false);
     setActionError(null);
@@ -84,20 +93,34 @@ export default function WorkQueuePage() {
       severity: severity ? [severity] : [],
       item_type: itemType ? [itemType] : [],
     })
-      .then((res) => setItems(res.items ?? []))
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      .then((res) => { if (seq === requestSeq.current) setItems(res.items ?? []); })
+      .catch(() => { if (seq === requestSeq.current) setError(true); })
+      .finally(() => { if (seq === requestSeq.current) setLoading(false); });
   }, [effectiveOrgSlug, itemType, severity, status]);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    void load();
+    return () => { requestSeq.current += 1; };
+  }, [load]);
+
+  useEffect(() => {
+    contextSeq.current += 1;
+    setSelectedWorkItemId(null);
+    setItems([]);
+    setBusyId(null);
+    setActionError(null);
+  }, [organizationSlug]);
 
   const activeFilterCount = useMemo(() => [status, severity, itemType].filter(Boolean).length, [status, severity, itemType]);
 
   const transition = useCallback(async (item: WorkItemSummary, nextStatus: "acknowledged" | "resolved") => {
+    if (!effectiveOrgSlug || busyId) return;
+    const context = contextSeq.current;
     setBusyId(item.id);
     setActionError(null);
     try {
       await setWorkItemStatus(item.id, effectiveOrgSlug, nextStatus);
+      if (context !== contextSeq.current) return;
       if (nextStatus === "resolved") {
         setItems((prev) => prev.filter((x) => x.id !== item.id));
         if (selectedWorkItemId === item.id) setSelectedWorkItemId(null);
@@ -106,13 +129,14 @@ export default function WorkQueuePage() {
       }
       toast(nextStatus === "resolved" ? "Aufgabe als erledigt markiert." : "Aufgabe in Bearbeitung übernommen.", "success");
     } catch (err) {
+      if (context !== contextSeq.current) return;
       const reason = err instanceof Error && err.message ? err.message : "Status konnte nicht aktualisiert werden.";
       setActionError(reason);
       toast(reason, "error");
     } finally {
-      setBusyId(null);
+      if (context === contextSeq.current) setBusyId(null);
     }
-  }, [effectiveOrgSlug, selectedWorkItemId, toast]);
+  }, [effectiveOrgSlug, busyId, selectedWorkItemId, toast]);
 
   function resetFilters() {
     setStatus("");
