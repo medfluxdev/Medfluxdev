@@ -58,9 +58,24 @@ def _search_region(page: "fitz.Page", snippet: str) -> tuple[Optional["fitz.Rect
         # adjacent lines. Verify that there is exactly one textual occurrence
         # before treating the union as a precise location.
         text = page.get_text("text")
-        occurrences = text.casefold().count(snippet.casefold())
-        if len(rects) == 1 and occurrences == 1:
-            return _union_rects(rects), "exact"
+        # PDF extraction may insert line breaks inside a single phrase.
+        # Count both contiguous and whitespace-normalized occurrences, but
+        # never mark a phrase exact when its text is absent or ambiguous.
+        normalized_text = " ".join(text.casefold().split())
+        normalized_snippet = " ".join(snippet.casefold().split())
+        occurrences = normalized_text.count(normalized_snippet) if normalized_snippet else 0
+        if occurrences == 1:
+            # Multiple rectangles can be fragments of one line-wrapped phrase.
+            # Only join nearby fragments; otherwise the union is a coarse hint.
+            if len(rects) == 1:
+                return _union_rects(rects), "exact"
+            ordered = sorted(rects, key=lambda box: (box.y0, box.x0))
+            adjacent = all(
+                (right.y0 - left.y1 <= max(left.height, right.height) * 1.5)
+                for left, right in zip(ordered, ordered[1:])
+            )
+            if adjacent:
+                return _union_rects(rects), "exact"
         return _union_rects(rects), "coarse"
     token = _robust_token(snippet)
     if token and len(token) >= 3:
