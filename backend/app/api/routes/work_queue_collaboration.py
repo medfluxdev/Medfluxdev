@@ -97,6 +97,8 @@ def update_collaboration(request: Request, work_item_id: UUID, organization_slug
     try:
         org, work, scope = _context(session, organization_slug, work_item_id)
         actor = getattr(request.state, "actor", None)
+        if actor is None or actor.organization_id != org.id:
+            raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation.")
         if body.assignee_account_id is not None:
             membership = session.scalars(
                 select(AccountMembership).where(
@@ -110,7 +112,7 @@ def update_collaboration(request: Request, work_item_id: UUID, organization_slug
                 raise HTTPException(status_code=422, detail="Zugewiesener Benutzer gehört nicht zur Organisation.")
 
         row = session.scalars(
-            select(WorkItemCollaboration).where(WorkItemCollaboration.work_item_id == work.id)
+            select(WorkItemCollaboration).where(WorkItemCollaboration.organization_id == org.id, WorkItemCollaboration.work_item_id == work.id)
         ).first()
         if row is None:
             row = WorkItemCollaboration(organization_id=org.id, work_item_id=work.id)
@@ -145,8 +147,10 @@ def add_comment(request: Request, work_item_id: UUID, organization_slug: str, bo
     try:
         org, work, scope = _context(session, organization_slug, work_item_id)
         actor = getattr(request.state, "actor", None)
-        if actor is None:
-            raise HTTPException(status_code=401, detail="Anmeldung erforderlich.")
+        if actor is None or actor.organization_id != org.id:
+            raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation.")
+        if not body.body.strip():
+            raise HTTPException(status_code=422, detail="Kommentar darf nicht leer sein.")
         comment = WorkItemComment(
             organization_id=org.id,
             work_item_id=work.id,
