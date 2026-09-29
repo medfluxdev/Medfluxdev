@@ -32,6 +32,9 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - Source-region resolver no longer labels a unique fallback token as exact; repeated token hits are rejected and repeated phrase hits are coarse rather than merged into a false precise location. Canonical token-only fallback is also coarse. Added regression fixtures for repeated/unique ambiguous text (not executed). Accurate per-word OCR on scanned contracts still depends on validated atomic word geometry and final real-document QA; do not promise exact boxes where geometry is unavailable.
 
+- Invalid explicit source-page hints now return no location rather than silently searching unrelated pages; PDF handles are closed after lookups. Added a focused regression (not executed).
+- PDF viewer now renders stored extraction rectangles only as approximate dashed regions. It uses the precise solid highlight and exact-location wording only after successful original-PDF source-region refinement; no implied word-level proof from a narrow but unverified stored box.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode. Verify PDF page changes do not refetch the document and evidence refinement reruns correctly when revisiting a source.
