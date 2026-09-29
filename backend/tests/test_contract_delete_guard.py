@@ -91,3 +91,14 @@ def test_capability_granted_only_to_opted_in_admin(monkeypatch):
     assert contracts.contract_deletion_capabilities(
         _request(role="contract_manager", organization_id=organization), "test-org"
     )["can_delete"] is False
+
+
+@pytest.mark.parametrize("handler", [contracts.contract_archive, contracts.contract_unarchive])
+def test_archive_routes_reject_cross_organization_before_query(monkeypatch, handler):
+    organization = uuid4()
+    fake_session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: fake_session)
+    monkeypatch.setattr(contracts, "get_organization", lambda session, slug: SimpleNamespace(id=organization))
+    with pytest.raises(HTTPException) as exc:
+        handler(_request(organization_id=uuid4()), "other-org", str(uuid4()))
+    assert exc.value.status_code == 404
