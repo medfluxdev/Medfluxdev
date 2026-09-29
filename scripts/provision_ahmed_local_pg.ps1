@@ -1,6 +1,7 @@
 param(
   [Parameter(Mandatory=$true)][string]$PostgresBin,
   [int]$Port = 55440,
+  [Parameter(Mandatory=$true)][SecureString]$AdminPassword,
   [string]$InstanceDir = ""
 )
 # Ahmed ONLY: initializes a NEW user-owned cluster; never discovers or changes existing clusters.
@@ -25,9 +26,8 @@ $log = Join-Path $InstanceDir "postgres.log"
 $pwfile = Join-Path $InstanceDir "bootstrap-password.txt"
 try {
   # Generate per-install secret; store in owner-readable directory. Remove after role setup.
-  $bytes = [byte[]]::new(32)
-  [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-  $password = [Convert]::ToBase64String($bytes)
+  $password = [System.Net.NetworkCredential]::new("",$AdminPassword).Password
+  if ($password.Length -lt 16) { throw "Use a password of at least 16 characters" }
   [IO.File]::WriteAllText($pwfile,$password,[Text.Encoding]::ASCII)
   & $initdb -D $data -U medflux_local -A scram-sha-256 --pwfile=$pwfile --encoding=UTF8 --no-instructions
   if ($LASTEXITCODE -ne 0) { throw "initdb failed; inspect ONLY this newly created directory" }
@@ -38,7 +38,7 @@ try {
   & $ready -h 127.0.0.1 -p $Port
   if ($LASTEXITCODE -ne 0) { throw "PostgreSQL not ready" }
   Write-Host "NEW isolated local PostgreSQL cluster ready on 127.0.0.1:$Port"
-  Write-Warning "Provisioning only: DB creation and .env setup are separate. Keep your generated password securely; this script does not store it after initdb."
+  Write-Warning "Provisioning only: DB creation and .env setup are separate. Keep the password you supplied securely; this script does not store it after initdb."
 } catch {
   if (Test-Path $pwfile) { Remove-Item $pwfile -Force }
   throw
