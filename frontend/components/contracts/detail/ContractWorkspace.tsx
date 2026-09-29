@@ -266,7 +266,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   useEffect(() => {
     if (!linkedEvidenceId) return;
     const match = data.evidence.find(ref => ref.evidence_id === linkedEvidenceId);
-    if (!match) return;
+    if (!match || !match.document_version_id || !data.documents.some(doc => doc.document_version_id === match.document_version_id)) return;
     setActiveEvidenceId(match.evidence_id);
     setNavTarget(evidenceTarget(match));
     if (match.document_version_id) setDocumentVersionId(match.document_version_id);
