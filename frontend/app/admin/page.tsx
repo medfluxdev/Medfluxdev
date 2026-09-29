@@ -11,6 +11,7 @@ import { listUsers } from "@/lib/domain-api/users";
 import { getDashboardOverview } from "@/lib/domain-api/dashboard";
 import { listActivity, type ActivityDto } from "@/lib/domain-api/activity";
 import { downloadContractsCsv } from "@/lib/domain-api/operations";
+import { getContractDeletionCapabilities } from "@/lib/domain-api/contracts";
 import { listIntelligenceEvents, type IntelligenceEventItem } from "@/lib/domain-api/intelligence";
 import styles from "./admin.module.css";
 
@@ -19,7 +20,11 @@ const EVENT_LABELS: Record<string, string> = {
   "account.updated": "Benutzer geändert",
   "account.scope_updated": "Benutzerbereich geändert",
   "contract.archived": "Vertrag archiviert",
-  "contract.unarchived": "Vertrag wiederhergestellt",
+  "contract.unarchived": "Vertrag aus Archiv wiederhergestellt",
+  "contract.deletion_requested": "Vertragslöschung beantragt",
+  "contract.deletion_cancelled": "Vertragslöschung abgebrochen",
+  "contract.deletion_confirmed": "Vertragslöschung bestätigt",
+  "contract.restored": "Gelöschten Vertrag wiederhergestellt",
   "contract.ownership_updated": "Vertragszuordnung geändert",
   "equipment.ownership_updated": "Gerätezuordnung geändert",
   "override.set": "Vertragsangabe geändert",
@@ -38,6 +43,18 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [deletionAllowed, setDeletionAllowed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setDeletionAllowed(false);
+    if (role === "admin" && membership?.organization_slug) {
+      getContractDeletionCapabilities(membership.organization_slug)
+        .then((capability) => { if (active) setDeletionAllowed(capability.can_delete); })
+        .catch(() => { if (active) setDeletionAllowed(false); });
+    }
+    return () => { active = false; };
+  }, [role, membership?.organization_slug]);
 
   const load = useCallback(async () => {
     if (role !== "admin" || !membership) return;
@@ -109,6 +126,7 @@ export default function AdminPage() {
         <Link href="/contracts"><div><strong>Verträge verwalten</strong><small>Bestand, Zuordnung und Verantwortliche</small></div><span>→</span></Link>
         <Link href="/work-queue"><div><strong>Aufgaben bearbeiten</strong><small>Fristen, Risiken und offene Entscheidungen</small></div><span>→</span></Link>
         <Link href="/settings/users"><div><strong>Benutzer & Rollen</strong><small>Konten und Zugriffsbereiche verwalten</small></div><span>→</span></Link>
+        {deletionAllowed && <Link href="/admin/deletion"><div><strong>Vertragslöschung</strong><small>Vorgemerkte Verträge prüfen und wiederherstellen</small></div><span>→</span></Link>}
         <Link href="/audit"><div><strong>Audit öffnen</strong><small>Änderungen nachvollziehen</small></div><span>→</span></Link>
         <button type="button" onClick={() => void exportContracts()} disabled={exporting}><div><strong>Verträge exportieren</strong><small>Scope-gefilterte CSV mit aktuellem Vertragsbestand</small></div><span>{exporting ? "…" : "↓"}</span></button>
       </section>
