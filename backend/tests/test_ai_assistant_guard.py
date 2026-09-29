@@ -26,7 +26,7 @@ async def test_assistant_rejects_cross_org_before_db_access(monkeypatch):
     monkeypatch.setattr(ai, "create_session", lambda: pytest.fail("DB opened for wrong org"))
     actor = SimpleNamespace(organization_slug="first", organization_id=uuid4(), account_id=uuid4())
     with pytest.raises(HTTPException) as exc:
-        await ai.ai_assistant(request(actor), "second", ai.AssistantRequest(message="Hallo"))
+        await ai.ai_assistant(request(actor), "second", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 403
 
 
@@ -37,7 +37,7 @@ async def test_assistant_rejects_revoked_membership_before_model(monkeypatch):
         get=lambda cls, identifier: None, close=lambda: None))
     actor = SimpleNamespace(organization_slug="hospital", organization_id=uuid4(), account_id=uuid4())
     with pytest.raises(HTTPException) as exc:
-        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 404
 
 
@@ -59,7 +59,7 @@ async def test_assistant_returns_503_when_local_model_unconfigured(monkeypatch):
     monkeypatch.setattr(ai, "actor_for_account", lambda session, user, slug: actor)
     monkeypatch.setattr(ai._ai_service, "_ensure_provider", lambda: None)
     with pytest.raises(HTTPException) as exc:
-        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 503
 
 
@@ -81,7 +81,7 @@ async def test_assistant_discards_answer_if_membership_revoked_during_generation
         return "Sensitive generated answer"
     monkeypatch.setattr(ai._ai_service, "generate_text", answer)
     with pytest.raises(HTTPException) as exc:
-        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 404
     assert len(calls) == 2
 
@@ -98,7 +98,7 @@ async def test_assistant_rejects_deactivated_account_before_model(monkeypatch):
     monkeypatch.setattr(ai, "actor_for_account",
                         lambda *args: pytest.fail("Deactivated account reached membership lookup"))
     with pytest.raises(HTTPException) as exc:
-        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 404
 
 
