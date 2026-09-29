@@ -12,7 +12,7 @@ import {
 } from "@/lib/domain-api/contracts";
 
 export default function DeletionQueuePage() {
-  const { organizationSlug } = useAuth();
+  const { organizationSlug, role, loading } = useAuth();
   const [allowed, setAllowed] = useState(false);
   const [queue, setQueue] = useState<ContractDeletionQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export default function DeletionQueuePage() {
   const refresh = useCallback(async () => {
     setAllowed(false);
     setQueue(null);
-    if (!organizationSlug) return;
+    if (!organizationSlug || role !== "admin") return;
     try {
       const capability = await getContractDeletionCapabilities(organizationSlug);
       if (!capability.can_delete) return;
@@ -32,7 +32,7 @@ export default function DeletionQueuePage() {
     } catch {
       setError("Die Löschverwaltung ist nicht verfügbar oder nicht freigegeben.");
     }
-  }, [organizationSlug]);
+  }, [organizationSlug, role]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -53,6 +53,8 @@ export default function DeletionQueuePage() {
     }
   }
 
+  if (!loading && role !== "admin") return <main className="page"><h1>Keine Berechtigung</h1><p>Diese Funktion ist nur für freigegebene Administratoren verfügbar.</p></main>;
+
   return <main className="page">
     <header><h1>Vertragslöschung verwalten</h1>
       <p>Nur ausdrücklich freigegebene Administratoren. Keine endgültige Datenvernichtung.</p>
@@ -61,7 +63,7 @@ export default function DeletionQueuePage() {
     {!allowed && !error && <p>Keine Löschberechtigung oder Daten werden geladen.</p>}
     {allowed && queue && <>
       {queue.items.length === 0 && <p>Keine vorgemerkten oder gelöschten Verträge.</p>}
-      {queue.has_more && <p role="status">Weitere Einträge vorhanden. Bitte die Liste eingrenzen lassen.</p>}
+      {queue.has_more && <p role="status">Es werden nur die ersten 100 Einträge angezeigt. Weitere Einträge erfordern eine erneute Abfrage nach Bearbeitung.</p>}
       {queue.items.map((item) => <section className="panel" key={item.contract_id} style={{ padding: "1rem", marginBottom: "1rem" }}>
         <h2>{item.contract_number || item.contract_id}</h2>
         <p>Status: {item.lifecycle_state === "pending_deletion" ? "Zur Löschung vorgemerkt" : "Gelöscht (wiederherstellbar)"}</p>
