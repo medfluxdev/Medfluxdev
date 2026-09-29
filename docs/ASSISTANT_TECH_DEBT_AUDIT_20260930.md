@@ -30,6 +30,8 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - PDF source overlay now resets canvas dimensions on every page/source change (including no-evidence pages), preventing stale rectangles from carrying across pages with different geometry. Page rendering now clears old dimensions and reports real page-load/render failures while ignoring cancelled stale renders.
 
+- Source-region resolver no longer labels a unique fallback token as exact; repeated token hits are rejected and repeated phrase hits are coarse rather than merged into a false precise location. Canonical token-only fallback is also coarse. Added regression fixtures for repeated/unique ambiguous text (not executed). Accurate per-word OCR on scanned contracts still depends on validated atomic word geometry and final real-document QA; do not promise exact boxes where geometry is unavailable.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode. Verify PDF page changes do not refetch the document and evidence refinement reruns correctly when revisiting a source.
