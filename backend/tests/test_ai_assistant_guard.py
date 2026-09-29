@@ -43,7 +43,7 @@ async def test_assistant_rejects_revoked_membership_before_model(monkeypatch):
 
 def test_assistant_rejects_blank_or_oversized_prompts():
     from pydantic import ValidationError
-    for text in ("", "   ", "\\n\\t", "x" * 2001):
+    for text in ("", "   ", "\n\t", "x" * 2001):
         with pytest.raises(ValidationError):
             ai.AssistantRequest(message=text)
 
