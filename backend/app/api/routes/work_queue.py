@@ -61,6 +61,13 @@ def work_queue_list(
         org = get_organization(session, organization_slug)
         if org is None:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        request_scope = current_scope_context()
+        allowed = scoped_contract_ids(
+            session,
+            org.id,
+            request_scope.hospital_id,
+            request_scope.department_id,
+        )
         raw = list_work_items_dto(
             session=session,
             organization_id=org.id,
@@ -69,20 +76,8 @@ def work_queue_list(
             severities=severity or None,
             item_types=item_type or None,
             limit=limit,
+            allowed_contract_ids=allowed,
         )
-        request_scope = current_scope_context()
-        allowed = scoped_contract_ids(
-            session,
-            org.id,
-            request_scope.hospital_id,
-            request_scope.department_id,
-        )
-        if allowed is not None:
-            raw = [
-                item
-                for item in raw
-                if UUID(str(item.get("contract_id"))) in allowed
-            ]
         return WorkItemList(items=[WorkItemSummary(**r) for r in raw], total=len(raw))
     finally:
         session.close()
