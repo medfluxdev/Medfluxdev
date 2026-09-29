@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ContractTable from "@/components/contracts/ContractTable";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
@@ -12,24 +12,38 @@ import type { ContractListResponse } from "@/lib/contract-types";
 
 export default function ReviewPage() {
   const { organizationSlug } = useAuth();
+  const requestSeq = useRef(0);
+  const [page, setPage] = useState(1);
   const [data, setData] = useState<ContractListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!organizationSlug) return;
+    const seq = ++requestSeq.current;
+    if (!organizationSlug) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      setData(await listContracts(organizationSlug, { requires_review: true, page_size: 100 }));
+      const result = await listContracts(organizationSlug, { requires_review: true, page_size: 100, page });
+      if (seq === requestSeq.current) setData(result);
     } catch {
+      if (seq !== requestSeq.current) return;
       setError("Prüfungsliste konnte nicht geladen werden.");
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
-  }, [organizationSlug]);
+  }, [organizationSlug, page]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => { requestSeq.current += 1; };
+  }, [load]);
+
+  useEffect(() => { setPage(1); setData(null); }, [organizationSlug]);
 
   return (
     <div className="page">
@@ -43,6 +57,13 @@ export default function ReviewPage() {
             <div className="state-box"><div className="state-icon">✓</div><h3>Keine offenen Prüfungen</h3><p>Alle aktiven Verträge sind geprüft – es liegt kein manueller Prüfbedarf vor.</p></div>
           ) : (
             <div className="table-wrap"><ContractTable items={data.items} extraHeader="Prüfung" extra={(item) => <Link className="btn btn-sm btn-primary" href={`/contracts/${item.contract_id}?tab=documents&subtab=review`}>Prüfen</Link>} /></div>
+          )}
+          {(page > 1 || data.has_more) && (
+            <nav className="pagination" aria-label="Prüfungsliste Seiten">
+              <button type="button" className="btn btn-sm" disabled={loading || page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Zurück</button>
+              <span>Seite {data.page}</span>
+              <button type="button" className="btn btn-sm" disabled={loading || !data.has_more} onClick={() => setPage((p) => p + 1)}>Weiter</button>
+            </nav>
           )}
         </section>
       )}
