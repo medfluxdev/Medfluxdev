@@ -47,3 +47,19 @@ def test_comment_write_rejects_whitespace_only(monkeypatch):
     assert error.value.status_code == 422
     session.commit.assert_not_called()
     session.close.assert_called_once()
+
+
+def test_developer_without_active_org_membership_cannot_be_assigned(monkeypatch):
+    session, org_id, work_id = _setup(monkeypatch)
+    actor = SimpleNamespace(organization_id=org_id)
+    assignee_id = uuid4()
+    session.scalars.return_value.first.return_value = None
+    session.get.return_value = SimpleNamespace(id=assignee_id, is_active=True, is_developer=True)
+    with pytest.raises(HTTPException) as error:
+        routes.update_collaboration(
+            SimpleNamespace(state=SimpleNamespace(actor=actor)), work_id, "hospital",
+            routes.CollaborationUpdate(assignee_account_id=assignee_id),
+        )
+    assert error.value.status_code == 422
+    session.commit.assert_not_called()
+    session.close.assert_called_once()
