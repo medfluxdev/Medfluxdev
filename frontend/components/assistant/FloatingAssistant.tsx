@@ -11,8 +11,9 @@ type Message = { sender: "user" | "assistant"; text: string };
 export default function FloatingAssistant() {
   const { organizationSlug, account } = useAuth();
   const pathname = usePathname();
-  const match = /^\\/contracts\\/([0-9a-f-]{36})\\/?$/i.exec(pathname);
-  const contractId = match?.[1] ?? null;
+  const segments = pathname.split("/").filter(Boolean);
+  const contractId = segments.length === 2 && segments[0] === "contracts" &&
+    /^[0-9a-f-]{36}$/i.test(segments[1]) ? segments[1] : null;
   const contextKey = [account?.id, organizationSlug, contractId].join(":");
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
