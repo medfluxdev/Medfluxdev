@@ -577,7 +577,7 @@ def contract_archive(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
@@ -614,7 +614,7 @@ def contract_unarchive(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
