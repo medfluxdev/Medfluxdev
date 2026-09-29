@@ -14,11 +14,13 @@ This audit is based on direct source inspection of the integrated assistant rout
 - Reject whitespace-only prompts server-side and normalize leading/trailing whitespace; added regression cases for empty, whitespace and oversized input.
 - Abort outstanding source-region requests when assistant contract/organization context changes or the component unmounts; ignore aborted lookup results.
 
+- Connected assistant evidence IDs to the existing contract evidence tab and PDF viewer via a deep link; the destination resolves evidence against the loaded contract and checks the document version is linked. This reuses the existing source-navigation implementation instead of introducing a second viewer.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode.
 3. Exercise an actual accepted PDF extraction, a DOCX paragraph extraction, stale membership, changed evidence, no configured model, aborted request and organization switch using an isolated database.
-4. The source-region action currently reports exact/coarse/not-found location text. It does not yet open a visually highlighted PDF at the exact source region; do not claim full source navigation.
+4. The assistant now links to the contract evidence tab, whose existing viewer supports evidence navigation. The separate source-region check still reports exact/coarse/not-found text only. Verify the deep link, evidence-ID preservation after deduplication, and visual highlighting with real accepted PDF data; do not claim verified exact navigation.
 5. The assistant is bounded to one contract and eight evidence excerpts. This is not organization-wide semantic search or full-contract retrieval; no unsupported capability should be advertised.
 6. The source-region endpoint reads PDF bytes before resolving geometry; benchmark resource usage with approved realistic PDFs during final acceptance.
 7. Audit the remaining repository beyond this scoped file set for truncated code, unreachable branches, duplicated implementations and dead TODOs before release.
