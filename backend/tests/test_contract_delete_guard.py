@@ -76,3 +76,18 @@ def test_capability_rejects_cross_org(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         contracts.contract_deletion_capabilities(_request(), "another-org")
     assert exc.value.status_code == 404
+
+
+def test_capability_granted_only_to_opted_in_admin(monkeypatch):
+    organization = uuid4()
+    fake_session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: fake_session)
+    monkeypatch.setattr(contracts, "get_organization", lambda session, slug: SimpleNamespace(id=organization))
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
+    assert contracts.contract_deletion_capabilities(
+        _request(role="admin", organization_id=organization), "test-org"
+    ) == {"can_delete": True, "can_restore": True, "requires_confirmation": True}
+    assert contracts.contract_deletion_capabilities(
+        _request(role="contract_manager", organization_id=organization), "test-org"
+    )["can_delete"] is False
