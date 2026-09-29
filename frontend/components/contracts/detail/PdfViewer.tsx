@@ -69,6 +69,9 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     setErrorText("Quelle konnte nicht geladen werden.");
     setDims(null);
     const seq = ++requestSeq.current;
+    // Never reuse geometry or an old page count across document versions.
+    setRefined(null);
+    setPageCount(0);
 
     (async () => {
       let responseStatus: number | null = null;
