@@ -218,17 +218,19 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
 
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!canvas) return;
+    // Clear the previous page's overlay even when no evidence is selected.
+    // Canvas dimensions must follow the currently rendered page before drawing.
+    canvas.width = dims?.width ?? 0;
+    canvas.height = dims?.height ?? 0;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber) return;
     const refinedKey = `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
     const useRefined = refined !== null && refined.key === refinedKey && refined.status === "exact" && refined.bbox !== null;
     const bbox = useRefined ? refined.bbox! : (navTarget.supports_exact_navigation ? navTarget.bbox : null);
     const bboxSpace = useRefined ? refined.bbox_space : navTarget.bbox_space;
     if (!bbox) return;
-    canvas.width = dims.width;
-    canvas.height = dims.height;
     const rect = resolveEvidenceRect(bbox, bboxSpace, BASE_SCALE * zoom, dims);
     if (!rect) return;
     const pagePoints = { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) };
