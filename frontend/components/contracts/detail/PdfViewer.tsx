@@ -51,6 +51,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const requestSeq = useRef(0);
+  const renderSeq = useRef(0);
   const canRender = status === "ready";
 
   useEffect(() => {
@@ -114,6 +115,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     return () => {
       cancelled = true;
       controller.abort();
+      renderSeq.current += 1;
       renderTaskRef.current?.cancel();
     };
   }, [active, documentVersionId, contractId, orgSlug, retrySeq]);
@@ -124,11 +126,17 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   }, []);
 
   const renderPage = useCallback(async () => {
+    const seq = ++renderSeq.current;
     const pdfjs = pdfRef.current;
     const doc = docRef.current;
     const canvas = pageCanvasRef.current;
     if (!pdfjs || !doc || !canvas) return;
+    // Cancel the previous render before awaiting the next page. An old
+    // getPage() completion must never paint over the newly selected page.
+    renderTaskRef.current?.cancel();
+    renderTaskRef.current = null;
     const page = await doc.getPage(pageNumber);
+    if (seq !== renderSeq.current || doc !== docRef.current || canvas !== pageCanvasRef.current) return;
     const scale = BASE_SCALE * zoom;
     const viewport = page.getViewport({ scale });
     canvas.width = Math.floor(viewport.width);
@@ -137,7 +145,6 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     canvas.style.height = `${canvas.height}px`;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    if (renderTaskRef.current) renderTaskRef.current.cancel();
     const task = page.render({ canvasContext: ctx, viewport });
     renderTaskRef.current = task;
     try {
@@ -145,8 +152,9 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     } catch {
       return;
     } finally {
-      renderTaskRef.current = null;
+      if (renderTaskRef.current === task) renderTaskRef.current = null;
     }
+    if (seq !== renderSeq.current || doc !== docRef.current) return;
     setDims({ width: canvas.width, height: canvas.height });
   }, [pageNumber, zoom]);
 
