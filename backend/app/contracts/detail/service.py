@@ -1873,6 +1873,11 @@ def _merge_evidence_duplicate(target: dict, other: dict) -> None:
     target["requires_review"] = bool(
         target.get("requires_review") or other.get("requires_review")
     )
+    # Keep every original ID addressable after read-layer deduplication.
+    target["merged_evidence_ids"] = sorted(set(
+        [*target.get("merged_evidence_ids", []), *other.get("merged_evidence_ids", []),
+         str(target.get("evidence_id") or ""), str(other.get("evidence_id") or "")]
+    ) - {""})
     if _is_recovered_ref(other) and not _is_recovered_ref(target):
         target["evidence_id"] = other.get("evidence_id")
     if _ref_confidence(other) > _ref_confidence(target):
@@ -1905,7 +1910,7 @@ def _dedupe_evidence(refs: list[dict]) -> list[dict]:
         existing_index = index.get(key)
         if existing_index is None:
             index[key] = len(merged)
-            merged.append(dict(ref))
+            merged.append({**ref, "merged_evidence_ids": list(ref.get("merged_evidence_ids", []))})
             continue
         _merge_evidence_duplicate(merged[existing_index], ref)
     deterministic = sorted(
