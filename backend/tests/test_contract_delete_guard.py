@@ -250,3 +250,29 @@ def test_contract_detail_rejects_cross_organization_before_read(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         contracts.contract_detail(_request(), "another-org", str(uuid4()))
     assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("handler,payload", [
+    (contracts.contract_fact_review, SimpleNamespace()),
+    (contracts.contract_review_start, SimpleNamespace()),
+    (contracts.contract_review_complete, SimpleNamespace()),
+    (contracts.contract_override, SimpleNamespace()),
+])
+def test_contract_write_routes_reject_cross_org_before_contract_query(monkeypatch, handler, payload):
+    session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: session)
+    monkeypatch.setattr(contracts, "get_organization",
+                        lambda db, slug: SimpleNamespace(id=uuid4()))
+    with pytest.raises(HTTPException) as exc:
+        handler(_request(), "other-org", str(uuid4()), payload)
+    assert exc.value.status_code == 404
+
+
+def test_contract_document_content_rejects_cross_org_before_storage(monkeypatch):
+    session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: session)
+    monkeypatch.setattr(contracts, "get_organization",
+                        lambda db, slug: SimpleNamespace(id=uuid4()))
+    with pytest.raises(HTTPException) as exc:
+        contracts.contract_document_content(_request(), "other-org", str(uuid4()), str(uuid4()))
+    assert exc.value.status_code == 404
