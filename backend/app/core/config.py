@@ -109,6 +109,8 @@ class Settings(BaseSettings):
     # fuer die lokale Entwicklung deaktiviert wird. Eine frisch installierte
     # Instanz startet daher nie unauthentifiziert im Netz.
     auth_enabled: bool = True
+    # Explicit opt-in. No role automatically receives contract deletion rights.
+    contracts_allow_delete: bool = False
     auth_cookie_name: str = "medflux_session"
     auth_session_ttl_seconds: int = 8 * 60 * 60
     auth_session_days: int = 14
