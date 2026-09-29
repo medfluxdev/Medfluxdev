@@ -131,11 +131,21 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     const doc = docRef.current;
     const canvas = pageCanvasRef.current;
     if (!pdfjs || !doc || !canvas) return;
+    setDims(null);
     // Cancel the previous render before awaiting the next page. An old
     // getPage() completion must never paint over the newly selected page.
     renderTaskRef.current?.cancel();
     renderTaskRef.current = null;
-    const page = await doc.getPage(pageNumber);
+    let page;
+    try {
+      page = await doc.getPage(pageNumber);
+    } catch {
+      if (seq === renderSeq.current) {
+        setErrorText("Diese PDF-Seite konnte nicht geladen werden.");
+        setStatus("error");
+      }
+      return;
+    }
     if (seq !== renderSeq.current || doc !== docRef.current || canvas !== pageCanvasRef.current) return;
     const scale = BASE_SCALE * zoom;
     const viewport = page.getViewport({ scale });
@@ -149,7 +159,11 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     renderTaskRef.current = task;
     try {
       await task.promise;
-    } catch {
+    } catch (error) {
+      if (seq === renderSeq.current && !(error instanceof Error && error.name === "RenderingCancelledException")) {
+        setErrorText("Diese PDF-Seite konnte nicht dargestellt werden.");
+        setStatus("error");
+      }
       return;
     } finally {
       if (renderTaskRef.current === task) renderTaskRef.current = null;
