@@ -157,7 +157,7 @@ def test_pdf_garbage_bytes_returns_none():
 def test_repeated_token_does_not_produce_misleading_highlight():
     result = resolve_narrowest_region(
         "Die Vertragsnummer 2026 ist maßgeblich",
-        pdf_bytes=_pdf("Vertragsnummer: 2026\\nVertragsnummer: 2027"),
+        pdf_bytes=_pdf("Vertragsnummer: 2026\nVertragsnummer: 2027"),
         page_hint=1,
     )
     assert result["status"] == "none"
@@ -177,7 +177,7 @@ def test_unique_partial_token_is_only_coarse():
 def test_repeated_exact_phrase_is_not_a_unique_location():
     result = resolve_narrowest_region(
         "Vertragsnummer",
-        pdf_bytes=_pdf("Vertragsnummer: A\\nVertragsnummer: B"),
+        pdf_bytes=_pdf("Vertragsnummer: A\nVertragsnummer: B"),
         page_hint=1,
     )
     assert result["status"] == "coarse"
