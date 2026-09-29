@@ -14,7 +14,7 @@ Identiaet/Autorisierung folgt in STEP 16.
 from __future__ import annotations
 
 import urllib.parse
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 from uuid import UUID
@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.scope_context import current_scope_context
+from app.core.config import settings
 from app.database.scope_queries import scoped_contract_ids
 
 from app.auth.context import reviewer_name
@@ -634,6 +635,74 @@ def contract_unarchive(
         return _augmented_detail_response(session, org.id, cid)
     finally:
         session.close()
+
+
+
+def _require_explicit_delete_permission(request: Request) -> None:
+    """Fail closed: deleting and restoring require an explicit server opt-in."""
+    actor = getattr(request.state, "actor", None)
+    if not settings.auth_enabled or actor is None:
+        raise HTTPException(status_code=403, detail="Vertragslöschung ist nicht freigegeben.")
+    if not settings.contracts_allow_delete or (actor.role or "").casefold() != "admin":
+        raise HTTPException(status_code=403, detail="Vertragslöschung ist nicht freigegeben.")
+
+
+def _deletion_transition(request: Request, organization_slug: str, contract_id: str, *,
+                         expected: str, target: str) -> ContractDetailResponse:
+    _require_explicit_delete_permission(request)
+    try:
+        cid = UUID(contract_id)
+    except ValueError:
+        raise _not_found()
+    session = create_session()
+    try:
+        org = get_organization(session, organization_slug)
+        if org is None or _scope_denies(session, org.id, cid):
+            raise _not_found()
+        row = session.execute(
+            select(Contract).where(
+                Contract.id == cid,
+                Contract.organization_id == org.id,
+                Contract.lifecycle_state == expected,
+            ).with_for_update()
+        ).scalar_one_or_none()
+        if row is None:
+            raise _not_found()
+        actor = request.state.actor
+        row.lifecycle_state = target
+        if target in {"pending_deletion", "deleted"}:
+            row.deletion_owner = str(actor.account_id)
+            row.deleted_at = datetime.now(timezone.utc) if target == "deleted" else None
+        else:
+            row.deletion_owner = None
+            row.deleted_at = None
+        _record_account_activity(session, request, f"contract.{target}", cid,
+                                 {"previous_state": expected, "new_state": target})
+        session.commit()
+        return _augmented_detail_response(session, org.id, cid)
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+@router.post("/{contract_id}/delete/request", response_model=ContractDetailResponse)
+def request_contract_deletion(request: Request, organization_slug: str, contract_id: str):
+    return _deletion_transition(request, organization_slug, contract_id,
+                                expected="active", target="pending_deletion")
+
+
+@router.post("/{contract_id}/delete/confirm", response_model=ContractDetailResponse)
+def confirm_contract_deletion(request: Request, organization_slug: str, contract_id: str):
+    return _deletion_transition(request, organization_slug, contract_id,
+                                expected="pending_deletion", target="deleted")
+
+
+@router.post("/{contract_id}/delete/restore", response_model=ContractDetailResponse)
+def restore_contract_deletion(request: Request, organization_slug: str, contract_id: str):
+    return _deletion_transition(request, organization_slug, contract_id,
+                                expected="deleted", target="active")
 
 
 @router.post("/{contract_id}/overrides", response_model=ContractDetailResponse)
