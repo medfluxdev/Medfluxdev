@@ -52,7 +52,7 @@ def test_assistant_rejects_blank_or_oversized_prompts():
 async def test_assistant_returns_503_when_local_model_unconfigured(monkeypatch):
     org = uuid4()
     actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4())
-    account = SimpleNamespace(id=actor.account_id)
+    account = SimpleNamespace(id=actor.account_id, is_active=True)
     monkeypatch.setattr(ai.settings, "auth_enabled", True)
     monkeypatch.setattr(ai, "create_session", lambda: SimpleNamespace(
         get=lambda cls, identifier: account, close=lambda: None))
