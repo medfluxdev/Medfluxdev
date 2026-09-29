@@ -22,13 +22,17 @@ export default function FloatingAssistant() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const generation = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
     generation.current += 1;
+    activeRequest.current?.abort();
+    activeRequest.current = null;
     setMessages([]);
     setDraft("");
     setError("");
     setBusy(false);
+    return () => { activeRequest.current?.abort(); };
   }, [contextKey]);
 
   async function submit(event: React.FormEvent) {
@@ -36,6 +40,8 @@ export default function FloatingAssistant() {
     const message = draft.trim();
     if (!message || !organizationSlug || busy) return;
     const current = generation.current;
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setDraft("");
     setError("");
     setBusy(true);
@@ -45,15 +51,16 @@ export default function FloatingAssistant() {
       const result = await apiPost<Reply>(`/api/ai/assistant?${query}`, {
         message,
         contract_id: contractId,
-      }, 180000);
+      }, 180000, controller.signal);
       if (current === generation.current) {
         setMessages(previous => [...previous, { sender: "assistant", text: result.answer, evidence: result.evidence }]);
       }
     } catch (failure) {
-      if (current === generation.current) {
+      if (current === generation.current && !controller.signal.aborted) {
         setError(failure instanceof Error ? failure.message : "Die Anfrage ist fehlgeschlagen.");
       }
     } finally {
+      if (activeRequest.current === controller) activeRequest.current = null;
       if (current === generation.current) setBusy(false);
     }
   }
@@ -69,7 +76,7 @@ export default function FloatingAssistant() {
       <p className="medflux-assistant-notice">Nur Lesezugriff. Vertragsübersichten sind keine geprüften Originalbelege.</p>
       <div className="medflux-assistant-messages" role="log" aria-live="polite">
         {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={`${source.document_version_id}:${source.field_ref}:${i}`}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <a href={`/contracts/${encodeURIComponent(contractId)}`}>Vertrag öffnen</a>}</div>)}</details>}</div>)}
-        {busy && <p role="status">Lokales Modell antwortet…</p>}
+        {busy && <p role="status">Lokales Modell antwortet… <button type="button" onClick={() => { generation.current += 1; activeRequest.current?.abort(); activeRequest.current = null; setBusy(false); }}>Abbrechen</button></p>}
       </div>
       {error && <p role="alert" className="medflux-assistant-error">{error}</p>}
       <form onSubmit={event => void submit(event)}>
