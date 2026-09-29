@@ -230,6 +230,7 @@ def list_work_items(
     severities: Optional[Iterable[str]] = None,
     item_types: Optional[Iterable[str]] = None,
     limit: int = 200,
+    allowed_contract_ids: Optional[set] = None,
 ):
     from app.database.models import Contract
 
@@ -244,6 +245,10 @@ def list_work_items(
             & (Contract.is_archived.is_(False))
         )
     )
+    if allowed_contract_ids is not None:
+        if not allowed_contract_ids:
+            return []
+        stmt = stmt.where(WorkItem.contract_id.in_(allowed_contract_ids))
     if active_only:
         stmt = stmt.where(WorkItem.active.is_(True))
     if statuses:
@@ -314,6 +319,7 @@ def list_work_items_dto(
     severities: Optional[Iterable[str]] = None,
     item_types: Optional[Iterable[str]] = None,
     limit: int = 200,
+    allowed_contract_ids: Optional[set] = None,
 ) -> list[dict]:
     from app.database.models import Contract, Equipment
 
@@ -325,6 +331,7 @@ def list_work_items_dto(
         severities=severities,
         item_types=item_types,
         limit=limit,
+        allowed_contract_ids=allowed_contract_ids,
     )
     contracts = {
         c.id: c
