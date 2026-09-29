@@ -11,7 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from app.ai.providers import discovery
 from app.ai.exceptions import AIProviderError
@@ -201,13 +201,14 @@ class AssistantResponse(BaseModel):
 
 
 @router.post("/assistant", response_model=AssistantResponse)
-async def ai_assistant(request: Request, organization_slug: str, payload: AssistantRequest) -> AssistantResponse:
+async def ai_assistant(request: Request, organization_slug: str, payload: AssistantRequest, response: Response) -> AssistantResponse:
     """Read-only local assistant; only server-authorized contract projections enter the prompt.
 
     No chat history or client-supplied document text is accepted. Source excerpts
     come only from the accepted extraction of a contract-linked document and are
     explicitly marked as extraction evidence, not independent verification.
     """
+    response.headers["Cache-Control"] = "no-store, private"
     actor = getattr(request.state, "actor", None)
     if not settings.auth_enabled or actor is None or actor.organization_slug != organization_slug:
         raise HTTPException(status_code=403, detail="Anmeldung mit Organisationszugriff erforderlich.")
