@@ -17,7 +17,7 @@ from app.ai.providers import discovery
 from app.ai.exceptions import AIProviderError
 from app.auth.service import actor_for_account
 from app.core.scope_context import current_scope_context
-from app.database.models import Contract, Account, ContractExtraction, ContractDocument, ExtractionEvidence
+from app.database.models import Contract, Account, AccountMembership, ContractExtraction, ContractDocument, ExtractionEvidence
 from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
 from app.ai.providers.registry import (
@@ -153,6 +153,37 @@ class AssistantRequest(BaseModel):
     contract_id: UUID | None = None
 
 
+_UNASSIGNED_HOSPITAL = UUID(int=0)
+
+
+def _assistant_visible_contracts(session, actor):
+    """Intersect current request scope with freshly loaded membership scope.
+
+    ScopeContext was computed at request entry. Membership assignments may be
+    changed while local inference runs, so the second authorization checkpoint
+    must not rely on that cached scope alone.
+    """
+    scope = current_scope_context()
+    request_ids = scoped_contract_ids(
+        session, actor.organization_id, scope.hospital_id, scope.department_id
+    )
+    if actor.is_developer or actor.role == "admin":
+        return request_ids
+    membership = session.scalar(select(AccountMembership).where(
+        AccountMembership.account_id == actor.account_id,
+        AccountMembership.organization_id == actor.organization_id,
+        AccountMembership.is_active.is_(True),
+    ))
+    if membership is None:
+        return set()
+    assigned_ids = scoped_contract_ids(
+        session, actor.organization_id,
+        membership.hospital_id or _UNASSIGNED_HOSPITAL,
+        membership.department_id,
+    )
+    return assigned_ids if request_ids is None else request_ids & assigned_ids
+
+
 class AssistantEvidence(BaseModel):
     field_ref: str
     document_version_id: UUID
@@ -188,8 +219,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
         evidence: list[AssistantEvidence] = []
         extraction_id: UUID | None = None
         if payload.contract_id is not None:
-            scope = current_scope_context()
-            visible = scoped_contract_ids(session, fresh.organization_id, scope.hospital_id, scope.department_id)
+            visible = _assistant_visible_contracts(session, fresh)
             if visible is not None and payload.contract_id not in visible:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
             contract = session.scalar(select(Contract).where(
@@ -262,8 +292,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
         if payload.contract_id is not None:
-            scope = current_scope_context()
-            visible = scoped_contract_ids(session, fresh.organization_id, scope.hospital_id, scope.department_id)
+            visible = _assistant_visible_contracts(session, fresh)
             if visible is not None and payload.contract_id not in visible:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
             exists = session.scalar(select(Contract.id).where(
