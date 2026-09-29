@@ -25,6 +25,9 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - Corrected PDF viewer navigation effect so manual page changes are not overridden by a previously selected evidence target. Source-region refinement now also runs for page-only evidence; it draws no fallback highlight without real geometry and reports successful exact resolution distinctly.
 
+- Fixed a Python local-variable shadow of SQLAlchemy `exists()` in the assistant evidence query; corrected a whitespace-validation test fixture that previously supplied literal backslash characters rather than newline/tab escapes.
+- Added render-generation invalidation to the PDF viewer so an older asynchronous `getPage()` or cancelled render cannot overwrite the newly selected page during rapid navigation.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode. Verify PDF page changes do not refetch the document and evidence refinement reruns correctly when revisiting a source.
