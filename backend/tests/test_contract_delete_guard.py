@@ -214,3 +214,29 @@ def test_deletion_queue_pagination_contract(monkeypatch, count, offset, expected
     assert len(result["items"]) == min(count, 100)
     assert result["has_more"] is expected_more
     assert result["next_offset"] == expected_next
+
+
+@pytest.mark.parametrize(("expected", "target"), [
+    ("active", "pending_deletion"),
+    ("pending_deletion", "active"),
+    ("pending_deletion", "deleted"),
+    ("deleted", "active"),
+])
+def test_deletion_transition_rejects_missing_or_wrong_state(monkeypatch, expected, target):
+    organization = uuid4()
+    rolled_back = []
+    session = SimpleNamespace(
+        execute=lambda query: SimpleNamespace(scalar_one_or_none=lambda: None),
+        commit=lambda: pytest.fail("Invalid transition committed"),
+        rollback=lambda: rolled_back.append(True), close=lambda: None,
+    )
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
+    monkeypatch.setattr(contracts, "create_session", lambda: session)
+    monkeypatch.setattr(contracts, "get_organization", lambda db, slug: SimpleNamespace(id=organization))
+    monkeypatch.setattr(contracts, "_scope_denies", lambda db, org, cid: False)
+    with pytest.raises(HTTPException) as exc:
+        contracts._deletion_transition(_request(organization_id=organization),
+                                       "test-org", str(uuid4()), expected=expected, target=target)
+    assert exc.value.status_code == 404
+    assert rolled_back == [True]
