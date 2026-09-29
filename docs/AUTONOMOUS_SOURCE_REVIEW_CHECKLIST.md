@@ -46,3 +46,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Collaboration UI checkpoint
 - Inspected `frontend/components/work-queue/WorkItemCollaborationPanel.tsx` and `frontend/lib/domain-api/workQueueCollaboration.ts`. Added per-context generation guards for stale load/save/comment completions, reset state on task/organization change, and blocked overlapping writes (`40f882c`). Parent remounts panel by organization and work item (`854b046`). Source changes not yet runtime-tested. Next: evidence-page first-100-contract limitation and user-visible search/pagination; check collaboration backend assignee scope.
+
+## Evidence pagination checkpoint
+- Reviewed evidence browser and contract list response schema. Added 100-contract page navigation with backend has_more/total_count, and clear prior detail immediately when page changes. Commits: 7723c98 and 75309a0. Not runtime tested. Next: add frontend regression for navigation, inspect backend contract search authorization and work-queue collaboration scope; continue full inventory.
