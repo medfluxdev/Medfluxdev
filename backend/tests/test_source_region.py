@@ -181,3 +181,9 @@ def test_repeated_exact_phrase_is_not_a_unique_location():
         page_hint=1,
     )
     assert result["status"] == "coarse"
+
+
+def test_invalid_page_hint_returns_none():
+    result = resolve_narrowest_region("Mindestvertragslaufzeit", pdf_bytes=_pdf("Mindestvertragslaufzeit"), page_hint=999)
+    assert result["status"] == "none"
+    assert result["bbox"] is None
