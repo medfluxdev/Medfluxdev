@@ -43,3 +43,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Collaboration authorization checkpoint
 - Inspected backend collaboration GET/PUT/comment routes and frontend collaboration panel. Fixed collaboration update lookup to require matching organization, blocked writes from actors whose organization differs from the requested work item, and rejected whitespace-only comments. Source commit `de6866d`; authored DB-free guard tests `c118639` and corrected whitespace fixture `2ffbb0e`. Tests not executed. Further audit: membership scope for assignee, frontend async save/comment stale-state and cross-organization switching, plus evidence-page contract pagination.
+
+## Collaboration UI checkpoint
+- Inspected `frontend/components/work-queue/WorkItemCollaborationPanel.tsx` and `frontend/lib/domain-api/workQueueCollaboration.ts`. Added per-context generation guards for stale load/save/comment completions, reset state on task/organization change, and blocked overlapping writes (`40f882c`). Parent remounts panel by organization and work item (`854b046`). Source changes not yet runtime-tested. Next: evidence-page first-100-contract limitation and user-visible search/pagination; check collaboration backend assignee scope.
