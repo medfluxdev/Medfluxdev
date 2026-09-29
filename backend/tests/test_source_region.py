@@ -187,3 +187,13 @@ def test_invalid_page_hint_returns_none():
     result = resolve_narrowest_region("Mindestvertragslaufzeit", pdf_bytes=_pdf("Mindestvertragslaufzeit"), page_hint=999)
     assert result["status"] == "none"
     assert result["bbox"] is None
+
+
+def test_unique_phrase_with_text_layer_is_exact():
+    result = resolve_narrowest_region("Mindestvertragslaufzeit", pdf_bytes=_pdf("Mindestvertragslaufzeit: 2 Jahre"), page_hint=1)
+    assert result["status"] == "exact"
+
+
+def test_repeated_phrase_is_not_exact_even_when_search_rectangles_are_narrow():
+    result = resolve_narrowest_region("Vertragsnummer", pdf_bytes=_pdf("Vertragsnummer A\nVertragsnummer B"), page_hint=1)
+    assert result["status"] == "coarse"
