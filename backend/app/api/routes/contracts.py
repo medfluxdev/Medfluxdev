@@ -419,7 +419,7 @@ def contract_fact_review(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
@@ -486,7 +486,7 @@ def contract_review_start(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
@@ -532,7 +532,7 @@ def contract_review_complete(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
@@ -793,7 +793,7 @@ def contract_override(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
@@ -857,7 +857,7 @@ def contract_document_content(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
