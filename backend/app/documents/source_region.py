@@ -151,7 +151,10 @@ def resolve_narrowest_region(
     except Exception:
         return _none()
 
-    if page_hint is not None and 1 <= page_hint <= doc.page_count:
+    if page_hint is not None:
+        if not 1 <= page_hint <= doc.page_count:
+            doc.close()
+            return _none()
         candidates = [page_hint - 1]
     else:
         candidates = list(range(doc.page_count))
@@ -165,6 +168,7 @@ def resolve_narrowest_region(
         status = match_status
         if page_area > 0 and (union.width * union.height) > _OVERSIZE_RATIO * page_area:
             status = "coarse"
+        doc.close()
         return {
             "status": status,
             "page": idx + 1,
@@ -181,7 +185,9 @@ def resolve_narrowest_region(
     if canonical is not None:
         region = _resolve_canonical(snippet, canonical, doc, page_hint)
         if region is not None:
+            doc.close()
             return region
+    doc.close()
     return _none()
 
 
