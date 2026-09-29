@@ -56,7 +56,7 @@ def test_text_layer_token_fallback_for_split_snippet():
         pdf_bytes=_pdf("Mindestvertragslaufzeit:\n2 Jahre"),
         page_hint=1,
     )
-    assert result["status"] == "exact"
+    assert result["status"] == "coarse"
     assert result["method"] == "pdf_text_layer"
 
 
@@ -153,3 +153,31 @@ def test_pdf_garbage_bytes_returns_none():
         pdf_bytes=b"keine echte pdf datei",
     )
     assert result["status"] == "none"
+
+def test_repeated_token_does_not_produce_misleading_highlight():
+    result = resolve_narrowest_region(
+        "Die Vertragsnummer 2026 ist maßgeblich",
+        pdf_bytes=_pdf("Vertragsnummer: 2026\\nVertragsnummer: 2027"),
+        page_hint=1,
+    )
+    assert result["status"] == "none"
+    assert result["bbox"] is None
+
+
+def test_unique_partial_token_is_only_coarse():
+    result = resolve_narrowest_region(
+        "Vertragsnummer 2026",
+        pdf_bytes=_pdf("Vertragsnummer: 2026"),
+        page_hint=1,
+    )
+    assert result["status"] == "coarse"
+    assert result["bbox"] is not None
+
+
+def test_repeated_exact_phrase_is_not_a_unique_location():
+    result = resolve_narrowest_region(
+        "Vertragsnummer",
+        pdf_bytes=_pdf("Vertragsnummer: A\\nVertragsnummer: B"),
+        page_hint=1,
+    )
+    assert result["status"] == "coarse"
