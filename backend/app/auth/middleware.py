@@ -111,7 +111,7 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
                     # Logout is a self-service security action and must remain
                     # available to every authenticated role. RBAC restrictions
                     # apply only to product mutations, never to ending a session.
-                    if path != "/api/auth/logout" and identity.role == "viewer":
+                    if path not in {"/api/auth/logout", "/api/ai/assistant"} and identity.role == "viewer":
                         return JSONResponse(
                             status_code=403,
                             content={"detail": "Keine Berechtigung fuer diese Aktion."},
@@ -119,6 +119,7 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
                     if (
                         path != "/api/auth/logout"
                         and identity.role == "reviewer"
+                        and path != "/api/ai/assistant"
                         and not _reviewer_mutation_allowed(path)
                     ):
                         return JSONResponse(
