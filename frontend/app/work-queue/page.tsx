@@ -160,7 +160,7 @@ export default function WorkQueuePage() {
         <span><strong>Vertragsende</strong> = dokumentiertes/berechnetes Ende des Vertrags</span>
       </div>
 
-      {selectedWorkItemId ? <WorkItemCollaborationPanel workItemId={selectedWorkItemId} onClose={() => setSelectedWorkItemId(null)} /> : null}
+      {selectedWorkItemId ? <WorkItemCollaborationPanel key={`${organizationSlug}:${selectedWorkItemId}`} workItemId={selectedWorkItemId} onClose={() => setSelectedWorkItemId(null)} /> : null}
 
       {error && <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut laden</button>}>To-dos konnten nicht geladen werden.</InlineAlert>}
       {actionError && <InlineAlert tone="warning" role="alert">{actionError}</InlineAlert>}
