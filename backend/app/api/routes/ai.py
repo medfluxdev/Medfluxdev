@@ -311,14 +311,14 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             visible = _assistant_visible_contracts(session, fresh)
             if visible is not None and payload.contract_id not in visible:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
-            exists = session.scalar(select(Contract.id).where(
+            contract_still_exists = session.scalar(select(Contract.id).where(
                 Contract.id == payload.contract_id,
                 Contract.organization_id == fresh.organization_id,
                 Contract.lifecycle_state == "active",
                 Contract.is_archived.is_(False),
                 Contract.accepted_extraction_id == extraction_id,
             ))
-            if exists is None:
+            if contract_still_exists is None:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
             if evidence:
                 # Revoke a response if a reviewer edited or removed any source
