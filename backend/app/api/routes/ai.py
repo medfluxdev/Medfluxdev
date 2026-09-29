@@ -181,7 +181,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
     try:
         # Recheck active membership at each invocation; never trust a prior chat turn.
         account = session.get(Account, actor.account_id)
-        fresh = actor_for_account(session, account, organization_slug) if account is not None else None
+        fresh = actor_for_account(session, account, organization_slug) if account is not None and account.is_active else None
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
         context = "Keine Vertragsdaten freigegeben."
@@ -258,7 +258,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
     session = create_session()
     try:
         account = session.get(Account, actor.account_id)
-        fresh = actor_for_account(session, account, organization_slug) if account is not None else None
+        fresh = actor_for_account(session, account, organization_slug) if account is not None and account.is_active else None
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
         if payload.contract_id is not None:
