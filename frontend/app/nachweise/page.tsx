@@ -35,6 +35,9 @@ export default function NachweisePage() {
   const { organizationSlug } = useAuth();
   const listSeq = useRef(0);
   const detailSeq = useRef(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
   const [contractId, setContractId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ContractDetailResponse | null>(null);
@@ -50,15 +53,19 @@ export default function NachweisePage() {
     if (!organizationSlug) {
       setContracts([]);
       setContractId(null);
+      setHasMore(false);
+      setTotalCount(0);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const res = await listContracts(organizationSlug, { page_size: 100 });
+      const res = await listContracts(organizationSlug, { page_size: 100, page });
       if (seq !== listSeq.current) return;
       setContracts(res.items);
+      setHasMore(res.has_more);
+      setTotalCount(res.total_count);
       setContractId((current) =>
         current && res.items.some((item) => item.contract_id === current)
           ? current : (res.items[0]?.contract_id ?? null)
@@ -68,17 +75,22 @@ export default function NachweisePage() {
     } finally {
       if (seq === listSeq.current) setLoading(false);
     }
-  }, [organizationSlug]);
+  }, [organizationSlug, page]);
 
   useEffect(() => {
+    setPage(1);
     setContracts([]);
     setContractId(null);
     setDetail(null);
     setActiveDoc(null);
     setNavTarget(null);
     detailSeq.current += 1;
-    void loadContracts();
     return () => { listSeq.current += 1; detailSeq.current += 1; };
+  }, [organizationSlug]);
+
+  useEffect(() => {
+    void loadContracts();
+    return () => { listSeq.current += 1; };
   }, [loadContracts]);
 
   const loadDetail = useCallback(async (id: string) => {
@@ -128,13 +140,15 @@ export default function NachweisePage() {
       <PageHeader title="Nachweise" description="Quellen, Belege und Originaldokumente der lokalen Vertragsanalyse." />
       {error && <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => void loadContracts()}>Erneut laden</button>}>{error}</InlineAlert>}
       {loading && <LoadingState>Verträge werden geladen…</LoadingState>}
-      {!loading && !error && contracts.length === 0 && <div className="state-box"><div className="state-icon">∅</div><h3>Keine Verträge verfügbar</h3><p>Importieren Sie Verträge, um deren Quellen und Nachweise hier zu durchsuchen.</p></div>}
-      {!loading && !error && contracts.length > 0 && (
+      {!loading && !error && contracts.length === 0 && page === 1 && <div className="state-box"><div className="state-icon">∅</div><h3>Keine Verträge verfügbar</h3><p>Importieren Sie Verträge, um deren Quellen und Nachweise hier zu durchsuchen.</p></div>}
+      {!loading && !error && (contracts.length > 0 || page > 1) && (
         <section className="panel" aria-labelledby="nachweise-heading">
           <div className="panel-head">
             <div><h2 id="nachweise-heading">Nachweise durchsuchen</h2><p>Auswahl eines Vertrags – echte Quellen aus der lokalen Analyse</p></div>
             <label className="field" style={{ minWidth: 280 }}><span className="visually-hidden">Vertrag</span><select value={contractId ?? ""} onChange={(e) => setContractId(e.target.value)}>{contracts.map((c) => <option key={c.contract_id} value={c.contract_id}>{c.contract_number ?? "–"} · {c.contract_title ?? c.supplier}</option>)}</select></label>
           </div>
+          <nav aria-label="Vertragsseiten" className="row-actions"><button type="button" className="btn btn-sm" disabled={page === 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>Vorherige 100</button><span aria-live="polite">Seite {page} · {totalCount} Verträge</span><button type="button" className="btn btn-sm" disabled={!hasMore || loading} onClick={() => setPage((p) => p + 1)}>Nächste 100</button></nav>
+          {contracts.length === 0 && <p>Auf dieser Seite sind keine Verträge verfügbar.</p>}
           {loadingDetail ? <LoadingState>Nachweise werden geladen…</LoadingState> : detailError ? <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => contractId && void loadDetail(contractId)}>Erneut laden</button>}>{detailError}</InlineAlert> : detail ? (
             <div className="detail-columns">
               <div className="detail-main">
