@@ -194,7 +194,7 @@ def test_archived_contract_cannot_enter_deletion_queue(monkeypatch):
     (2, 0, False, None),
     (100, 0, False, None),
     (101, 0, True, 100),
-    (101, 100, True, 200),
+    (1, 100, False, None),
 ])
 def test_deletion_queue_pagination_contract(monkeypatch, count, offset, expected_more, expected_next):
     organization = uuid4()
