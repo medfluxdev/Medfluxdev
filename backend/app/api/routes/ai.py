@@ -226,18 +226,18 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                     requires_review=bool(row.requires_review),
                 ) for row, version_id in rows if row.source_text and row.source_text.strip()]
             # Projections are context, NOT verified source evidence or approved totals.
-            context = ("Unverifizierte Vertragsübersicht (keine Originalbelege):\\n"
-                       f"Vertragsnummer: {contract.contract_number or 'unbekannt'}\\n"
-                       f"Lieferant: {contract.supplier or 'unbekannt'}\\n"
-                       f"Status: {contract.status or 'unbekannt'}\\n"
-                       f"Beginn: {contract.start_date or 'unbekannt'}\\n"
+            context = ("Unverifizierte Vertragsübersicht (keine Originalbelege):\n"
+                       f"Vertragsnummer: {contract.contract_number or 'unbekannt'}\n"
+                       f"Lieferant: {contract.supplier or 'unbekannt'}\n"
+                       f"Status: {contract.status or 'unbekannt'}\n"
+                       f"Beginn: {contract.start_date or 'unbekannt'}\n"
                        f"Ende: {contract.end_date or 'unbekannt'}")
             if evidence:
-                context += "\\nQuellenauszüge (nur verlinkte, akzeptierte Extraktion; Prüfstatus beachten):\\n"
+                context += "\nQuellenauszüge (nur verlinkte, akzeptierte Extraktion; Prüfstatus beachten):\n"
                 for index, item in enumerate(evidence, start=1):
                     context += (f"[{index}] Feld {item.field_ref}, Seite {item.page or 'nicht verfügbar'}, "
                                 f"Prüfung erforderlich: {item.requires_review}; "
-                                f"Auszug: {item.source_text}\\n")
+                                f"Auszug: {item.source_text}\n")
     finally:
         session.close()
     if not _ai_service.configured:
@@ -250,7 +250,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
               "Du darfst keine Änderungen ausführen.")
     try:
         answer = await _ai_service.generate_text(
-            f"Kontext:\\n{context}\\n\\nNutzerfrage:\\n{payload.message}", system, max_tokens=768)
+            f"Kontext:\n{context}\n\nNutzerfrage:\n{payload.message}", system, max_tokens=768)
     except AIProviderError as exc:
         raise HTTPException(status_code=503, detail=exc.user_message) from exc
     # A membership or object scope may be revoked during a slow local generation.
