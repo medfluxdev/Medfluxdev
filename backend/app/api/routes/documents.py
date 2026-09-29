@@ -8,7 +8,7 @@ would form a second production processing architecture.
 
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -295,6 +295,7 @@ async def import_documents(
 @router.get("/{document_version_id}/source-region")
 def document_source_region(
     document_version_id: str,
+    request: Request,
     organization_slug: str = Query(min_length=1),
     snippet: str = Query(min_length=2, max_length=500),
     page: int | None = Query(default=None, ge=1),
@@ -303,7 +304,10 @@ def document_source_region(
 
     with create_session() as session:
         org = get_organization(session, organization_slug)
-        if org is None:
+        actor = getattr(request.state, "actor", None)
+        if org is None or (settings.auth_enabled and (
+            actor is None or actor.organization_id != org.id
+        )):
             raise _not_found()
         version = session.scalars(
             select(DocumentVersion).where(
