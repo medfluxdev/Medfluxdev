@@ -67,7 +67,7 @@ async def test_assistant_returns_503_when_local_model_unconfigured(monkeypatch):
 async def test_assistant_discards_answer_if_membership_revoked_during_generation(monkeypatch):
     org = uuid4()
     actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4())
-    account = SimpleNamespace(id=actor.account_id)
+    account = SimpleNamespace(id=actor.account_id, is_active=True)
     calls = []
     monkeypatch.setattr(ai.settings, "auth_enabled", True)
     monkeypatch.setattr(ai, "create_session", lambda: SimpleNamespace(
