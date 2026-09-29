@@ -648,7 +648,7 @@ def _require_explicit_delete_permission(request: Request) -> None:
 
 
 def _deletion_transition(request: Request, organization_slug: str, contract_id: str, *,
-                         expected: str, target: str) -> ContractDetailResponse:
+                         expected: str, target: str) -> dict:
     _require_explicit_delete_permission(request)
     try:
         cid = UUID(contract_id)
@@ -679,7 +679,7 @@ def _deletion_transition(request: Request, organization_slug: str, contract_id: 
         _record_account_activity(session, request, f"contract.{target}", cid,
                                  {"previous_state": expected, "new_state": target})
         session.commit()
-        return _augmented_detail_response(session, org.id, cid)
+        return {"contract_id": str(cid), "lifecycle_state": target}
     except Exception:
         session.rollback()
         raise
@@ -687,19 +687,19 @@ def _deletion_transition(request: Request, organization_slug: str, contract_id: 
         session.close()
 
 
-@router.post("/{contract_id}/delete/request", response_model=ContractDetailResponse)
+@router.post("/{contract_id}/delete/request")
 def request_contract_deletion(request: Request, organization_slug: str, contract_id: str):
     return _deletion_transition(request, organization_slug, contract_id,
                                 expected="active", target="pending_deletion")
 
 
-@router.post("/{contract_id}/delete/confirm", response_model=ContractDetailResponse)
+@router.post("/{contract_id}/delete/confirm")
 def confirm_contract_deletion(request: Request, organization_slug: str, contract_id: str):
     return _deletion_transition(request, organization_slug, contract_id,
                                 expected="pending_deletion", target="deleted")
 
 
-@router.post("/{contract_id}/delete/restore", response_model=ContractDetailResponse)
+@router.post("/{contract_id}/delete/restore")
 def restore_contract_deletion(request: Request, organization_slug: str, contract_id: str):
     return _deletion_transition(request, organization_slug, contract_id,
                                 expected="deleted", target="active")
