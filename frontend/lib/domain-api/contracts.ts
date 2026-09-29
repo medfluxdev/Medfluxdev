@@ -107,6 +107,17 @@ export function getContractDeletionCapabilities(organizationSlug: string) {
   );
 }
 
+export type ContractDeletionQueue = {
+  items: Array<{ contract_id: string; contract_number: string | null; lifecycle_state: "pending_deletion" | "deleted" }>;
+  has_more: boolean;
+};
+
+export function getContractDeletionQueue(organizationSlug: string) {
+  return apiGet<ContractDeletionQueue>(
+    `/api/contracts/deletion/queue?organization_slug=${encodeURIComponent(organizationSlug)}`,
+  );
+}
+
 export type ContractDeletionReceipt = {
   contract_id: string;
   lifecycle_state: "pending_deletion" | "deleted" | "active";
