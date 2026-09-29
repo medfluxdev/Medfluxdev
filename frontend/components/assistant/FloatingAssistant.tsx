@@ -25,9 +25,15 @@ export default function FloatingAssistant() {
   const [sourceStatus, setSourceStatus] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
+  const renderedContext = useRef(contextKey);
+  // Invalidate previous requests synchronously on render, before effects run.
+  if (renderedContext.current !== contextKey) {
+    renderedContext.current = contextKey;
+    generation.current += 1;
+    activeRequest.current?.abort();
+  }
 
   useEffect(() => {
-    generation.current += 1;
     activeRequest.current?.abort();
     activeRequest.current = null;
     setMessages([]);
@@ -55,7 +61,7 @@ export default function FloatingAssistant() {
         message,
         contract_id: contractId,
       }, 180000, controller.signal);
-      if (current === generation.current) {
+      if (current === generation.current && !controller.signal.aborted) {
         setMessages(previous => [...previous, { sender: "assistant", text: result.answer, evidence: result.evidence }]);
       }
     } catch (failure) {
