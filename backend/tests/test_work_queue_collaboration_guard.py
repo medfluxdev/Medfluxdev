@@ -43,7 +43,7 @@ def test_comment_write_rejects_whitespace_only(monkeypatch):
     session, org_id, work_id = _setup(monkeypatch)
     actor = SimpleNamespace(organization_id=org_id)
     with pytest.raises(HTTPException) as error:
-        routes.add_comment(SimpleNamespace(state=SimpleNamespace(actor=actor)), work_id, "hospital", routes.CommentCreate(body="  \\t  "))
+        routes.add_comment(SimpleNamespace(state=SimpleNamespace(actor=actor)), work_id, "hospital", routes.CommentCreate(body="     "))
     assert error.value.status_code == 422
     session.commit.assert_not_called()
     session.close.assert_called_once()
