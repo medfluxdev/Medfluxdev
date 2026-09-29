@@ -108,8 +108,8 @@ export async function apiGet<T>(path: string, signal?: AbortSignal, timeoutMs: n
   return (await res.json()) as T;
 }
 
-export async function apiPost<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
-  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, timeoutMs);
+export async function apiPost<T>(path: string, body: unknown, timeoutMs: number = DEFAULT_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal }, timeoutMs);
   if (!res.ok) return throwForResponse(res, path);
   return (await res.json()) as T;
 }
