@@ -46,3 +46,41 @@ def test_assistant_rejects_blank_or_oversized_prompts():
     for text in ("", "x" * 2001):
         with pytest.raises(ValidationError):
             ai.AssistantRequest(message=text)
+
+
+@pytest.mark.asyncio
+async def test_assistant_returns_503_when_local_model_unconfigured(monkeypatch):
+    org = uuid4()
+    actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4())
+    account = SimpleNamespace(id=actor.account_id)
+    monkeypatch.setattr(ai.settings, "auth_enabled", True)
+    monkeypatch.setattr(ai, "create_session", lambda: SimpleNamespace(
+        get=lambda cls, identifier: account, close=lambda: None))
+    monkeypatch.setattr(ai, "actor_for_account", lambda session, user, slug: actor)
+    monkeypatch.setattr(ai._ai_service, "_ensure_provider", lambda: None)
+    with pytest.raises(HTTPException) as exc:
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+    assert exc.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_assistant_discards_answer_if_membership_revoked_during_generation(monkeypatch):
+    org = uuid4()
+    actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4())
+    account = SimpleNamespace(id=actor.account_id)
+    calls = []
+    monkeypatch.setattr(ai.settings, "auth_enabled", True)
+    monkeypatch.setattr(ai, "create_session", lambda: SimpleNamespace(
+        get=lambda cls, identifier: account, close=lambda: None))
+    def fresh_actor(session, user, slug):
+        calls.append(True)
+        return actor if len(calls) == 1 else None
+    monkeypatch.setattr(ai, "actor_for_account", fresh_actor)
+    monkeypatch.setattr(ai._ai_service, "_ensure_provider", lambda: object())
+    async def answer(*args, **kwargs):
+        return "Sensitive generated answer"
+    monkeypatch.setattr(ai._ai_service, "generate_text", answer)
+    with pytest.raises(HTTPException) as exc:
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+    assert exc.value.status_code == 404
+    assert len(calls) == 2
