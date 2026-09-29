@@ -155,16 +155,16 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     void renderPage();
   }, [status, renderPage]);
 
+  // Navigate when the selected evidence changes, not on every manual page turn.
+  // Including pageNumber here previously forced the reader back to the cited page.
   useEffect(() => {
     if (
-      status !== "ready" ||
-      !navTarget ||
+      status !== "ready" || pageCount < 1 || !navTarget ||
       navTarget.document_version_id !== documentVersionId ||
-      navTarget.page == null ||
-      navTarget.page === pageNumber
+      navTarget.page == null
     ) return;
     setPageNumber(Math.min(Math.max(1, navTarget.page), pageCount));
-  }, [navTarget, status, documentVersionId, pageCount, pageNumber]);
+  }, [navTarget, status, documentVersionId, pageCount]);
 
   useEffect(() => {
     if (
