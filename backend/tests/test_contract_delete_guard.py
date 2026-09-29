@@ -187,3 +187,30 @@ def test_archived_contract_cannot_enter_deletion_queue(monkeypatch):
                                        "test-org", str(uuid4()), expected="active",
                                        target="pending_deletion")
     assert exc.value.status_code == 409
+
+
+@pytest.mark.parametrize(("count", "offset", "expected_more", "expected_next"), [
+    (0, 0, False, None),
+    (2, 0, False, None),
+    (100, 0, False, None),
+    (101, 0, True, 100),
+    (101, 100, True, 200),
+])
+def test_deletion_queue_pagination_contract(monkeypatch, count, offset, expected_more, expected_next):
+    organization = uuid4()
+    rows = [SimpleNamespace(id=uuid4(), contract_number=str(i), lifecycle_state="deleted")
+            for i in range(count)]
+    query_result = SimpleNamespace(all=lambda: rows)
+    session = SimpleNamespace(scalars=lambda query: query_result, close=lambda: None)
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
+    monkeypatch.setattr(contracts, "create_session", lambda: session)
+    monkeypatch.setattr(contracts, "get_organization", lambda db, slug: SimpleNamespace(id=organization))
+    monkeypatch.setattr(contracts, "current_scope_context",
+                        lambda: SimpleNamespace(hospital_id=None, department_id=None))
+    monkeypatch.setattr(contracts, "scoped_contract_ids", lambda *args: None)
+    result = contracts.contract_deletion_queue(
+        _request(organization_id=organization), "test-org", offset=offset)
+    assert len(result["items"]) == min(count, 100)
+    assert result["has_more"] is expected_more
+    assert result["next_offset"] == expected_next
