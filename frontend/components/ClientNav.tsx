@@ -9,7 +9,7 @@ import FloatingAssistant from "@/components/assistant/FloatingAssistant";
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { account, loading } = useAuth();
+  const { account, organizationSlug, loading } = useAuth();
 
   if (pathname === "/login" || pathname === "/select-organization") {
     return <>{children}</>;
@@ -35,7 +35,7 @@ export default function ClientNav({ children }: { children: React.ReactNode }) {
         <AppTopbar />
         {children}
       </main>
-      <FloatingAssistant />
+      {organizationSlug && <FloatingAssistant key={`${account.id}:${organizationSlug}`} />}
     </div>
   );
 }
