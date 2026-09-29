@@ -40,3 +40,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Latest source-review checkpoint
 - Reviewed work-queue route, service and regression tests. Fixed SQL ordering so allowed contract scope is applied before the result limit. Commits: 15158f8, c4c1b7e, 94a727f. Tests authored but not executed. Next: collaboration endpoint authorization and evidence-list navigation.
+
+## Collaboration authorization checkpoint
+- Inspected backend collaboration GET/PUT/comment routes and frontend collaboration panel. Fixed collaboration update lookup to require matching organization, blocked writes from actors whose organization differs from the requested work item, and rejected whitespace-only comments. Source commit `de6866d`; authored DB-free guard tests `c118639` and corrected whitespace fixture `2ffbb0e`. Tests not executed. Further audit: membership scope for assignee, frontend async save/comment stale-state and cross-organization switching, plus evidence-page contract pagination.
