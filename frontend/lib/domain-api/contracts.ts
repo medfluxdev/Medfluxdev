@@ -123,8 +123,8 @@ export type ContractDeletionReceipt = {
   lifecycle_state: "pending_deletion" | "deleted" | "active";
 };
 
-// These operations are deliberately not exposed in the UI until
-// a server-backed permission capability and final role policy exist.
+// Destructive lifecycle transitions require server-side admin authorization
+// and an explicit CONTRACTS_ALLOW_DELETE opt-in. UI capability checks are advisory.
 export function requestContractDeletion(contractId: string, organizationSlug: string) {
   return apiPost<ContractDeletionReceipt>(
     `/api/contracts/${encodeURIComponent(contractId)}/delete/request?organization_slug=${encodeURIComponent(organizationSlug)}`, {},
