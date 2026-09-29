@@ -109,3 +109,22 @@ def test_static_deletion_routes_precede_dynamic_contract_route():
     dynamic = paths.index("/api/contracts/{contract_id}")
     assert paths.index("/api/contracts/deletion/queue") < dynamic
     assert paths.index("/api/contracts/capabilities/deletion") < dynamic
+
+
+def test_deletion_queue_denied_when_feature_disabled(monkeypatch):
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", False)
+    with pytest.raises(HTTPException) as exc:
+        contracts.contract_deletion_queue(_request(), "test-org", offset=0)
+    assert exc.value.status_code == 403
+
+
+def test_deletion_queue_rejects_cross_organization_before_database_query(monkeypatch):
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
+    fake_session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: fake_session)
+    monkeypatch.setattr(contracts, "get_organization", lambda session, slug: SimpleNamespace(id=uuid4()))
+    with pytest.raises(HTTPException) as exc:
+        contracts.contract_deletion_queue(_request(), "another-org", offset=0)
+    assert exc.value.status_code == 404
