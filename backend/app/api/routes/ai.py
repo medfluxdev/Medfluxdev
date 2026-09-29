@@ -186,6 +186,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
         context = "Keine Vertragsdaten freigegeben."
         evidence: list[AssistantEvidence] = []
+        extraction_id: UUID | None = None
         if payload.contract_id is not None:
             scope = current_scope_context()
             visible = scoped_contract_ids(session, fresh.organization_id, scope.hospital_id, scope.department_id)
@@ -202,6 +203,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             # Only accepted extraction evidence from a document explicitly linked
             # to this same contract. Never search a tenant-wide evidence index.
             if contract.accepted_extraction_id is not None:
+                extraction_id = contract.accepted_extraction_id
                 rows = session.execute(
                     select(ExtractionEvidence, ContractExtraction.document_version_id)
                     .join(ContractExtraction, ContractExtraction.id == ExtractionEvidence.extraction_id)
@@ -269,9 +271,17 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                 Contract.organization_id == fresh.organization_id,
                 Contract.lifecycle_state == "active",
                 Contract.is_archived.is_(False),
+                Contract.accepted_extraction_id == extraction_id,
             ))
             if exists is None:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+            if evidence:
+                still_linked = set(session.scalars(select(ContractDocument.document_version_id).where(
+                    ContractDocument.organization_id == fresh.organization_id,
+                    ContractDocument.contract_id == payload.contract_id,
+                )).all())
+                if any(item.document_version_id not in still_linked for item in evidence):
+                    raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
     finally:
         session.close()
     return AssistantResponse(answer=answer, contract_id=payload.contract_id, evidence=evidence)
