@@ -95,6 +95,18 @@ export function unarchiveContract(contractId: string, organizationSlug: string) 
 }
 
 
+export type ContractDeletionCapabilities = {
+  can_delete: boolean;
+  can_restore: boolean;
+  requires_confirmation: boolean;
+};
+
+export function getContractDeletionCapabilities(organizationSlug: string) {
+  return apiGet<ContractDeletionCapabilities>(
+    `/api/contracts/capabilities/deletion?organization_slug=${encodeURIComponent(organizationSlug)}`,
+  );
+}
+
 export type ContractDeletionReceipt = {
   contract_id: string;
   lifecycle_state: "pending_deletion" | "deleted" | "active";
