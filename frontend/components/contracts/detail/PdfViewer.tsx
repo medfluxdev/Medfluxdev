@@ -249,7 +249,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (!rect) return;
     const pagePoints = { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) };
     const precision = evidencePrecision(bbox, bboxSpace, pagePoints);
-    if (precision === "coarse") {
+    if (!useRefined || precision === "coarse") {
       ctx.fillStyle = "rgba(255, 200, 0, 0.12)";
       ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       ctx.strokeStyle = "#d97706";
@@ -299,12 +299,6 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
         <p className="pdf-nav-info" aria-live="polite">
           {refined?.key === `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}` && refined.status === "exact" && refined.bbox
             ? `Quelle im Original lokalisiert: ${navTarget.label}`
-            : navTarget.supports_exact_navigation && navTarget.bbox && evidencePrecision(
-            navTarget.bbox,
-            navTarget.bbox_space,
-            dims ? { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) } : undefined
-          ) === "exact"
-            ? `Quelle (Seitenbereich) hervorgehoben: ${navTarget.label}`
             : navTarget.supports_exact_navigation && navTarget.bbox
               ? `Quelle: ${navTarget.label} · ungefähre Lage auf Seite ${navTarget.page} (keine exakte Position)`
               : `Quelle: ${navTarget.label} (ohne exakte Position)`}
