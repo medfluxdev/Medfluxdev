@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 from app.api.routes import ai
 
@@ -16,7 +16,7 @@ def request(actor=None):
 async def test_assistant_requires_auth_even_when_dev_auth_is_disabled(monkeypatch):
     monkeypatch.setattr(ai.settings, "auth_enabled", False)
     with pytest.raises(HTTPException) as exc:
-        await ai.ai_assistant(request(), "hospital", ai.AssistantRequest(message="Hallo"))
+        await ai.ai_assistant(request(), "hospital", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 403
 
 
