@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import Button from "@/components/ui/Button";
 import InlineAlert from "@/components/ui/InlineAlert";
@@ -30,6 +30,8 @@ const EMPTY: WorkItemCollaboration = {
 
 export default function WorkItemCollaborationPanel({ workItemId, onClose }: Props) {
   const { organizationSlug } = useAuth();
+  const contextVersion = useRef(0);
+  const savingRef = useRef(false);
   const [state, setState] = useState<WorkItemCollaboration>(EMPTY);
   const [users, setUsers] = useState<Assignee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,17 @@ export default function WorkItemCollaborationPanel({ workItemId, onClose }: Prop
 
   useEffect(() => {
     let active = true;
-    if (!organizationSlug) return;
+    contextVersion.current += 1;
+    savingRef.current = false;
+    setState(EMPTY);
+    setUsers([]);
+    setComment("");
+    setError(null);
+    setSaving(false);
+    if (!organizationSlug) {
+      setLoading(false);
+      return () => { active = false; contextVersion.current += 1; };
+    }
     setLoading(true);
     Promise.all([
       getWorkItemCollaboration(organizationSlug, workItemId),
@@ -53,11 +65,13 @@ export default function WorkItemCollaborationPanel({ workItemId, onClose }: Prop
       })
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Zusammenarbeit konnte nicht geladen werden."); })
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    return () => { active = false; contextVersion.current += 1; };
   }, [organizationSlug, workItemId]);
 
   async function save() {
-    if (!organizationSlug) return;
+    if (!organizationSlug || savingRef.current || loading) return;
+    const version = contextVersion.current;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -67,26 +81,31 @@ export default function WorkItemCollaborationPanel({ workItemId, onClose }: Prop
         remind_at: state.remind_at,
         escalation_level: state.escalation_level,
       });
-      setState((current) => ({ ...current, ...updated }));
+      if (version === contextVersion.current) setState((current) => ({ ...current, ...updated }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Zusammenarbeit konnte nicht gespeichert werden.");
+      if (version === contextVersion.current) setError(err instanceof Error ? err.message : "Zusammenarbeit konnte nicht gespeichert werden.");
     } finally {
-      setSaving(false);
+      if (version === contextVersion.current) { savingRef.current = false; setSaving(false); }
     }
   }
 
   async function submitComment(event: FormEvent) {
     event.preventDefault();
-    if (!organizationSlug || !comment.trim()) return;
+    if (!organizationSlug || !comment.trim() || savingRef.current || loading) return;
+    const version = contextVersion.current;
+    savingRef.current = true;
     setSaving(true);
+    setError(null);
     try {
       const created = await addWorkItemComment(organizationSlug, workItemId, comment.trim());
-      setState((current) => ({ ...current, comments: [...(current.comments ?? []), created] }));
-      setComment("");
+      if (version === contextVersion.current) {
+        setState((current) => ({ ...current, comments: [...(current.comments ?? []), created] }));
+        setComment("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kommentar konnte nicht gespeichert werden.");
+      if (version === contextVersion.current) setError(err instanceof Error ? err.message : "Kommentar konnte nicht gespeichert werden.");
     } finally {
-      setSaving(false);
+      if (version === contextVersion.current) { savingRef.current = false; setSaving(false); }
     }
   }
 
