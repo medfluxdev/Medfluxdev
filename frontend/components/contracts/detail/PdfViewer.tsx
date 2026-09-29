@@ -169,7 +169,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   useEffect(() => {
     if (
       status !== "ready" || !documentVersionId || !navTarget ||
-      !navTarget.supports_exact_navigation || !navTarget.label || navTarget.page == null
+      !navTarget.label || navTarget.page == null
     ) return;
     if (navTarget.document_version_id !== documentVersionId) return;
     const key = `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
@@ -213,10 +213,10 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber || !navTarget.supports_exact_navigation) return;
+    if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber) return;
     const refinedKey = `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
     const useRefined = refined !== null && refined.key === refinedKey && refined.status === "exact" && refined.bbox !== null;
-    const bbox = useRefined ? refined.bbox! : navTarget.bbox;
+    const bbox = useRefined ? refined.bbox! : (navTarget.supports_exact_navigation ? navTarget.bbox : null);
     const bboxSpace = useRefined ? refined.bbox_space : navTarget.bbox_space;
     if (!bbox) return;
     canvas.width = dims.width;
@@ -271,7 +271,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
         </div>
       )}
       {canRender && <div className="pdf-stage"><div className="pdf-page-wrap" style={{ width: dims?.width }}><canvas ref={pageCanvasRef} className="pdf-page-canvas" /><canvas ref={overlayCanvasRef} className="pdf-overlay-canvas" aria-hidden="true" /></div></div>}
-      {navTarget && pageNumber === navTarget.page && navTarget.page != null && (
+      {navTarget && navTarget.document_version_id === documentVersionId && pageNumber === navTarget.page && navTarget.page != null && (
         <p className="pdf-nav-info" aria-live="polite">
           {navTarget.supports_exact_navigation && navTarget.bbox && evidencePrecision(
             navTarget.bbox,
