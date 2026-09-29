@@ -638,6 +638,23 @@ def contract_unarchive(
 
 
 
+@router.get("/capabilities/deletion")
+def contract_deletion_capabilities(request: Request, organization_slug: str) -> dict:
+    """Server-authoritative UI capability; never trust client-side role checks."""
+    actor = getattr(request.state, "actor", None)
+    session = create_session()
+    try:
+        org = get_organization(session, organization_slug)
+        if org is None or actor is None or actor.organization_id != org.id:
+            raise _not_found()
+        allowed = bool(settings.auth_enabled and settings.contracts_allow_delete
+                       and (actor.role or "").casefold() == "admin")
+        return {"can_delete": allowed, "can_restore": allowed,
+                "requires_confirmation": True}
+    finally:
+        session.close()
+
+
 def _require_explicit_delete_permission(request: Request) -> None:
     """Fail closed: deleting and restoring require an explicit server opt-in."""
     actor = getattr(request.state, "actor", None)
