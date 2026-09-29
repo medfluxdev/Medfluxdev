@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiPost } from "@/lib/api";
 
-type Reply = { answer: string; contract_id: string | null; evidence: unknown[] };
-type Message = { sender: "user" | "assistant"; text: string };
+type Evidence = { field_ref: string; document_version_id: string; page: number | null; source_text: string; requires_review: boolean };
+type Reply = { answer: string; contract_id: string | null; evidence: Evidence[] };
+type Message = { sender: "user" | "assistant"; text: string; evidence?: Evidence[] };
 
 export default function FloatingAssistant() {
   const { organizationSlug, account } = useAuth();
@@ -46,7 +47,7 @@ export default function FloatingAssistant() {
         contract_id: contractId,
       }, 180000);
       if (current === generation.current) {
-        setMessages(previous => [...previous, { sender: "assistant", text: result.answer }]);
+        setMessages(previous => [...previous, { sender: "assistant", text: result.answer, evidence: result.evidence }]);
       }
     } catch (failure) {
       if (current === generation.current) {
@@ -67,7 +68,7 @@ export default function FloatingAssistant() {
       <header><strong>Lokaler MedFlux-Assistent</strong><small>{contractId ? "Aktueller Vertrag" : "Ohne Vertragskontext"}</small></header>
       <p className="medflux-assistant-notice">Nur Lesezugriff. Vertragsübersichten sind keine geprüften Originalbelege.</p>
       <div className="medflux-assistant-messages" role="log" aria-live="polite">
-        {messages.map((item, index) => <p key={index}><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>)}
+        {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={`${source.document_version_id}:${source.field_ref}:${i}`}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <a href={`/contracts/${encodeURIComponent(contractId)}`}>Vertrag öffnen</a>}</div>)}</details>}</div>)}
         {busy && <p role="status">Lokales Modell antwortet…</p>}
       </div>
       {error && <p role="alert" className="medflux-assistant-error">{error}</p>}
