@@ -647,6 +647,11 @@ def _require_explicit_delete_permission(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Vertragslöschung ist nicht freigegeben.")
 
 
+def actor_org_mismatch(request: Request, organization_id) -> bool:
+    actor = getattr(request.state, "actor", None)
+    return actor is None or actor.organization_id != organization_id
+
+
 def _deletion_transition(request: Request, organization_slug: str, contract_id: str, *,
                          expected: str, target: str) -> dict:
     _require_explicit_delete_permission(request)
@@ -657,7 +662,7 @@ def _deletion_transition(request: Request, organization_slug: str, contract_id: 
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None or _scope_denies(session, org.id, cid):
+        if org is None or actor_org_mismatch(request, org.id) or _scope_denies(session, org.id, cid):
             raise _not_found()
         row = session.execute(
             select(Contract).where(
@@ -669,6 +674,8 @@ def _deletion_transition(request: Request, organization_slug: str, contract_id: 
         if row is None:
             raise _not_found()
         actor = request.state.actor
+        if target == "pending_deletion" and row.is_archived:
+            raise HTTPException(status_code=409, detail="Archivierten Vertrag zuerst wiederherstellen.")
         row.lifecycle_state = target
         if target in {"pending_deletion", "deleted"}:
             row.deletion_owner = str(actor.account_id)
