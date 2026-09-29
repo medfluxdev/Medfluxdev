@@ -240,3 +240,13 @@ def test_deletion_transition_rejects_missing_or_wrong_state(monkeypatch, expecte
                                        "test-org", str(uuid4()), expected=expected, target=target)
     assert exc.value.status_code == 404
     assert rolled_back == [True]
+
+
+def test_contract_detail_rejects_cross_organization_before_read(monkeypatch):
+    fake_session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: fake_session)
+    monkeypatch.setattr(contracts, "get_organization",
+                        lambda session, slug: SimpleNamespace(id=uuid4()))
+    with pytest.raises(HTTPException) as exc:
+        contracts.contract_detail(_request(), "another-org", str(uuid4()))
+    assert exc.value.status_code == 404
