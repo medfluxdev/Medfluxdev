@@ -31,3 +31,8 @@ Deletion administration and archive wiring have source commits but have not been
 - [ ] Prove frontend build, backend tests, real browser workflows and optional GPU tests on the approved local environment.
 
 Do not report zero outstanding tasks or zero defects until the remaining source work and the final acceptance evidence actually support those claims.
+
+## Full-workflow source review resumed (2026-09-30)
+- Inspected the integrated finish criteria, current assistant audit, route inventory, and review/archive/work-queue/evidence pages plus their shared contract API types. This is a route-level pass, **not** a completed full-repository audit.
+- Review and archive pages previously fetched only the first 100 records with no pagination; both now use backend page/has_more and generation guards so stale requests cannot overwrite the current organization/page. Archive restore moves back one page when the last row is restored.
+- Continue examining work queue, evidence and contract workflow source, tests, dead branches, duplicates, and cross-organization asynchronous state before final acceptance. No OpenCode execution or test pass is claimed.
