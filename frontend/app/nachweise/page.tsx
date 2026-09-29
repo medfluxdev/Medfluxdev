@@ -89,8 +89,14 @@ export default function NachweisePage() {
   }, [organizationSlug]);
 
   useEffect(() => {
+    setContracts([]);
+    setContractId(null);
+    setDetail(null);
+    setActiveDoc(null);
+    setNavTarget(null);
+    detailSeq.current += 1;
     void loadContracts();
-    return () => { listSeq.current += 1; };
+    return () => { listSeq.current += 1; detailSeq.current += 1; };
   }, [loadContracts]);
 
   const loadDetail = useCallback(async (id: string) => {
