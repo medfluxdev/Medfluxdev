@@ -9,7 +9,7 @@ import logging
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
@@ -241,14 +241,16 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                 rows = session.execute(
                     select(ExtractionEvidence, ContractExtraction.document_version_id)
                     .join(ContractExtraction, ContractExtraction.id == ExtractionEvidence.extraction_id)
-                    .join(ContractDocument, ContractDocument.document_version_id == ContractExtraction.document_version_id)
                     .where(
                         ExtractionEvidence.organization_id == fresh.organization_id,
                         ContractExtraction.organization_id == fresh.organization_id,
-                        ContractDocument.organization_id == fresh.organization_id,
-                        ContractDocument.contract_id == contract.id,
                         ContractExtraction.id == contract.accepted_extraction_id,
                         ExtractionEvidence.source_text.is_not(None),
+                        exists(select(ContractDocument.id).where(
+                            ContractDocument.document_version_id == ContractExtraction.document_version_id,
+                            ContractDocument.organization_id == fresh.organization_id,
+                            ContractDocument.contract_id == contract.id,
+                        )),
                     )
                     .order_by(ExtractionEvidence.id).limit(8)
                 ).all()
