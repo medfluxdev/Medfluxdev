@@ -730,7 +730,13 @@ def _deletion_transition(request: Request, organization_slug: str, contract_id: 
         else:
             row.deletion_owner = None
             row.deleted_at = None
-        _record_account_activity(session, request, f"contract.{target}", cid,
+        audit_event = {
+            ("active", "pending_deletion"): "contract.deletion_requested",
+            ("pending_deletion", "active"): "contract.deletion_cancelled",
+            ("pending_deletion", "deleted"): "contract.deletion_confirmed",
+            ("deleted", "active"): "contract.restored",
+        }[(expected, target)]
+        _record_account_activity(session, request, audit_event, cid,
                                  {"previous_state": expected, "new_state": target})
         session.commit()
         return {"contract_id": str(cid), "lifecycle_state": target}
