@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type {
   CalcBasis,
@@ -15,7 +15,7 @@ import {
   STATUS_LABEL_DETAIL,
 } from "@/lib/contract-detail-types";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { archiveContract } from "@/lib/domain-api/contracts";
+import { archiveContract, getContractDeletionCapabilities, requestContractDeletion } from "@/lib/domain-api/contracts";
 import PdfViewer from "./PdfViewer";
 import EvidencePane from "./EvidencePane";
 import FactReviewPanel from "./FactReviewPanel";
@@ -168,6 +168,36 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [canRequestDeletion, setCanRequestDeletion] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setCanRequestDeletion(false);
+    getContractDeletionCapabilities(orgSlug)
+      .then((result) => { if (active) setCanRequestDeletion(result.can_delete); })
+      .catch(() => { if (active) setCanRequestDeletion(false); });
+    return () => { active = false; };
+  }, [orgSlug]);
+
+  async function submitDeletionRequest() {
+    if (!canRequestDeletion || !deleteAcknowledged || deletePending) return;
+    setDeletePending(true);
+    setDeleteError(null);
+    try {
+      await requestContractDeletion(data.contract_id, orgSlug);
+      setDeleteDialogOpen(false);
+      router.push("/contracts");
+      router.refresh();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Löschanfrage fehlgeschlagen.");
+    } finally {
+      setDeletePending(false);
+    }
+  }
 
   const reload = onReload ?? (() => undefined);
 
@@ -266,8 +296,18 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     <div className="contract-workspace">
       <header className="cw-header">
         <div><div className="cw-breadcrumb">Verträge / {data.contract_number ?? data.contract_id}</div><h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1><p>{[data.contract_number ? `Nr. ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p></div>
-        <div className="cw-header-badges"><button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button><span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
+        <div className="cw-header-badges">{canRequestDeletion && <button type="button" className="cw-badge cw-badge-button" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button>}<button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button><span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
       </header>
+      {deleteDialogOpen && <div role="dialog" aria-modal="true" aria-labelledby="cw-delete-title" className="cw-section" style={{ margin: "1rem 0", padding: "1rem", border: "1px solid currentColor" }}>
+        <h2 id="cw-delete-title">Vertragslöschung beantragen?</h2>
+        <p>Dieser Schritt markiert den Vertrag als zur Löschung vorgemerkt. Er löscht keine Daten endgültig. Eine separate Bestätigung ist erforderlich.</p>
+        <label><input type="checkbox" checked={deleteAcknowledged} disabled={deletePending} onChange={(event) => setDeleteAcknowledged(event.target.checked)} /> Ich verstehe, dass der Vertrag danach aus aktiven Ansichten verschwindet.</label>
+        {deleteError && <p role="alert">{deleteError}</p>}
+        <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
+          <button type="button" disabled={deletePending} onClick={() => setDeleteDialogOpen(false)}>Abbrechen</button>
+          <button type="button" disabled={deletePending || !deleteAcknowledged} onClick={submitDeletionRequest}>{deletePending ? "Wird gesendet…" : "Löschung beantragen"}</button>
+        </div>
+      </div>}
       {archiveDialogOpen && <div role="dialog" aria-modal="true" aria-labelledby="cw-archive-title" className="cw-section" style={{ margin: "1rem 0", padding: "1rem", border: "1px solid currentColor" }}>
         <h2 id="cw-archive-title">Vertrag archivieren?</h2>
         <p>Der Vertrag bleibt erhalten und kann über das Archiv wiederhergestellt werden.</p>
