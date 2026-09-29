@@ -23,6 +23,8 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - Removed evidence-page changes from the PDF document-loading effect dependencies: page navigation no longer triggers a full PDF fetch. Removed the persistent refinement-key guard and reset geometry/page count on document reload, preventing stale source highlights across documents.
 
+- Corrected PDF viewer navigation effect so manual page changes are not overridden by a previously selected evidence target. Source-region refinement now also runs for page-only evidence; it draws no fallback highlight without real geometry and reports successful exact resolution distinctly.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode. Verify PDF page changes do not refetch the document and evidence refinement reruns correctly when revisiting a source.
