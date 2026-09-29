@@ -100,3 +100,32 @@ async def test_assistant_rejects_deactivated_account_before_model(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
     assert exc.value.status_code == 404
+
+
+def test_assistant_rechecks_fresh_membership_scope(monkeypatch):
+    org, contract_id = uuid4(), uuid4()
+    actor = SimpleNamespace(account_id=uuid4(), organization_id=org,
+                            role="viewer", is_developer=False)
+    stale_hospital, newly_assigned_hospital = uuid4(), uuid4()
+    monkeypatch.setattr(ai, "current_scope_context", lambda: SimpleNamespace(
+        hospital_id=stale_hospital, department_id=None))
+    membership = SimpleNamespace(hospital_id=newly_assigned_hospital, department_id=None)
+    session = SimpleNamespace(scalar=lambda stmt: membership)
+    seen = []
+    def scoped(session, organization_id, hospital_id, department_id):
+        seen.append(hospital_id)
+        return {contract_id} if hospital_id == stale_hospital else set()
+    monkeypatch.setattr(ai, "scoped_contract_ids", scoped)
+    assert ai._assistant_visible_contracts(session, actor) == set()
+    assert seen == [stale_hospital, newly_assigned_hospital]
+
+
+def test_assistant_unassigned_membership_is_not_global(monkeypatch):
+    actor = SimpleNamespace(account_id=uuid4(), organization_id=uuid4(),
+                            role="viewer", is_developer=False)
+    monkeypatch.setattr(ai, "current_scope_context", lambda: SimpleNamespace(
+        hospital_id=None, department_id=None))
+    monkeypatch.setattr(ai, "scoped_contract_ids",
+                        lambda session, org, hospital, department: None if hospital is None else set())
+    session = SimpleNamespace(scalar=lambda stmt: SimpleNamespace(hospital_id=None, department_id=None))
+    assert ai._assistant_visible_contracts(session, actor) == set()
