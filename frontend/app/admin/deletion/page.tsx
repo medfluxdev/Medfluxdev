@@ -17,11 +17,15 @@ export default function DeletionQueuePage() {
   const [queue, setQueue] = useState<ContractDeletionQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [pageLoading, setPageLoading] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setAllowed(false);
     setQueue(null);
+    setOffset(0);
+    setError(null);
     if (!organizationSlug || role !== "admin") return;
     try {
       const capability = await getContractDeletionCapabilities(organizationSlug);
@@ -35,6 +39,21 @@ export default function DeletionQueuePage() {
   }, [organizationSlug, role]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  async function changePage(next: number) {
+    if (!organizationSlug || pageLoading) return;
+    setPageLoading(true);
+    setError(null);
+    try {
+      const result = await getContractDeletionQueue(organizationSlug, next);
+      setQueue(result);
+      setOffset(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Weitere Einträge konnten nicht geladen werden.");
+    } finally {
+      setPageLoading(false);
+    }
+  }
 
   async function act(id: string, action: "cancel" | "confirm" | "restore") {
     if (!organizationSlug || busy) return;
@@ -63,7 +82,11 @@ export default function DeletionQueuePage() {
     {!allowed && !error && <p>Keine Löschberechtigung oder Daten werden geladen.</p>}
     {allowed && queue && <>
       {queue.items.length === 0 && <p>Keine vorgemerkten oder gelöschten Verträge.</p>}
-      {queue.has_more && <p role="status">Es werden nur die ersten 100 Einträge angezeigt. Weitere Einträge erfordern eine erneute Abfrage nach Bearbeitung.</p>}
+      <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>
+      <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+        <button type="button" disabled={pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
+        <button type="button" disabled={pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
+      </div>
       {queue.items.map((item) => <section className="panel" key={item.contract_id} style={{ padding: "1rem", marginBottom: "1rem" }}>
         <h2>{item.contract_number || item.contract_id}</h2>
         <p>Status: {item.lifecycle_state === "pending_deletion" ? "Zur Löschung vorgemerkt" : "Gelöscht (wiederherstellbar)"}</p>
