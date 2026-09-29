@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   confirmContractDeletion,
@@ -20,8 +20,10 @@ export default function DeletionQueuePage() {
   const [offset, setOffset] = useState(0);
   const [pageLoading, setPageLoading] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const generation = useRef(0);
 
   const refresh = useCallback(async () => {
+    const current = ++generation.current;
     setAllowed(false);
     setQueue(null);
     setOffset(0);
@@ -30,27 +32,33 @@ export default function DeletionQueuePage() {
     if (!organizationSlug || role !== "admin") return;
     try {
       const capability = await getContractDeletionCapabilities(organizationSlug);
-      if (!capability.can_delete) return;
+      if (current !== generation.current || !capability.can_delete) return;
       const result = await getContractDeletionQueue(organizationSlug);
+      if (current !== generation.current) return;
       setQueue(result);
       setAllowed(true);
     } catch {
-      setError("Die Löschverwaltung ist nicht verfügbar oder nicht freigegeben.");
+      if (current === generation.current) setError("Die Löschverwaltung ist nicht verfügbar oder nicht freigegeben.");
     }
   }, [organizationSlug, role]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    return () => { generation.current += 1; };
+  }, [refresh]);
 
   async function changePage(next: number) {
     if (!organizationSlug || pageLoading) return;
+    const current = generation.current;
     setPageLoading(true);
     setError(null);
     try {
       const result = await getContractDeletionQueue(organizationSlug, next);
+      if (current !== generation.current) return;
       setQueue(result);
       setOffset(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Weitere Einträge konnten nicht geladen werden.");
+      if (current === generation.current) setError(err instanceof Error ? err.message : "Weitere Einträge konnten nicht geladen werden.");
     } finally {
       setPageLoading(false);
     }
