@@ -36,6 +36,7 @@ export default function NachweisePage() {
   const listSeq = useRef(0);
   const detailSeq = useRef(0);
   const [page, setPage] = useState(1);
+  const [listOrg, setListOrg] = useState(organizationSlug);
   const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
@@ -78,6 +79,7 @@ export default function NachweisePage() {
   }, [organizationSlug, page]);
 
   useEffect(() => {
+    setListOrg(organizationSlug);
     setPage(1);
     setContracts([]);
     setContractId(null);
@@ -89,6 +91,7 @@ export default function NachweisePage() {
   }, [organizationSlug]);
 
   useEffect(() => {
+    if (listOrg !== organizationSlug) return;
     setContracts([]);
     setContractId(null);
     setDetail(null);
@@ -97,7 +100,7 @@ export default function NachweisePage() {
     detailSeq.current += 1;
     void loadContracts();
     return () => { listSeq.current += 1; detailSeq.current += 1; };
-  }, [loadContracts]);
+  }, [loadContracts, listOrg, organizationSlug]);
 
   const loadDetail = useCallback(async (id: string) => {
     const seq = ++detailSeq.current;
