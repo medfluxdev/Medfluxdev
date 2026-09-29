@@ -16,11 +16,13 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - Connected assistant evidence IDs to the existing contract evidence tab and PDF viewer via a deep link; the destination resolves evidence against the loaded contract and checks the document version is linked. This reuses the existing source-navigation implementation instead of introducing a second viewer.
 
+- Preserved all original evidence IDs as `merged_evidence_ids` when the contract detail read layer deduplicates identical physical evidence. Assistant deep links now resolve through these aliases without bypassing the loaded contract/document membership check; added DB-free alias regression tests (not yet executed).
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode.
 3. Exercise an actual accepted PDF extraction, a DOCX paragraph extraction, stale membership, changed evidence, no configured model, aborted request and organization switch using an isolated database.
-4. The assistant now links to the contract evidence tab, whose existing viewer supports evidence navigation. The separate source-region check still reports exact/coarse/not-found text only. Verify the deep link, evidence-ID preservation after deduplication, and visual highlighting with real accepted PDF data; do not claim verified exact navigation.
+4. The assistant now links to the contract evidence tab, whose existing viewer supports evidence navigation. The separate source-region check still reports exact/coarse/not-found text only. Verify the deep link, evidence-alias regression tests, and visual highlighting with real accepted PDF data; do not claim verified exact navigation.
 5. The assistant is bounded to one contract and eight evidence excerpts. This is not organization-wide semantic search or full-contract retrieval; no unsupported capability should be advertised.
 6. The source-region endpoint reads PDF bytes before resolving geometry; benchmark resource usage with approved realistic PDFs during final acceptance.
 7. Audit the remaining repository beyond this scoped file set for truncated code, unreachable branches, duplicated implementations and dead TODOs before release.
