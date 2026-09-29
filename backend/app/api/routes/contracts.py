@@ -372,6 +372,7 @@ def contract_deletion_capabilities(request: Request, organization_slug: str) -> 
 
 @router.get("/{contract_id}", response_model=ContractDetailResponse)
 def contract_detail(
+    request: Request,
     organization_slug: str,
     contract_id: str,
 ) -> ContractDetailResponse:
@@ -382,7 +383,7 @@ def contract_detail(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor_org_mismatch(request, org.id):
             raise _not_found()
         if _scope_denies(session, org.id, cid):
             raise _not_found()
