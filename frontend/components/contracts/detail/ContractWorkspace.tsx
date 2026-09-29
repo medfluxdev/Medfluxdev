@@ -165,6 +165,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   const [documentVersionId, setDocumentVersionId] = useState<string | null>(data.documents[0]?.document_version_id ?? null);
   const [navTarget, setNavTarget] = useState<SourceNavigationTarget | null>(null);
   const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
+  const [sourceLinkError, setSourceLinkError] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
@@ -223,6 +224,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     setActiveTab(tab);
     if (subtab) setDocumentTab(subtab);
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("source_evidence_id");
+    setSourceLinkError(false);
     if (tab === "overview") params.delete("tab");
     else params.set("tab", tab);
     if (tab === "documents") params.set("subtab", subtab ?? documentTab);
@@ -266,7 +269,14 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   useEffect(() => {
     if (!linkedEvidenceId) return;
     const match = data.evidence.find(ref => ref.evidence_id === linkedEvidenceId || ref.merged_evidence_ids?.includes(linkedEvidenceId));
-    if (!match || !match.document_version_id || !data.documents.some(doc => doc.document_version_id === match.document_version_id)) return;
+    const document = data.documents.find(doc => doc.document_version_id === match?.document_version_id);
+    if (!match || !document) {
+      setSourceLinkError(true);
+      setActiveTab("documents");
+      setDocumentTab("evidence");
+      return;
+    }
+    setSourceLinkError(false);
     setActiveEvidenceId(match.evidence_id);
     setNavTarget(evidenceTarget(match));
     if (match.document_version_id) setDocumentVersionId(match.document_version_id);
@@ -364,7 +374,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Offene Prüfungen" value={String(data.contract_review.unresolved_count)} /></div>
           <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
           {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div>}
-          {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten"><div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
+          {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
           {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}
