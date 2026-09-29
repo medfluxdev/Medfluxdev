@@ -186,6 +186,7 @@ def _assistant_visible_contracts(session, actor):
 
 class AssistantEvidence(BaseModel):
     field_ref: str
+    source_type: str
     document_version_id: UUID
     page: int | None = None
     source_text: str
@@ -251,6 +252,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                 ).all()
                 evidence = [AssistantEvidence(
                     field_ref=row.field_ref,
+                    source_type=row.source_type,
                     document_version_id=version_id,
                     page=row.page,
                     source_text=row.source_text[:350],
@@ -266,7 +268,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             if evidence:
                 context += "\nQuellenauszüge (nur verlinkte, akzeptierte Extraktion; Prüfstatus beachten):\n"
                 for index, item in enumerate(evidence, start=1):
-                    context += (f"[{index}] Feld {item.field_ref}, Seite {item.page or 'nicht verfügbar'}, "
+                    context += (f"[{index}] Feld {item.field_ref}, Quelle {item.source_type}, Seite {item.page or 'nicht verfügbar'}, "
                                 f"Prüfung erforderlich: {item.requires_review}; "
                                 f"Auszug: {item.source_text}\n")
     finally:
