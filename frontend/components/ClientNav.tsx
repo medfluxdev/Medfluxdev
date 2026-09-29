@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AppSidebar from "@/components/shell/AppSidebar";
 import AppTopbar from "@/components/shell/AppTopbar";
+import FloatingAssistant from "@/components/assistant/FloatingAssistant";
 
 export default function ClientNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
