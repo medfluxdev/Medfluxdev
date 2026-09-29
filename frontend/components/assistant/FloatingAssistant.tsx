@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiGet, apiPost } from "@/lib/api";
 
@@ -111,7 +112,7 @@ export default function FloatingAssistant() {
       <header><strong>Lokaler MedFlux-Assistent</strong><small>{contractId ? "Aktueller Vertrag" : "Ohne Vertragskontext"}</small></header>
       <p className="medflux-assistant-notice">Nur Lesezugriff. Vertragsübersichten sind keine geprüften Originalbelege.</p>
       <div className="medflux-assistant-messages" role="log" aria-live="polite">
-        {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={source.evidence_id}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <a href={`/contracts/${encodeURIComponent(contractId)}`}>Vertrag öffnen</a>}{source.source_type === "page" && source.page != null && source.source_text.trim().length >= 2 && <button type="button" onClick={() => void checkSource(source, `${index}:${i}`)}>Fundstelle im Original prüfen</button>}{sourceStatus[`${index}:${i}`] && <p role="status">{sourceStatus[`${index}:${i}`]}</p>}</div>)}</details>}</div>)}
+        {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={source.evidence_id}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <Link href={`/contracts/${encodeURIComponent(contractId)}?tab=documents&subtab=evidence&source_evidence_id=${encodeURIComponent(source.evidence_id)}`}>Nachweis im Vertrag öffnen</Link>}{source.source_type === "page" && source.page != null && source.source_text.trim().length >= 2 && <button type="button" onClick={() => void checkSource(source, `${index}:${i}`)}>Fundstelle im Original prüfen</button>}{sourceStatus[`${index}:${i}`] && <p role="status">{sourceStatus[`${index}:${i}`]}</p>}</div>)}</details>}</div>)}
         {busy && <p role="status">Lokales Modell antwortet… <button type="button" onClick={() => { generation.current += 1; activeRequest.current?.abort(); activeRequest.current = null; setBusy(false); }}>Abbrechen</button></p>}
       </div>
       {error && <p role="alert" className="medflux-assistant-error">{error}</p>}
