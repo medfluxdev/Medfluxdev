@@ -8,9 +8,12 @@ This audit is based on direct source inspection of the integrated assistant rout
 - Added bounded responsive dimensions and overflow/focus handling for the floating assistant, reducing clipped evidence and controls.
 - Earlier commits revalidated account/membership scope and source identity after model inference, and restricted original-PDF lookup by tenant and fresh membership.
 
+- Keyed the floating assistant by account and organization to reset chat state across tenant switches; moved contract-context invalidation out of React render and into a layout effect.
+- Replaced the accepted-evidence document-link join with a correlated EXISTS filter so multiple roles for one document do not duplicate evidence rows or consume the eight-item budget.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
-2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review the render-time context invalidation under React Strict Mode.
+2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode.
 3. Exercise an actual accepted PDF extraction, a DOCX paragraph extraction, stale membership, changed evidence, no configured model, aborted request and organization switch using an isolated database.
 4. The source-region action currently reports exact/coarse/not-found location text. It does not yet open a visually highlighted PDF at the exact source region; do not claim full source navigation.
 5. The assistant is bounded to one contract and eight evidence excerpts. This is not organization-wide semantic search or full-contract retrieval; no unsupported capability should be advertised.
