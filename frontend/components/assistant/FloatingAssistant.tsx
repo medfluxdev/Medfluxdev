@@ -25,18 +25,25 @@ export default function FloatingAssistant() {
   const [sourceStatus, setSourceStatus] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
+  const sourceRequests = useRef<Set<AbortController>>(new Set());
   // Layout-effect cleanup invalidates the old contract before browser paint;
   // no aborts or mutable ref writes occur during React's render phase.
   useLayoutEffect(() => {
     generation.current += 1;
     activeRequest.current?.abort();
     activeRequest.current = null;
+    sourceRequests.current.forEach(controller => controller.abort());
+    sourceRequests.current.clear();
     setMessages([]);
     setDraft("");
     setError("");
     setSourceStatus({});
     setBusy(false);
-    return () => { activeRequest.current?.abort(); };
+    return () => {
+      activeRequest.current?.abort();
+      sourceRequests.current.forEach(controller => controller.abort());
+      sourceRequests.current.clear();
+    };
   }, [contextKey]);
 
   async function submit(event: React.FormEvent) {
@@ -72,6 +79,8 @@ export default function FloatingAssistant() {
   async function checkSource(source: Evidence, key: string) {
     const current = generation.current;
     if (!organizationSlug || source.source_text.trim().length < 2) return;
+    const controller = new AbortController();
+    sourceRequests.current.add(controller);
     setSourceStatus(previous => ({ ...previous, [key]: "Original wird geprüft…" }));
     const query = new URLSearchParams({
       organization_slug: organizationSlug,
@@ -81,12 +90,14 @@ export default function FloatingAssistant() {
     try {
       const result = await apiGet<SourceRegion>(
         `/api/documents/${encodeURIComponent(source.document_version_id)}/source-region?${query}`,
-        undefined, 45000,
+        controller.signal, 45000,
       );
-      if (current === generation.current) setSourceStatus(previous => ({ ...previous, [key]: result.message_de }));
+      if (current === generation.current && !controller.signal.aborted) setSourceStatus(previous => ({ ...previous, [key]: result.message_de }));
     } catch (failure) {
-      if (current === generation.current) setSourceStatus(previous => ({ ...previous, [key]: failure instanceof Error
+      if (current === generation.current && !controller.signal.aborted) setSourceStatus(previous => ({ ...previous, [key]: failure instanceof Error
         ? failure.message : "Quellennachweis konnte nicht geprüft werden." }));
+    } finally {
+      sourceRequests.current.delete(controller);
     }
   }
 
