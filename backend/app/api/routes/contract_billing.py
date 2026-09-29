@@ -28,6 +28,7 @@ def _load_contract(session, organization_slug: str, contract_id: UUID):
         Contract.id == contract_id,
         Contract.organization_id == org.id,
         Contract.lifecycle_state == "active",
+        Contract.is_archived.is_(False),
     ))
     if contract is None:
         raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
