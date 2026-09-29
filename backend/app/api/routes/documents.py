@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import (
     Contract,
+    AccountMembership,
     ContractDocument,
     Department,
     DocumentFile,
@@ -318,6 +319,25 @@ def document_source_region(
         if version is None:
             raise _not_found()
         _ensure_document_visible(session, org.id, vid)
+        # Do not rely solely on request-entry scope for a source lookup:
+        # re-read the account's current hospital/department assignment.
+        if settings.auth_enabled and actor is not None and not (
+            actor.role == "admin" or getattr(actor, "is_developer", False)
+        ):
+            membership = session.scalar(select(AccountMembership).where(
+                AccountMembership.account_id == actor.account_id,
+                AccountMembership.organization_id == org.id,
+                AccountMembership.is_active.is_(True),
+            ))
+            if membership is None:
+                raise _not_found()
+            assigned = scoped_contract_ids(
+                session, org.id, membership.hospital_id or UUID(int=0),
+                membership.department_id,
+            )
+            linked = _linked_contract_ids(session, org.id, vid)
+            if assigned is None or not linked or assigned.isdisjoint(linked):
+                raise _not_found()
 
         doc_file = session.get(DocumentFile, version.document_file_id) if version.document_file_id is not None else None
         ext = (doc_file.file_extension or "").lower() if doc_file else ""
