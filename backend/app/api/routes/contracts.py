@@ -638,6 +638,36 @@ def contract_unarchive(
 
 
 
+@router.get("/deletion/queue")
+def contract_deletion_queue(request: Request, organization_slug: str) -> dict:
+    """Bounded, org-scoped administrative queue; excludes active contracts."""
+    _require_explicit_delete_permission(request)
+    session = create_session()
+    try:
+        org = get_organization(session, organization_slug)
+        if org is None or actor_org_mismatch(request, org.id):
+            raise _not_found()
+        scope = current_scope_context()
+        visible = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
+        query = select(Contract).where(
+            Contract.organization_id == org.id,
+            Contract.lifecycle_state.in_(("pending_deletion", "deleted")),
+        )
+        if visible is not None:
+            query = query.where(Contract.id.in_(visible))
+        rows = session.scalars(query.order_by(Contract.id).limit(101)).all()
+        return {
+            "items": [
+                {"contract_id": str(row.id), "contract_number": row.contract_number,
+                 "contract_title": row.title, "lifecycle_state": row.lifecycle_state}
+                for row in rows[:100]
+            ],
+            "has_more": len(rows) > 100,
+        }
+    finally:
+        session.close()
+
+
 @router.get("/capabilities/deletion")
 def contract_deletion_capabilities(request: Request, organization_slug: str) -> dict:
     """Server-authoritative UI capability; never trust client-side role checks."""
