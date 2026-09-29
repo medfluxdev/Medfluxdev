@@ -20,3 +20,14 @@ Do not merge protected JAMAL, alter Ahmed's independent installation, or run exp
 
 ## Current status
 Deletion administration and archive wiring have source commits but have not been locally tested. UI screenshots and interaction-only mocks are not evidence of real backend/Ollama integration.
+
+## Pre-acceptance source inventory (not a test result)
+- [x] Server-gated deletion request, confirm, cancel and restore endpoints with audit events.
+- [x] Server-gated administration page and paginated queue with stale-response isolation.
+- [x] Archive action in the active contract workspace and organization isolation on archive endpoints.
+- [x] Targeted source-level regression tests authored (not yet executed).
+- [ ] Complete actual floating assistant with authenticated, scope-bound backend conversation and verifiable contract evidence; the existing AI status/test/selection endpoints are not a conversation assistant.
+- [ ] Inspect all affected frontend/backend routes, existing tests and imports together; resolve failures before requesting the one-shot local acceptance run.
+- [ ] Prove frontend build, backend tests, real browser workflows and optional GPU tests on the approved local environment.
+
+Do not report zero outstanding tasks or zero defects until the remaining source work and the final acceptance evidence actually support those claims.
