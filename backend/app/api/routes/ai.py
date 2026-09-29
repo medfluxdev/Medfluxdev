@@ -17,7 +17,7 @@ from app.ai.providers import discovery
 from app.ai.exceptions import AIProviderError
 from app.auth.service import actor_for_account
 from app.core.scope_context import current_scope_context
-from app.database.models import Contract, Organization, Account, AccountMembership
+from app.database.models import Contract, Account
 from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
 from app.ai.providers.registry import (
@@ -172,7 +172,8 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
     session = create_session()
     try:
         # Recheck active membership at each invocation; never trust a prior chat turn.
-        fresh = actor_for_account(session, session.get(Account, actor.account_id), organization_slug)
+        account = session.get(Account, actor.account_id)
+        fresh = actor_for_account(session, account, organization_slug) if account is not None else None
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
         context = "Keine Vertragsdaten freigegeben."
@@ -211,4 +212,27 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             f"Kontext:\\n{context}\\n\\nNutzerfrage:\\n{payload.message}", system, max_tokens=768)
     except AIProviderError as exc:
         raise HTTPException(status_code=503, detail=exc.user_message) from exc
+    # A membership or object scope may be revoked during a slow local generation.
+    # Recheck before returning even an already generated answer.
+    session = create_session()
+    try:
+        account = session.get(Account, actor.account_id)
+        fresh = actor_for_account(session, account, organization_slug) if account is not None else None
+        if fresh is None or fresh.organization_id != actor.organization_id:
+            raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+        if payload.contract_id is not None:
+            scope = current_scope_context()
+            visible = scoped_contract_ids(session, fresh.organization_id, scope.hospital_id, scope.department_id)
+            if visible is not None and payload.contract_id not in visible:
+                raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+            exists = session.scalar(select(Contract.id).where(
+                Contract.id == payload.contract_id,
+                Contract.organization_id == fresh.organization_id,
+                Contract.lifecycle_state == "active",
+                Contract.is_archived.is_(False),
+            ))
+            if exists is None:
+                raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+    finally:
+        session.close()
     return AssistantResponse(answer=answer, contract_id=payload.contract_id)
