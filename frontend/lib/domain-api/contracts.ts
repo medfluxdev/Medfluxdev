@@ -110,12 +110,12 @@ export function getContractDeletionCapabilities(organizationSlug: string) {
 export type ContractDeletionQueue = {
   items: Array<{ contract_id: string; contract_number: string | null; lifecycle_state: "pending_deletion" | "deleted" }>;
   has_more: boolean;
+  next_offset: number | null;
 };
 
-export function getContractDeletionQueue(organizationSlug: string) {
-  return apiGet<ContractDeletionQueue>(
-    `/api/contracts/deletion/queue?organization_slug=${encodeURIComponent(organizationSlug)}`,
-  );
+export function getContractDeletionQueue(organizationSlug: string, offset = 0) {
+  const params = new URLSearchParams({ organization_slug: organizationSlug, offset: String(offset) });
+  return apiGet<ContractDeletionQueue>("/api/contracts/deletion/queue?" + params.toString());
 }
 
 export type ContractDeletionReceipt = {
