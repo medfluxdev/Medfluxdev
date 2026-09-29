@@ -17,7 +17,7 @@ from app.ai.providers import discovery
 from app.ai.exceptions import AIProviderError
 from app.auth.service import actor_for_account
 from app.core.scope_context import current_scope_context
-from app.database.models import Contract, Account
+from app.database.models import Contract, Account, ContractExtraction, ContractDocument, ExtractionEvidence
 from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
 from app.ai.providers.registry import (
@@ -153,10 +153,18 @@ class AssistantRequest(BaseModel):
     contract_id: UUID | None = None
 
 
+class AssistantEvidence(BaseModel):
+    field_ref: str
+    document_version_id: UUID
+    page: int | None = None
+    source_text: str
+    requires_review: bool
+
+
 class AssistantResponse(BaseModel):
     answer: str
     contract_id: UUID | None = None
-    evidence: list = Field(default_factory=list)
+    evidence: list[AssistantEvidence] = Field(default_factory=list)
 
 
 @router.post("/assistant", response_model=AssistantResponse)
@@ -177,6 +185,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
         context = "Keine Vertragsdaten freigegeben."
+        evidence: list[AssistantEvidence] = []
         if payload.contract_id is not None:
             scope = current_scope_context()
             visible = scoped_contract_ids(session, fresh.organization_id, scope.hospital_id, scope.department_id)
@@ -190,6 +199,30 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             ))
             if contract is None:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+            # Only accepted extraction evidence from a document explicitly linked
+            # to this same contract. Never search a tenant-wide evidence index.
+            if contract.accepted_extraction_id is not None:
+                rows = session.execute(
+                    select(ExtractionEvidence, ContractExtraction.document_version_id)
+                    .join(ContractExtraction, ContractExtraction.id == ExtractionEvidence.extraction_id)
+                    .join(ContractDocument, ContractDocument.document_version_id == ContractExtraction.document_version_id)
+                    .where(
+                        ExtractionEvidence.organization_id == fresh.organization_id,
+                        ContractExtraction.organization_id == fresh.organization_id,
+                        ContractDocument.organization_id == fresh.organization_id,
+                        ContractDocument.contract_id == contract.id,
+                        ContractExtraction.id == contract.accepted_extraction_id,
+                        ExtractionEvidence.source_text.is_not(None),
+                    )
+                    .order_by(ExtractionEvidence.id).limit(8)
+                ).all()
+                evidence = [AssistantEvidence(
+                    field_ref=row.field_ref,
+                    document_version_id=version_id,
+                    page=row.page,
+                    source_text=row.source_text[:350],
+                    requires_review=bool(row.requires_review),
+                ) for row, version_id in rows if row.source_text and row.source_text.strip()]
             # Projections are context, NOT verified source evidence or approved totals.
             context = ("Unverifizierte Vertragsübersicht (keine Originalbelege):\\n"
                        f"Vertragsnummer: {contract.contract_number or 'unbekannt'}\\n"
@@ -197,6 +230,12 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                        f"Status: {contract.status or 'unbekannt'}\\n"
                        f"Beginn: {contract.start_date or 'unbekannt'}\\n"
                        f"Ende: {contract.end_date or 'unbekannt'}")
+            if evidence:
+                context += "\\nQuellenauszüge (nur verlinkte, akzeptierte Extraktion; Prüfstatus beachten):\\n"
+                for index, item in enumerate(evidence, start=1):
+                    context += (f"[{index}] Feld {item.field_ref}, Seite {item.page or 'nicht verfügbar'}, "
+                                f"Prüfung erforderlich: {item.requires_review}; "
+                                f"Auszug: {item.source_text}\\n")
     finally:
         session.close()
     if not _ai_service.configured:
@@ -235,4 +274,4 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
     finally:
         session.close()
-    return AssistantResponse(answer=answer, contract_id=payload.contract_id)
+    return AssistantResponse(answer=answer, contract_id=payload.contract_id, evidence=evidence)
