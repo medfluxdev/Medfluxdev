@@ -108,6 +108,12 @@ export function requestContractDeletion(contractId: string, organizationSlug: st
   );
 }
 
+export function cancelContractDeletion(contractId: string, organizationSlug: string) {
+  return apiPost<ContractDeletionReceipt>(
+    `/api/contracts/${encodeURIComponent(contractId)}/delete/cancel?organization_slug=${encodeURIComponent(organizationSlug)}`, {},
+  );
+}
+
 export function confirmContractDeletion(contractId: string, organizationSlug: string) {
   return apiPost<ContractDeletionReceipt>(
     `/api/contracts/${encodeURIComponent(contractId)}/delete/confirm?organization_slug=${encodeURIComponent(organizationSlug)}`, {},
