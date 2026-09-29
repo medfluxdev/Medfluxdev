@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 
 type Evidence = { field_ref: string; document_version_id: string; page: number | null; source_text: string; requires_review: boolean };
 type Reply = { answer: string; contract_id: string | null; evidence: Evidence[] };
+type SourceRegion = { status: string; message_de: string };
 type Message = { sender: "user" | "assistant"; text: string; evidence?: Evidence[] };
 
 export default function FloatingAssistant() {
@@ -21,6 +22,7 @@ export default function FloatingAssistant() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [sourceStatus, setSourceStatus] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
 
@@ -31,6 +33,7 @@ export default function FloatingAssistant() {
     setMessages([]);
     setDraft("");
     setError("");
+    setSourceStatus({});
     setBusy(false);
     return () => { activeRequest.current?.abort(); };
   }, [contextKey]);
@@ -65,6 +68,26 @@ export default function FloatingAssistant() {
     }
   }
 
+  async function checkSource(source: Evidence, key: string) {
+    if (!organizationSlug || source.source_text.trim().length < 2) return;
+    setSourceStatus(previous => ({ ...previous, [key]: "Original wird geprüft…" }));
+    const query = new URLSearchParams({
+      organization_slug: organizationSlug,
+      snippet: source.source_text.slice(0, 500),
+    });
+    if (source.page != null && source.page > 0) query.set("page", String(source.page));
+    try {
+      const result = await apiGet<SourceRegion>(
+        `/api/documents/${encodeURIComponent(source.document_version_id)}/source-region?${query}`,
+        45000,
+      );
+      setSourceStatus(previous => ({ ...previous, [key]: result.message_de }));
+    } catch (failure) {
+      setSourceStatus(previous => ({ ...previous, [key]: failure instanceof Error
+        ? failure.message : "Quellennachweis konnte nicht geprüft werden." }));
+    }
+  }
+
   if (!organizationSlug) return null;
   return <aside className="medflux-assistant" aria-label="Lokaler KI-Assistent">
     <button type="button" className="medflux-assistant-toggle" aria-expanded={open}
@@ -75,7 +98,7 @@ export default function FloatingAssistant() {
       <header><strong>Lokaler MedFlux-Assistent</strong><small>{contractId ? "Aktueller Vertrag" : "Ohne Vertragskontext"}</small></header>
       <p className="medflux-assistant-notice">Nur Lesezugriff. Vertragsübersichten sind keine geprüften Originalbelege.</p>
       <div className="medflux-assistant-messages" role="log" aria-live="polite">
-        {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={`${source.document_version_id}:${source.field_ref}:${i}`}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <a href={`/contracts/${encodeURIComponent(contractId)}`}>Vertrag öffnen</a>}</div>)}</details>}</div>)}
+        {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={`${source.document_version_id}:${source.field_ref}:${i}`}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <a href={`/contracts/${encodeURIComponent(contractId)}`}>Vertrag öffnen</a>}{source.source_text.trim().length >= 2 && <button type="button" onClick={() => void checkSource(source, `${index}:${i}`)}>Fundstelle im Original prüfen</button>}{sourceStatus[`${index}:${i}`] && <p role="status">{sourceStatus[`${index}:${i}`]}</p>}</div>)}</details>}</div>)}
         {busy && <p role="status">Lokales Modell antwortet… <button type="button" onClick={() => { generation.current += 1; activeRequest.current?.abort(); activeRequest.current = null; setBusy(false); }}>Abbrechen</button></p>}
       </div>
       {error && <p role="alert" className="medflux-assistant-error">{error}</p>}
