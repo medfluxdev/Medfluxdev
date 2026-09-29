@@ -55,3 +55,24 @@ def test_actor_organization_isolation():
     assert contracts.actor_org_mismatch(_request(organization_id=organization), organization) is False
     assert contracts.actor_org_mismatch(_request(), organization) is True
     assert contracts.actor_org_mismatch(_request(actor=False), organization) is True
+
+
+def test_capability_denied_without_explicit_opt_in(monkeypatch):
+    organization = uuid4()
+    actor_request = _request(organization_id=organization)
+    fake_session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: fake_session)
+    monkeypatch.setattr(contracts, "get_organization", lambda session, slug: SimpleNamespace(id=organization))
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", False)
+    result = contracts.contract_deletion_capabilities(actor_request, "test-org")
+    assert result == {"can_delete": False, "can_restore": False, "requires_confirmation": True}
+
+
+def test_capability_rejects_cross_org(monkeypatch):
+    fake_session = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(contracts, "create_session", lambda: fake_session)
+    monkeypatch.setattr(contracts, "get_organization", lambda session, slug: SimpleNamespace(id=uuid4()))
+    with pytest.raises(HTTPException) as exc:
+        contracts.contract_deletion_capabilities(_request(), "another-org")
+    assert exc.value.status_code == 404
