@@ -185,6 +185,7 @@ def _assistant_visible_contracts(session, actor):
 
 
 class AssistantEvidence(BaseModel):
+    evidence_id: UUID
     field_ref: str
     source_type: str
     document_version_id: UUID
@@ -251,6 +252,7 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                     .order_by(ExtractionEvidence.id).limit(8)
                 ).all()
                 evidence = [AssistantEvidence(
+                    evidence_id=row.id,
                     field_ref=row.field_ref,
                     source_type=row.source_type,
                     document_version_id=version_id,
@@ -308,6 +310,24 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
             if exists is None:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
             if evidence:
+                # Revoke a response if a reviewer edited or removed any source
+                # while the local model was generating its answer.
+                current_evidence = session.scalars(select(ExtractionEvidence).where(
+                    ExtractionEvidence.organization_id == fresh.organization_id,
+                    ExtractionEvidence.extraction_id == extraction_id,
+                    ExtractionEvidence.id.in_([item.evidence_id for item in evidence]),
+                )).all()
+                current_by_id = {item.id: item for item in current_evidence}
+                if any(
+                    (current := current_by_id.get(item.evidence_id)) is None
+                    or current.field_ref != item.field_ref
+                    or current.source_type != item.source_type
+                    or current.page != item.page
+                    or (current.source_text or "")[:350] != item.source_text
+                    or bool(current.requires_review) != item.requires_review
+                    for item in evidence
+                ):
+                    raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
                 still_linked = set(session.scalars(select(ContractDocument.document_version_id).where(
                     ContractDocument.organization_id == fresh.organization_id,
                     ContractDocument.contract_id == payload.contract_id,
