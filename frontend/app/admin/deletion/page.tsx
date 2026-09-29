@@ -31,7 +31,7 @@ export default function DeletionQueuePage() {
     setOffset(0);
     setConfirmId(null);
     setError(null);
-    if (!organizationSlug || role !== "admin") {
+    if (loading || !organizationSlug || role !== "admin") {
       setChecking(false);
       return;
     }
@@ -47,7 +47,7 @@ export default function DeletionQueuePage() {
     } finally {
       if (current === generation.current) setChecking(false);
     }
-  }, [organizationSlug, role]);
+  }, [organizationSlug, role, loading]);
 
   useEffect(() => {
     void refresh();
@@ -88,7 +88,9 @@ export default function DeletionQueuePage() {
     }
   }
 
-  if (!loading && role !== "admin") return <main className="page"><h1>Keine Berechtigung</h1><p>Diese Funktion ist nur für freigegebene Administratoren verfügbar.</p></main>;
+  if (loading) return <main className="page"><p role="status">Benutzerberechtigungen werden geladen…</p></main>;
+
+  if (role !== "admin") return <main className="page"><h1>Keine Berechtigung</h1><p>Diese Funktion ist nur für freigegebene Administratoren verfügbar.</p></main>;
 
   return <main className="page">
     <header><h1>Vertragslöschung verwalten</h1>
@@ -102,7 +104,7 @@ export default function DeletionQueuePage() {
       {queue.items.length > 0 && <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>}
       <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
         <button type="button" disabled={checking || pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
-        <button type="button" disabled={pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
+        <button type="button" disabled={checking || pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
       </div>
       {queue.items.map((item) => <section className="panel" key={item.contract_id} style={{ padding: "1rem", marginBottom: "1rem" }}>
         <h2>{item.contract_number || item.contract_id}</h2>
