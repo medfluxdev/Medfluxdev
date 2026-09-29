@@ -94,6 +94,32 @@ export function unarchiveContract(contractId: string, organizationSlug: string) 
   );
 }
 
+
+export type ContractDeletionReceipt = {
+  contract_id: string;
+  lifecycle_state: "pending_deletion" | "deleted" | "active";
+};
+
+// These operations are deliberately not exposed in the UI until
+// a server-backed permission capability and final role policy exist.
+export function requestContractDeletion(contractId: string, organizationSlug: string) {
+  return apiPost<ContractDeletionReceipt>(
+    `/api/contracts/${encodeURIComponent(contractId)}/delete/request?organization_slug=${encodeURIComponent(organizationSlug)}`, {},
+  );
+}
+
+export function confirmContractDeletion(contractId: string, organizationSlug: string) {
+  return apiPost<ContractDeletionReceipt>(
+    `/api/contracts/${encodeURIComponent(contractId)}/delete/confirm?organization_slug=${encodeURIComponent(organizationSlug)}`, {},
+  );
+}
+
+export function restoreDeletedContract(contractId: string, organizationSlug: string) {
+  return apiPost<ContractDeletionReceipt>(
+    `/api/contracts/${encodeURIComponent(contractId)}/delete/restore?organization_slug=${encodeURIComponent(organizationSlug)}`, {},
+  );
+}
+
 export function contractDocumentUrl(
   contractId: string,
   documentVersionId: string,
