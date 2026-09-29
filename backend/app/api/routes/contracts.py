@@ -700,6 +700,12 @@ def request_contract_deletion(request: Request, organization_slug: str, contract
                                 expected="active", target="pending_deletion")
 
 
+@router.post("/{contract_id}/delete/cancel")
+def cancel_contract_deletion(request: Request, organization_slug: str, contract_id: str):
+    return _deletion_transition(request, organization_slug, contract_id,
+                                expected="pending_deletion", target="active")
+
+
 @router.post("/{contract_id}/delete/confirm")
 def confirm_contract_deletion(request: Request, organization_slug: str, contract_id: str):
     return _deletion_transition(request, organization_slug, contract_id,
