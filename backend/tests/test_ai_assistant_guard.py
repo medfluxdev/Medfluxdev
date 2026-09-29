@@ -43,7 +43,7 @@ async def test_assistant_rejects_revoked_membership_before_model(monkeypatch):
 
 def test_assistant_rejects_blank_or_oversized_prompts():
     from pydantic import ValidationError
-    for text in ("", "x" * 2001):
+    for text in ("", "   ", "\\n\\t", "x" * 2001):
         with pytest.raises(ValidationError):
             ai.AssistantRequest(message=text)
 
@@ -198,3 +198,4 @@ def test_assistant_evidence_requires_explicit_source_type():
     with pytest.raises(ValidationError):
         ai.AssistantEvidence(evidence_id=uuid4(), field_ref="contract.term", document_version_id=uuid4(),
                              source_text="Unknown format", requires_review=False)
+\n\ndef test_assistant_trims_surrounding_whitespace_without_changing_question():\n    assert ai.AssistantRequest(message="  Frage zum Vertrag?  ").message == "Frage zum Vertrag?"\n
