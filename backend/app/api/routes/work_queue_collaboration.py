@@ -108,7 +108,7 @@ def update_collaboration(request: Request, work_item_id: UUID, organization_slug
                 )
             ).first()
             account = session.get(Account, body.assignee_account_id)
-            if account is None or not account.is_active or (membership is None and not account.is_developer):
+            if account is None or not account.is_active or membership is None:
                 raise HTTPException(status_code=422, detail="Zugewiesener Benutzer gehört nicht zur Organisation.")
 
         row = session.scalars(
