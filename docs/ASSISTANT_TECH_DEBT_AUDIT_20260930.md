@@ -18,6 +18,9 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - Preserved all original evidence IDs as `merged_evidence_ids` when the contract detail read layer deduplicates identical physical evidence. Assistant deep links now resolve through these aliases without bypassing the loaded contract/document membership check; added DB-free alias regression tests (not yet executed).
 
+- Extended DB-free deduplication regressions for input ordering and immutable source alias lists; removed an unused test helper parameter.
+- Made missing assistant evidence deep links visibly report an unavailable source in the contract evidence tab, and clear stale source IDs during manual contract tab navigation.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode.
