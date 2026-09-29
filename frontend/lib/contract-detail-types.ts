@@ -13,6 +13,7 @@ export interface EvidenceBbox {
 
 export interface EvidenceRef {
   evidence_id: string;
+  merged_evidence_ids?: string[];
   field_ref: string | null;
   document_version_id: string | null;
   original_filename: string | null;
