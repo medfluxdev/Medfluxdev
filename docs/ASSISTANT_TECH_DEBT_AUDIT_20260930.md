@@ -11,6 +11,9 @@ This audit is based on direct source inspection of the integrated assistant rout
 - Keyed the floating assistant by account and organization to reset chat state across tenant switches; moved contract-context invalidation out of React render and into a layout effect.
 - Replaced the accepted-evidence document-link join with a correlated EXISTS filter so multiple roles for one document do not duplicate evidence rows or consume the eight-item budget.
 
+- Reject whitespace-only prompts server-side and normalize leading/trailing whitespace; added regression cases for empty, whitespace and oversized input.
+- Abort outstanding source-region requests when assistant contract/organization context changes or the component unmounts; ignore aborted lookup results.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode.
