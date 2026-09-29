@@ -25,6 +25,7 @@ export default function DeletionQueuePage() {
     setAllowed(false);
     setQueue(null);
     setOffset(0);
+    setConfirmId(null);
     setError(null);
     if (!organizationSlug || role !== "admin") return;
     try {
@@ -82,7 +83,7 @@ export default function DeletionQueuePage() {
     {!allowed && !error && <p>Keine Löschberechtigung oder Daten werden geladen.</p>}
     {allowed && queue && <>
       {queue.items.length === 0 && <p>Keine vorgemerkten oder gelöschten Verträge.</p>}
-      <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>
+      {queue.items.length > 0 && <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>}
       <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
         <button type="button" disabled={pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
         <button type="button" disabled={pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
