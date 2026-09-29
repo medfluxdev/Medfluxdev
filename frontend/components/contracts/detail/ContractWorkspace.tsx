@@ -260,6 +260,20 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     setRoute("documents", targetTab);
   }
 
+  // Accept only an evidence ID that belongs to the currently loaded contract.
+  // Never trust a deep link to supply document IDs or PDF geometry.
+  const linkedEvidenceId = searchParams.get("source_evidence_id");
+  useEffect(() => {
+    if (!linkedEvidenceId) return;
+    const match = data.evidence.find(ref => ref.evidence_id === linkedEvidenceId);
+    if (!match) return;
+    setActiveEvidenceId(match.evidence_id);
+    setNavTarget(evidenceTarget(match));
+    if (match.document_version_id) setDocumentVersionId(match.document_version_id);
+    setActiveTab("documents");
+    setDocumentTab("evidence");
+  }, [linkedEvidenceId, data.evidence]);
+
   function SourceButton({ evidence }: { evidence: EvidenceRef | null }) {
     if (!evidence) return null;
     return <button type="button" className="cw-source-button" onClick={() => openEvidence(evidence)}>Quelle</button>;
