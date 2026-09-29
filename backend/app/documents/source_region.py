@@ -45,14 +45,22 @@ def _union_rects(rects) -> Optional["fitz.Rect"]:
     return union
 
 
-def _search_region(page: "fitz.Page", snippet: str) -> Optional["fitz.Rect"]:
-    """Exact text-layer hits in the original PDF (deterministic)."""
+def _search_region(page: "fitz.Page", snippet: str) -> tuple[Optional["fitz.Rect"], str]:
+    """Return geometry and confidence, never calling a token-only hit exact.
+
+    A repeated phrase or token has no unique source location. Its union may
+    provide a coarse page-level hint, but must not be presented as a precise
+    word or number highlight.
+    """
     rects = page.search_for(snippet)
-    if not rects:
-        token = _robust_token(snippet)
-        if token and len(token) >= 3:
-            rects = page.search_for(token)
-    return _union_rects(rects)
+    if rects:
+        return _union_rects(rects), "exact" if len(rects) == 1 else "coarse"
+    token = _robust_token(snippet)
+    if token and len(token) >= 3:
+        hits = page.search_for(token)
+        if len(hits) == 1:
+            return _union_rects(hits), "coarse"
+    return None, "none"
 
 
 def _to_pdf_bbox(r: BoundingRegion) -> list[float]:
@@ -83,11 +91,14 @@ def _resolve_canonical(
             folded = snippet.casefold()
             if len(folded) == length:
                 offset = text.casefold().find(folded)
+        token_fallback = False
         if offset < 0:
             token = _robust_token(snippet)
             if token:
-                offset = text.find(token)
-                length = len(token)
+                if text.casefold().count(token.casefold()) == 1:
+                    offset = text.casefold().find(token.casefold())
+                    length = len(token)
+                    token_fallback = offset >= 0
         if offset < 0:
             continue
         resolution = resolve_target_atomic(page, offset, length)
@@ -100,6 +111,8 @@ def _resolve_canonical(
             continue
         if not resolution.boxes:
             continue
+        if token_fallback:
+            status = "coarse"
         try:
             pdf_page = doc.load_page(page.page_number - 1)
             rotation = pdf_page.rotation or 0
@@ -145,11 +158,11 @@ def resolve_narrowest_region(
 
     for idx in candidates:
         page = doc.load_page(idx)
-        union = _search_region(page, snippet)
+        union, match_status = _search_region(page, snippet)
         if union is None:
             continue
         page_area = page.rect.width * page.rect.height
-        status = "exact"
+        status = match_status
         if page_area > 0 and (union.width * union.height) > _OVERSIZE_RATIO * page_area:
             status = "coarse"
         return {
