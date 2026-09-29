@@ -129,3 +129,26 @@ def test_assistant_unassigned_membership_is_not_global(monkeypatch):
                         lambda session, org, hospital, department: None if hospital is None else set())
     session = SimpleNamespace(scalar=lambda stmt: SimpleNamespace(hospital_id=None, department_id=None))
     assert ai._assistant_visible_contracts(session, actor) == set()
+
+
+def test_source_region_denies_cross_organization_before_loading_document(monkeypatch):
+    from app.api.routes import documents
+    requested_org, actor_org = uuid4(), uuid4()
+    request = SimpleNamespace(state=SimpleNamespace(actor=SimpleNamespace(
+        organization_id=actor_org)))
+    monkeypatch.setattr(documents.settings, "auth_enabled", True)
+    # A real context manager is needed because the route uses with create_session().
+    class Session:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return None
+        def scalars(self, stmt):
+            pytest.fail("Cross-organization request reached document query")
+    monkeypatch.setattr(documents, "create_session", lambda: Session())
+    monkeypatch.setattr(documents, "get_organization",
+                        lambda session, slug: SimpleNamespace(id=requested_org))
+    with pytest.raises(HTTPException) as exc:
+        documents.document_source_region(str(uuid4()), request,
+                                         organization_slug="other", snippet="valid text", page=1)
+    assert exc.value.status_code == 404
