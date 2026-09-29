@@ -79,7 +79,7 @@ export default function FloatingAssistant() {
     try {
       const result = await apiGet<SourceRegion>(
         `/api/documents/${encodeURIComponent(source.document_version_id)}/source-region?${query}`,
-        45000,
+        undefined, 45000,
       );
       setSourceStatus(previous => ({ ...previous, [key]: result.message_de }));
     } catch (failure) {
