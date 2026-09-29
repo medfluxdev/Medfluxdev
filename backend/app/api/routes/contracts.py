@@ -639,7 +639,7 @@ def contract_unarchive(
 
 
 @router.get("/deletion/queue")
-def contract_deletion_queue(request: Request, organization_slug: str) -> dict:
+def contract_deletion_queue(request: Request, organization_slug: str, offset: int = Query(default=0, ge=0, le=100000)) -> dict:
     """Bounded, org-scoped administrative queue; excludes active contracts."""
     _require_explicit_delete_permission(request)
     session = create_session()
@@ -655,7 +655,7 @@ def contract_deletion_queue(request: Request, organization_slug: str) -> dict:
         )
         if visible is not None:
             query = query.where(Contract.id.in_(visible))
-        rows = session.scalars(query.order_by(Contract.id).limit(101)).all()
+        rows = session.scalars(query.order_by(Contract.id).offset(offset).limit(101)).all()
         return {
             "items": [
                 {"contract_id": str(row.id), "contract_number": row.contract_number,
@@ -663,6 +663,7 @@ def contract_deletion_queue(request: Request, organization_slug: str) -> dict:
                 for row in rows[:100]
             ],
             "has_more": len(rows) > 100,
+            "next_offset": offset + 100 if len(rows) > 100 else None,
         }
     finally:
         session.close()
