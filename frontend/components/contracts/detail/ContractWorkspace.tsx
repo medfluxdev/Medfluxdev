@@ -15,6 +15,7 @@ import {
   STATUS_LABEL_DETAIL,
 } from "@/lib/contract-detail-types";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { archiveContract } from "@/lib/domain-api/contracts";
 import PdfViewer from "./PdfViewer";
 import EvidencePane from "./EvidencePane";
 import FactReviewPanel from "./FactReviewPanel";
@@ -164,8 +165,27 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   const [documentVersionId, setDocumentVersionId] = useState<string | null>(data.documents[0]?.document_version_id ?? null);
   const [navTarget, setNavTarget] = useState<SourceNavigationTarget | null>(null);
   const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archivePending, setArchivePending] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   const reload = onReload ?? (() => undefined);
+
+  async function confirmArchive() {
+    if (archivePending) return;
+    setArchivePending(true);
+    setArchiveError(null);
+    try {
+      await archiveContract(data.contract_id, orgSlug);
+      setArchiveDialogOpen(false);
+      router.push("/archiv");
+      router.refresh();
+    } catch (error) {
+      setArchiveError(error instanceof Error ? error.message : "Archivierung fehlgeschlagen.");
+    } finally {
+      setArchivePending(false);
+    }
+  }
   const openTasks = useMemo(() => data.work_items.filter((item) => item.status !== "resolved"), [data.work_items]);
   const actionableWarnings = useMemo(() => data.warnings.filter((warning) => warning.requires_action || warning.requires_review), [data.warnings]);
 
@@ -246,8 +266,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     <div className="contract-workspace">
       <header className="cw-header">
         <div><div className="cw-breadcrumb">Verträge / {data.contract_number ?? data.contract_id}</div><h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1><p>{[data.contract_number ? `Nr. ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p></div>
-        <div className="cw-header-badges"><span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
+        <div className="cw-header-badges"><button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button><span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
       </header>
+      {archiveDialogOpen && <div role="dialog" aria-modal="true" aria-labelledby="cw-archive-title" className="cw-section" style={{ margin: "1rem 0", padding: "1rem", border: "1px solid currentColor" }}>
+        <h2 id="cw-archive-title">Vertrag archivieren?</h2>
+        <p>Der Vertrag bleibt erhalten und kann über das Archiv wiederhergestellt werden.</p>
+        {archiveError && <p role="alert">{archiveError}</p>}
+        <div style={{ display: "flex", gap: "1rem" }}>
+          <button type="button" disabled={archivePending} onClick={() => setArchiveDialogOpen(false)}>Abbrechen</button>
+          <button type="button" disabled={archivePending} onClick={confirmArchive}>{archivePending ? "Wird archiviert…" : "Archivierung bestätigen"}</button>
+        </div>
+      </div>}
 
       <nav className="cw-tabs" aria-label="Vertragsbereiche">{TABS.map((tab) => <button key={tab.key} type="button" className={activeTab === tab.key ? "active" : ""} onClick={() => setRoute(tab.key)}>{tab.label}</button>)}</nav>
 
