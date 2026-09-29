@@ -102,3 +102,10 @@ def test_archive_routes_reject_cross_organization_before_query(monkeypatch, hand
     with pytest.raises(HTTPException) as exc:
         handler(_request(organization_id=uuid4()), "other-org", str(uuid4()))
     assert exc.value.status_code == 404
+
+
+def test_static_deletion_routes_precede_dynamic_contract_route():
+    paths = [route.path for route in contracts.router.routes]
+    dynamic = paths.index("/api/contracts/{contract_id}")
+    assert paths.index("/api/contracts/deletion/queue") < dynamic
+    assert paths.index("/api/contracts/capabilities/deletion") < dynamic
