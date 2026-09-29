@@ -202,8 +202,9 @@ class AssistantResponse(BaseModel):
 async def ai_assistant(request: Request, organization_slug: str, payload: AssistantRequest) -> AssistantResponse:
     """Read-only local assistant; only server-authorized contract projections enter the prompt.
 
-    No chat history or document text is accepted. Evidence stays empty until an
-    independently authorized, provenance-checked evidence gateway is available.
+    No chat history or client-supplied document text is accepted. Source excerpts
+    come only from the accepted extraction of a contract-linked document and are
+    explicitly marked as extraction evidence, not independent verification.
     """
     actor = getattr(request.state, "actor", None)
     if not settings.auth_enabled or actor is None or actor.organization_slug != organization_slug:
