@@ -8,7 +8,7 @@ verändert oder aktiv getestet werden, sobald Authentifizierung aktiv ist.
 import logging
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import exists, select
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -151,6 +151,14 @@ async def ai_set_selection(request: Request, payload: SelectionUpdate) -> AISnap
 class AssistantRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     contract_id: UUID | None = None
+
+    @field_validator("message")
+    @classmethod
+    def nonblank_message(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Die Frage darf nicht leer sein.")
+        return cleaned
 
 
 _UNASSIGNED_HOSPITAL = UUID(int=0)
