@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { apiGet, apiPost } from "@/lib/api";
@@ -25,15 +25,10 @@ export default function FloatingAssistant() {
   const [sourceStatus, setSourceStatus] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
-  const renderedContext = useRef(contextKey);
-  // Invalidate previous requests synchronously on render, before effects run.
-  if (renderedContext.current !== contextKey) {
-    renderedContext.current = contextKey;
+  // Layout-effect cleanup invalidates the old contract before browser paint;
+  // no aborts or mutable ref writes occur during React's render phase.
+  useLayoutEffect(() => {
     generation.current += 1;
-    activeRequest.current?.abort();
-  }
-
-  useEffect(() => {
     activeRequest.current?.abort();
     activeRequest.current = null;
     setMessages([]);
