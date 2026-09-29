@@ -152,3 +152,31 @@ def test_source_region_denies_cross_organization_before_loading_document(monkeyp
         documents.document_source_region(str(uuid4()), request,
                                          organization_slug="other", snippet="valid text", page=1)
     assert exc.value.status_code == 404
+
+
+def test_source_region_rejects_revoked_membership_before_storage(monkeypatch):
+    from app.api.routes import documents
+    org, vid = uuid4(), uuid4()
+    actor = SimpleNamespace(organization_id=org, account_id=uuid4(),
+                            role="viewer", is_developer=False)
+    request = SimpleNamespace(state=SimpleNamespace(actor=actor))
+    monkeypatch.setattr(documents.settings, "auth_enabled", True)
+    monkeypatch.setattr(documents, "get_organization",
+                        lambda session, slug: SimpleNamespace(id=org))
+    monkeypatch.setattr(documents, "_ensure_document_visible", lambda *args: None)
+    class Session:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return None
+        def scalars(self, stmt):
+            return SimpleNamespace(first=lambda: SimpleNamespace(id=vid))
+        def scalar(self, stmt):
+            return None
+        def get(self, *args):
+            pytest.fail("Revoked membership reached original document storage")
+    monkeypatch.setattr(documents, "create_session", lambda: Session())
+    with pytest.raises(HTTPException) as exc:
+        documents.document_source_region(str(vid), request,
+                                         organization_slug="hospital", snippet="valid text", page=1)
+    assert exc.value.status_code == 404
