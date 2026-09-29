@@ -273,7 +273,9 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
       {canRender && <div className="pdf-stage"><div className="pdf-page-wrap" style={{ width: dims?.width }}><canvas ref={pageCanvasRef} className="pdf-page-canvas" /><canvas ref={overlayCanvasRef} className="pdf-overlay-canvas" aria-hidden="true" /></div></div>}
       {navTarget && navTarget.document_version_id === documentVersionId && pageNumber === navTarget.page && navTarget.page != null && (
         <p className="pdf-nav-info" aria-live="polite">
-          {navTarget.supports_exact_navigation && navTarget.bbox && evidencePrecision(
+          {refined?.key === `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}` && refined.status === "exact" && refined.bbox
+            ? `Quelle im Original lokalisiert: ${navTarget.label}`
+            : navTarget.supports_exact_navigation && navTarget.bbox && evidencePrecision(
             navTarget.bbox,
             navTarget.bbox_space,
             dims ? { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) } : undefined
