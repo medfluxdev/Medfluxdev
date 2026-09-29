@@ -54,7 +54,14 @@ def _search_region(page: "fitz.Page", snippet: str) -> tuple[Optional["fitz.Rect
     """
     rects = page.search_for(snippet)
     if rects:
-        return _union_rects(rects), "exact" if len(rects) == 1 else "coarse"
+        # PyMuPDF can return several rectangles for ONE phrase split across
+        # adjacent lines. Verify that there is exactly one textual occurrence
+        # before treating the union as a precise location.
+        text = page.get_text("text")
+        occurrences = text.casefold().count(snippet.casefold())
+        if len(rects) == 1 and occurrences == 1:
+            return _union_rects(rects), "exact"
+        return _union_rects(rects), "coarse"
     token = _robust_token(snippet)
     if token and len(token) >= 3:
         hits = page.search_for(token)
