@@ -37,6 +37,8 @@ This audit is based on direct source inspection of the integrated assistant rout
 
 - Tightened text-layer source precision: a single returned rectangle is exact only when the PDF text layer also has one matching phrase occurrence. Added unique/repeated phrase regression cases. Multi-line phrase normalization and scanned OCR word precision remain final-acceptance items; tests not yet executed.
 
+- PDF source search now normalizes whitespace to recognize unique line-wrapped phrases and checks proximity before merging their search rectangles as exact; ambiguous repeated phrases remain coarse. Corrected repeated-source fixtures to use newline escape sequences. Real-document visual confirmation and isolated tests remain pending.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
 2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode. Verify PDF page changes do not refetch the document and evidence refinement reruns correctly when revisiting a source.
