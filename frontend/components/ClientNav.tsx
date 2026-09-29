@@ -35,6 +35,7 @@ export default function ClientNav({ children }: { children: React.ReactNode }) {
         <AppTopbar />
         {children}
       </main>
+      <FloatingAssistant />
     </div>
   );
 }
