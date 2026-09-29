@@ -75,6 +75,7 @@ class EvidenceRef(BaseModel):
     """
 
     evidence_id: str
+    merged_evidence_ids: list[str] = Field(default_factory=list)
     field_ref: str
     document_version_id: Optional[str] = None
     original_filename: Optional[str] = None
