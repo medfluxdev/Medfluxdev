@@ -57,3 +57,32 @@ def test_patch_validates_before_commit(monkeypatch, bad_dto, commit_error, expec
 def test_legacy_references_keep_nonempty_content():
     assert _references_as_dict([{"source": 3}]) == {"legacy_refs": [{"source": 3}]}
     assert _references_as_dict([]) is None
+
+
+def test_list_applies_contract_scope_before_result_limit(monkeypatch):
+    """A small SQL limit must not be consumed by out-of-scope tasks."""
+    org_id = uuid.uuid4()
+    permitted = uuid.uuid4()
+    session = MagicMock()
+    monkeypatch.setattr(routes, "create_session", lambda: session)
+    monkeypatch.setattr(routes, "get_organization", lambda *a: SimpleNamespace(id=org_id))
+    monkeypatch.setattr(routes, "scoped_contract_ids", lambda *a, **kw: {permitted})
+    observed = {}
+
+    def scoped_list(**kwargs):
+        observed.update(kwargs)
+        return []
+
+    monkeypatch.setattr(routes, "list_work_items_dto", scoped_list)
+    response = TestClient(app).get("/api/work-queue?organization_slug=test&limit=1")
+    assert response.status_code == 200
+    assert observed["allowed_contract_ids"] == {permitted}
+    assert observed["limit"] == 1
+
+
+def test_list_service_returns_early_for_empty_scope():
+    from app.work_queue.service import list_work_items
+
+    session = MagicMock()
+    assert list_work_items(session, organization_id=uuid.uuid4(), allowed_contract_ids=set()) == []
+    session.scalars.assert_not_called()
