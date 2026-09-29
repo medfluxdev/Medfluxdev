@@ -84,3 +84,19 @@ async def test_assistant_discards_answer_if_membership_revoked_during_generation
         await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
     assert exc.value.status_code == 404
     assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_assistant_rejects_deactivated_account_before_model(monkeypatch):
+    org = uuid4()
+    actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4())
+    monkeypatch.setattr(ai.settings, "auth_enabled", True)
+    monkeypatch.setattr(ai, "create_session", lambda: SimpleNamespace(
+        get=lambda cls, identifier: SimpleNamespace(id=actor.account_id, is_active=False),
+        close=lambda: None,
+    ))
+    monkeypatch.setattr(ai, "actor_for_account",
+                        lambda *args: pytest.fail("Deactivated account reached membership lookup"))
+    with pytest.raises(HTTPException) as exc:
+        await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"))
+    assert exc.value.status_code == 404
