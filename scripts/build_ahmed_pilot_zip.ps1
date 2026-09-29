@@ -1,21 +1,51 @@
-# Build source-only pilot handoff archive from a clean, reviewed release checkout.
-# Does NOT install, run, merge, deploy, provision databases, or invoke GPU.
+# Create a source-only release archive and verifiable sidecar manifest.
+# This is NOT an installer and must not be distributed before acceptance testing.
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Push-Location $root
 try {
-  if ((git status --porcelain) -ne $null) { throw "Working tree must be clean." }
+  $dirty = @(git status --porcelain)
+  if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw "Working tree must be clean." }
   $branch = (git branch --show-current).Trim()
-  if ($branch -ne "release/ahmed-pilot-package-20260929") { throw "Wrong branch: $branch" }
+  if ($LASTEXITCODE -ne 0 -or $branch -ne "feature/integrated-release-build-20260929") {
+    throw "Wrong branch: $branch"
+  }
   $tracked = @(git ls-files)
-  $forbidden = @($tracked | Where-Object { $_ -match '(^|/)(\.env($|\.)|pgdata/|node_modules/|\.venv/|data/contracts/|data/backups/)' -and $_ -notmatch '(^|/)\.env\.example$' })
-  if ($forbidden.Count -gt 0) { throw "Potentially sensitive tracked paths found; STOP: $($forbidden -join ', ')" }
+  if ($LASTEXITCODE -ne 0) { throw "Cannot inspect tracked files" }
+  $forbidden = @($tracked | Where-Object {
+    $_ -match '(^|/)(\.env($|\.)|pgdata/|node_modules/|\.venv/|data/contracts/|data/backups/)' -and $_ -notmatch '(^|/)\.env\.example$'
+  })
+  if ($forbidden.Count -gt 0) { throw "Potentially sensitive tracked paths: $($forbidden -join ', ')" }
   $sha = (git rev-parse HEAD).Trim()
-  $out = Join-Path (Split-Path $root -Parent) "MedFlux_Ahmed_Pilot_SOURCE_$($sha.Substring(0,12)).zip"
-  if (Test-Path $out) { throw "Archive already exists; refusing overwrite: $out" }
-  git archive --format=zip --output="$out" HEAD
-  if ($LASTEXITCODE -ne 0) { throw "git archive failed" }
-  Write-Host "Created source-only handoff archive: $out"
-  Write-Host "Pinned revision: $sha"
-  Write-Warning "NOT a validated installer. Do not distribute until local installation + analysis walkthrough passes and Jamal approves."
+  if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') { throw "Invalid HEAD" }
+  $stem = "MedFlux_Integrated_SOURCE_$($sha.Substring(0,12))"
+  $dir = Split-Path $root -Parent
+  $out = Join-Path $dir "$stem.zip"
+  $manifestPath = Join-Path $dir "$stem.manifest.json"
+  if ((Test-Path $out) -or (Test-Path $manifestPath)) { throw "Output already exists; refusing overwrite." }
+  try {
+    git archive --format=zip --output="$out" HEAD
+    if ($LASTEXITCODE -ne 0) { throw "git archive failed" }
+    $digest = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLowerInvariant()
+    $manifest = [ordered]@{
+      schema_version = 1
+      artifact = (Split-Path $out -Leaf)
+      sha256 = $digest
+      commit = $sha
+      branch = $branch
+      package_type = "source-only"
+      installer_validated = $false
+      acceptance_tested = $false
+      distribution_approved = $false
+    }
+    $manifest | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $manifestPath -Encoding UTF8 -NoNewline
+  } catch {
+    if (Test-Path $out) { Remove-Item -LiteralPath $out -Force }
+    if (Test-Path $manifestPath) { Remove-Item -LiteralPath $manifestPath -Force }
+    throw
+  }
+  Write-Host "Archive: $out"
+  Write-Host "Manifest: $manifestPath"
+  Write-Host "SHA256: $digest"
+  Write-Warning "Source only; NOT an installer. No distribution without Jamal approval and acceptance testing."
 } finally { Pop-Location }
