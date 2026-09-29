@@ -21,9 +21,11 @@ This audit is based on direct source inspection of the integrated assistant rout
 - Extended DB-free deduplication regressions for input ordering and immutable source alias lists; removed an unused test helper parameter.
 - Made missing assistant evidence deep links visibly report an unavailable source in the contract evidence tab, and clear stale source IDs during manual contract tab navigation.
 
+- Removed evidence-page changes from the PDF document-loading effect dependencies: page navigation no longer triggers a full PDF fetch. Removed the persistent refinement-key guard and reset geometry/page count on document reload, preventing stale source highlights across documents.
+
 ## Outstanding validation / debt (do not mark complete without evidence)
 1. Run Python compilation and targeted assistant/source-region tests in the isolated OpenCode acceptance environment; none of the fixes above have been executed here.
-2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode.
+2. Run frontend TypeScript checks, lint, build and desktop/tablet/mobile interaction checks; review layout-effect cleanup and remount behavior under React Strict Mode. Verify PDF page changes do not refetch the document and evidence refinement reruns correctly when revisiting a source.
 3. Exercise an actual accepted PDF extraction, a DOCX paragraph extraction, stale membership, changed evidence, no configured model, aborted request and organization switch using an isolated database.
 4. The assistant now links to the contract evidence tab, whose existing viewer supports evidence navigation. The separate source-region check still reports exact/coarse/not-found text only. Verify the deep link, evidence-alias regression tests, and visual highlighting with real accepted PDF data; do not claim verified exact navigation.
 5. The assistant is bounded to one contract and eight evidence excerpts. This is not organization-wide semantic search or full-contract retrieval; no unsupported capability should be advertised.
