@@ -180,3 +180,21 @@ def test_source_region_rejects_revoked_membership_before_storage(monkeypatch):
         documents.document_source_region(str(vid), request,
                                          organization_slug="hospital", snippet="valid text", page=1)
     assert exc.value.status_code == 404
+
+
+def test_assistant_evidence_preserves_source_type_and_review_status():
+    item = ai.AssistantEvidence(
+        field_ref="contract.term", source_type="paragraph",
+        document_version_id=uuid4(), page=None,
+        source_text="DOCX paragraph evidence", requires_review=True,
+    )
+    assert item.source_type == "paragraph"
+    assert item.page is None
+    assert item.requires_review is True
+
+
+def test_assistant_evidence_requires_explicit_source_type():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ai.AssistantEvidence(field_ref="contract.term", document_version_id=uuid4(),
+                             source_text="Unknown format", requires_review=False)
