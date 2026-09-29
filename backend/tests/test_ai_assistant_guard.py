@@ -184,7 +184,7 @@ def test_source_region_rejects_revoked_membership_before_storage(monkeypatch):
 
 def test_assistant_evidence_preserves_source_type_and_review_status():
     item = ai.AssistantEvidence(
-        field_ref="contract.term", source_type="paragraph",
+        evidence_id=uuid4(), field_ref="contract.term", source_type="paragraph",
         document_version_id=uuid4(), page=None,
         source_text="DOCX paragraph evidence", requires_review=True,
     )
@@ -196,5 +196,5 @@ def test_assistant_evidence_preserves_source_type_and_review_status():
 def test_assistant_evidence_requires_explicit_source_type():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
-        ai.AssistantEvidence(field_ref="contract.term", document_version_id=uuid4(),
+        ai.AssistantEvidence(evidence_id=uuid4(), field_ref="contract.term", document_version_id=uuid4(),
                              source_text="Unknown format", requires_review=False)
