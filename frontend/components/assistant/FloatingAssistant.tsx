@@ -69,6 +69,7 @@ export default function FloatingAssistant() {
   }
 
   async function checkSource(source: Evidence, key: string) {
+    const current = generation.current;
     if (!organizationSlug || source.source_text.trim().length < 2) return;
     setSourceStatus(previous => ({ ...previous, [key]: "Original wird geprüft…" }));
     const query = new URLSearchParams({
@@ -81,9 +82,9 @@ export default function FloatingAssistant() {
         `/api/documents/${encodeURIComponent(source.document_version_id)}/source-region?${query}`,
         undefined, 45000,
       );
-      setSourceStatus(previous => ({ ...previous, [key]: result.message_de }));
+      if (current === generation.current) setSourceStatus(previous => ({ ...previous, [key]: result.message_de }));
     } catch (failure) {
-      setSourceStatus(previous => ({ ...previous, [key]: failure instanceof Error
+      if (current === generation.current) setSourceStatus(previous => ({ ...previous, [key]: failure instanceof Error
         ? failure.message : "Quellennachweis konnte nicht geprüft werden." }));
     }
   }
