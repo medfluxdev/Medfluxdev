@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import EvidencePane from "@/components/contracts/detail/EvidencePane";
 import PdfViewer from "@/components/contracts/detail/PdfViewer";
 import SourceLink from "@/components/contracts/detail/SourceLink";
@@ -33,6 +33,8 @@ function toTarget(ref: EvidenceRef): SourceNavigationTarget {
 
 export default function NachweisePage() {
   const { organizationSlug } = useAuth();
+  const listSeq = useRef(0);
+  const detailSeq = useRef(0);
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
   const [contractId, setContractId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ContractDetailResponse | null>(null);
@@ -44,40 +46,74 @@ export default function NachweisePage() {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const loadContracts = useCallback(async () => {
-    if (!organizationSlug) return;
+    const seq = ++listSeq.current;
+    if (!organizationSlug) {
+      setContracts([]);
+      setContractId(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await listContracts(organizationSlug, { page_size: 100 });
+      if (seq !== listSeq.current) return;
       setContracts(res.items);
-      setContractId((cur) => cur ?? (res.items[0]?.contract_id ?? null));
+      setContractId((current) =>
+        current && res.items.some((item) => item.contract_id === current)
+          ? current : (res.items[0]?.contract_id ?? null)
+      );
     } catch {
-      setError("Verträge konnten nicht geladen werden.");
+      if (seq === listSeq.current) setError("Verträge konnten nicht geladen werden.");
     } finally {
-      setLoading(false);
+      if (seq === listSeq.current) setLoading(false);
     }
   }, [organizationSlug]);
 
-  useEffect(() => { void loadContracts(); }, [loadContracts]);
+  useEffect(() => {
+    setContracts([]);
+    setContractId(null);
+    setDetail(null);
+    setActiveDoc(null);
+    setNavTarget(null);
+    detailSeq.current += 1;
+    void loadContracts();
+    return () => { listSeq.current += 1; detailSeq.current += 1; };
+  }, [loadContracts]);
 
   const loadDetail = useCallback(async (id: string) => {
+    const seq = ++detailSeq.current;
     if (!organizationSlug) return;
     setLoadingDetail(true);
     setDetailError(null);
+    setDetail(null);
+    setActiveDoc(null);
+    setNavTarget(null);
     try {
       const res = await getContract(id, organizationSlug);
+      if (seq !== detailSeq.current) return;
       setDetail(res);
       setActiveDoc(res.documents.find((d) => d.viewer_supported) ?? null);
-      setNavTarget(null);
     } catch {
+      if (seq !== detailSeq.current) return;
       setDetail(null);
       setDetailError("Vertragsdetail konnte nicht geladen werden.");
     } finally {
-      setLoadingDetail(false);
+      if (seq === detailSeq.current) setLoadingDetail(false);
     }
   }, [organizationSlug]);
 
-  useEffect(() => { if (contractId) void loadDetail(contractId); }, [contractId, loadDetail]);
+  useEffect(() => {
+    if (contractId) void loadDetail(contractId);
+    else {
+      detailSeq.current += 1;
+      setDetail(null);
+      setActiveDoc(null);
+      setNavTarget(null);
+      setLoadingDetail(false);
+    }
+    return () => { detailSeq.current += 1; };
+  }, [contractId, loadDetail]);
 
   function onNavigate(ref: EvidenceRef) {
     const target = toTarget(ref);
