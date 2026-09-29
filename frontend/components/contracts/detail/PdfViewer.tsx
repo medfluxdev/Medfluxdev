@@ -45,7 +45,6 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     bbox: EvidenceBbox | null;
     bbox_space: "pdf_points" | "normalized";
   } | null>(null);
-  const refinedKeyRef = useRef<string | null>(null);
   const pdfRef = useRef<PdfJsModule | null>(null);
   const docRef = useRef<PdfDoc | null>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -114,7 +113,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
       controller.abort();
       renderTaskRef.current?.cancel();
     };
-  }, [active, documentVersionId, contractId, orgSlug, retrySeq, navTarget?.document_version_id, navTarget?.page]);
+  }, [active, documentVersionId, contractId, orgSlug, retrySeq]);
 
   useEffect(() => () => {
     renderTaskRef.current?.cancel();
@@ -169,9 +168,9 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
       status !== "ready" || !documentVersionId || !navTarget ||
       !navTarget.supports_exact_navigation || !navTarget.label || navTarget.page == null
     ) return;
-    const key = `${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
-    if (refinedKeyRef.current === key) return;
-    refinedKeyRef.current = key;
+    if (navTarget.document_version_id !== documentVersionId) return;
+    const key = `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
+    setRefined(null);
     let cancelled = false;
     const controller = new AbortController();
     (async () => {
@@ -212,7 +211,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber || !navTarget.supports_exact_navigation) return;
-    const refinedKey = `${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
+    const refinedKey = `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
     const useRefined = refined !== null && refined.key === refinedKey && refined.status === "exact" && refined.bbox !== null;
     const bbox = useRefined ? refined.bbox! : navTarget.bbox;
     const bboxSpace = useRefined ? refined.bbox_space : navTarget.bbox_space;
@@ -241,7 +240,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     ctx.strokeStyle = "#d97706";
     ctx.lineWidth = 2;
     ctx.strokeRect(rect.x + 1, rect.y + 1, Math.max(0, rect.width - 2), Math.max(0, rect.height - 2));
-  }, [navTarget, dims, documentVersionId, pageNumber, zoom, refined]);
+  }, [navTarget, dims, documentVersionId, pageNumber, zoom, refined, orgSlug]);
 
   if (!active || !documentVersionId) {
     return <div className="pdf-viewer pdf-idle" role="region" aria-label="Quellansicht"><p className="pdf-placeholder">Wählen Sie oben ein Quelldokument aus, um die Quelle zu öffnen.</p></div>;
