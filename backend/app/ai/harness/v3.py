@@ -35,6 +35,7 @@ from app.ai.harness.pipeline import (
     RETRIEVAL_TERMS,
     field_types,
     strict_value,
+    equipment_identity_in_quote,
 )
 from app.ai.harness.source_signals import collect_source_signals
 from app.documents.intelligence.hybrid import route_summary, visual_candidate_pages
@@ -1914,9 +1915,17 @@ class DirectContractHarness:
 
                 if fact.field == "equipment":
                     contract.equipment = value or []
+                    unattributed = 0
                     for item in contract.equipment:
-                        if item.evidence is None:
+                        if equipment_identity_in_quote(item, resolved_quote):
                             item.evidence = source
+                        else:
+                            unattributed += 1
+                    if unattributed:
+                        issues.append(
+                            "Equipment source attribution incomplete: "
+                            f"{unattributed} item(s) require manual evidence review"
+                        )
                 else:
                     group, field = fact.field.split(".", 1)
                     holder = getattr(contract, group)
