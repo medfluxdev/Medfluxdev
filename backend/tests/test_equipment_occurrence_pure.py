@@ -62,3 +62,14 @@ def test_included_service_variations_have_independent_occurrence_and_review():
     assert review(preventive, serial="SN-1", scope="Maintenance", included=["Preventive"]) != review(
         emergency, serial="SN-1", scope="Maintenance", included=["Emergency"]
     )
+
+
+
+def test_known_identifier_without_scope_survives_evidence_reordering():
+    first = occurrence(serial_number="SN-1")
+    reordered = occurrence(
+        serial_number="SN-1",
+        field_ref="identity_equipment.evidence.10", equipment_index=10,
+    )
+    assert first == reordered
+    assert review(first, serial="SN-1") == review(reordered, serial="SN-1")
