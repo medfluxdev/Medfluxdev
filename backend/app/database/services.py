@@ -613,6 +613,8 @@ def accept_extraction(
     run = session.get(ContractExtraction, extraction_id)
     if run is None:
         raise PersistenceError("extraction run nicht gefunden")
+    if run.organization_id != contract.organization_id:
+        raise PersistenceError("extraction/contract organisation mismatch")
     contract.accepted_extraction_id = extraction_id
     session.flush()
     return contract
@@ -627,6 +629,8 @@ def accept_calculation(
     run = session.get(CalculationRun, calculation_run_id)
     if run is None:
         raise PersistenceError("calculation run nicht gefunden")
+    if run.organization_id != contract.organization_id or run.extraction_id != contract.accepted_extraction_id:
+        raise PersistenceError("calculation run does not belong to accepted contract extraction")
     contract.accepted_calculation_run_id = calculation_run_id
     session.flush()
     return contract
