@@ -225,6 +225,24 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("zeigt den belegten Systemnamen, wenn device_name fehlt", async () => {
+    const equipment = detailFixture().equipment;
+    await renderWithData(detailFixture({
+      equipment: [{ ...equipment[0], device_name: null, system_name: "Impella AIC System", model: null }],
+    }));
+    await openTab("Geräte");
+    expect(screen.getByText("Impella AIC System")).toBeInTheDocument();
+  });
+
+  it("zeigt den belegten Modellnamen, wenn Geräte- und Systemname fehlen", async () => {
+    const equipment = detailFixture().equipment;
+    await renderWithData(detailFixture({
+      equipment: [{ ...equipment[0], device_name: null, system_name: null, model: "Accutron MR" }],
+    }));
+    await openTab("Geräte");
+    expect(screen.getByText("Accutron MR")).toBeInTheDocument();
+  });
+
   it("zeigt die Quelldokumente und lädt den PDF-Viewer", async () => {
     await renderWithData(detailFixture());
     await openDocuments();
