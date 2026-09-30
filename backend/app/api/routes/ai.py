@@ -6,6 +6,7 @@ verändert oder aktiv getestet werden, sobald Authentifizierung aktiv ist.
 """
 
 import logging
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -103,7 +104,22 @@ async def ai_set_selection(request: Request, payload: SelectionUpdate) -> AISnap
     if is_generic and not endpoint:
         raise HTTPException(status_code=400, detail="Für den OpenAI-kompatiblen Anbieter ist ein Endpunkt erforderlich.")
     if is_generic:
-        if not endpoint.startswith("http://127.0.0.1:") and not endpoint.startswith("http://localhost:"):
+        # String prefixes also accept URLs such as
+        # http://localhost:80@remote.example, whose actual host is remote.
+        # Parse the authority and reject credentials and invalid ports.
+        try:
+            parsed = urlsplit(endpoint)
+            local_endpoint = (
+                parsed.scheme == "http"
+                and parsed.hostname in {"localhost", "127.0.0.1"}
+                and parsed.port is not None
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.fragment == ""
+            )
+        except ValueError:
+            local_endpoint = False
+        if not local_endpoint:
             raise HTTPException(status_code=400, detail="Nur lokale Endpunkte (localhost) sind erlaubt.")
         probe_base = endpoint
     else:
