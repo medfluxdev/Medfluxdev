@@ -936,6 +936,7 @@ def resolve_source_navigation(
         select(ExtractionEvidence)
         .where(
             (ExtractionEvidence.extraction_id == contract.accepted_extraction_id)
+            & (ExtractionEvidence.organization_id == contract.organization_id)
             & (ExtractionEvidence.field_ref == field_ref)
         )
         .order_by(ExtractionEvidence.id)
@@ -945,7 +946,7 @@ def resolve_source_navigation(
     # Evidence hat kein direktes document_version_id; es laeuft ueber den
     # zugehoerigen Extraction-Lauf.
     extraction = session.get(ContractExtraction, row.extraction_id)
-    if extraction is None:
+    if extraction is None or extraction.organization_id != contract.organization_id:
         return None
     version = session.get(DocumentVersion, extraction.document_version_id)
     doc_file_id = version.document_file_id if version else None
