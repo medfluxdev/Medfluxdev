@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from app.core.scope_context import current_scope_context
@@ -27,9 +27,10 @@ from app.database.session import create_session
 router = APIRouter(prefix="/api/intelligence", tags=["intelligence"])
 
 
-def _org(session, slug):
+def _org(session, slug, request: Request):
     org = get_organization(session, slug)
-    if org is None:
+    actor = getattr(request.state, "actor", None)
+    if org is None or actor is None or actor.organization_id != org.id:
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     return org
 
@@ -61,10 +62,10 @@ def _require_visible_contract(session, organization_id: UUID, contract_id: UUID)
 
 
 @router.get("/contracts/{contract_id}/graph")
-def contract_graph(organization_slug: str, contract_id: UUID):
+def contract_graph(request: Request, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         visible = _require_visible_contract(session, org.id, contract_id)
         rows = session.scalars(
             select(ContractRelationRecord).where(
@@ -103,10 +104,10 @@ def contract_graph(organization_slug: str, contract_id: UUID):
 
 
 @router.get("/contracts/{contract_id}/obligations")
-def contract_obligations(organization_slug: str, contract_id: UUID):
+def contract_obligations(request: Request, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _require_visible_contract(session, org.id, contract_id)
         rows = session.scalars(
             select(ContractObligationRecord).where(
@@ -139,10 +140,10 @@ def contract_obligations(organization_slug: str, contract_id: UUID):
 
 
 @router.get("/contracts/{contract_id}/policies")
-def contract_policies(organization_slug: str, contract_id: UUID):
+def contract_policies(request: Request, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _require_visible_contract(session, org.id, contract_id)
         rows = session.scalars(
             select(PolicyDecisionRecord).where(
@@ -170,10 +171,10 @@ def contract_policies(organization_slug: str, contract_id: UUID):
 
 
 @router.get("/contracts/{contract_id}/actions")
-def contract_actions(organization_slug: str, contract_id: UUID):
+def contract_actions(request: Request, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _require_visible_contract(session, org.id, contract_id)
         rows = session.scalars(
             select(ActionProposalRecord).where(
@@ -202,10 +203,10 @@ def contract_actions(organization_slug: str, contract_id: UUID):
 
 
 @router.get("/events")
-def intelligence_events(organization_slug: str, limit: int = 100):
+def intelligence_events(request: Request, organization_slug: str, limit: int = 100):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         visible = _visible_contract_ids(session, org.id)
         stmt = select(IntelligenceEvent).where(IntelligenceEvent.organization_id == org.id)
         if visible is not None:
