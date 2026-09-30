@@ -13,7 +13,7 @@ from app.contracts.calculation.models import CalculationStatus, ContractCalculat
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models.calculation import CalculationRun
-from app.database.models.contract import Contract
+from app.database.models.contract import Contract, ContractExtraction
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -45,7 +45,18 @@ def _accepted_result(session, org_id: UUID, contract: Contract):
     if not contract.accepted_calculation_run_id:
         return None
     run = session.get(CalculationRun, contract.accepted_calculation_run_id)
-    if run is None or run.organization_id != org_id or run.contract_id != contract.id or not run.result_snapshot:
+    if run is None or run.organization_id != org_id or not run.result_snapshot:
+        return None
+    # CalculationRun is keyed by extraction_id, NOT contract_id. Verify the
+    # accepted extraction belongs to this exact contract and organization.
+    if contract.accepted_extraction_id is None or run.extraction_id != contract.accepted_extraction_id:
+        return None
+    extraction = session.scalar(select(ContractExtraction).where(
+        ContractExtraction.id == run.extraction_id,
+        ContractExtraction.contract_id == contract.id,
+        ContractExtraction.organization_id == org_id,
+    ))
+    if extraction is None:
         return None
     try:
         return ContractCalculationResult.model_validate(run.result_snapshot)
