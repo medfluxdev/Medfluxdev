@@ -121,8 +121,9 @@ def derive_from_equipment(row) -> Optional[dict]:
     if not _get(row, "requires_review", False):
         return None
     device = (
-        _get(row, "device_name") or _get(row, "model")
-        or _get(row, "manufacturer") or (_get(row, "equipment_category") or "Gerät")
+        _get(row, "device_name") or _get(row, "system_name")
+        or _get(row, "model") or _get(row, "manufacturer")
+        or (_get(row, "equipment_category") or "Gerät")
     )
     if item_type == WorkItemType.EQUIPMENT_COVERAGE_REVIEW:
         title = f"Geräte-Zuordnung prüfen: {device}"
