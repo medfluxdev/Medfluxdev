@@ -995,8 +995,11 @@ def resolve_source_navigation(
     if extraction is None or extraction.organization_id != contract.organization_id:
         return None
     version = session.get(DocumentVersion, extraction.document_version_id)
-    doc_file_id = version.document_file_id if version else None
-    doc = session.get(DocumentFile, doc_file_id) if doc_file_id else None
+    if version is None or version.organization_id != contract.organization_id:
+        return None
+    doc = session.get(DocumentFile, version.document_file_id) if version.document_file_id else None
+    if doc is not None and doc.organization_id != contract.organization_id:
+        return None
     return SourceNavigation(
         field_ref=row.field_ref,
         page=row.page,
