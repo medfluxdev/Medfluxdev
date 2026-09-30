@@ -245,8 +245,8 @@ def contract_list(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
-            raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        if org is None or actor_org_mismatch(request, org.id):
+            raise _not_found()
 
         params = SearchParams(
             organization_id=org.id,
