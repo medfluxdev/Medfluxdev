@@ -137,9 +137,9 @@ IDENTITY_EQUIPMENT_PROMPT = (
     "- equipment[].device_name/model: den belegten Produkt-/Modellnamen übernehmen; Hersteller nur setzen, wenn als Hersteller/Marke belegt.\n"
     "- GERÄTE-VOLLSTÄNDIGKEIT: Durchsuche ausdrücklich Vertragsbetreff, Anlagen, Geräteverzeichnis und Tabellen. "
     "Übernimm JEDE eindeutig vom Vertrag abgedeckte Gerätezeile als eigenen equipment-Eintrag, auch wenn nur ein belegter "
-    "Gerätename oder Modellname ohne Seriennummer vorhanden ist. Ein Gerät darf nicht deshalb fehlen, weil weitere Felder leer sind.\\n"
+    "Gerätename oder Modellname ohne Seriennummer vorhanden ist. Ein Gerät darf nicht deshalb fehlen, weil weitere Felder leer sind.\n"
     "- TABELLEN-GERÄTE: Verbinde Tabellenüberschrift mit jeder Gerätezeile; Hersteller, Typ/Modell und Gerätename nicht "
-    "verwechseln. Wiederholte Produktnennungen ohne eindeutige Kennung nicht zu einer erfundenen physischen Identität verschmelzen.\\n"
+    "verwechseln. Wiederholte Produktnennungen ohne eindeutige Kennung nicht zu einer erfundenen physischen Identität verschmelzen.\n"
 
     "- equipment[].inventory_number/serial_number: NUR wenn wörtlich belegt; eine Aussage, dass die Nummer noch fehlt, bedeutet null.\n"
     "- equipment[].coverage_start/coverage_end: nur bei expliziter Abdeckungs-Zeit (FlexibleDate).\n"
