@@ -890,36 +890,37 @@ def contract_document_content(
         except StorageError:
             raise _not_found()
 
-        # Range-Unterstuetzung (bounded), Fallback: volle Datei.
+        # Single byte ranges only. Malformed/unsatisfiable requests return 416.
         total = len(content)
         start, end = 0, total - 1
         status_code = 200
         range_header = request.headers.get("range")
-        if range_header and range_header.startswith("bytes="):
+        if range_header:
+            invalid_range = Response(
+                status_code=416, headers={"Content-Range": f"bytes */{total}"}
+            )
+            if not range_header.startswith("bytes=") or total == 0:
+                return invalid_range
             try:
-                parts = range_header[6:].split("-", 1)
-                r_start = int(parts[0]) if parts[0].strip() else None
-                r_end = int(parts[1]) if len(parts) > 1 and parts[1].strip() else None
-                if r_start is None and r_end is None:
-                    raise ValueError("Empty byte range")
-                if r_start is None and r_end is not None:
-                    if r_end <= 0:
-                        return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
-                    # suffix-range: letzte n Bytes
-                    start = max(0, total - r_end)
-                    end = total - 1
+                spec = range_header[6:]
+                if spec.count("-") != 1 or "," in spec:
+                    return invalid_range
+                first, last = spec.split("-", 1)
+                if first:
+                    if not first.isdecimal() or (last and not last.isdecimal()):
+                        return invalid_range
+                    start = int(first)
+                    end = total - 1 if not last else min(int(last), total - 1)
                 else:
-                    start = r_start or 0
-                    end = total - 1 if r_end is None else min(r_end, total - 1)
-                if start < 0 or start >= total or end < start:
-                    return Response(
-                        status_code=416,
-                        headers={"Content-Range": f"bytes */{total}"},
-                    )
+                    if not last.isdecimal() or int(last) == 0:
+                        return invalid_range
+                    start = max(0, total - int(last))
+                    end = total - 1
+                if start >= total or end < start:
+                    return invalid_range
                 status_code = 206
-            except (ValueError, TypeError):
-                start, end = 0, total - 1
-                status_code = 200
+            except ValueError:
+                return invalid_range
 
         body = content[start : end + 1]
         headers = {
