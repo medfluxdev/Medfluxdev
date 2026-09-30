@@ -159,10 +159,35 @@ def _collapse_sibling_duplicates(
             & (WorkItem.active.is_(True))
         )
     ).all()
+    # Only merge duplicate reviews for the *same coverage scope*. A shared
+    # canonical master can have independent service rows that require separate
+    # human decisions; collapsing them loses their review state.
+    from app.database.models import ContractEquipment
+
+    coverage_ids = {
+        wi.contract_equipment_id for wi in actives
+        if wi.contract_equipment_id is not None
+    }
+    coverages = {
+        row.id: row for row in session.scalars(
+            select(ContractEquipment).where(
+                (ContractEquipment.organization_id == organization_id)
+                & (ContractEquipment.contract_id == contract_id)
+                & (ContractEquipment.id.in_(coverage_ids))
+            )
+        )
+    } if coverage_ids else {}
     families: dict[tuple, list[WorkItem]] = {}
     for wi in actives:
-        if wi.equipment_id is not None:
-            key = (wi.equipment_id, wi.item_type)
+        coverage = coverages.get(wi.contract_equipment_id)
+        if wi.equipment_id is not None and coverage is not None:
+            # Preserve independent service/coverage reviews even when the
+            # underlying canonical equipment master is the same.
+            key = (
+                wi.equipment_id, wi.item_type,
+                (coverage.service_scope or "").strip().casefold(),
+                coverage.coverage_start, coverage.coverage_end,
+            )
         elif wi.contract_equipment_id is not None:
             key = (wi.contract_equipment_id, wi.item_type)
         else:
