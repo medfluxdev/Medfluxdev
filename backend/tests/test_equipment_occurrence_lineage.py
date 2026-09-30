@@ -8,7 +8,7 @@ from app.work_queue.derive import derive_work_items
 
 
 def test_same_sourced_occurrence_retry_is_idempotent(db):
-    org, contract = _org(db), None
+    org = _org(db)
     contract = _contract(db, org, "OCC-RETRY")
     values = dict(
         contract_id=contract.id, device_name="Infusion Pump",
