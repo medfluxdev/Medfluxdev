@@ -28,6 +28,7 @@ from app.contract_intelligence.risk import RiskFinding, summarize_risk
 from app.contract_intelligence.scenario import simulate_termination
 from app.contract_intelligence.supplier import summarize_supplier_performance
 from app.contracts.calculation.models import CalculationStatus, ContractCalculationResult
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import (
     CalculationReviewFlag,
@@ -48,7 +49,7 @@ router = APIRouter(prefix="/api/intelligence/analytics", tags=["intelligence-ana
 def _org(session, slug: str, request: Request):
     org = get_organization(session, slug)
     actor = getattr(request.state, "actor", None)
-    if org is None or actor is None or actor.organization_id != org.id:
+    if org is None or (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     return org
 
