@@ -61,3 +61,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Original document range and binding checkpoint
 - Inspected document download route and `DocumentPersistenceService.resolve_bytes_for_version`: the storage service already checks organization, contract existence and ContractDocument binding before reading original bytes. Hardened byte-range parser to return 416 on unsupported units, malformed/multiple/zero suffix and unsatisfiable ranges (`99671ff`). Added source-level valid/invalid range regression cases (`10bad69`). Tests not executed; continue source review and final acceptance preparation.
+
+## Billing scope checkpoint
+- Inspected contract billing endpoints and ownership authorization patterns. Billing basis and invoice reconciliation previously relied on contract organization and workspace scope but lacked an explicit actor/organization match in their shared loader. Added request actor guard for both (`88e7063`) and DB-free missing/cross-org actor regressions (`499e84c`). Tests not executed. Continue other intelligence routes and eventual one-shot acceptance only with owner approval.
