@@ -11,6 +11,7 @@ from app.api.routes import reports
 
 @pytest.mark.parametrize("actor_kind", ["missing", "different"])
 def test_portfolio_report_rejects_unmatched_actor_before_aggregates(monkeypatch, actor_kind):
+    monkeypatch.setattr(reports.settings, "auth_enabled", True)
     org_id = uuid4()
     session = MagicMock()
     monkeypatch.setattr(reports, "create_session", lambda: session)
