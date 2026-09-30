@@ -55,3 +55,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Contract portfolio scope checkpoint
 - Inspected `backend/app/api/routes/contracts.py`, `backend/app/contracts/search/service.py`, and existing search test coverage. SQL service already applies organization and workspace-contract predicates before count/pagination; portfolio route lacked its own explicit actor/organization mismatch check (detail route already had one). Added route guard (`6393540`) and DB-free cross-organization route regression (`80fd6ad`). Source-only review; test not executed. Continue backend mutation scope and frontend evidence navigation edge cases.
+
+## Document content-route checkpoint
+- Inspected contract mutation route guards and original-document content route. Mutation endpoints reviewed use actor organization and scoped-contract checks; no change required in this pass. Confirmed document content MIME allowlist previously accepted mismatched allowed extension/type pairs, and zero-length suffix byte ranges were accepted. Corrected both (`8c054ef`); authored mismatched PDF/DOCX MIME regressions (`0691d60`). Tests not executed. Next: test byte-range boundary handling, inspect document-version contract binding and additional backend endpoints.
