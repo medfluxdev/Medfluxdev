@@ -571,6 +571,50 @@ def test_work_queue_routes_ok_and_cross_org_404(engine, db):
 # 7) Reprocessing erzeugt keine Duplikate
 # ---------------------------------------------------------------------------
 
+
+def test_equipment_catalog_ignores_superseded_extraction_rows(db):
+    """Current equipment links/counts must not include historical reanalysis."""
+    from app.database.services import save_extraction
+
+    org = _org(db)
+    contract = _contract(db, org, "HISTORY")
+    old = add_equipment(
+        db, contract_id=contract.id, device_name="CT-Old",
+        serial_number="HIST-1", has_evidence=True,
+    )
+    version = db.scalar(
+        select(DocumentVersion)
+        .join(DocumentVersion.document_file)
+        .where(DocumentVersion.document_file_id == db.scalar(
+            select(DocumentFile.id).where(
+                DocumentFile.organization_id == org.id
+            ).limit(1)
+        ))
+        .limit(1)
+    )
+    next_extraction = save_extraction(
+        db, organization_id=org.id, document_version_id=version.id,
+        snapshot={}, evidence=[], status="success",
+        validation_status="unknown", requires_review=False,
+        model="test", prompt_version="test",
+    )
+    contract.accepted_extraction_id = next_extraction.id
+    db.flush()
+    # Historical equipment remains auditable, but not a current link.
+    assert db.get(ContractEquipment, old.id) is not None
+    assert all(
+        item.id != str(old.equipment_id)
+        for item in list_equipment(db, organization_id=org.id)
+        if item.contract_count > 0
+    )
+    detail = get_equipment_detail(
+        db, organization_id=org.id, equipment_id=old.equipment_id
+    )
+    assert detail is not None
+    assert detail.contract_count == 0
+    assert detail.contracts == []
+
+
 def test_reprocessing_no_duplicate_equipment_or_relationships(db):
     org = _org(db)
     c = _contract(db, org, "REPRO")
