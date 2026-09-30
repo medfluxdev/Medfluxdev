@@ -702,6 +702,11 @@ def resolve_equipment_master(
     """
     from app.equipment.identity import identification_quality as _calc_quality
 
+    # A whitespace-only identifier must never count as an exact identity.
+    # Normalize leading/trailing whitespace before matching an existing master.
+    serial_number = serial_number.strip() or None if serial_number is not None else None
+    inventory_number = inventory_number.strip() or None if inventory_number is not None else None
+
     if not (serial_number or inventory_number or device_name or model
             or manufacturer or equipment_category):
         return None
