@@ -647,16 +647,23 @@ def link_document(
 
     if role is not None:
         _assert_status(role, CONTRACT_DOCUMENT_ROLE_ALLOWED, "role")
+    contract = session.get(Contract, contract_id)
+    version = session.get(DocumentVersion, document_version_id)
+    if contract is None or version is None:
+        raise PersistenceError("contract or document version not found")
+    if contract.organization_id != version.organization_id:
+        raise PersistenceError("contract/document organisation mismatch")
     existing = session.scalars(
         select(ContractDocument).where(
             (ContractDocument.contract_id == contract_id)
             & (ContractDocument.document_version_id == document_version_id)
+            & (ContractDocument.organization_id == contract.organization_id)
         )
     ).first()
     if existing is not None:
         return existing  # idempotent
     link = ContractDocument(
-        organization_id=session.get(Contract, contract_id).organization_id,
+        organization_id=contract.organization_id,
         contract_id=contract_id,
         document_version_id=document_version_id,
         role=role,
