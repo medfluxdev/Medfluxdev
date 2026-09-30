@@ -256,13 +256,18 @@ class ContractEquipment(OrgOwnedMixin, Base):
     logical_fingerprint: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True
     )
+    # Unique per source-backed coverage/physical occurrence within one run.
+    # Logical fingerprint remains for cross-reanalysis semantic lineage.
+    occurrence_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint(
             "contract_id",
             "extraction_id",
-            "logical_fingerprint",
-            name="uq_contract_equipment_contract_extraction_fingerprint",
+            "occurrence_fingerprint",
+            name="uq_contract_equipment_contract_extraction_occurrence",
         ),
         Index("ix_contract_equipment_contract_id", "contract_id"),
         Index("ix_contract_equipment_extraction_id", "extraction_id"),
