@@ -1505,6 +1505,13 @@ class DocumentProcessingService:
                 document_version_id=version.id,
                 role="main",
             )
+            # Only persisted, navigable evidence can upgrade relationship
+            # quality. An in-memory evidence object may lack a source locator
+            # and be discarded by _evidence_row above.
+            persisted_equipment_refs = {
+                row["field_ref"] for row in evidence
+                if row.get("field_ref", "").startswith("identity_equipment.evidence.")
+            }
             for index, equipment in enumerate(contract_model.equipment or []):
                 add_equipment(
                     session,
@@ -1534,7 +1541,7 @@ class DocumentProcessingService:
                     sla_notes=equipment.sla_notes,
                     field_ref=f"identity_equipment.evidence.{index}",
                     equipment_index=index,
-                    has_evidence=equipment.evidence is not None,
+                    has_evidence=f"identity_equipment.evidence.{index}" in persisted_equipment_refs,
                 )
             accept_extraction(
                 session, contract_id=contract.id, extraction_id=extraction.id
