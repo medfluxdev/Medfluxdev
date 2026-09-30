@@ -823,9 +823,13 @@ def add_equipment(
     if existing is not None:
         return existing
 
+    # A source-backed system name is a usable canonical equipment identity even
+    # when the extractor did not supply a separate device_name. Preserve the
+    # original contract fields; only the master identity uses this fallback.
+    master_name = device_name or system_name
     ident = _quality(
         serial_number=serial_number, inventory_number=inventory_number,
-        device_name=device_name, model=model, manufacturer=manufacturer,
+        device_name=master_name, model=model, manufacturer=manufacturer,
         equipment_category=equipment_category,
     )
     rel = _rel(ident, has_evidence=has_evidence)
@@ -837,7 +841,7 @@ def add_equipment(
         organization_id=contract.organization_id,
         serial_number=serial_number,
         inventory_number=inventory_number,
-        device_name=device_name,
+        device_name=master_name,
         manufacturer=manufacturer,
         model=model,
         equipment_type=equipment_type,
