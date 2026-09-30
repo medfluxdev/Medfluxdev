@@ -583,14 +583,9 @@ def test_equipment_catalog_ignores_superseded_extraction_rows(db):
         serial_number="HIST-1", has_evidence=True,
     )
     version = db.scalar(
-        select(DocumentVersion)
-        .join(DocumentVersion.document_file)
-        .where(DocumentVersion.document_file_id == db.scalar(
-            select(DocumentFile.id).where(
-                DocumentFile.organization_id == org.id
-            ).limit(1)
-        ))
-        .limit(1)
+        select(DocumentVersion).where(
+            DocumentVersion.organization_id == org.id
+        ).limit(1)
     )
     next_extraction = save_extraction(
         db, organization_id=org.id, document_version_id=version.id,
