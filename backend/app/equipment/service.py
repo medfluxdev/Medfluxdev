@@ -21,6 +21,8 @@ def list_equipment(
     organization_id,
     search: Optional[str] = None,
     limit: int = 200,
+    hospital_id=None,
+    department_id=None,
 ) -> list[EquipmentSummary]:
     """Liste kanonischer Geräte einer Organisation mit Vertrags-Anzahl."""
     contract_count = (
@@ -42,6 +44,10 @@ def list_equipment(
         .order_by(Equipment.device_name.asc().nulls_last(), Equipment.id)
         .limit(limit)
     )
+    if department_id is not None:
+        stmt = stmt.where(Equipment.department_id == department_id)
+    elif hospital_id is not None:
+        stmt = stmt.where(Equipment.hospital_id == hospital_id)
     if search:
         like = f"%{search}%"
         stmt = stmt.where(
