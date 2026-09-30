@@ -6,9 +6,10 @@ pending intelligence approvals remain authoritative in their own domains.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import ActionProposalRecord, WorkItem
 from app.database.scope_queries import scoped_contract_ids
@@ -20,13 +21,15 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 @router.get("")
 def notification_feed(
+    request: Request,
     organization_slug: str,
     limit: int = Query(default=100, ge=1, le=500),
 ):
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        actor = getattr(request.state, "actor", None)
+        if org is None or (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
         scope = current_scope_context()
         allowed = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
