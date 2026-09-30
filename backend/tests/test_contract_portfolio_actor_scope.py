@@ -22,6 +22,7 @@ def test_portfolio_list_rejects_other_organization(monkeypatch):
         contracts.contract_list(
             request=request, organization_slug="other",
             status=[], risk=[], warning_type=[], page_size=25,
+            sort="operational", direction="asc",
         )
     assert exc.value.status_code == 404
     search.assert_not_called()
