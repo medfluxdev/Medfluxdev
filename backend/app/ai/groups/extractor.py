@@ -135,7 +135,20 @@ class GroupPipeline:
         if not any(v is not None for v in merged_groups.values()):
             return None, diag, [MSG_GROUP_VALIDATION]
 
-        # A successful identity group can still omit explicitly labelled devices.\n        # Flag the omission instead of inventing an equipment name from regex.\n        if not contract.equipment and any(\n            re.search(r"(?im)^\\s*(?:ger(?:ä|ae)t(?:e)?|medizinger(?:ä|ae)t(?:e)?|anlage(?:n)?|device(?:s)?|modell|model)\\s*(?:[:\\t]| {2,})\\s*\\S", str(getattr(unit, "text", "") or ""))\n            for unit in units\n        ):\n            messages.append("Geräteangaben im Quelltext erkennbar, aber keine Geräte extrahiert – manuelle Prüfung erforderlich")\n\n        source_notes = ground_source_identity(contract, units)
+        # A successful identity group can still omit explicitly labelled devices.
+        # Flag the omission instead of inventing an equipment name from regex.
+        if not contract.equipment and any(
+            re.search(
+                r"(?im)^\s*(?:gerät(?:e)?|geraet(?:e)?|medizingerät(?:e)?|medizingeraet(?:e)?|anlage(?:n)?|device(?:s)?|modell|model)\s*(?:[:\t]| {2,})\s*\S",
+                str(getattr(unit, "text", "") or ""),
+            )
+            for unit in units
+        ):
+            messages.append(
+                "Geräteangaben im Quelltext erkennbar, aber keine Geräte extrahiert – manuelle Prüfung erforderlich"
+            )
+
+        source_notes = ground_source_identity(contract, units)
         diag.normalization_issues += len(source_notes)
         if source_notes:
             logger.info(
