@@ -16,7 +16,7 @@ class InvoiceLine(BaseModel):
     label: str
     amount: Decimal
     currency: str
-    quantity: Optional[Decimal] = None
+    quantity: Optional[Decimal] = Field(default=None, gt=0)
     unit: Optional[str] = None
 
 
