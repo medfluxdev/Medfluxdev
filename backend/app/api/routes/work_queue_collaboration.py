@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import Account, AccountMembership, WorkItem, WorkItemCollaboration, WorkItemComment
 from app.database.models.activity_log import ActivityLog
@@ -56,10 +57,13 @@ def _collab_payload(row: WorkItemCollaboration | None) -> dict:
 
 
 @router.get("/{work_item_id}/collaboration")
-def get_collaboration(work_item_id: UUID, organization_slug: str):
+def get_collaboration(request: Request, work_item_id: UUID, organization_slug: str):
     session = create_session()
     try:
         org, work, _ = _context(session, organization_slug, work_item_id)
+        actor = getattr(request.state, "actor", None)
+        if (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
+            raise HTTPException(status_code=404, detail="Arbeitselement nicht gefunden.")
         row = session.scalars(
             select(WorkItemCollaboration).where(
                 WorkItemCollaboration.organization_id == org.id,
