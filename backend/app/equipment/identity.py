@@ -80,8 +80,8 @@ def requires_manual_review(rel: RelationshipQuality) -> bool:
 def review_reason_de(rel: RelationshipQuality) -> Optional[str]:
     mapping = {
         RelationshipQuality.PARTIAL: (
-            "Gerät nur teilweise identifiziert (keine eindeutige Serien-/"
-            "Inventarnummer vorhanden)."
+            "Geräte-Identität oder Vertragsbezug nicht vollständig belegt: "
+            "Serien-/Inventarnummer und zugehörigen Quellenbeleg prüfen."
         ),
         RelationshipQuality.GENERIC: (
             "Nur generische Geräte-/Wartungsbeschreibung – nicht eindeutig."
