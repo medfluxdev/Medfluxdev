@@ -435,6 +435,35 @@ async def test_equipment_and_service_hours_and_service_scope_normalize():
 
 
 @pytest.mark.asyncio
+async def test_separate_equipment_facts_preserve_all_devices_and_own_sources():
+    class TwoDeviceProvider(FakeProvider):
+        async def generate_request(self, text, system, schema, max_tokens, context_tokens, images=None):
+            if schema["title"] == "ProposedFactBatch" and "sla.service_hours" in text:
+                return json.dumps({"facts": [
+                    {"field": "equipment", "value": [{"device_name": "Impella AIC System"}],
+                     "page": 3, "quote": "Impella AIC System", "applicability": "applicable"},
+                    {"field": "equipment", "value": [{"system_name": "Accutron MR"}],
+                     "page": 7, "quote": "Accutron MR", "applicability": "applicable"},
+                ]})
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images=images
+            )
+
+    source = document()
+    page = next(page for page in source.pages if page.page_number == 7)
+    page.text += " Accutron MR"
+    page.elements[0].text += " Accutron MR"
+    source.canonical_text = "\\n".join(page.text for page in source.pages)
+    result = await DirectContractHarness(settings(), ai(TwoDeviceProvider())).analyze(source)
+    assert result.contract is not None, result.error
+    equipment = result.contract.equipment
+    assert [item.device_name or item.system_name for item in equipment] == [
+        "Impella AIC System", "Accutron MR"
+    ]
+    assert [item.evidence.page for item in equipment] == [3, 7]
+
+
+@pytest.mark.asyncio
 async def test_alternative_fact_never_projects():
     class AlternativeProvider(FakeProvider):
         async def generate_request(
