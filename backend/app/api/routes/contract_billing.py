@@ -13,7 +13,8 @@ from app.contracts.calculation.models import CalculationStatus, ContractCalculat
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models.calculation import CalculationRun
-from app.database.models.contract import Contract, ContractExtraction
+from app.database.models.contract import Contract, ContractDocument
+from app.database.models.extraction import ContractExtraction
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -53,8 +54,12 @@ def _accepted_result(session, org_id: UUID, contract: Contract):
         return None
     extraction = session.scalar(select(ContractExtraction).where(
         ContractExtraction.id == run.extraction_id,
-        ContractExtraction.contract_id == contract.id,
         ContractExtraction.organization_id == org_id,
+        select(ContractDocument.id).where(
+            ContractDocument.contract_id == contract.id,
+            ContractDocument.organization_id == org_id,
+            ContractDocument.document_version_id == ContractExtraction.document_version_id,
+        ).exists(),
     ))
     if extraction is None:
         return None
