@@ -35,8 +35,20 @@ def test_per_device_evidence_attribution_requires_identity_in_quote():
     quote = "Gerät: CT Scanner Alpha, Seriennummer CT-001"
     assert equipment_identity_in_quote(scanner, quote)
     assert not equipment_identity_in_quote(infusion, quote)
-    assert equipment_identity_in_quote(infusion, "Anlage Accutron MR")
+    assert not equipment_identity_in_quote(infusion, "Anlage Accutron MR")
+    assert equipment_identity_in_quote(infusion, "Anlage Accutron MR, SN MR-002")
     assert not equipment_identity_in_quote(infusion, "Geräte und Anlagen gemäß Anhang")
+
+    # Identical model or name must not attribute one unit's source to
+    # another physical unit with its own serial number.
+    second = Equipment(device_name="CT Scanner Alpha", model="CT-X",
+                       serial_number="CT-002")
+    assert not equipment_identity_in_quote(second, quote)
+    assert equipment_identity_in_quote(second, "CT Scanner Alpha CT-002")
+    assert not equipment_identity_in_quote(second, "CT-X service")
+    assert not equipment_identity_in_quote(
+        Equipment(device_name="CT Scanner"), "CT ScannerAlpha"
+    )
 
 
 def settings(**overrides):
