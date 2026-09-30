@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from tests.test_pr4_equipment_work_item import _org, _contract
+from tests.test_pr4_equipment_work_item import _org, _contract, db, engine, _require_pg
 from app.database.services import add_equipment
 from app.work_queue.derive import derive_work_items
 
