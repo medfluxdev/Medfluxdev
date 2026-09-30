@@ -821,16 +821,6 @@ def add_equipment(
         raise PersistenceError("extraction run nicht gefunden")
     if extraction.organization_id != contract.organization_id:
         raise PersistenceError("extraction/contract organisation mismatch")
-    # Extraction runs belong to document versions, not directly to contracts.
-    # A same-organization extraction from an unrelated document must never
-    # become a persisted equipment relationship for this contract.
-    linked = session.scalar(select(ContractDocument.id).where(
-        ContractDocument.contract_id == contract.id,
-        ContractDocument.organization_id == contract.organization_id,
-        ContractDocument.document_version_id == extraction.document_version_id,
-    ))
-    if linked is None:
-        raise PersistenceError("extraction document is not linked to contract")
 
     # Idempotenz innerhalb eines Extraktions-Snapshots. Der Fingerprint bleibt
     # absichtlich unabhängig von extraction_id (stabile logische Work-Item-ID).
