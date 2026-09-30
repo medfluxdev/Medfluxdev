@@ -213,6 +213,11 @@ def test_system_name_only_creates_reviewable_canonical_equipment(db):
     assert master.organization_id == org.id
     listed = list_equipment(db, organization_id=org.id)
     assert any(item.device_name == "Accutron MR" for item in listed)
+    from app.work_queue.derive import derive_from_equipment
+    review_item = derive_from_equipment(row)
+    assert review_item is not None
+    assert "Accutron MR" in review_item["title_de"]
+    assert "Accutron MR" in review_item["why_de"]
 
 
 
