@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.contract_intelligence.invoice import ContractCharge, InvoiceLine, reconcile_invoice, value_leakage
 from app.contracts.calculation.models import CalculationStatus, ContractCalculationResult
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models.calculation import CalculationRun
 from app.database.models.contract import Contract
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/api/intelligence/billing", tags=["intelligence-billi
 def _load_contract(session, organization_slug: str, contract_id: UUID, request: Request):
     org = get_organization(session, organization_slug)
     actor = getattr(request.state, "actor", None)
-    if org is None or actor is None or actor.organization_id != org.id:
+    if org is None or (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     contract = session.scalar(select(Contract).where(
         Contract.id == contract_id,
