@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import func, select
 
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import Contract, WorkItem
 from app.database.scope_queries import scoped_contract_ids
@@ -20,7 +21,7 @@ def portfolio_report(request: Request, organization_slug: str):
     try:
         org = get_organization(session, organization_slug)
         actor = getattr(request.state, "actor", None)
-        if org is None or actor is None or actor.organization_id != org.id:
+        if org is None or (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
         scope = current_scope_context()
         allowed = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
