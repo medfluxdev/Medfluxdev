@@ -374,6 +374,9 @@ def save_extraction(
 
     _assert_status(status, EXTRACTION_STATUS_ALLOWED, "extraction status")
     _assert_status(validation_status, VALIDATION_STATUS_ALLOWED, "validation_status")
+    version = session.get(DocumentVersion, document_version_id)
+    if version is None or version.organization_id != organization_id:
+        raise PersistenceError("extraction/document version organisation mismatch")
 
     snapshot_sha = _snapshot_sha256(snapshot)
     run = ContractExtraction(
