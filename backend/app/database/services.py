@@ -798,12 +798,10 @@ def _equipment_occurrence_fingerprint(
             sorted(norm(v) for v in (excluded_services or [])),
         ], ensure_ascii=False, separators=(",", ":"),
     )
-    has_scope = any((
-        service_scope, coverage_start, coverage_end,
-        included_services, excluded_services,
-    ))
     known = bool(serial_number or inventory_number)
-    source = "" if known and has_scope else norm(field_ref)
+    # A verified unique identifier is stable across document row reordering
+    # even when the contract has no explicit coverage scope.
+    source = "" if known else norm(field_ref)
     index = (
         str(equipment_index) if not source and not known and
         equipment_index is not None else ""
