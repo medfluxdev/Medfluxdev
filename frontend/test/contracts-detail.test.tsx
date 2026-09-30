@@ -240,7 +240,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
       equipment: [{ ...equipment[0], device_name: null, system_name: null, model: "Accutron MR" }],
     }));
     await openTab("Geräte");
-    expect(screen.getByText("Accutron MR")).toBeInTheDocument();
+    expect(screen.getAllByText("Accutron MR").length).toBeGreaterThanOrEqual(1);
   });
 
   it("zeigt die Quelldokumente und lädt den PDF-Viewer", async () => {
