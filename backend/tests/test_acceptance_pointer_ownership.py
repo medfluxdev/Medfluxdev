@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.database.services import (
-    PersistenceError, accept_calculation, accept_extraction,
+    PersistenceError, accept_calculation, accept_extraction, link_document,
 )
 
 
@@ -61,3 +61,25 @@ def test_accept_matching_calculation():
     ) is contract
     assert contract.accepted_calculation_run_id == run_id
     session.flush.assert_called_once()
+
+
+
+def test_reject_cross_org_contract_document_link_before_query():
+    org, foreign = uuid4(), uuid4()
+    session = MagicMock()
+    session.get.side_effect = [
+        SimpleNamespace(organization_id=org),
+        SimpleNamespace(organization_id=foreign),
+    ]
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        link_document(session, contract_id=uuid4(), document_version_id=uuid4())
+    session.scalars.assert_not_called()
+    session.add.assert_not_called()
+
+
+def test_reject_missing_contract_document_link_target():
+    session = MagicMock()
+    session.get.side_effect = [None, SimpleNamespace(organization_id=uuid4())]
+    with pytest.raises(PersistenceError, match="not found"):
+        link_document(session, contract_id=uuid4(), document_version_id=uuid4())
+    session.add.assert_not_called()
