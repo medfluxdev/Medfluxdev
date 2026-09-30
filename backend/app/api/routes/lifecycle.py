@@ -64,7 +64,7 @@ def _actor_or_forbid(request: Request):
 def _org(session, slug: str, request: Request):
     org = get_organization(session, slug)
     actor = getattr(request.state, "actor", None)
-    if org is None or (settings.auth_enabled and (actor is None or actor.organization_id != org.id)) or (actor is not None and actor.organization_id != org.id):
+    if org is None or (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     return org
 
