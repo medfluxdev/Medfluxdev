@@ -280,6 +280,37 @@ def test_distinct_same_name_units_without_identifiers_remain_separate(db):
     ) == 2
 
 
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Known persistence blocker: equipment fingerprint ignores distinct "
+        "coverage scope and returns the first row in one extraction"
+    ),
+)
+def test_same_identified_device_keeps_two_distinct_coverage_scopes(db):
+    """A single physical unit may have two independently sourced service rows."""
+    org = _org(db)
+    contract = _contract(db, org, "SCOPE-ROWS")
+    first = add_equipment(
+        db, contract_id=contract.id, device_name="CT Main",
+        serial_number="SCOPE-001", service_scope="Maintenance",
+        field_ref="identity_equipment.evidence.0", equipment_index=0,
+        has_evidence=True,
+    )
+    second = add_equipment(
+        db, contract_id=contract.id, device_name="CT Main",
+        serial_number="SCOPE-001", service_scope="Inspection",
+        field_ref="identity_equipment.evidence.1", equipment_index=1,
+        has_evidence=True,
+    )
+    assert first.id != second.id
+    assert first.equipment_id == second.equipment_id
+    assert {first.service_scope, second.service_scope} == {
+        "Maintenance", "Inspection"
+    }
+
+
 def test_one_contract_many_devices(db):
     org = _org(db)
     c = _contract(db, org, "MULTI")
