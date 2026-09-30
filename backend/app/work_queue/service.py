@@ -187,6 +187,8 @@ def _collapse_sibling_duplicates(
                 wi.equipment_id, wi.item_type,
                 (coverage.service_scope or "").strip().casefold(),
                 coverage.coverage_start, coverage.coverage_end,
+                tuple(sorted(str(x).strip().casefold() for x in (coverage.included_services or []))),
+                tuple(sorted(str(x).strip().casefold() for x in (coverage.excluded_services or []))),
             )
         elif wi.contract_equipment_id is not None:
             key = (wi.contract_equipment_id, wi.item_type)
