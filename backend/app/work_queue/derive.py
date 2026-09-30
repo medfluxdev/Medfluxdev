@@ -158,8 +158,13 @@ def derive_from_equipment(row) -> Optional[dict]:
         "_has_unique_id": bool(
             _get(row, "serial_number") or _get(row, "inventory_number")
         ),
-        "_coverage_scope": "|".join(str(_get(row, key) or "").strip().casefold()
-            for key in ("service_scope", "coverage_start", "coverage_end")),
+        "_coverage_scope": "|".join(
+            [str(_get(row, key) or "").strip().casefold()
+             for key in ("service_scope", "coverage_start", "coverage_end")]
+            + [",".join(sorted(str(v).strip().casefold()
+                for v in (_get(row, key) or [])))
+               for key in ("included_services", "excluded_services")]
+        ),
     }
 
 
