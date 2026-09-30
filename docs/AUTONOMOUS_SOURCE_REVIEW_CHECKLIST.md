@@ -64,3 +64,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Billing scope checkpoint
 - Inspected contract billing endpoints and ownership authorization patterns. Billing basis and invoice reconciliation previously relied on contract organization and workspace scope but lacked an explicit actor/organization match in their shared loader. Added request actor guard for both (`88e7063`) and DB-free missing/cross-org actor regressions (`499e84c`). Tests not executed. Continue other intelligence routes and eventual one-shot acceptance only with owner approval.
+
+## Intelligence read-route actor-scope checkpoint
+- Reconciled latest branch HEAD and prior interactive commits before edits. Inspected `backend/app/api/routes/intelligence.py` and prior billing guard. Five intelligence read routes (graph, obligations, policies, actions, events) had organization/workspace filters but no explicit request actor/organization match. Added shared `_org` actor check and request parameters (`c5cafce`); authored DB-free absent/cross-org regression (`621d358`). Tests NOT EXECUTED. Next inspect intelligence actions/analytics and other read routes, plus frontend evidence stale-detail regression. Both scheduled and interactive sessions must reconcile this same ledger and branch HEAD before writing.
