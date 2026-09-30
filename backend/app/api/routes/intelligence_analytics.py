@@ -11,7 +11,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -45,9 +45,10 @@ from app.database.session import create_session
 router = APIRouter(prefix="/api/intelligence/analytics", tags=["intelligence-analytics"])
 
 
-def _org(session, slug: str):
+def _org(session, slug: str, request: Request):
     org = get_organization(session, slug)
-    if org is None:
+    actor = getattr(request.state, "actor", None)
+    if org is None or actor is None or actor.organization_id != org.id:
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     return org
 
@@ -90,11 +91,11 @@ def _severity_from_policy(outcome: str, requires_review: bool) -> str | None:
 
 
 @router.get("/contracts/{contract_id}/risk")
-def contract_risk(organization_slug: str, contract_id: UUID):
+def contract_risk(request: Request, organization_slug: str, contract_id: UUID):
     """Explain the contract risk from persisted, inspectable findings."""
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         contract = _contract(session, org.id, contract_id)
         findings: list[RiskFinding] = []
 
@@ -206,6 +207,7 @@ class TerminationScenarioRequest(BaseModel):
 
 @router.post("/contracts/{contract_id}/termination-scenario")
 def termination_scenario(
+    request: Request,
     payload: TerminationScenarioRequest,
     organization_slug: str,
     contract_id: UUID,
@@ -213,7 +215,7 @@ def termination_scenario(
     """Run the conservative deterministic termination-cost scenario."""
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         contract = _contract(session, org.id, contract_id)
         annual_cost = None
         currency = None
@@ -259,11 +261,11 @@ def termination_scenario(
 
 
 @router.get("/contracts/{contract_id}/authority-diagnostics")
-def authority_diagnostics(organization_slug: str, contract_id: UUID):
+def authority_diagnostics(request: Request, organization_slug: str, contract_id: UUID):
     """Expose evidence/precedence conflicts around a contract graph."""
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _contract(session, org.id, contract_id)
         rows = session.scalars(
             select(ContractRelationRecord).where(
@@ -314,11 +316,11 @@ class PortfolioQueryRequest(BaseModel):
 
 
 @router.post("/portfolio/query")
-def portfolio_query(payload: PortfolioQueryRequest, organization_slug: str):
+def portfolio_query(request: Request, payload: PortfolioQueryRequest, organization_slug: str):
     """Query accepted portfolio state through the deterministic portfolio engine."""
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         visible = _visible_contract_ids(session, org.id)
         stmt = select(Contract).where(
             Contract.organization_id == org.id,
@@ -385,11 +387,11 @@ def portfolio_query(payload: PortfolioQueryRequest, organization_slug: str):
 
 
 @router.get("/suppliers/performance")
-def supplier_performance(organization_slug: str):
+def supplier_performance(request: Request, organization_slug: str):
     """Roll up persisted obligation performance per supplier."""
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         visible = _visible_contract_ids(session, org.id)
         stmt = select(Contract).where(
             Contract.organization_id == org.id,
@@ -428,11 +430,11 @@ class InvoiceReconciliationRequest(BaseModel):
 
 
 @router.post("/invoices/reconcile")
-def reconcile_invoice_preview(payload: InvoiceReconciliationRequest, organization_slug: str):
+def reconcile_invoice_preview(request: Request, payload: InvoiceReconciliationRequest, organization_slug: str):
     """Expose the conservative invoice engine without pretending persistence."""
     session = create_session()
     try:
-        _org(session, organization_slug)
+        _org(session, organization_slug, request)
         findings = reconcile_invoice(payload.lines, payload.charges)
         leakage = value_leakage(findings)
         return {
@@ -450,11 +452,11 @@ class ClauseFingerprintRequest(BaseModel):
 
 
 @router.post("/clauses/fingerprint")
-def clause_fingerprint(payload: ClauseFingerprintRequest, organization_slug: str):
+def clause_fingerprint(request: Request, payload: ClauseFingerprintRequest, organization_slug: str):
     """Expose the canonical clause normalizer/fingerprint for comparison tooling."""
     session = create_session()
     try:
-        _org(session, organization_slug)
+        _org(session, organization_slug, request)
         result = fingerprint_clause(payload.text)
         return {
             "normalized_text": result.normalized_text,
