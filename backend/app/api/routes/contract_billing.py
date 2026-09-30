@@ -45,7 +45,7 @@ def _accepted_result(session, org_id: UUID, contract: Contract):
     if not contract.accepted_calculation_run_id:
         return None
     run = session.get(CalculationRun, contract.accepted_calculation_run_id)
-    if run is None or run.organization_id != org_id or not run.result_snapshot:
+    if run is None or run.organization_id != org_id or run.contract_id != contract.id or not run.result_snapshot:
         return None
     try:
         return ContractCalculationResult.model_validate(run.result_snapshot)
