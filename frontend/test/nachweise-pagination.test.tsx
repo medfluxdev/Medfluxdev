@@ -38,18 +38,18 @@ describe("Evidence contract pagination", () => {
     expect(screen.getByRole("button", { name: "Nächste 100" })).toBeDisabled();
   });
 
-  it("ignores a delayed response from the previous page", async () => {
-    let resolveFirst!: (value: unknown) => void;
+  it("returns to page one without retaining page-two selection", async () => {
     listContracts.mockImplementation((_org: string, query: { page: number }) =>
-      query.page === 1
-        ? new Promise((resolve) => { resolveFirst = resolve; })
-        : Promise.resolve({ items: [entry("second")], has_more: false, total_count: 101 }));
+      Promise.resolve(query.page === 1
+        ? { items: [entry("first")], has_more: true, total_count: 101 }
+        : { items: [entry("second")], has_more: false, total_count: 101 }));
     render(<NachweisePage />);
-    await waitFor(() => expect(listContracts).toHaveBeenCalled());
-    // The next-page button is intentionally unavailable until page one resolves.
-    resolveFirst({ items: [entry("first")], has_more: true, total_count: 101 });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Nächste 100" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("option", { name: /first/ })).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Nächste 100" }));
     await waitFor(() => expect(screen.getByRole("option", { name: /second/ })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Vorherige 100" }));
+    await waitFor(() => expect(screen.getByRole("option", { name: /first/ })).toBeInTheDocument());
+    expect(screen.queryByRole("option", { name: /second/ })).not.toBeInTheDocument();
   });
+
 });
