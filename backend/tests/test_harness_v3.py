@@ -464,6 +464,30 @@ async def test_separate_equipment_facts_preserve_all_devices_and_own_sources():
 
 
 @pytest.mark.asyncio
+async def test_repeated_identical_equipment_fact_does_not_duplicate_device():
+    class RepeatedDeviceProvider(FakeProvider):
+        async def generate_request(self, text, system, schema, max_tokens, context_tokens, images=None):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images=images
+            )
+            if schema["title"] == "ProposedFactBatch" and "sla.service_hours" in text:
+                payload = json.loads(raw)
+                equipment = next(
+                    fact for fact in payload["facts"] if fact["field"] == "equipment"
+                )
+                payload["facts"].append(dict(equipment))
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(
+        settings(), ai(RepeatedDeviceProvider())
+    ).analyze(document())
+    assert result.contract is not None, result.error
+    assert len(result.contract.equipment) == 1
+    assert result.contract.equipment[0].evidence.page == 3
+
+
+@pytest.mark.asyncio
 async def test_alternative_fact_never_projects():
     class AlternativeProvider(FakeProvider):
         async def generate_request(
