@@ -11,6 +11,7 @@ from app.api.routes import contract_billing
 
 @pytest.mark.parametrize("actor_org", [None, uuid4()])
 def test_billing_contract_loader_requires_matching_actor(monkeypatch, actor_org):
+    monkeypatch.setattr(contract_billing.settings, "auth_enabled", True)
     org_id = uuid4()
     session = MagicMock()
     monkeypatch.setattr(
