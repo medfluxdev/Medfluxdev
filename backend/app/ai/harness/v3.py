@@ -1914,13 +1914,17 @@ class DirectContractHarness:
                     )
 
                 if fact.field == "equipment":
-                    contract.equipment = value or []
+                    # A contract can contain separately grounded equipment
+                    # facts from different pages/annexes. Never discard devices
+                    # already accepted from an earlier fact.
+                    new_equipment = value or []
                     unattributed = 0
-                    for item in contract.equipment:
+                    for item in new_equipment:
                         if equipment_identity_in_quote(item, resolved_quote):
                             item.evidence = source
                         else:
                             unattributed += 1
+                    contract.equipment.extend(new_equipment)
                     if unattributed:
                         issues.append(
                             "Equipment source attribution incomplete: "
