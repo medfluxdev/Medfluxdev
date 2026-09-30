@@ -266,6 +266,48 @@ def _analysis_success(*, docx: bool = False) -> ContractAnalysisResult:
     )
 
 
+def test_equipment_evidence_without_locator_is_not_persistable():
+    """An evidence object alone must not imply a navigable equipment source."""
+    contract = DomainContract(
+        equipment=[
+            Equipment(
+                system_name="Accutron MR",
+                evidence=SourceEvidence(
+                    source_text="Accutron MR",
+                    confidence=0.9,
+                ),
+            )
+        ]
+    )
+    _snapshot, evidence = DocumentProcessingService._build_extraction(contract)
+    assert not any(
+        row["field_ref"] == "identity_equipment.evidence.0"
+        for row in evidence
+    )
+
+
+def test_equipment_evidence_with_locator_is_persistable():
+    contract = DomainContract(
+        equipment=[
+            Equipment(
+                system_name="Accutron MR",
+                evidence=SourceEvidence(
+                    source_type="page",
+                    page=2,
+                    source_text="Accutron MR",
+                    confidence=0.9,
+                ),
+            )
+        ]
+    )
+    _snapshot, evidence = DocumentProcessingService._build_extraction(contract)
+    assert any(
+        row["field_ref"] == "identity_equipment.evidence.0"
+        and row["page"] == 2
+        for row in evidence
+    )
+
+
 def _analysis_failure() -> ContractAnalysisResult:
     return ContractAnalysisResult(
         document_id="",
