@@ -877,7 +877,7 @@ def contract_document_content(
             doc_file = session.get(DocumentFile, version.document_file_id)
         mime = (doc_file.mime_type if doc_file else None) or ""
         ext = (doc_file.file_extension or "").lower() if doc_file else ""
-        if ext not in _VALID_CONTENT_TYPES or mime not in set(_VALID_CONTENT_TYPES.values()):
+        if _VALID_CONTENT_TYPES.get(ext) != mime:
             raise HTTPException(status_code=415, detail="Dokumenttyp nicht lieferbar.")
 
         try:
@@ -900,7 +900,11 @@ def contract_document_content(
                 parts = range_header[6:].split("-", 1)
                 r_start = int(parts[0]) if parts[0].strip() else None
                 r_end = int(parts[1]) if len(parts) > 1 and parts[1].strip() else None
+                if r_start is None and r_end is None:
+                    raise ValueError("Empty byte range")
                 if r_start is None and r_end is not None:
+                    if r_end <= 0:
+                        return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
                     # suffix-range: letzte n Bytes
                     start = max(0, total - r_end)
                     end = total - 1
