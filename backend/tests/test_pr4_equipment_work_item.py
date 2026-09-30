@@ -195,6 +195,26 @@ def test_one_device_many_contracts_share_master(db):
     assert links[0].contract_count == 2
 
 
+def test_system_name_only_creates_reviewable_canonical_equipment(db):
+    """Keep explicitly extracted system labels in the master equipment list."""
+    org = _org(db)
+    contract = _contract(db, org, "SYSTEM")
+    row = add_equipment(
+        db, contract_id=contract.id, system_name="Accutron MR", has_evidence=True
+    )
+    db.flush()
+    assert row.device_name is None
+    assert row.system_name == "Accutron MR"
+    assert row.identification_quality == "partial"
+    assert row.requires_review is True
+    assert row.equipment_id is not None
+    master = db.get(Equipment, row.equipment_id)
+    assert master.device_name == "Accutron MR"
+    assert master.organization_id == org.id
+    listed = list_equipment(db, organization_id=org.id)
+    assert any(item.device_name == "Accutron MR" for item in listed)
+
+
 def test_one_contract_many_devices(db):
     org = _org(db)
     c = _contract(db, org, "MULTI")
