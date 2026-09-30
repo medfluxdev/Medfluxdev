@@ -615,6 +615,10 @@ def accept_extraction(
         raise PersistenceError("extraction run nicht gefunden")
     if run.organization_id != contract.organization_id:
         raise PersistenceError("extraction/contract organisation mismatch")
+    if contract.accepted_extraction_id != extraction_id:
+        # A calculation accepted for an older extraction must never survive
+        # reanalysis as the new contract's accepted financial snapshot.
+        contract.accepted_calculation_run_id = None
     contract.accepted_extraction_id = extraction_id
     session.flush()
     return contract
