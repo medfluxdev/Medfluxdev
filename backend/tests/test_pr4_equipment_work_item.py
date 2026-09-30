@@ -196,6 +196,41 @@ def test_one_device_many_contracts_share_master(db):
 
 
 
+
+def test_identifier_whitespace_is_not_an_exact_equipment_identity(db):
+    """Whitespace-only identifiers cannot silently bypass manual review."""
+    org = _org(db)
+    contract = _contract(db, org, "BLANK-ID")
+    row = add_equipment(
+        db, contract_id=contract.id, device_name="Infusion Pump",
+        serial_number="   ", inventory_number="  ",
+        has_evidence=True,
+    )
+    assert row.serial_number is None
+    assert row.inventory_number is None
+    assert row.identification_quality == "partial"
+    assert row.requires_review is True
+
+
+def test_identifier_whitespace_reuses_same_canonical_master(db):
+    """A pasted serial with spaces must resolve to the same physical unit."""
+    org = _org(db)
+    first_contract = _contract(db, org, "TRIM-A")
+    second_contract = _contract(db, org, "TRIM-B")
+    first = add_equipment(
+        db, contract_id=first_contract.id,
+        device_name="CT Main", serial_number=" TRIM-001 ",
+        has_evidence=True,
+    )
+    second = add_equipment(
+        db, contract_id=second_contract.id,
+        device_name="CT Main", serial_number="TRIM-001",
+        has_evidence=True,
+    )
+    assert first.serial_number == second.serial_number == "TRIM-001"
+    assert first.equipment_id == second.equipment_id
+
+
 def test_equipment_catalog_counts_distinct_contracts_not_coverage_rows(db):
     """Two current coverage rows for one physical unit count as one contract."""
     org = _org(db)
