@@ -195,6 +195,35 @@ def test_one_device_many_contracts_share_master(db):
     assert links[0].contract_count == 2
 
 
+
+def test_equipment_catalog_counts_distinct_contracts_not_coverage_rows(db):
+    """Two current coverage rows for one physical unit count as one contract."""
+    org = _org(db)
+    contract = _contract(db, org, "TWO-SCOPES")
+    first = add_equipment(
+        db, contract_id=contract.id, device_name="CT Main",
+        serial_number="SHARED-001", service_scope="Maintenance",
+    )
+    second = add_equipment(
+        db, contract_id=contract.id, device_name="CT Console",
+        serial_number="SHARED-001", service_scope="Inspection",
+    )
+    assert first.id != second.id
+    assert first.equipment_id == second.equipment_id
+    catalog = list_equipment(db, organization_id=org.id)
+    row = next(item for item in catalog if item.id == str(first.equipment_id))
+    assert row.contract_count == 1
+    detail = get_equipment_detail(
+        db, organization_id=org.id, equipment_id=first.equipment_id
+    )
+    assert detail is not None
+    assert detail.contract_count == 1
+    assert len(detail.contracts) == 2
+    assert {link.service_scope for link in detail.contracts} == {
+        "Maintenance", "Inspection"
+    }
+
+
 def test_system_name_only_creates_reviewable_canonical_equipment(db):
     """Keep explicitly extracted system labels in the master equipment list."""
     org = _org(db)
