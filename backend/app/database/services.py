@@ -760,6 +760,44 @@ def resolve_equipment_master(
     return m
 
 
+def _equipment_occurrence_fingerprint(
+    logical_fp: str, *, serial_number, inventory_number, service_scope,
+    coverage_start, coverage_end, included_services, excluded_services,
+    field_ref, equipment_index,
+) -> str:
+    """Separate source-backed coverage occurrences without guessing unit IDs.
+
+    Known units retain a scope-stable occurrence key across source reordering;
+    unresolved units use a distinct source reference when supplied. The index
+    is only a last-resort within-run discriminator, never a physical ID.
+    """
+    import json
+
+    def norm(value):
+        return str(value).strip().casefold() if value is not None else ""
+
+    scope = json.dumps(
+        [
+            norm(service_scope), norm(coverage_start), norm(coverage_end),
+            sorted(norm(v) for v in (included_services or [])),
+            sorted(norm(v) for v in (excluded_services or [])),
+        ], ensure_ascii=False, separators=(",", ":"),
+    )
+    has_scope = any((
+        service_scope, coverage_start, coverage_end,
+        included_services, excluded_services,
+    ))
+    known = bool(serial_number or inventory_number)
+    source = "" if known and has_scope else norm(field_ref)
+    index = (
+        str(equipment_index) if not source and not known and
+        equipment_index is not None else ""
+    )
+    return hashlib.sha256(
+        f"{logical_fp}|{scope}|{source}|{index}".encode("utf-8")
+    ).hexdigest()
+
+
 def add_equipment(
     session: Session,
     *,
@@ -830,13 +868,20 @@ def add_equipment(
         serial_number=serial_number, inventory_number=inventory_number,
         system_name=system_name,
     )
+    occurrence_fp = _equipment_occurrence_fingerprint(
+        fp, serial_number=serial_number, inventory_number=inventory_number,
+        service_scope=service_scope, coverage_start=coverage_start,
+        coverage_end=coverage_end, included_services=included_services,
+        excluded_services=excluded_services, field_ref=field_ref,
+        equipment_index=equipment_index,
+    )
     existing = session.scalars(
         select(ContractEquipment).where(
             (ContractEquipment.contract_id == contract_id)
             & (ContractEquipment.extraction_id == extraction_id)
-            & (ContractEquipment.logical_fingerprint == fp)
+            & (ContractEquipment.occurrence_fingerprint == occurrence_fp)
         )
-    ).first() if hasattr(ContractEquipment, "logical_fingerprint") else None
+    ).first()
     if existing is not None:
         return existing
 
@@ -896,6 +941,7 @@ def add_equipment(
         field_ref=field_ref,
         equipment_index=equipment_index,
         logical_fingerprint=fp,
+        occurrence_fingerprint=occurrence_fp,
     )
     session.add(eq)
     session.flush()
