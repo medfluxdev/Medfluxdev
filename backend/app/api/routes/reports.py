@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import func, select
 
 from app.core.scope_context import current_scope_context
@@ -15,11 +15,12 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
 @router.get("/portfolio")
-def portfolio_report(organization_slug: str):
+def portfolio_report(request: Request, organization_slug: str):
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        actor = getattr(request.state, "actor", None)
+        if org is None or actor is None or actor.organization_id != org.id:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
         scope = current_scope_context()
         allowed = scoped_contract_ids(session, org.id, scope.hospital_id, scope.department_id)
