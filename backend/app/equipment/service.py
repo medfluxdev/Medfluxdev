@@ -26,7 +26,7 @@ def list_equipment(
 ) -> list[EquipmentSummary]:
     """Liste kanonischer Geräte einer Organisation mit Vertrags-Anzahl."""
     contract_count = (
-        select(func.count(ContractEquipment.id))
+        select(func.count(func.distinct(ContractEquipment.contract_id)))
         .join(Contract, Contract.id == ContractEquipment.contract_id)
         .where(
             (ContractEquipment.organization_id == organization_id)
@@ -130,6 +130,6 @@ def get_equipment_detail(
         location=equip.location,
         department=equip.department,
         identification_quality=equip.identification_quality,
-        contract_count=len(links),
+        contract_count=len({link.contract_id for link in links}),
         contracts=links,
     )
