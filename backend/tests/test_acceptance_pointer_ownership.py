@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.database.services import (
-    PersistenceError, accept_calculation, accept_extraction, link_document,
+    PersistenceError, accept_calculation, accept_extraction, link_document, save_extraction,
 )
 
 
@@ -115,3 +115,17 @@ def test_reaccept_same_extraction_preserves_accepted_calculation():
     ]
     accept_extraction(session, contract_id=uuid4(), extraction_id=accepted_id)
     assert contract.accepted_calculation_run_id == calculation_id
+
+
+
+def test_save_extraction_rejects_cross_org_document_before_insert():
+    org, foreign = uuid4(), uuid4()
+    session = MagicMock()
+    session.get.return_value = SimpleNamespace(organization_id=foreign)
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        save_extraction(
+            session, organization_id=org, document_version_id=uuid4(),
+            snapshot={}, evidence=[],
+        )
+    session.add.assert_not_called()
+    session.flush.assert_not_called()
