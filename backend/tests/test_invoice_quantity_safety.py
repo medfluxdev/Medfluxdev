@@ -65,3 +65,17 @@ def test_invoice_rejects_nonpositive_quantities(quantity):
             label="Maintenance", amount=Decimal("100"),
             currency="EUR", quantity=Decimal(quantity),
         )
+
+
+@pytest.mark.parametrize("quantity", [None, Decimal("1"), Decimal("2")])
+def test_invoice_explicit_unit_without_contract_unit_basis_requires_review(quantity):
+    findings = reconcile_invoice(
+        [InvoiceLine(
+            label="Maintenance", amount=Decimal("200.00"),
+            currency="EUR", quantity=quantity, unit="per device",
+        )],
+        [_charge()],
+    )
+    assert findings[0].outcome == "unknown"
+    assert findings[0].requires_review
+    assert value_leakage(findings) == {}
