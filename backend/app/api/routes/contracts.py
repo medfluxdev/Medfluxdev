@@ -203,6 +203,7 @@ def _parse_decimal(value: Optional[str], name: str) -> Optional[Decimal]:
 
 @router.get("", response_model=ContractListResponse)
 def contract_list(
+    request: Request,
     organization_slug: str,
     q: Optional[str] = Query(default=None, max_length=200),
     status: list[str] = Query(default=[]),
@@ -697,6 +698,14 @@ def _require_explicit_delete_permission(request: Request) -> None:
 
 
 def actor_org_mismatch(request: Request, organization_id) -> bool:
+    # Auth-off is permitted only with explicit insecure opt-in in dev/test.
+    # Keep pilot/production and every auth-enabled request fail-closed.
+    if (
+        not settings.auth_enabled
+        and settings.medflux_insecure_dev
+        and settings.app_env.strip().casefold() in {"development", "test"}
+    ):
+        return False
     actor = getattr(request.state, "actor", None)
     return actor is None or actor.organization_id != organization_id
 
