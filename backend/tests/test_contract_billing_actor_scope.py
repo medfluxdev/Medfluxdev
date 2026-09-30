@@ -26,3 +26,25 @@ def test_billing_contract_loader_requires_matching_actor(monkeypatch, actor_org)
         contract_billing._load_contract(session, "clinic", uuid4(), request)
     assert exc.value.status_code == 404
     session.scalar.assert_not_called()
+
+
+@pytest.mark.parametrize("same_contract", [True, False])
+def test_billing_accepted_result_requires_same_contract(monkeypatch, same_contract):
+    """A stale or corrupted accepted-run pointer must not expose other billing."""
+    org_id, contract_id = uuid4(), uuid4()
+    run = SimpleNamespace(
+        organization_id=org_id,
+        contract_id=contract_id if same_contract else uuid4(),
+        result_snapshot={"not": "a valid calculation"},
+    )
+    session = MagicMock()
+    session.get.return_value = run
+    contract = SimpleNamespace(
+        id=contract_id, accepted_calculation_run_id=uuid4(),
+    )
+    result = contract_billing._accepted_result(session, org_id, contract)
+    # Invalid snapshots are rejected even for the matching contract; the
+    # mismatched pointer must be rejected before schema validation.
+    assert result is None
+    if not same_contract:
+        session.get.assert_called_once()
