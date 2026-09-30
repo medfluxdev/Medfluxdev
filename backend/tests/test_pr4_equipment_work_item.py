@@ -379,13 +379,6 @@ def test_system_name_only_creates_reviewable_canonical_equipment(db):
 
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known persistence blocker: fingerprint and unique constraint collapse "
-        "distinct same-name units without serial/inventory identifiers"
-    ),
-)
 def test_distinct_same_name_units_without_identifiers_remain_separate(db):
     """Two separately sourced units must not disappear at persistence."""
     org = _org(db)
@@ -410,13 +403,6 @@ def test_distinct_same_name_units_without_identifiers_remain_separate(db):
 
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Known persistence blocker: equipment fingerprint ignores distinct "
-        "coverage scope and returns the first row in one extraction"
-    ),
-)
 def test_same_identified_device_keeps_two_distinct_coverage_scopes(db):
     """A single physical unit may have two independently sourced service rows."""
     org = _org(db)
