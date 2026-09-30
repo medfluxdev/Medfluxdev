@@ -710,11 +710,16 @@ def resolve_equipment_master(
     if not (serial_number or inventory_number or device_name or model
             or manufacturer or equipment_category):
         return None
-    quality = identification_quality or _calc_quality(
+    derived_quality = _calc_quality(
         serial_number=serial_number, inventory_number=inventory_number,
         device_name=device_name, model=model, manufacturer=manufacturer,
         equipment_category=equipment_category,
     ).value
+    quality = identification_quality or derived_quality
+    # A caller-supplied quality must not override the absence of a verified
+    # unique identifier and manufacture an authoritative canonical identity.
+    if quality == "exact" and not (serial_number or inventory_number):
+        quality = derived_quality
 
     if quality == "exact" and serial_number:
         exists = session.scalars(
