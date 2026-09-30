@@ -29,7 +29,7 @@ def upgrade() -> None:
         """
         UPDATE contract_equipment
         SET occurrence_fingerprint =
-            encode(digest(id::text, 'sha256'), 'hex')
+            md5(id::text) || md5('occurrence:' || id::text)
         WHERE occurrence_fingerprint IS NULL
         """
     )
