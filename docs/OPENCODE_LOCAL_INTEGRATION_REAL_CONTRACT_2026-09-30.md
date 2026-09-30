@@ -20,3 +20,8 @@ You are operating on Jamal's LOCAL MedFlux working copy. First inspect `git stat
 
 ## Current remote source status at writing
 GitHub branch: `feature/integrated-release-build-20260929`. Source-only repairs and authored tests exist; they have NOT been run on the owner's local machine. The first priority for OpenCode is compile/import and focused tests, then isolated PostgreSQL migration and a real local contract with the installed vision model.
+
+## Additional source-review checkpoint
+- Equipment occurrence known serial/inventory now ignores unstable evidence row positions even with no explicit service scope (`9572b7d`); DB-free regression added (`bb8183e`). Still verify true same-serial independent same-scope rows with real contracts.
+- `save_extraction` now rejects absent/foreign-organization document versions before persisting extraction/evidence (`7a8bf90`), with negative regression (`c4b8fa2`). The existing accepted extraction/document link invariant still requires a focused production-flow audit before imposing any additional acceptance guard; do not silently assume all fixtures reflect production linking.
+- The local integration operator MUST inspect these additional changes and rerun relevant focused tests. No tests, DB migrations or local model operations have been executed remotely by this source-only pass.
