@@ -83,3 +83,35 @@ def test_reject_missing_contract_document_link_target():
     with pytest.raises(PersistenceError, match="not found"):
         link_document(session, contract_id=uuid4(), document_version_id=uuid4())
     session.add.assert_not_called()
+
+
+
+def test_accept_new_extraction_invalidates_old_accepted_calculation():
+    org, old_id, new_id = uuid4(), uuid4(), uuid4()
+    contract = SimpleNamespace(
+        organization_id=org, accepted_extraction_id=old_id,
+        accepted_calculation_run_id=uuid4(),
+    )
+    session = MagicMock()
+    session.get.side_effect = [
+        contract, SimpleNamespace(organization_id=org),
+    ]
+    assert accept_extraction(
+        session, contract_id=uuid4(), extraction_id=new_id,
+    ) is contract
+    assert contract.accepted_extraction_id == new_id
+    assert contract.accepted_calculation_run_id is None
+
+
+def test_reaccept_same_extraction_preserves_accepted_calculation():
+    org, accepted_id, calculation_id = uuid4(), uuid4(), uuid4()
+    contract = SimpleNamespace(
+        organization_id=org, accepted_extraction_id=accepted_id,
+        accepted_calculation_run_id=calculation_id,
+    )
+    session = MagicMock()
+    session.get.side_effect = [
+        contract, SimpleNamespace(organization_id=org),
+    ]
+    accept_extraction(session, contract_id=uuid4(), extraction_id=accepted_id)
+    assert contract.accepted_calculation_run_id == calculation_id
