@@ -11,6 +11,7 @@ from app.api.routes import intelligence
 
 @pytest.mark.parametrize("actor_kind", ["missing", "other"])
 def test_intelligence_org_requires_matching_actor(monkeypatch, actor_kind):
+    monkeypatch.setattr(intelligence.settings, "auth_enabled", True)
     org_id = uuid4()
     session = MagicMock()
     monkeypatch.setattr(intelligence, "get_organization", lambda *_: SimpleNamespace(id=org_id))
