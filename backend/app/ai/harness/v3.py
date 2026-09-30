@@ -1924,7 +1924,21 @@ class DirectContractHarness:
                             item.evidence = source
                         else:
                             unattributed += 1
-                    contract.equipment.extend(new_equipment)
+                    # Remove only exact repeated rows from overlapping facts.
+                    # Names/models/serials alone are not safe deduplication keys:
+                    # two physical units can share those values. Preserve any
+                    # distinct source, scope or equipment attribute.
+                    seen_equipment = {
+                        json.dumps(item.model_dump(mode="json"), sort_keys=True)
+                        for item in contract.equipment
+                    }
+                    for item in new_equipment:
+                        fingerprint = json.dumps(
+                            item.model_dump(mode="json"), sort_keys=True
+                        )
+                        if fingerprint not in seen_equipment:
+                            contract.equipment.append(item)
+                            seen_equipment.add(fingerprint)
                     if unattributed:
                         issues.append(
                             "Equipment source attribution incomplete: "
