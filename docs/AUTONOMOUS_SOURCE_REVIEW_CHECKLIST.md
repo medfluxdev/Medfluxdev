@@ -52,3 +52,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Evidence navigation follow-up
 - Inspected evidence page and existing frontend test setup. Added guard against fetching an obsolete page while organization resets (`a6c6678`). Authored evidence pagination regression cases for forward/back navigation and selection replacement (`e90b79d`, refined `38cfdd1`). Tests not executed. Still pending: actual stale-response test and full backend contract search scope review.
+
+## Contract portfolio scope checkpoint
+- Inspected `backend/app/api/routes/contracts.py`, `backend/app/contracts/search/service.py`, and existing search test coverage. SQL service already applies organization and workspace-contract predicates before count/pagination; portfolio route lacked its own explicit actor/organization mismatch check (detail route already had one). Added route guard (`6393540`) and DB-free cross-organization route regression (`80fd6ad`). Source-only review; test not executed. Continue backend mutation scope and frontend evidence navigation edge cases.
