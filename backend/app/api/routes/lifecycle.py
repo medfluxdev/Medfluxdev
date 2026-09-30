@@ -61,9 +61,10 @@ def _actor_or_forbid(request: Request):
     return actor
 
 
-def _org(session, slug: str):
+def _org(session, slug: str, request: Request):
     org = get_organization(session, slug)
-    if org is None:
+    actor = getattr(request.state, "actor", None)
+    if org is None or (settings.auth_enabled and (actor is None or actor.organization_id != org.id)) or (actor is not None and actor.organization_id != org.id):
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     return org
 
@@ -106,10 +107,10 @@ def _decision_payload(row: ContractLifecycleDecision) -> dict:
 
 
 @router.get("/contracts/{contract_id}")
-def contract_lifecycle(organization_slug: str, contract_id: UUID):
+def contract_lifecycle(request: Request, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _require_contract(session, org.id, contract_id)
         rows = session.scalars(
             select(ContractLifecycleDecision).where(
@@ -131,7 +132,7 @@ def create_contract_decision(request: Request, organization_slug: str, contract_
         raise HTTPException(status_code=422, detail="Ungültige Lifecycle-Angaben.")
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _, scope = _require_contract(session, org.id, contract_id)
         display_name = getattr(actor, "display_name", None) or "local-development"
         row = ContractLifecycleDecision(
@@ -172,7 +173,7 @@ def update_contract_decision(request: Request, organization_slug: str, contract_
         raise HTTPException(status_code=422, detail="Ungültiger Lifecycle-Status.")
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _, scope = _require_contract(session, org.id, contract_id)
         row = session.get(ContractLifecycleDecision, decision_id)
         if row is None or row.organization_id != org.id or row.contract_id != contract_id:
@@ -201,10 +202,10 @@ def update_contract_decision(request: Request, organization_slug: str, contract_
 
 
 @router.get("/equipment/{equipment_id}")
-def equipment_lifecycle(organization_slug: str, equipment_id: UUID):
+def equipment_lifecycle(request: Request, organization_slug: str, equipment_id: UUID):
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _require_equipment(session, org.id, equipment_id)
         row = session.scalars(select(EquipmentLifecycleRecord).where(
             EquipmentLifecycleRecord.organization_id == org.id,
@@ -225,7 +226,7 @@ def update_equipment_lifecycle(request: Request, organization_slug: str, equipme
         raise HTTPException(status_code=422, detail="Ungültiger Geräte-Lifecycle-Status.")
     session = create_session()
     try:
-        org = _org(session, organization_slug)
+        org = _org(session, organization_slug, request)
         _, scope = _require_equipment(session, org.id, equipment_id)
         row = session.scalars(select(EquipmentLifecycleRecord).where(EquipmentLifecycleRecord.equipment_id == equipment_id)).first()
         display_name = getattr(actor, "display_name", None) or "local-development"
