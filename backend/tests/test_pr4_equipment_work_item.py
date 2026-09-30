@@ -198,6 +198,23 @@ def test_one_device_many_contracts_share_master(db):
 
 
 
+
+def test_direct_master_default_quality_resolves_known_serial(db):
+    """Default unknown quality must not create two masters for one known ID."""
+    org = _org(db)
+    first = resolve_equipment_master(
+        db, organization_id=org.id, device_name="CT Main",
+        serial_number="DEFAULT-001",
+    )
+    second = resolve_equipment_master(
+        db, organization_id=org.id, device_name="CT Main",
+        serial_number="DEFAULT-001",
+    )
+    assert first is not None
+    assert first.identification_quality == "exact"
+    assert first.id == second.id
+
+
 def test_canonical_master_rejects_forced_exact_without_unique_identifier(db):
     """Even direct service callers cannot label an anonymous master exact."""
     org = _org(db)
