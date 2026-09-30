@@ -154,6 +154,12 @@ def derive_from_equipment(row) -> Optional[dict]:
         "contract_equipment_id": _get(row, "id"),
         "equipment_id": _get(row, "equipment_id"),
         "_fp_source": fp,
+        "_occurrence_fp": _get(row, "occurrence_fingerprint"),
+        "_has_unique_id": bool(
+            _get(row, "serial_number") or _get(row, "inventory_number")
+        ),
+        "_coverage_scope": "|".join(str(_get(row, key) or "").strip().casefold()
+            for key in ("service_scope", "coverage_start", "coverage_end")),
     }
 
 
@@ -163,7 +169,13 @@ def compute_fingerprint(item: dict) -> str:
         return _prepend_domain("w", item["source_warning_fingerprint"])
     src = item.get("_fp_source")
     if src:
-        return _prepend_domain("eq", src)
+        # Preserve historical semantic lineage for a known single scope;
+        # independent scopes and anonymous sourced units need separate tasks.
+        scope = item.get("_coverage_scope") or ""
+        if item.get("_has_unique_id"):
+            return _prepend_domain("eq", src + ("|scope:" + scope if scope.strip("|") else ""))
+        occurrence = item.get("_occurrence_fp")
+        return _prepend_domain("eq-occ", occurrence or src)
     # Fallback: deterministisch aus Typ + refs + Ziel.
     payload = "|".join([
         str(item["item_type"].value if hasattr(item["item_type"], "value") else item["item_type"]),
