@@ -112,6 +112,8 @@ def save_document_file(
         select(DocumentFile).where(DocumentFile.sha256 == sha256)
     ).first()
     if existing is not None:
+        if existing.organization_id != organization_id:
+            raise PersistenceError("document hash already belongs to another organisation")
         existing.duplicate_detected = True
         return existing
     doc = DocumentFile(
@@ -145,7 +147,12 @@ def create_document_version(
         select(DocumentVersion).where(DocumentVersion.sha256 == sha256)
     ).first()
     if existing is not None:
-        return existing  # same bytes -> already a version
+        if existing.organization_id != organization_id or existing.document_file_id != document_file_id:
+            raise PersistenceError("document version hash belongs to another owner or file")
+        return existing  # same bytes and same owner/file
+    doc = session.get(DocumentFile, document_file_id)
+    if doc is None or doc.organization_id != organization_id:
+        raise PersistenceError("document version/file organisation mismatch")
     ver = DocumentVersion(
         organization_id=organization_id,
         document_file_id=document_file_id,
@@ -495,6 +502,9 @@ def save_calculation(
     from app.database.models.calculation import CALCULATION_STATUS_ALLOWED
 
     _assert_status(status, CALCULATION_STATUS_ALLOWED, "calculation status")
+    extraction = session.get(ContractExtraction, extraction_id)
+    if extraction is None or extraction.organization_id != organization_id:
+        raise PersistenceError("calculation/extraction organisation mismatch")
     run = CalculationRun(
         organization_id=organization_id,
         extraction_id=extraction_id,
