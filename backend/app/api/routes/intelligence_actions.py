@@ -60,7 +60,7 @@ def transition_action_proposal(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        if org is None or actor is None or actor.organization_id != org.id:
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
         row = session.get(ActionProposalRecord, proposal_id)
         if row is None or row.organization_id != org.id:
