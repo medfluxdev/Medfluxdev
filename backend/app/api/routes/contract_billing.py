@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -20,9 +20,10 @@ from app.database.session import create_session
 router = APIRouter(prefix="/api/intelligence/billing", tags=["intelligence-billing"])
 
 
-def _load_contract(session, organization_slug: str, contract_id: UUID):
+def _load_contract(session, organization_slug: str, contract_id: UUID, request: Request):
     org = get_organization(session, organization_slug)
-    if org is None:
+    actor = getattr(request.state, "actor", None)
+    if org is None or actor is None or actor.organization_id != org.id:
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
     contract = session.scalar(select(Contract).where(
         Contract.id == contract_id,
@@ -68,10 +69,10 @@ def _charges(result: ContractCalculationResult | None) -> list[ContractCharge]:
 
 
 @router.get("/contracts/{contract_id}/basis")
-def billing_basis(organization_slug: str, contract_id: UUID):
+def billing_basis(request: Request, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org, contract = _load_contract(session, organization_slug, contract_id)
+        org, contract = _load_contract(session, organization_slug, contract_id, request)
         items = _charges(_accepted_result(session, org.id, contract))
         return {"contract_id": str(contract_id), "available": bool(items), "items": [item.model_dump(mode="json") for item in items]}
     finally:
@@ -83,10 +84,10 @@ class ReconcileRequest(BaseModel):
 
 
 @router.post("/contracts/{contract_id}/reconcile")
-def reconcile_contract_invoice(payload: ReconcileRequest, organization_slug: str, contract_id: UUID):
+def reconcile_contract_invoice(request: Request, payload: ReconcileRequest, organization_slug: str, contract_id: UUID):
     session = create_session()
     try:
-        org, contract = _load_contract(session, organization_slug, contract_id)
+        org, contract = _load_contract(session, organization_slug, contract_id, request)
         charges = _charges(_accepted_result(session, org.id, contract))
         if not charges:
             return {"contract_id": str(contract_id), "billing_basis": [], "findings": [], "value_leakage": {}, "requires_review": True, "message": "Keine eindeutig akzeptierte Abrechnungsbasis verfügbar."}
