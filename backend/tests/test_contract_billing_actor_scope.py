@@ -42,9 +42,15 @@ def test_billing_accepted_result_requires_same_contract(monkeypatch, same_contra
     contract = SimpleNamespace(
         id=contract_id, accepted_calculation_run_id=uuid4(),
     )
+    parsed = []
+    monkeypatch.setattr(
+        contract_billing.ContractCalculationResult, "model_validate",
+        lambda snapshot: parsed.append(snapshot) or "accepted",
+    )
     result = contract_billing._accepted_result(session, org_id, contract)
-    # Invalid snapshots are rejected even for the matching contract; the
-    # mismatched pointer must be rejected before schema validation.
-    assert result is None
-    if not same_contract:
-        session.get.assert_called_once()
+    if same_contract:
+        assert result == "accepted"
+        assert parsed == [run.result_snapshot]
+    else:
+        assert result is None
+        assert parsed == []
