@@ -215,6 +215,37 @@ def test_system_name_only_creates_reviewable_canonical_equipment(db):
     assert any(item.device_name == "Accutron MR" for item in listed)
 
 
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Known persistence blocker: fingerprint and unique constraint collapse "
+        "distinct same-name units without serial/inventory identifiers"
+    ),
+)
+def test_distinct_same_name_units_without_identifiers_remain_separate(db):
+    """Two separately sourced units must not disappear at persistence."""
+    org = _org(db)
+    contract = _contract(db, org, "SAME-NAME")
+    first = add_equipment(
+        db, contract_id=contract.id, device_name="Infusion Pump",
+        model="IP-7", equipment_index=0,
+        field_ref="identity_equipment.evidence.0", has_evidence=True,
+    )
+    second = add_equipment(
+        db, contract_id=contract.id, device_name="Infusion Pump",
+        model="IP-7", equipment_index=1,
+        field_ref="identity_equipment.evidence.1", has_evidence=True,
+    )
+    assert first.id != second.id
+    assert db.scalar(
+        select(func.count(ContractEquipment.id)).where(
+            ContractEquipment.contract_id == contract.id,
+            ContractEquipment.extraction_id == contract.accepted_extraction_id,
+        )
+    ) == 2
+
+
 def test_one_contract_many_devices(db):
     org = _org(db)
     c = _contract(db, org, "MULTI")
