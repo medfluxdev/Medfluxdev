@@ -224,6 +224,29 @@ def test_equipment_catalog_counts_distinct_contracts_not_coverage_rows(db):
     }
 
 
+
+def test_known_serial_without_source_reports_missing_evidence_not_missing_serial(db):
+    """Review guidance must not claim a known serial is absent."""
+    from app.work_queue.derive import derive_from_equipment
+    from app.equipment.identity import review_reason_de
+
+    org = _org(db)
+    contract = _contract(db, org, "KNOWN-NO-SOURCE")
+    row = add_equipment(
+        db, contract_id=contract.id, device_name="Infusion Pump",
+        serial_number="KNOWN-01", has_evidence=False,
+    )
+    assert row.identification_quality == "exact"
+    assert row.relationship_quality == "partial"
+    assert row.requires_review
+    assert "keine eindeutige Serien" not in " ".join(row.review_reasons or [])
+    assert "Quellenbeleg" in " ".join(row.review_reasons or [])
+    task = derive_from_equipment(row)
+    assert task is not None
+    assert "Quellenbeleg" in task["why_de"]
+    assert "nur partial identifiziert" not in task["why_de"]
+
+
 def test_system_name_only_creates_reviewable_canonical_equipment(db):
     """Keep explicitly extracted system labels in the master equipment list."""
     org = _org(db)
