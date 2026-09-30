@@ -98,19 +98,29 @@ def strict_value(annotation, value):
 
 
 def equipment_identity_in_quote(equipment, quote: str) -> bool:
-    """Conservative per-item attribution for a verified equipment quote."""
+    """Attribute a verified quote to one item, not every item sharing a model.
+
+    A supplied serial/inventory identifier must be present if available.
+    Otherwise use the complete device/system name. A generic model is a
+    fallback only when no more specific identity was supplied.
+    """
     text = quote.casefold()
-    return any(
-        str(value).strip().casefold() in text
-        for value in (
-            equipment.serial_number,
-            equipment.inventory_number,
-            equipment.device_name,
-            equipment.system_name,
-            equipment.model,
-        )
-        if value and len(str(value).strip()) >= 3
-    )
+
+    def mentions(value: str | None) -> bool:
+        if not value or len(value.strip()) < 3:
+            return False
+        token = re.escape(value.strip().casefold())
+        return re.search(r"(?<!\\w)" + token + r"(?!\\w)", text) is not None
+
+    identifiers = (equipment.serial_number, equipment.inventory_number)
+    specific = tuple(value for value in identifiers if value and value.strip())
+    if specific:
+        return any(mentions(value) for value in specific)
+    names = (equipment.device_name, equipment.system_name)
+    specific_names = tuple(value for value in names if value and value.strip())
+    if specific_names:
+        return any(mentions(value) for value in specific_names)
+    return mentions(equipment.model)
 
 
 class CallBudgetExhausted(RuntimeError):
