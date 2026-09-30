@@ -28,19 +28,27 @@ def test_billing_contract_loader_requires_matching_actor(monkeypatch, actor_org)
     session.scalar.assert_not_called()
 
 
-@pytest.mark.parametrize("same_contract", [True, False])
-def test_billing_accepted_result_requires_same_contract(monkeypatch, same_contract):
-    """A stale or corrupted accepted-run pointer must not expose other billing."""
-    org_id, contract_id = uuid4(), uuid4()
+@pytest.mark.parametrize("same_extraction,owned_extraction", [
+    (True, True), (False, True), (True, False),
+])
+def test_billing_accepted_result_requires_owned_accepted_extraction(
+    monkeypatch, same_extraction, owned_extraction,
+):
+    """Only a run from this contract's accepted extraction can be returned."""
+    org_id, contract_id, accepted_id = uuid4(), uuid4(), uuid4()
     run = SimpleNamespace(
         organization_id=org_id,
-        contract_id=contract_id if same_contract else uuid4(),
-        result_snapshot={"not": "a valid calculation"},
+        extraction_id=accepted_id if same_extraction else uuid4(),
+        result_snapshot={"snapshot": "opaque"},
     )
     session = MagicMock()
     session.get.return_value = run
+    session.scalar.return_value = (
+        SimpleNamespace(id=accepted_id) if owned_extraction else None
+    )
     contract = SimpleNamespace(
         id=contract_id, accepted_calculation_run_id=uuid4(),
+        accepted_extraction_id=accepted_id,
     )
     parsed = []
     monkeypatch.setattr(
@@ -48,9 +56,11 @@ def test_billing_accepted_result_requires_same_contract(monkeypatch, same_contra
         lambda snapshot: parsed.append(snapshot) or "accepted",
     )
     result = contract_billing._accepted_result(session, org_id, contract)
-    if same_contract:
+    if same_extraction and owned_extraction:
         assert result == "accepted"
         assert parsed == [run.result_snapshot]
     else:
         assert result is None
         assert parsed == []
+        if not same_extraction:
+            session.scalar.assert_not_called()
