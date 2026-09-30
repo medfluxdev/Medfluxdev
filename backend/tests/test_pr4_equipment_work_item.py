@@ -623,6 +623,11 @@ def test_equipment_catalog_ignores_superseded_extraction_rows(db):
         model="test", prompt_version="test",
     )
     contract.accepted_extraction_id = next_extraction.id
+    current = add_equipment(
+        db, contract_id=contract.id, extraction_id=next_extraction.id,
+        device_name="CT-Current", serial_number="HIST-2",
+        has_evidence=True,
+    )
     db.flush()
     # Historical equipment remains auditable, but not a current link.
     assert db.get(ContractEquipment, old.id) is not None
@@ -637,6 +642,13 @@ def test_equipment_catalog_ignores_superseded_extraction_rows(db):
     assert detail is not None
     assert detail.contract_count == 0
     assert detail.contracts == []
+    current_detail = get_equipment_detail(
+        db, organization_id=org.id, equipment_id=current.equipment_id
+    )
+    assert current_detail is not None
+    assert current_detail.contract_count == 1
+    assert len(current_detail.contracts) == 1
+    assert current_detail.contracts[0].contract_id == str(contract.id)
 
 
 def test_reprocessing_no_duplicate_equipment_or_relationships(db):
