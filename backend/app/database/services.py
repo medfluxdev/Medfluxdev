@@ -797,6 +797,11 @@ def add_equipment(
         review_reason_de as _reason_de,
     )
 
+    # Keep extraction identifiers, fingerprint and canonical master consistent:
+    # whitespace-only serial/inventory fields are missing, not exact IDs.
+    serial_number = serial_number.strip() or None if serial_number is not None else None
+    inventory_number = inventory_number.strip() or None if inventory_number is not None else None
+
     contract = session.get(Contract, contract_id)
     if contract is None:
         raise PersistenceError("contract nicht gefunden")
