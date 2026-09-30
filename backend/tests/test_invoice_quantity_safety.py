@@ -2,6 +2,9 @@
 
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from app.contract_intelligence.invoice import (
     ContractCharge,
     InvoiceLine,
@@ -53,3 +56,12 @@ def test_unspecified_quantity_preserves_existing_normalized_comparison():
     )
     assert findings[0].outcome == "overbilled"
     assert value_leakage(findings) == {"EUR": Decimal("20.00")}
+
+
+@pytest.mark.parametrize("quantity", ["0", "-1", "-0.01"])
+def test_invoice_rejects_nonpositive_quantities(quantity):
+    with pytest.raises(ValidationError):
+        InvoiceLine(
+            label="Maintenance", amount=Decimal("100"),
+            currency="EUR", quantity=Decimal(quantity),
+        )
