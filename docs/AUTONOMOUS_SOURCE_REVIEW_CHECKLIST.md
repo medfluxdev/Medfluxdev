@@ -49,3 +49,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Evidence pagination checkpoint
 - Reviewed evidence browser and contract list response schema. Added 100-contract page navigation with backend has_more/total_count, and clear prior detail immediately when page changes. Commits: 7723c98 and 75309a0. Not runtime tested. Next: add frontend regression for navigation, inspect backend contract search authorization and work-queue collaboration scope; continue full inventory.
+
+## Evidence navigation follow-up
+- Inspected evidence page and existing frontend test setup. Added guard against fetching an obsolete page while organization resets (`a6c6678`). Authored evidence pagination regression cases for forward/back navigation and selection replacement (`e90b79d`, refined `38cfdd1`). Tests not executed. Still pending: actual stale-response test and full backend contract search scope review.
