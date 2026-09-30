@@ -110,7 +110,7 @@ def equipment_identity_in_quote(equipment, quote: str) -> bool:
         if not value or len(value.strip()) < 3:
             return False
         token = re.escape(value.strip().casefold())
-        return re.search(r"(?<!\\w)" + token + r"(?!\\w)", text) is not None
+        return re.search(r"(?<!\w)" + token + r"(?!\w)", text) is not None
 
     identifiers = (equipment.serial_number, equipment.inventory_number)
     specific = tuple(value for value in identifiers if value and value.strip())
