@@ -11,6 +11,7 @@ from app.api.routes import intelligence_actions, intelligence_analytics
 
 @pytest.mark.parametrize("actor_org", [None, uuid4()])
 def test_analytics_rejects_missing_or_cross_org_actor(monkeypatch, actor_org):
+    monkeypatch.setattr(intelligence_analytics.settings, "auth_enabled", True)
     org_id = uuid4()
     monkeypatch.setattr(intelligence_analytics, "get_organization", lambda *_: SimpleNamespace(id=org_id))
     request = SimpleNamespace(state=SimpleNamespace(
