@@ -198,4 +198,7 @@ def test_assistant_evidence_requires_explicit_source_type():
     with pytest.raises(ValidationError):
         ai.AssistantEvidence(evidence_id=uuid4(), field_ref="contract.term", document_version_id=uuid4(),
                              source_text="Unknown format", requires_review=False)
-\n\ndef test_assistant_trims_surrounding_whitespace_without_changing_question():\n    assert ai.AssistantRequest(message="  Frage zum Vertrag?  ").message == "Frage zum Vertrag?"\n
+
+
+def test_assistant_trims_surrounding_whitespace_without_changing_question():
+    assert ai.AssistantRequest(message="  Frage zum Vertrag?  ").message == "Frage zum Vertrag?"
