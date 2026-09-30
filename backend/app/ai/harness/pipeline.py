@@ -1352,8 +1352,28 @@ class HarnessV2:
                             {"field": candidate.field, "block_id": block.id, "source": source.model_dump(mode="json")}
                         )
                         if candidate.field == "equipment":
+                            # A batch-level quote is not automatically evidence
+                            # for every device in a multi-device contract. Only
+                            # attach it to an item whose explicit identity occurs
+                            # in that exact verified quote; otherwise leave the
+                            # device for manual evidence review.
+                            quote = ref.quote.casefold()
                             for equipment in contract.equipment:
-                                if equipment.evidence is None:
+                                identifiers = (
+                                    equipment.serial_number,
+                                    equipment.inventory_number,
+                                    equipment.device_name,
+                                    equipment.system_name,
+                                    equipment.model,
+                                )
+                                if (
+                                    equipment.evidence is None
+                                    and any(
+                                        str(value).strip().casefold() in quote
+                                        for value in identifiers
+                                        if value and len(str(value).strip()) >= 3
+                                    )
+                                ):
                                     equipment.evidence = source
                         else:
                             holder = getattr(contract, candidate.field.split(".")[0])
