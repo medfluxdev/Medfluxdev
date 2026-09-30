@@ -71,7 +71,7 @@ def _org(session, slug: str, request: Request):
 
 def _require_contract(session, org_id: UUID, contract_id: UUID):
     row = session.get(Contract, contract_id)
-    if row is None or row.organization_id != org_id or row.lifecycle_state != "active":
+    if row is None or row.organization_id != org_id or row.lifecycle_state != "active" or row.is_archived:
         raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
     scope = current_scope_context()
     allowed = scoped_contract_ids(session, org_id, scope.hospital_id, scope.department_id)
