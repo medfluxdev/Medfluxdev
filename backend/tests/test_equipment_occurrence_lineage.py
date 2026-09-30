@@ -52,3 +52,24 @@ def test_known_unit_coverage_lineage_survives_source_reorder(db):
     second = scope_rows(("identity_equipment.evidence.1", "identity_equipment.evidence.0"))
     assert [row.id for row in first] == [row.id for row in second]
     assert first[0].occurrence_fingerprint != first[1].occurrence_fingerprint
+
+
+
+def test_same_known_unit_distinct_included_services_keep_two_reviews(db):
+    org = _org(db)
+    contract = _contract(db, org, "OCC-INCLUSIONS")
+    rows = [
+        add_equipment(
+            db, contract_id=contract.id, device_name="CT Main",
+            serial_number="SERVICE-1", service_scope="Maintenance",
+            included_services=[service], has_evidence=False,
+        )
+        for service in ("Preventive", "Emergency")
+    ]
+    assert rows[0].id != rows[1].id
+    assert rows[0].equipment_id == rows[1].equipment_id
+    derived = derive_work_items(
+        contract_id=str(contract.id), warnings=[], equipment_rows=rows,
+        as_of_date=date(2026, 9, 30), policy_version="test",
+    )
+    assert len({item["logical_fingerprint"] for item in derived}) == 2
