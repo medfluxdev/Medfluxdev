@@ -49,6 +49,13 @@ def test_per_device_evidence_attribution_requires_identity_in_quote():
     assert not equipment_identity_in_quote(
         Equipment(device_name="CT Scanner"), "CT ScannerAlpha"
     )
+    # Hyphenated serials must match as complete tokens, not prefixes.
+    assert not equipment_identity_in_quote(scanner, "CT-0019")
+    assert not equipment_identity_in_quote(scanner, "XCT-001")
+    assert equipment_identity_in_quote(scanner, "(CT-001), service included")
+    assert equipment_identity_in_quote(
+        Equipment(system_name="Accutron MR"), "Anlage: Accutron MR."
+    )
 
 
 def settings(**overrides):
