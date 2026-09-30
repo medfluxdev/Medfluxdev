@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.database.services import (
-    PersistenceError, accept_calculation, accept_extraction, link_document, save_extraction,
+    PersistenceError, accept_calculation, accept_extraction, link_document, save_extraction, save_document_file, create_document_version, save_calculation,
 )
 
 
@@ -129,3 +129,59 @@ def test_save_extraction_rejects_cross_org_document_before_insert():
         )
     session.add.assert_not_called()
     session.flush.assert_not_called()
+
+
+
+def test_document_hash_cannot_reuse_foreign_org_file():
+    org, foreign = uuid4(), uuid4()
+    session = MagicMock()
+    existing = SimpleNamespace(organization_id=foreign, duplicate_detected=False)
+    session.scalars.return_value.first.return_value = existing
+    with pytest.raises(PersistenceError, match="another organisation"):
+        save_document_file(
+            session, organization_id=org, sha256="a" * 64,
+            original_filename="x.pdf", stored_filename="x.pdf",
+            file_extension=".pdf", file_size_bytes=1, storage_key="x.pdf",
+        )
+    assert existing.duplicate_detected is False
+    session.add.assert_not_called()
+
+
+def test_document_version_cannot_reuse_foreign_file_hash():
+    org = uuid4()
+    session = MagicMock()
+    session.scalars.return_value.first.return_value = SimpleNamespace(
+        organization_id=org, document_file_id=uuid4(),
+    )
+    with pytest.raises(PersistenceError, match="another owner or file"):
+        create_document_version(
+            session, organization_id=org, document_file_id=uuid4(),
+            version_no=1, sha256="b" * 64, storage_key="v1.pdf",
+        )
+    session.add.assert_not_called()
+
+
+def test_new_document_version_requires_owned_file():
+    org = uuid4()
+    session = MagicMock()
+    session.scalars.return_value.first.return_value = None
+    session.get.return_value = SimpleNamespace(organization_id=uuid4())
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        create_document_version(
+            session, organization_id=org, document_file_id=uuid4(),
+            version_no=1, sha256="b" * 64, storage_key="v1.pdf",
+        )
+    session.add.assert_not_called()
+
+
+def test_calculation_requires_same_org_extraction():
+    org = uuid4()
+    session = MagicMock()
+    session.get.return_value = SimpleNamespace(organization_id=uuid4())
+    from datetime import date
+    with pytest.raises(PersistenceError, match="organisation mismatch"):
+        save_calculation(
+            session, organization_id=org, extraction_id=uuid4(),
+            as_of_date=date(2026, 9, 30), result_snapshot={},
+        )
+    session.add.assert_not_called()
