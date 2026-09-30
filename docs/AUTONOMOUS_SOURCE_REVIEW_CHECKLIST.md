@@ -58,3 +58,6 @@ Inspect work queue backend authorization and evidence list pagination/search; th
 
 ## Document content-route checkpoint
 - Inspected contract mutation route guards and original-document content route. Mutation endpoints reviewed use actor organization and scoped-contract checks; no change required in this pass. Confirmed document content MIME allowlist previously accepted mismatched allowed extension/type pairs, and zero-length suffix byte ranges were accepted. Corrected both (`8c054ef`); authored mismatched PDF/DOCX MIME regressions (`0691d60`). Tests not executed. Next: test byte-range boundary handling, inspect document-version contract binding and additional backend endpoints.
+
+## Original document range and binding checkpoint
+- Inspected document download route and `DocumentPersistenceService.resolve_bytes_for_version`: the storage service already checks organization, contract existence and ContractDocument binding before reading original bytes. Hardened byte-range parser to return 416 on unsupported units, malformed/multiple/zero suffix and unsatisfiable ranges (`99671ff`). Added source-level valid/invalid range regression cases (`10bad69`). Tests not executed; continue source review and final acceptance preparation.
