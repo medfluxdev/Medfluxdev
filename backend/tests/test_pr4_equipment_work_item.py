@@ -247,6 +247,45 @@ def test_known_serial_without_source_reports_missing_evidence_not_missing_serial
     assert "nur partial identifiziert" not in task["why_de"]
 
 
+
+def test_distinct_coverage_scopes_keep_separate_review_tasks(db):
+    """One canonical unit with two services requires two review decisions."""
+    org = _org(db)
+    contract = _contract(db, org, "REVIEW-SCOPES")
+    first = add_equipment(
+        db, contract_id=contract.id, device_name="CT Main",
+        serial_number="REVIEW-001", service_scope="Maintenance",
+        has_evidence=False,
+    )
+    second = add_equipment(
+        db, contract_id=contract.id, device_name="CT Console",
+        serial_number="REVIEW-001", service_scope="Inspection",
+        has_evidence=False,
+    )
+    assert first.equipment_id == second.equipment_id
+    derived = derive_work_items(
+        contract_id=str(contract.id), warnings=[],
+        equipment_rows=[first, second], as_of_date=date(2026, 9, 30),
+        policy_version="test",
+    )
+    assert len(derived) == 2
+    reconcile_work_items(
+        db, organization_id=org.id, contract_id=contract.id,
+        derived=derived,
+    )
+    active = db.scalars(
+        select(WorkItem).where(
+            (WorkItem.organization_id == org.id)
+            & (WorkItem.contract_id == contract.id)
+            & (WorkItem.active.is_(True))
+        )
+    ).all()
+    assert len(active) == 2
+    assert {row.contract_equipment_id for row in active} == {
+        first.id, second.id
+    }
+
+
 def test_system_name_only_creates_reviewable_canonical_equipment(db):
     """Keep explicitly extracted system labels in the master equipment list."""
     org = _org(db)
