@@ -64,15 +64,18 @@ def reconcile_invoice(lines: list[InvoiceLine], charges: list[ContractCharge]) -
         # A normalized contract charge is not proof of a per-unit rate.
         # Comparing a multi-unit invoice total against it would fabricate
         # an overbilling finding and inflate value leakage.
-        if line.quantity is not None and line.quantity != Decimal("1"):
+        if (
+            (line.quantity is not None and line.quantity != Decimal("1"))
+            or (line.unit is not None and line.unit.strip())
+        ):
             findings.append(ReconciliationFinding(
                 outcome="unknown",
                 invoice_label=line.label,
                 invoice_amount=line.amount,
                 currency=line.currency.upper(),
                 explanation=(
-                    "Invoice quantity differs from one; no proven unit-rate "
-                    "or quantity basis is available for this contract charge."
+                    "Invoice quantity or unit basis is not proven against "
+                    "this normalized contractual charge."
                 ),
                 requires_review=True,
             ))
