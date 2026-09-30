@@ -197,6 +197,21 @@ def test_one_device_many_contracts_share_master(db):
 
 
 
+
+def test_canonical_master_rejects_forced_exact_without_unique_identifier(db):
+    """Even direct service callers cannot label an anonymous master exact."""
+    org = _org(db)
+    master = resolve_equipment_master(
+        db, organization_id=org.id, device_name="Infusion Pump",
+        serial_number="   ", inventory_number=" ",
+        identification_quality="exact",
+    )
+    assert master is not None
+    assert master.serial_number is None
+    assert master.inventory_number is None
+    assert master.identification_quality == "partial"
+
+
 def test_identifier_whitespace_is_not_an_exact_equipment_identity(db):
     """Whitespace-only identifiers cannot silently bypass manual review."""
     org = _org(db)
