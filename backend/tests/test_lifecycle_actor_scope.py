@@ -27,3 +27,32 @@ def test_lifecycle_org_actor_scope(monkeypatch, auth_enabled, actor_kind, expect
         assert exc.value.status_code == expected
     else:
         assert lifecycle._org(MagicMock(), "clinic", request).id == org_id
+
+
+@pytest.mark.parametrize("is_archived,lifecycle_state,allowed", [
+    (False, "active", True),
+    (True, "active", False),
+    (False, "deleted", False),
+])
+def test_lifecycle_contract_rejects_archived_and_inactive(
+    monkeypatch, is_archived, lifecycle_state, allowed,
+):
+    org_id, contract_id = uuid4(), uuid4()
+    contract = SimpleNamespace(
+        organization_id=org_id, lifecycle_state=lifecycle_state,
+        is_archived=is_archived,
+    )
+    session = MagicMock()
+    session.get.return_value = contract
+    monkeypatch.setattr(
+        lifecycle, "current_scope_context",
+        lambda: SimpleNamespace(hospital_id=None, department_id=None),
+    )
+    monkeypatch.setattr(lifecycle, "scoped_contract_ids", lambda *_: None)
+    if allowed:
+        row, _ = lifecycle._require_contract(session, org_id, contract_id)
+        assert row is contract
+    else:
+        with pytest.raises(HTTPException) as exc:
+            lifecycle._require_contract(session, org_id, contract_id)
+        assert exc.value.status_code == 404
