@@ -715,7 +715,9 @@ def resolve_equipment_master(
         device_name=device_name, model=model, manufacturer=manufacturer,
         equipment_category=equipment_category,
     ).value
-    quality = identification_quality or derived_quality
+    # "unknown" is the public default, not an instruction to discard
+    # deterministically identified serial/inventory evidence.
+    quality = derived_quality if identification_quality in (None, "unknown") else identification_quality
     # A caller-supplied quality must not override the absence of a verified
     # unique identifier and manufacture an authoritative canonical identity.
     if quality == "exact" and not (serial_number or inventory_number):
