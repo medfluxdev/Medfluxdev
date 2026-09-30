@@ -11,7 +11,7 @@ vi.mock("@/lib/domain-api/contracts", () => ({
 }));
 vi.mock("@/components/contracts/detail/PdfViewer", () => ({ default: () => null }));
 vi.mock("@/components/contracts/detail/EvidencePane", () => ({ default: () => null }));
-vi.mock("@/components/contracts/detail/SourceLink", () => ({ default: () => null }));
+vi.mock("@/components/contracts/detail/SourceLink", () => ({ default: ({ document }: { document: { document_version_id: string } }) => <span>{document.document_version_id}</span> }));
 
 const entry = (id: string) => ({
   contract_id: id, contract_number: id, contract_title: id, supplier: "Supplier",
@@ -50,6 +50,25 @@ describe("Evidence contract pagination", () => {
     await userEvent.click(screen.getByRole("button", { name: "Vorherige 100" }));
     await waitFor(() => expect(screen.getByRole("option", { name: /first/ })).toBeInTheDocument());
     expect(screen.queryByRole("option", { name: /second/ })).not.toBeInTheDocument();
+  });
+
+  it("ignores a delayed detail response from the previous page", async () => {
+    let resolveOld!: (value: unknown) => void;
+    const oldDetail = new Promise((resolve) => { resolveOld = resolve; });
+    listContracts.mockImplementation((_org: string, query: { page: number }) =>
+      Promise.resolve(query.page === 1
+        ? { items: [entry("first")], has_more: true, total_count: 101 }
+        : { items: [entry("second")], has_more: false, total_count: 101 }));
+    getContract.mockImplementation((id: string) => id === "first"
+      ? oldDetail
+      : Promise.resolve({ contract_id: "second", documents: [], evidence: [] }));
+    render(<NachweisePage />);
+    await waitFor(() => expect(getContract).toHaveBeenCalledWith("first", "test-klinik"));
+    await userEvent.click(screen.getByRole("button", { name: "Nächste 100" }));
+    await waitFor(() => expect(getContract).toHaveBeenCalledWith("second", "test-klinik"));
+    resolveOld({ contract_id: "first", documents: [{ document_version_id: "STALE-DOCUMENT", viewer_supported: true }], evidence: [] });
+    await waitFor(() => expect(screen.getByRole("option", { name: /second/ })).toBeInTheDocument());
+    expect(screen.queryByText("STALE-DOCUMENT")).not.toBeInTheDocument();
   });
 
 });
