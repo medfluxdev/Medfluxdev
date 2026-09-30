@@ -23,9 +23,6 @@ def test_dashboard_actor_scope_before_aggregation(monkeypatch, auth_enabled, act
     monkeypatch.setattr(dashboard, "get_organization", lambda *_: SimpleNamespace(id=org_id))
     monkeypatch.setattr(dashboard, "current_scope_context", lambda: SimpleNamespace(hospital_id=None, department_id=None))
     monkeypatch.setattr(dashboard, "scoped_contract_ids", lambda *_: None)
-    monkeypatch.setattr(dashboard, "build_dashboard_overview", lambda *_args, **_kwargs: {
-        "contracts": {}, "work_queue": {}
-    })
     actor = None if actor_kind == "missing" else SimpleNamespace(organization_id=uuid4())
     request = SimpleNamespace(state=SimpleNamespace(actor=actor))
     if denied:
@@ -39,9 +36,9 @@ def test_dashboard_actor_scope_before_aggregation(monkeypatch, auth_enabled, act
         called = []
         def builder(*args, **kwargs):
             called.append(kwargs["organization_id"])
-            raise dashboard.DashboardError("stop after guard")
+            raise RuntimeError("stop after guard")
         monkeypatch.setattr(dashboard, "build_dashboard_overview", builder)
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError, match="stop after guard"):
             dashboard.dashboard_overview(request, "clinic")
         assert called == [org_id]
     session.close.assert_called_once()
