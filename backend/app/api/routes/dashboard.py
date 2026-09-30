@@ -12,8 +12,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.dashboard.models import DashboardOverview
 from app.dashboard.service import DashboardError, build_dashboard_overview
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 @router.get("/overview", response_model=DashboardOverview)
 def dashboard_overview(
+    request: Request,
     organization_slug: str,
     as_of_date: Optional[date] = None,
 ) -> DashboardOverview:
@@ -34,7 +36,8 @@ def dashboard_overview(
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
-        if org is None:
+        actor = getattr(request.state, "actor", None)
+        if org is None or (actor is None and settings.auth_enabled) or (actor is not None and actor.organization_id != org.id):
             raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
         scope = current_scope_context()
         scope_ids = scoped_contract_ids(
