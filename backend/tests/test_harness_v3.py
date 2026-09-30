@@ -25,6 +25,20 @@ from app.documents.intelligence.canonical import (
 )
 
 
+
+def test_per_device_evidence_attribution_requires_identity_in_quote():
+    from app.ai.harness.pipeline import equipment_identity_in_quote
+    from app.models.contract import Equipment
+
+    scanner = Equipment(device_name="CT Scanner Alpha", serial_number="CT-001")
+    infusion = Equipment(system_name="Accutron MR", serial_number="MR-002")
+    quote = "Gerät: CT Scanner Alpha, Seriennummer CT-001"
+    assert equipment_identity_in_quote(scanner, quote)
+    assert not equipment_identity_in_quote(infusion, quote)
+    assert equipment_identity_in_quote(infusion, "Anlage Accutron MR")
+    assert not equipment_identity_in_quote(infusion, "Geräte und Anlagen gemäß Anhang")
+
+
 def settings(**overrides):
     base = {
         "harness_engine": "v3",
