@@ -33,3 +33,6 @@ Status: DESIGN / NOT IMPLEMENTED / TESTS NOT EXECUTED. Do not interpret this as 
 - Run migration on representative PostgreSQL snapshot, then real multi-page PDF/DOCX, API and UI navigation, and final consolidated owner-approved acceptance.
 
 No schema change is included in this document.
+## Additional verified blocker: same identified unit, distinct service scopes
+
+A separate source review found that `_equipment_fingerprint` also omits `service_scope`, coverage dates, included/excluded services and evidence. Two separately sourced coverage rows with the SAME device name and serial but different service scopes collapse under `add_equipment` before they reach the catalog. The earlier distinct-contract count regression intentionally used two different device names, so it does not cover this case. Added STRICT XFAIL `test_same_identified_device_keeps_two_distinct_coverage_scopes` (`547527c`), source-only and not executed. The occurrence migration must preserve *both* rows linked to the same canonical master while counting their contract once; do not solve the anonymous-unit collision by making serial-only rows unconditionally idempotent.
