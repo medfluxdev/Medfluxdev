@@ -58,7 +58,9 @@ def test_portfolio_org_guard_only_bypasses_actor_in_explicit_local_dev(
 
 def test_portfolio_route_declares_fastapi_request_parameter():
     import inspect
+    from typing import get_type_hints
     from fastapi import Request
 
     signature = inspect.signature(contracts.contract_list)
-    assert signature.parameters["request"].annotation is Request
+    assert "request" in signature.parameters
+    assert get_type_hints(contracts.contract_list)["request"] is Request
