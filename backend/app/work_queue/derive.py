@@ -128,8 +128,8 @@ def derive_from_equipment(row) -> Optional[dict]:
     if item_type == WorkItemType.EQUIPMENT_COVERAGE_REVIEW:
         title = f"Geräte-Zuordnung prüfen: {device}"
         why = (
-            f"Gerät '{device}' ist nur {rel} identifiziert – die Zuordnung zum "
-            "Vertrag muss manuell bestätigt werden."
+            f"Gerät '{device}': Identität oder Quellenbeleg für die "
+            "Vertrags-Zuordnung unvollständig; manuelle Prüfung erforderlich."
         )
     else:
         title = f"Geräte-Zuordnung mehrdeutig: {device}"
