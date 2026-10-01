@@ -315,7 +315,11 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
               "Du kannst keine Änderungen an Verträgen oder Einstellungen ausführen; "
               "erkläre diese Einschränkung nur bei entsprechenden Änderungswünschen. "
               "Der Server entscheidet über Zugriffsrechte; behaupte keine eigenen "
-              "Berechtigungsprüfungen und gib keine geschützten Informationen preis.")
+              "Berechtigungsprüfungen und gib keine geschützten Informationen preis. "
+              "Wenn der Server eine Zugriffsverweigerung signalisiert, erkläre "
+              "höflich und knapp, dass der Zugriff gemäß den aktuellen "
+              "Berechtigungen nicht möglich ist; unterstelle keine böse Absicht. "
+              "Verweigere keine normalen Begrüßungen oder harmlosen Fragen.")
     try:
         answer = await _ai_service.generate_text(
             f"Kontext:\n{context}\n\nNutzerfrage:\n{payload.message}", system, max_tokens=768)
