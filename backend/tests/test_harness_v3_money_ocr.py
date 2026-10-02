@@ -512,10 +512,21 @@ def test_effective_context_keeps_requested_when_budget_is_enough():
     assert eff == 8192
 
 
-def test_effective_context_raises_near_limit_within_model_cap():
+def test_effective_context_never_exceeds_operator_budget():
+    # Das konfigurierte Kontextbudget ist ein Speicherbudget: eine pessimistische
+    # Prompt-Schaetzung darf num_ctx nicht anheben, sonst wird der KV-Cache auf
+    # lokaler GPU mit CPU-Teilauslagerung bezahlt (langsamer, instabil).
     eff = _effective_context(
         prompt_tokens=7865, output_tokens=1800, requested_context=8192,
         model_capacity=262144, image_reserve=0,
+    )
+    assert eff == 8192
+
+
+def test_effective_context_grows_only_when_explicitly_allowed():
+    eff = _effective_context(
+        prompt_tokens=7865, output_tokens=1800, requested_context=8192,
+        model_capacity=262144, image_reserve=0, allow_growth=True,
     )
     assert eff > 8192
     assert eff <= 262144
@@ -528,8 +539,14 @@ def test_effective_context_negative_margin():
         prompt_tokens=200000, output_tokens=1800, requested_context=8192,
         model_capacity=262144, image_reserve=0,
     )
-    assert eff == 200000 + 1800 + 512
     assert eff <= 262144
+    assert eff == 8192
+    grown = _effective_context(
+        prompt_tokens=200000, output_tokens=1800, requested_context=8192,
+        model_capacity=262144, image_reserve=0, allow_growth=True,
+    )
+    assert grown == 200000 + 1800 + 512
+    assert grown <= 262144
 
 
 def test_effective_context_small_context_model_capped():

@@ -354,6 +354,7 @@ export type ImportStateKind =
   | "uploaded"
   | "processing"
   | "analysis_ok"
+  | "analysis_partial"
   | "analysis_failed";
 
 /** Ehrlicher Verarbeitungs-/Importzustand des Vertrags (failure-safe). */

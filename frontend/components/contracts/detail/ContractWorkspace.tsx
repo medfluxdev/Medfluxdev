@@ -15,6 +15,7 @@ import {
   STATUS_LABEL_DETAIL,
 } from "@/lib/contract-detail-types";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { removeWarningsRepresentedByTasks } from "@/lib/action-dedup";
 import { archiveContract, getContractDeletionCapabilities, requestContractDeletion } from "@/lib/domain-api/contracts";
 import PdfViewer from "./PdfViewer";
 import EvidencePane from "./EvidencePane";
@@ -218,7 +219,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     }
   }
   const openTasks = useMemo(() => data.work_items.filter((item) => item.status !== "resolved"), [data.work_items]);
-  const actionableWarnings = useMemo(() => data.warnings.filter((warning) => warning.requires_action || warning.requires_review), [data.warnings]);
+  const actionableWarnings = useMemo(() => removeWarningsRepresentedByTasks(
+    openTasks,
+    data.warnings.filter((warning) => warning.requires_action || warning.requires_review),
+  ), [data.warnings, openTasks]);
 
   function setRoute(tab: TabKey, subtab?: DocumentTab) {
     setActiveTab(tab);
@@ -347,7 +351,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
       <div className="cw-content">
         {activeTab === "overview" && <>
           <div className="cw-kpi-grid"><InfoCard label="Status" value={statusLabel(data.status)} origin="system" /><InfoCard label="Vertragsende" value={effectiveEnd ? formatDate(effectiveEnd) : "Nicht verfügbar"} origin={endOrigin} hint={<SourceButton evidence={data.dates.documented_end_date ? endEvidence : null} />} /><InfoCard label="Jährliche Kosten" value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} /><InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} origin={cancellationOrigin} hint={<SourceButton evidence={cancellationEvidence} />} /><InfoCard label="Risiko" value={riskLabel(data.risk_level)} origin="system" /></div>
-          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list">{openTasks.slice(0, 6).map((item) => <button type="button" className="cw-task cw-task-button" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>)}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("term")}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
+          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>)}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("term")}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
           <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
         </>}
 

@@ -25,14 +25,22 @@ STATE_LABELS = {
     "uploaded": "Hochgeladen",
     "processing": "Verarbeitung läuft",
     "analysis_ok": "Analyse erfolgreich",
+    "analysis_partial": "Teilanalyse – Prüfung erforderlich",
     "analysis_failed": "Analyse fehlgeschlagen",
 }
 
-_KNOWN_AI_ERRORS = [
-    ("nicht verfügbar", "Lokale KI nicht verfügbar."),
-    ("nicht installiert", "Das lokale KI-Modell ist nicht installiert."),
-    ("Zeitüberschreitung", "Die lokale KI hat nicht rechtzeitig geantwortet."),
-]
+_KNOWN_AI_ERRORS = {
+    "nicht verfügbar": "Lokale KI nicht verfügbar.",
+    "nicht installiert": "Das lokale KI-Modell ist nicht installiert.",
+    "zeitüberschreitung": "Die lokale KI hat nicht rechtzeitig geantwortet.",
+    "invalid_schema": "Die lokale KI konnte das Ausgabeformat nicht verarbeiten.",
+    "insufficient_memory": "Für die Analyse war nicht genügend Arbeitsspeicher verfügbar.",
+    "model_runner_stopped": "Das KI-Modell wurde während der Analyse beendet.",
+    "timeout": "Die lokale KI hat nicht rechtzeitig geantwortet.",
+    "aitimeouterror": "Die lokale KI hat nicht rechtzeitig geantwortet.",
+    "aiunavailableerror": "Lokale KI nicht verfügbar.",
+    "aimodelmissingerror": "Das lokale KI-Modell ist nicht installiert.",
+}
 
 
 def safe_failure_message(*, message: str | None, error: str | None) -> str:
@@ -43,8 +51,9 @@ def safe_failure_message(*, message: str | None, error: str | None) -> str:
     ausgegeben.
     """
     if error:
-        for needle, text in _KNOWN_AI_ERRORS:
-            if needle in error:
+        lowered = error.casefold()
+        for needle, text in _KNOWN_AI_ERRORS.items():
+            if needle in lowered:
                 return text
     return message or "Verarbeitung konnte nicht abgeschlossen werden."
 
@@ -78,28 +87,32 @@ def build_import_state(session: Session, *, organization_id, contract_id, detail
             .limit(1)
         ).first()
 
-    state = "analysis_ok"
+    state = "analysis_ok" if accepted else "uploaded"
     can_retry = False
     message: str | None = None
     analysis_status: str | None = None
 
-    if not accepted:
-        if run is None:
-            state = "uploaded"
-        elif run.status == "running":
+    if run is not None:
+        analysis_status = run.status
+        if run.status == "running":
             state = "processing"
-        else:  # failed | partial
+        elif run.status == "success" and accepted:
+            state = "analysis_ok"
+        elif run.status == "partial":
+            state = "analysis_partial"
+            message = _fail_reason(run)
+        else:  # failed, or a success without an accepted extraction
             state = "analysis_failed"
             can_retry = True
-            analysis_status = run.status
-            message = _fail_reason(run)
-
-    if run is not None and analysis_status is None:
-        analysis_status = run.status if run.status in ("success", "partial") else None
+            message = (
+                "Analyseergebnis wurde nicht sicher übernommen; bitte erneut verarbeiten."
+                if run.status == "success" and not accepted
+                else _fail_reason(run)
+            )
 
     review_section = detail.get("review") or {}
     requires_review = bool(
-        state == "analysis_failed"
+        state in {"analysis_failed", "analysis_partial"}
         or review_section.get("requires_manual_review", False)
     )
 

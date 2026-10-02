@@ -1254,8 +1254,13 @@ class DocumentProcessingService:
             last_failure = failed_calls[-1] if failed_calls else {}
             logger.warning(
                 "Harness analysis not accepted for version %s "
-                "(calls=%s failures=%s purpose=%s category=%s type=%s done_reason=%s)",
+                "(analysis_id=%s provider=%s model=%s stage=%s calls=%s failures=%s "
+                "purpose=%s category=%s type=%s done_reason=%s)",
                 stored.document_version_id,
+                analysis.diagnostics.get("analysis_id"),
+                analysis.diagnostics.get("provider"),
+                analysis.diagnostics.get("model"),
+                analysis.diagnostics.get("processing_stage"),
                 analysis.diagnostics.get("call_count"),
                 analysis.diagnostics.get("failure_count"),
                 last_failure.get("purpose"),

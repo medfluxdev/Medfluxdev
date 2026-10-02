@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # erneut generieren. Das grosse Semantic-Budget (harness_output_tokens)
     # bleibt fuer Kern-/Kosten-Packs unveraendert.
     harness_vision_output_tokens: int = 600
+    # Standardmaessig waehrend des Harness-Laufs NIE ueber
+    # `harness_context_tokens` hinaus verstaerken: auf einer lokalen GPU ist das
+    # ein Speicherbudget, und ein groesserer KV-Cache wird mit CPU-Teilauslagerung
+    # bezahlt - messbar langsamer und mit instabilen, ueberlangen Antworten. Passt
+    # ein Aufruf nicht, wird stattdessen sein Output-Budget verkleinert. Nur
+    # aktivieren, wenn ein bewusst grosses Modellkontextlimit verfuegt ist.
+    harness_allow_context_growth: bool = False
     # Deterministischer Multimodal-Warmup vor der ersten Vision-Seitenlesung.
     # Ein pathologischer Cold-Start (erste Inferenz nach Modell-Load) wird so
     # einmal frueh und begrenzt abgefangen statt als Seitenlesung mitten im Lauf

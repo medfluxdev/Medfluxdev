@@ -308,6 +308,32 @@ def test_equipment_evidence_with_locator_is_persistable():
     )
 
 
+def test_equipment_with_incomplete_identity_and_source_evidence_remains_persistable():
+    contract = DomainContract(
+        equipment=[
+            Equipment(
+                device_name="Exactrac X-Ray System",
+                evidence=SourceEvidence(
+                    source_type="page",
+                    page=2,
+                    source_text="Exactrac X-Ray System",
+                    confidence=0.9,
+                    requires_review=True,
+                ),
+            )
+        ]
+    )
+    _snapshot, evidence = DocumentProcessingService._build_extraction(contract)
+    assert contract.equipment[0].device_name == "Exactrac X-Ray System"
+    assert contract.equipment[0].evidence.requires_review is True
+    assert any(
+        row["field_ref"] == "identity_equipment.evidence.0"
+        and row["page"] == 2
+        and row["requires_review"] is True
+        for row in evidence
+    )
+
+
 def _analysis_failure() -> ContractAnalysisResult:
     return ContractAnalysisResult(
         document_id="",

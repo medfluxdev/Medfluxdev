@@ -23,6 +23,7 @@ from app.ai.exceptions import (
     AITimeoutError,
     AIUnavailableError,
 )
+from app.ai.schema import normalize_constrained_schema
 from app.ai.schemas import AIStatus, ModelCapabilities, ModelDescriptor, ModelInfo
 from app.core.config import Settings
 
@@ -60,6 +61,30 @@ VISION_FAMILIES = {
 }
 
 MAX_SHOW_ENRICHMENT = 40
+
+# Bekannte, inhaltsfreie Ollama-Fehlerklassen. Der Antworttext wird ausschließlich
+# gegen diese festen Muster geprüft und niemals weitergegeben, weil er angeforderte
+# Inhalte (Dokumenttext) enthalten kann.
+_SAFE_ERROR_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("invalid json schema", "invalid_schema"),
+    ("more system memory", "insufficient_memory"),
+    ("out of memory", "insufficient_memory"),
+    ("cuda error: out of memory", "insufficient_memory"),
+    ("failed to allocate memory", "insufficient_memory"),
+    ("unable to allocate", "insufficient_memory"),
+    ("model runner has unexpectedly stopped", "model_runner_stopped"),
+)
+
+
+def _safe_error_category(body: str | None) -> str | None:
+    """Leitet eine streng begrenzte Fehlerklasse aus einem Ollama-Antworttext ab."""
+    if not body:
+        return None
+    lowered = body.lower()
+    for needle, category in _SAFE_ERROR_PATTERNS:
+        if needle in lowered:
+            return category
+    return None
 
 
 class OllamaProvider(AIProvider):
@@ -115,7 +140,7 @@ class OllamaProvider(AIProvider):
                 logger.warning("Ollama %s nicht erreichbar: %s", path, exc)
                 raise AIUnavailableError() from exc
         if resp.status_code != 200:
-            raise AIHTTPError(resp.status_code)
+            raise AIHTTPError(resp.status_code, _safe_error_category(resp.text))
         try:
             data = resp.json()
         except ValueError as exc:
@@ -135,7 +160,7 @@ class OllamaProvider(AIProvider):
                 logger.warning("Ollama %s nicht erreichbar: %s", path, exc)
                 raise AIUnavailableError() from exc
         if resp.status_code != 200:
-            raise AIHTTPError(resp.status_code)
+            raise AIHTTPError(resp.status_code, _safe_error_category(resp.text))
         try:
             data = resp.json()
         except ValueError as exc:
@@ -226,12 +251,26 @@ class OllamaProvider(AIProvider):
         arch = model_info.get("general.architecture") if isinstance(model_info, dict) else None
         family = details.get("family")
 
+        # Ollama liefert mit `/api/show` eine eigene, autoritative Fähigkeitsliste
+        # (`capabilities`, z. B. ["completion", "vision"]). Sie hat Vorrang vor allen
+        # Struktur-Heuristiken, weil sie auch Modelle ohne `<arch>.vision.*`-Metadaten
+        # (z. B. Qwen3-Architektur mit Vision-Encoder) korrekt erkennt.
+        reported = show.get("capabilities")
+        if isinstance(reported, list):
+            values = {str(item).lower() for item in reported}
+            if "completion" in values:
+                caps.text = True
+            if "vision" in values or "image" in values:
+                caps.vision = True
+            if "embedding" in values:
+                caps.embedding = True
+
         # Text-/Chat-Fähigkeit: autoritativ über die Familie (Embedding-only
         # Modelle können nicht chatten); unbekannt, wenn keine Details vorliegen.
-        if family is not None:
+        if caps.text is None and family is not None:
             caps.text = family not in EMBEDDING_ONLY_FAMILIES
 
-        # Vision: autoritativ über `{arch}.vision.*`-Metadaten von /api/show.
+        # Vision: ansonsten autoritativ über `{arch}.vision.*`-Metadaten von /api/show.
         # FEHLT die Metadaten-Quelle, bleibt die Fähigkeit unbekannt (None).
         # Familien-Liste ist nur eine unterstützende Quelle – nie aus Namen.
         if isinstance(model_info, dict) and any(
@@ -300,7 +339,10 @@ class OllamaProvider(AIProvider):
             "options": options,
         }
         if schema is not None:
-            payload["format"] = schema
+            # Ollamas Decodierer akzeptiert kein Teilschema ohne strukturellen Typ.
+            # Pydantic rendert `Any`-Felder als reines `{"title": ...}`, was sonst
+            # mit HTTP 500 `invalid JSON schema in format` scheitert.
+            payload["format"] = normalize_constrained_schema(schema)
         keep_alive = getattr(self.settings, "ollama_keep_alive", "") or ""
         if keep_alive and keep_alive != "0":
             payload["keep_alive"] = keep_alive
@@ -368,7 +410,7 @@ class OllamaProvider(AIProvider):
         if resp.status_code == 404:
             raise AIModelMissingError(model)
         if resp.status_code != 200:
-            raise AIHTTPError(resp.status_code)
+            raise AIHTTPError(resp.status_code, _safe_error_category(resp.text))
 
         # Streaming (stream=true): NDJSON-Zeilen, Token fuer Token. Der Read-
         # Timeout gilt so nur fuer die Zeit zwischen zwei eingehenden Zeilen;

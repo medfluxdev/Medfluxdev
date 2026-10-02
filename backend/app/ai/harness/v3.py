@@ -23,8 +23,9 @@ import hashlib
 import json
 import re
 import time
+import uuid
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,9 +43,16 @@ from app.documents.intelligence.hybrid import route_summary, visual_candidate_pa
 from app.ai.service import AIService
 from app.core.config import Settings
 from app.models.contract import Contract
-from app.models.enums import ExtractionStatus, ReviewFlag, ValidationStatus
+from app.models.contract import Equipment as EquipmentModel
+from app.models.contract import VariableCharge
+from app.models.enums import (
+    ExtractionMethod,
+    ExtractionStatus,
+    ReviewFlag,
+    ValidationStatus,
+)
 from app.models.evidence import BoundingBox, SourceEvidence
-from app.models.values import Money
+from app.models.values import Duration, Money, TimeUnit
 
 
 class ProposedFact(BaseModel):
@@ -61,11 +69,28 @@ class ProposedFactBatch(BaseModel):
     facts: list[ProposedFact] = Field(default_factory=list)
 
 
+# A visual reading is *complementary* to the canonical OCR text layer, never a
+# second full-page transcription. Unbounded transcription of a dense scanned
+# contract page cannot fit the vision output budget: the model hits the token
+# limit mid-JSON and the structured response is lost. The bounds below keep every
+# vision call inside `harness_vision_output_tokens`.
+_VISION_MAX_FRAGMENTS = 12
+_VISION_FRAGMENT_MAX_CHARS = 160
+
+_VisionFragment = Annotated[str, Field(max_length=_VISION_FRAGMENT_MAX_CHARS)]
+
+
 class VisualPageReading(BaseModel):
     page: int
-    visible_text: list[str] = Field(default_factory=list)
-    layout_relations: list[str] = Field(default_factory=list)
-    unresolved: list[str] = Field(default_factory=list)
+    visible_text: list[_VisionFragment] = Field(
+        default_factory=list, max_length=_VISION_MAX_FRAGMENTS
+    )
+    layout_relations: list[_VisionFragment] = Field(
+        default_factory=list, max_length=_VISION_MAX_FRAGMENTS
+    )
+    unresolved: list[_VisionFragment] = Field(
+        default_factory=list, max_length=_VISION_MAX_FRAGMENTS
+    )
 
 
 # Each pack: (name, field selectors, retrieval topics, keyword expansion)
@@ -193,10 +218,19 @@ def _retry_output_plan(
 
 
 def _estimate_tokens(text: str) -> int:
-    return max(1, int(len(text.encode("utf-8")) / 3 * 1.15))
+    """Conservative pre-call token estimate for one prompt.
+
+    Calibrated against measured Ollama `prompt_eval_count` values for German
+    contract prompts (core pack: ~3.2 UTF-8 bytes per token). The factor stays
+    slightly pessimistic so a budget computed from it can never understate the
+    real prompt size.
+    """
+    return max(1, int(len(text.encode("utf-8")) / 3.1))
 
 
 _CONTEXT_RESERVE = 512
+_MIN_OUTPUT_TOKENS = 256
+_PACK_SPLIT_MAX_DEPTH = 6
 
 
 def _effective_context(
@@ -206,21 +240,50 @@ def _effective_context(
     model_capacity: int | None,
     image_reserve: int = 0,
     reserve: int = _CONTEXT_RESERVE,
+    allow_growth: bool = False,
 ) -> int:
     """Effective num_ctx for one provider call.
 
-    The operator-configured context is the preferred budget, but a prompt +
-    output expectation that exceeds it is raised to fit -- capped by the
-    selected model's real capability (descriptor.context_length).  Small-context
-    models never exceed that capability; a model without a reported context
-    length stays on the requested budget (conservative).
+    The operator-configured context is a *memory* budget: on a local, VRAM-limited
+    device a larger KV cache is paid for with partial CPU offload, which collapses
+    generation speed and can make the model ramble until the output cap. The
+    harness therefore never grows num_ctx beyond that budget; it only shrinks it
+    when a single call provably cannot fit. Growing stays available for operators
+    who deliberately configure a larger context via `harness_allow_context_growth`.
     """
+    allowed = int(requested_context)
+    if model_capacity is not None:
+        allowed = min(allowed, int(model_capacity))
     needed = int(prompt_tokens) + int(output_tokens) + int(image_reserve) + int(reserve)
-    if needed <= int(requested_context):
-        return int(requested_context)
-    if model_capacity is None:
-        return int(requested_context)
+    if needed <= allowed:
+        return allowed
+    if not allow_growth or model_capacity is None:
+        return allowed
     return min(int(model_capacity), needed)
+
+
+def _fits_output_budget(
+    prompt_tokens: int,
+    output_tokens: int,
+    context: int,
+    image_reserve: int = 0,
+    reserve: int = _CONTEXT_RESERVE,
+) -> bool:
+    return (
+        int(prompt_tokens) + int(output_tokens) + int(image_reserve) + int(reserve)
+        <= int(context)
+    )
+
+
+def _shrunk_output_budget(
+    prompt_tokens: int,
+    context: int,
+    image_reserve: int = 0,
+    reserve: int = _CONTEXT_RESERVE,
+) -> int:
+    """Largest output budget that still fits, never below the generation floor."""
+    room = int(context) - int(prompt_tokens) - int(image_reserve) - int(reserve)
+    return max(_MIN_OUTPUT_TOKENS, room)
 
 
 def _field_catalog(types: dict[str, Any], selectors: tuple[str, ...]) -> dict[str, str]:
@@ -351,7 +414,13 @@ def _normalize_digits(value: str) -> str:
 
 
 def _date_signal_iso(value: str) -> str | None:
-    match = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", value or "")
+    text = value or ""
+    # ISO zuerst: "2029-06-03" darf nicht als dd-mm-yyyy (3.6.2029) gelesen werden.
+    iso = re.search(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if iso:
+        year, month, day = iso.groups()
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+    match = re.search(r"(\d{1,2})[./-](\d{1,2})[./-](\d{4})", text)
     if not match:
         return None
     day, month, year = match.groups()
@@ -406,13 +475,116 @@ def _duration_candidates(value: Any) -> list[dict]:
     return rows
 
 
+_PY_REPR_RE = re.compile(r"^(?P<cls>[A-Z][A-Za-z0-9_]*)\((?P<body>.*)\)$", re.DOTALL)
+_REPR_INVALID = object()
+
+
+def _split_top_level(body: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    quote = ""
+    for char in body:
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+            continue
+        if char in "\"'":
+            quote = char
+            current.append(char)
+            continue
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
+def _coerce_repr_scalar(raw: str) -> Any:
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1]
+    lowered = text.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if lowered == "none":
+        return None
+    nested = _parse_python_repr(text)
+    if nested is not None:
+        return nested
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    # Unbekannter Skalarwert als Rohtext behalten (z. B.
+    # `FlexibleDate(YYYY-MM-DD=2029-06-03)`), statt die Form zu verwerfen.
+    return text
+
+
+def _parse_python_repr(text: str) -> Optional[dict[str, Any]]:
+    """Parse a `Model(field=value, ...)` repr into plain data.
+
+    MiniCPM sometimes emits the Python *repr* of a nested model instead of its
+    JSON object (`Duration(days=30)`, `FlexibleDate(YYYY-MM-DD=2029-06-03)`).
+    Those carry a real fact but fail object validation, so every date/duration
+    would silently be dropped. Parsing them here is deterministic; a repr that
+    cannot be parsed is returned unchanged and rejected by the normal gates.
+    """
+    match = _PY_REPR_RE.match(text.strip())
+    if match is None:
+        return None
+    fields: dict[str, Any] = {}
+    for part in _split_top_level(match.group("body")):
+        if "=" not in part:
+            return None
+        key, _, raw = part.partition("=")
+        key = key.strip()
+        if not key:
+            return None
+        parsed = _coerce_repr_scalar(raw)
+        if parsed is _REPR_INVALID:
+            return None
+        fields[key] = parsed
+    return fields
+
+
 def _normalize_date_payload(value: Any) -> Any:
     if isinstance(value, str):
         iso = _date_signal_iso(value)
         if iso:
             return {"date": iso, "condition": None, "requires_review": False}
+        parsed = _parse_python_repr(value)
+        if parsed is not None:
+            return _normalize_date_payload(parsed)
         return value
     if isinstance(value, dict):
+        # `FlexibleDate(YYYY-MM-DD=2029-06-03)` parst zu
+        # {"YYYY-MM-DD": "2029-06-03"}; das Feld ist ein Datum, kein Datum.
+        if not value.get("date") and not value.get("literal_value"):
+            for raw_key, raw_value in value.items():
+                key = str(raw_key).strip().casefold()
+                if key in {"date", "datum", "yyyy-mm-dd", "iso", "iso_date"}:
+                    iso = _date_signal_iso(str(raw_value))
+                    if iso:
+                        return {
+                            "date": iso,
+                            "condition": None,
+                            "requires_review": False,
+                        }
         # Qwen semantic nutzt {"date_type": "start"|"end", "literal_value":
         # "04.06.2025"} - gleiche Form wie bei Dauer-Fakten.  Ohne Umbau leeren
         # wir den Date-Wert zu {"requires_review": false} und verlieren das
@@ -443,6 +615,12 @@ def _normalize_date_payload(value: Any) -> Any:
             for key in ("date", "condition", "requires_review")
             if key in value
         }
+        if not cleaned:
+            # Kein erkennbares Datumsfeld (z. B. eine unvollstaendige
+            # `FlexibleDate(YYYY-MM-DD=1983)`-Form): zurueckgeben, damit die
+            # strenge Validierung das Fact ablehnt, statt still ein leeres Datum
+            # zu uebernehmen.
+            return value
         raw_date = cleaned.get("date")
         if isinstance(raw_date, str):
             cleaned["date"] = _date_signal_iso(raw_date) or raw_date
@@ -460,21 +638,27 @@ def _normalize_date_payload(value: Any) -> Any:
 def _normalize_duration_payload(value: Any) -> Any:
     if isinstance(value, str):
         match = re.search(
-            r"(?P<value>\d+)\s*(?P<unit>Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?)",
+            r"(?P<value>\d+)\s*(?P<unit>Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?"
+            r"|years?|months?|weeks?|days?|hours?|minutes?)",
             value,
             re.IGNORECASE,
         )
         if not match:
+            parsed = _parse_python_repr(value)
+            if parsed is not None:
+                return _normalize_duration_payload(parsed)
             return value
         unit_raw = match.group("unit").lower()
-        if unit_raw.startswith("jahr"):
+        if unit_raw.startswith("jahr") or unit_raw.startswith("year"):
             unit = "years"
-        elif unit_raw.startswith("monat"):
+        elif unit_raw.startswith("monat") or unit_raw.startswith("month"):
             unit = "months"
-        elif unit_raw.startswith("woche"):
+        elif unit_raw.startswith("woch") or unit_raw.startswith("week"):
             unit = "weeks"
-        elif unit_raw.startswith("tag"):
+        elif unit_raw.startswith("tag") or unit_raw.startswith("day"):
             unit = "days"
+        elif unit_raw.startswith("minut"):
+            unit = "minutes"
         else:
             unit = "hours"
         return {"value": int(match.group("value")), "unit": unit}
@@ -702,6 +886,28 @@ _EQUIPMENT_ALIASES = {
 _EQUIPMENT_SCOPE_LIST_KEYS = {"included_services", "excluded_services"}
 
 
+def _clean_device_name(name: str) -> str:
+    """Reduce an OCR/model device name to the device name itself.
+
+    Contract price tables repeat the device in a row like
+    `OPTIS(TM) Mobile Next Imaging System | 1014932 | SN: 12`. The trailing
+    article/serial columns are not part of the device name, so only the first
+    meaningful cell is kept. Nothing is invented: empty or purely numeric
+    fragments are dropped, never filled in.
+    """
+    text = " ".join((name or "").split())
+    if "|" in text:
+        candidates = [
+            segment.strip()
+            for segment in text.split("|")
+            if segment.strip() and re.search(r"[A-Za-z\u00c4-\u00dc\u00e4-\u00fc]", segment)
+        ]
+        if candidates:
+            text = candidates[0]
+    text = re.sub(r"\bSN:?\s*$", "", text).strip()
+    return text
+
+
 def _normalize_equipment_item(item: Any) -> Optional[dict]:
     """Normalisiert ein einzelnes Equipment-Proposal deterministisch.
 
@@ -710,7 +916,7 @@ def _normalize_equipment_item(item: Any) -> Optional[dict]:
     Seriennummern werden NICHT erfunden; sie bleiben einfach weg (None).
     """
     if isinstance(item, str):
-        name = item.strip()
+        name = _clean_device_name(item)
         return {"device_name": name} if name else None
     if not isinstance(item, dict):
         return None
@@ -720,7 +926,7 @@ def _normalize_equipment_item(item: Any) -> Optional[dict]:
         if key not in _EQUIPMENT_KEEP or val is None:
             continue
         if isinstance(val, str):
-            stripped = val.strip()
+            stripped = _clean_device_name(val) if key == "device_name" else val.strip()
             if stripped:
                 cleaned[key] = (
                     [stripped] if key in _EQUIPMENT_SCOPE_LIST_KEYS else stripped
@@ -940,6 +1146,664 @@ _SERVICE_FACT_LABELS_DE = {
     "consumables_included": "Verbrauchsmaterial",
     "emergency_service": "Notdienst",
 }
+
+
+_RUNTIME_DURATION_STRONG = (
+    "vertragslaufzeit",
+    "vertragsdauer",
+    "laufzeit",
+    "mietlaufzeit",
+)
+
+_RUNTIME_DURATION_WEAK = ("vertragszeitraum",)
+
+
+def _build_page_evidence(
+    page: int | None,
+    quote: str,
+    document: Any,
+    canonical: Any,
+    *,
+    extraction_method: ExtractionMethod = ExtractionMethod.PROGRAMMATIC,
+) -> Optional[SourceEvidence]:
+    source = SourceEvidence(
+        page=page,
+        source_type="page",
+        source_text=quote,
+        extraction_method=extraction_method,
+        requires_review=False,
+    )
+    if page is None:
+        return source
+    block = next(
+        (
+            candidate
+            for candidate in document.pages_blocks.get(page, [])
+            if _find_quote(candidate.text or "", quote) is not None
+        ),
+        None,
+    )
+    if block is not None:
+        source.source_type = getattr(block, "source_type", "page")
+        source.paragraph_index = (
+            getattr(block, "source_index", None)
+            if source.source_type == "paragraph"
+            else None
+        )
+        source.table_index = (
+            getattr(block, "source_index", None)
+            if source.source_type == "table"
+            else None
+        )
+        box = _bbox(block)
+        if box is not None:
+            source.bounding_box = box
+        return source
+    page_text = next(
+        (
+            candidate.text
+            for candidate in canonical.pages
+            if candidate.page_number == page and (candidate.text or "").strip()
+        ),
+        None,
+    )
+    if page_text is not None and _find_quote(page_text, quote) is not None:
+        source.source_text = _clean_quote(page_text)
+    return source
+
+
+_TITLE_EXCLUSIONS = (
+    "allgemeine geschäftsbedingungen",
+    "allgemeine geschaeftsbedingungen",
+    "datenschutzvereinbarung",
+    "data processing agreement",
+    "privacy policy",
+)
+_TITLE_MARKERS = ("servicevertrag", "rahmenvertrag", "wartungsvertrag", "kaufvertrag", "vertrag")
+
+
+def _primary_contract_title(canonical, document) -> Optional[tuple[str, SourceEvidence]]:
+    """Select a short, source-backed contract heading from the opening pages.
+
+    Generic legal appendices often repeat a title-like heading near the end of a
+    document. Restricting candidate search to the opening pages and excluding
+    standard legal boilerplate keeps those headings from replacing the principal
+    contract identity without relying on any vendor or product name.
+    """
+    for page in sorted(canonical.pages, key=lambda item: item.page_number)[:3]:
+        candidates: list[tuple[int, str, str]] = []
+        for block in sorted(
+            document.pages_blocks.get(page.page_number, []),
+            key=lambda item: getattr(item, "reading_order", 0),
+        ):
+            for raw_line in (block.text or "").splitlines():
+                line = re.sub(r"\s+", " ", raw_line).strip(" \t\r\n:;|-")
+                lowered = line.casefold()
+                if not line or len(line) > 140 or any(term in lowered for term in _TITLE_EXCLUSIONS):
+                    continue
+                if not any(term in lowered for term in _TITLE_MARKERS):
+                    continue
+                if re.search(r"\b(?:paragraf|paragraph|artikel|article|seite|page)\s+\d", lowered):
+                    continue
+                priority = 0 if lowered.startswith(("servicevertrag", "rahmenvertrag", "wartungsvertrag")) else 1
+                candidates.append((priority, line, line))
+        if candidates:
+            _priority, title, quote = min(candidates, key=lambda row: (row[0], len(row[1])))
+            evidence = _build_page_evidence(page.page_number, quote, document, canonical)
+            if evidence is not None:
+                return title, evidence
+    return None
+
+
+def _duration_from_runtime_signal(
+    contract: Any, signals, document: Any, canonical: Any
+) -> Optional[tuple[Any, SourceEvidence]]:
+    """Derive the contract duration from a literal "Laufzeit von X" sentence.
+
+    This is a labelled literal in the source ("Der Vertrag hat eine Laufzeit von
+    48 Monaten"), so code can read it deterministically instead of asking the
+    model and hoping it picks the right sentence. Only used while
+    `dates.duration` is still empty. Several sentences may repeat the same term
+    ("Laufzeit von 48 Monaten" and "Verbrauchsmaterial fuer den Vertragszeitraum
+    von 48 Monaten"); that agreement is accepted and the strongest sentence is
+    used as evidence. Genuinely *different* durations stay unresolved.
+    """
+    candidates: list[tuple[int, Any, SourceEvidence]] = []
+    for signal in signals:
+        if _signal_field(signal, "kind") != "duration":
+            continue
+        page = _signal_field(signal, "page")
+        if page is None:
+            continue
+        signal_value = _signal_field(signal, "value")
+        quote = (_signal_field(signal, "quote") or "").strip()
+        lowered = quote.casefold()
+        if any(marker in lowered for marker in _RUNTIME_DURATION_STRONG):
+            rank = 2
+        elif any(marker in lowered for marker in _RUNTIME_DURATION_WEAK):
+            rank = 1
+        else:
+            continue
+        window = _temporal_candidates(signal_value)
+        if not window:
+            window = _temporal_candidates(quote)
+        if len(window) != 1:
+            continue
+        value = _duration_unit_from_text(str(signal_value or "")) or window[0]["unit"]
+        if value != window[0]["unit"]:
+            continue
+        evidence = _build_page_evidence(page, quote, document, canonical)
+        if evidence is None:
+            continue
+        duration = _make_duration(window[0]["value"], value)
+        if duration is None:
+            continue
+        candidates.append((rank, duration, evidence))
+    if not candidates:
+        return None
+    distinct = {(row[1].value, getattr(row[1].unit, "value", row[1].unit)) for row in candidates}
+    if len(distinct) > 1:
+        # Mehrere unterschiedliche Laufzeiten: nicht raten.
+        return None
+    best_rank = max(row[0] for row in candidates)
+    for rank, duration, evidence in candidates:
+        if rank == best_rank:
+            return duration, evidence
+    return None
+
+
+def _make_duration(number: int, unit: str) -> Optional[Any]:
+    try:
+        return Duration(value=number, unit=TimeUnit(unit))
+    except (ValueError, TypeError):
+        return None
+
+
+# ------------------------------------------- Deterministische Preis-/Kostenableitung
+
+_PRICE_TABLE_SECTION_MARKERS = (
+    "einzelkomponenten",
+    "verbrauchsmaterial",
+    "mengenabweichung",
+    "ausgleichszahlung",
+)
+
+# Aggregate rows repeat a total that is already carried by the item rows.
+_AGGREGATE_LABEL_MARKERS = ("kosten ", "summe", "gesamt", "total")
+
+_INSTALL_LABEL_MARKERS = (
+    "install-kit",
+    "install kit",
+    "installationskosten",
+    "inbetriebnahme",
+    "installier",
+)
+
+_ONE_TIME_LABEL_MARKERS = (
+    "anteilige zahlung",
+    "einmalig",
+    "pauschale",
+)
+
+_CONDITION_CLAUSE_MARKERS = (
+    "nicht erreicht",
+    "zielmengenverfehlung",
+    "nichterreichung",
+    "wahlrecht",
+)
+
+_EURO_HINT_RE = re.compile(r"(?:€|\bEUR\b)", re.IGNORECASE)
+
+
+def _currency_from_text(text: str) -> Optional[str]:
+    return "EUR" if _EURO_HINT_RE.search(text or "") else None
+
+
+def _table_cells(line: str) -> list[str]:
+    return [cell.strip() for cell in (line or "").split("|")]
+
+
+def _price_row_candidates(page_text: str) -> list[dict]:
+    """Every pipe-table row of a page that carries exactly one price per cell."""
+    rows: list[dict] = []
+    lines = (page_text or "").splitlines()
+    for index, line in enumerate(lines):
+        if "|" not in line:
+            continue
+        cells = _table_cells(line)
+        if len(cells) < 2:
+            continue
+        label = next((cell for cell in cells if cell), "")
+        for cell in cells:
+            amounts = [
+                (_money_amount(match.group(0)), match.group(0))
+                for match in _MONEY_LITERAL_RE.finditer(cell)
+            ]
+            amounts = [(value, literal) for value, literal in amounts if value is not None]
+            if not amounts or label == cell:
+                # Die Label-Zelle selbst traegt den Betrag (z. B.
+                # "Anteilige Zahlung: | | EUR 12.000,00") - weiter unten.
+                continue
+            for value, literal in amounts:
+                rows.append(
+                    {
+                        "label": _clean_quote(label),
+                        "amount": value,
+                        "currency": _currency_from_text(cell) or _currency_from_text(line),
+                        "literal": literal,
+                        "line_index": index,
+                        "row_text": " ".join(line.split()),
+                        "context": " ".join(" ".join(part.split()) for part in lines[max(0, index - 15):index]),
+                    }
+                )
+    return rows
+
+
+def _money_from_literal(literal: str, period: Optional[str]) -> Optional[Money]:
+    value = _money_amount(literal)
+    if value is None:
+        return None
+    return Money(amount=value, currency="EUR", period=period)
+
+
+def _derive_costs_from_price_tables(
+    contract: Any, canonical: Any, document: Any
+) -> list[dict]:
+    """Read literal price-table rows into cost fields, without inferring periods.
+
+    Purchase contracts carry their money in pipe tables ("Bezeichnung | Preis pro
+    Stueck | Kaufpreis"). The model frequently returns those rows without page or
+    quote, so the evidence gate drops them. Reading them here is deterministic: the
+    amount must appear verbatim in its own row, and every row keeps its own page
+    and row text as evidence. Recurring budgets (annual/monthly) are never touched
+    here - those stay the AI's job behind the financial classification gate.
+    """
+    derived: list[dict] = []
+    for page in canonical.pages:
+        page_number = page.page_number
+        page_text = page.text or ""
+        if not page_text:
+            continue
+        variable_rows: list[dict] = []
+        for row in _price_row_candidates(page_text):
+            label = row["label"]
+            if not label or re.match(r"^(bezeichnung|produkt|modell|menge)", label, re.IGNORECASE):
+                continue
+            if any(label.casefold().startswith(marker) for marker in _AGGREGATE_LABEL_MARKERS):
+                continue
+            context = row["context"].casefold()
+            conditional = any(marker in context for marker in _CONDITION_CLAUSE_MARKERS) or any(
+                marker in page_text.casefold() for marker in ("ausgleichszahlung", "zielmengenverfehlung")
+            )
+
+            if any(marker in label.casefold() for marker in _ONE_TIME_LABEL_MARKERS):
+                if contract.costs.one_time_cost is None:
+                    money = _money_from_literal(row["literal"], "once")
+                    if money is not None:
+                        contract.costs.one_time_cost = money
+                        evidence = _build_page_evidence(
+                            page_number, row["row_text"], document, canonical
+                        )
+                        if evidence is not None:
+                            contract.costs.evidence = evidence
+                        derived.append(
+                            {
+                                "field": "costs.one_time_cost",
+                                "derivation": "literal_price_table_row",
+                                "page": page_number,
+                                "label": label,
+                                "amount": money.amount,
+                                "evidence": (
+                                    evidence.model_dump(mode="json") if evidence else None
+                                ),
+                            }
+                        )
+                continue
+
+            if any(marker in label.casefold() for marker in _INSTALL_LABEL_MARKERS):
+                if contract.costs.setup_installation_cost is None:
+                    money = _money_from_literal(row["literal"], "once")
+                    if money is not None:
+                        contract.costs.setup_installation_cost = money
+                        evidence = _build_page_evidence(
+                            page_number, row["row_text"], document, canonical
+                        )
+                        derived.append(
+                            {
+                                "field": "costs.setup_installation_cost",
+                                "derivation": "literal_price_table_row",
+                                "page": page_number,
+                                "label": label,
+                                "amount": money.amount,
+                                "evidence": (
+                                    evidence.model_dump(mode="json") if evidence else None
+                                ),
+                            }
+                        )
+                continue
+
+            if conditional:
+                variable_rows.append(row)
+
+        condition_clause = _condition_clause(page_text)
+        if variable_rows and condition_clause:
+            row_evidence = _build_page_evidence(
+                page_number, condition_clause, document, canonical
+            )
+        for row in variable_rows:
+            money = _money_from_literal(row["literal"], None)
+            if money is None:
+                continue
+            if any(
+                existing.label == row["label"]
+                and existing.amount.amount == money.amount
+                for existing in contract.costs.variable_charges
+            ):
+                continue
+            contract.costs.variable_charges.append(
+                VariableCharge(
+                    label=row["label"],
+                    amount=money,
+                    unit="per_piece",
+                    condition=condition_clause,
+                )
+            )
+            derived.append(
+                {
+                    "field": "costs.variable_charges",
+                    "derivation": "literal_price_table_row",
+                    "page": page_number,
+                    "label": row["label"],
+                    "amount": money.amount,
+                    "condition": condition_clause,
+                    "evidence": (
+                        row_evidence.model_dump(mode="json") if row_evidence else None
+                    ),
+                }
+            )
+
+    return derived
+
+
+def _condition_clause(page_text: str) -> Optional[str]:
+    for line in (page_text or "").splitlines():
+        if any(marker in line.casefold() for marker in _CONDITION_CLAUSE_MARKERS):
+            cleaned = _clean_quote(" ".join(line.split()))
+            if 20 <= len(cleaned) <= 400:
+                return cleaned
+    return None
+
+
+# ---------------------------------------------- Startbedingung / Lieferantenbeleg
+
+_START_CONDITION_RE = re.compile(
+    r"[^.\n]{0,60}\b(?:startet|beginnt|gilt\s+ab)\b[^.\n]{0,160}", re.IGNORECASE
+)
+
+_START_CONDITION_TRIGGERS = (
+    "installation",
+    "inbetriebnahme",
+    "übergabe",
+    "uebergabe",
+    "lieferung",
+    "vertragsbeginn",
+    "vertragsschluss",
+)
+
+
+def _derive_start_condition(
+    contract: Any, canonical: Any
+) -> Optional[tuple[str, Any]]:
+    """Read the event the term starts on, e.g. "an dem Tag der Installation".
+
+    The contract deliberately has no calendar start date, only a trigger. That is
+    a literal clause, so it is read from the source instead of being inferred.
+    """
+    if contract.dates.start_condition:
+        return None
+    found: list[tuple[int, str]] = []
+    for page in canonical.pages:
+        page_text = page.text or ""
+        if not page_text:
+            continue
+        for match in _START_CONDITION_RE.finditer(page_text):
+            clause = _clean_quote(" ".join(match.group(0).split()))
+            lowered = clause.casefold()
+            if not any(trigger in lowered for trigger in _START_CONDITION_TRIGGERS):
+                continue
+            if len(clause) < 15 or len(clause) > 220:
+                continue
+            found.append((page.page_number, clause))
+    distinct = {clause for _, clause in found}
+    if len(distinct) != 1:
+        # Abweichende Klauseln bleiben ungeklaert statt geraten.
+        return None
+    page_number, clause = found[0]
+    return page_number, clause
+
+
+_LEGAL_FORM_RE = re.compile(
+    r"\b(?:GmbH|mbH|AG|KG|OHG|UG|SE|Ltd\.?|Inc\.?|B\.V\.|S\.A\.|N\.V\.|S\.r\.l\.)\b"
+)
+
+_ADDRESS_HINT_RE = re.compile(
+    r"(?:\b\d{5}\b|stra(?:ss|ß)e|allee|weg\b|platz\b|betriebsstätte|betricbsstätte|anschrift)",
+    re.IGNORECASE,
+)
+
+
+_ORG_NAME_RE = re.compile(
+    r"\b((?:[A-ZÄÖÜ][\w&.\-]*\s+){0,5}?"
+    r"(?:GmbH(?:\s*&\s*Co\.?\s*KG)?|mbH|AG|KG|OHG|UG|gGmbH|SE|KGaA|"
+    r"Ltd\.?|Ltd|LLC|Inc\.?|Incorporated|Corporation|Corp\.?|PLC|"
+    r"B\.V\.|S\.A\.|N\.V\.|S\.r\.l\.|S\.p\.A\.|A\.G\.|AB|AS|Oy|SAS|S\.à\s*r\.l\.))"
+)
+
+_PARTIES_SPLIT_RE = re.compile(r"\s+und\s+", re.IGNORECASE)
+
+# Organisation names that appear in boilerplate but never denote the vendor.
+_KNOWN_NON_PARTIES = frozenset(
+    {
+        "abbott medical gmbh betriebsstaette wetzlar schanzenfeldstr",
+        "kliniken",
+        "klinikum",
+    }
+)
+
+
+def _org_key(name: str) -> str:
+    """Comparable form of an organisation name (case, punctuation, spacing)."""
+    cleaned = re.sub(r"[^\w\s]", " ", (name or "").casefold())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _parties_clause(line: str, supplier: str) -> Optional[str]:
+    """Trim an OCR run-together line down to the "zwischen A und B" clause.
+
+    Scanned cover pages concatenate letterhead, footer and body text into one
+    line. The contracting-parties sentence inside it is the strongest supplier
+    citation, so the noisy surroundings are cut away.
+    """
+    # NOTE: never take an index from a case-folded copy - casefold can change the
+    # string length ("ß" -> "ss") and would cut the clause at the wrong offset.
+    start = re.search(r"zwischen", line, re.IGNORECASE)
+    if start is None:
+        return None
+    supplier_pattern = r"\s+".join(re.escape(piece) for piece in supplier.split())
+    match = re.search(supplier_pattern, line[start.start():], re.IGNORECASE)
+    if match is None:
+        return None
+    clause = _clean_quote(line[start.start():])
+    if not (10 <= len(clause) <= 400) or "und" not in clause.casefold():
+        return None
+    return clause
+
+
+def _derive_supplier(contract: Any, canonical: Any, document: Any) -> Optional[Any]:
+    """Read the supplier party deterministically from an explicit legal-form mention.
+
+    The evidence gate correctly drops the model's supplier fact whenever it omits
+    page/quote, which left the party empty even though the contract names it in
+    plain sight. The name is therefore read from the text itself:
+
+    1. the contracting-parties sentence ``zwischen A und B`` -> A is the vendor;
+    2. otherwise the letterhead line carrying a legal form.
+
+    Only a name that literally carries a legal form is accepted, the hospital
+    customer is excluded, and an already accepted AI supplier is never replaced.
+    """
+    identity = getattr(contract, "identity", None)
+    if identity is None:
+        return None
+    existing = (getattr(identity, "supplier", None) or "").strip()
+    if existing:
+        return None
+    customer = (getattr(identity, "customer", None) or "").strip()
+    customer_key = _org_key(customer)
+
+    best: Optional[tuple[int, int, int, str, str]] = None
+    for page in canonical.pages:
+        page_number = page.page_number
+        for line in (page.text or "").splitlines():
+            candidate = " ".join(line.split())
+            if not candidate or "|" in candidate or len(candidate) > 2000:
+                continue
+            for name, rank in _supplier_candidates(candidate):
+                if customer_key and _org_key(name) == customer_key:
+                    continue
+                if _org_key(name) in _KNOWN_NON_PARTIES:
+                    continue
+                key = (rank, page_number, len(name), name, candidate)
+                if best is None or key[:3] < best[:3]:
+                    best = key
+    if best is None:
+        return None
+    _rank, page_number, _length, name, source_line = best
+    clause = _parties_clause(source_line, name)
+    quote = clause or _clean_quote(source_line)
+    if len(quote) > 400:
+        quote = name
+    evidence = _build_page_evidence(page_number, quote, document, canonical)
+    if evidence is None:
+        return None
+    evidence.source_text = quote
+    evidence.extraction_method = ExtractionMethod.PROGRAMMATIC
+    identity.supplier = name
+    return evidence
+
+
+def _supplier_candidates(line: str) -> list[tuple[str, int]]:
+    """Yield (organisation name, rank) pairs found in one canonical line.
+
+    rank 0 - named as the first party of a "zwischen A und B" sentence;
+    rank 1 - letterhead style mention with an address hint;
+    rank 2 - any other legal-form mention.
+    """
+    found: list[tuple[str, int]] = []
+    start = re.search(r"zwischen", line, re.IGNORECASE)
+    if start is not None:
+        head = line[start.start():]
+        split = _PARTIES_SPLIT_RE.search(head)
+        if split is not None:
+            first_party = head[: split.start()]
+            for match in _ORG_NAME_RE.finditer(first_party):
+                name = _clean_quote(match.group(1))
+                if _LEGAL_FORM_RE.search(name):
+                    found.append((name, 0))
+    has_address = bool(_ADDRESS_HINT_RE.search(line))
+    for match in _ORG_NAME_RE.finditer(line):
+        name = _clean_quote(match.group(1))
+        if not _LEGAL_FORM_RE.search(name):
+            continue
+        found.append((name, 1 if has_address else 2))
+    return found
+
+
+def _bind_supplier_evidence(contract: Any, canonical: Any, document: Any) -> Optional[Any]:
+    """Point the identity evidence at an explicit supplier letterhead line.
+
+    The supplier name is often read off the contract title, which proves nothing
+    about the party. A line that names the supplier together with its legal form
+    (and preferably an address) is an actual mention of the supplier, so it is
+    preferred as the group's evidence.
+    """
+    supplier = (getattr(getattr(contract, "identity", None), "supplier", None) or "").strip()
+    if not supplier:
+        return None
+    current = getattr(getattr(contract, "identity", None), "evidence", None)
+    if current is not None and supplier.casefold() in (getattr(current, "source_text", "") or "").casefold():
+        return None
+
+    supplier_pattern = r"\s+".join(re.escape(piece) for piece in supplier.split())
+    best: Optional[tuple[int, int, int, str]] = None
+    for page in canonical.pages:
+        page_number = page.page_number
+        for line in (page.text or "").splitlines():
+            candidate = " ".join(line.split())
+            if not candidate or "|" in candidate or len(candidate) > 2000:
+                continue
+            if not re.search(supplier_pattern, candidate, re.IGNORECASE):
+                continue
+            if not _LEGAL_FORM_RE.search(candidate):
+                continue
+            quote = _parties_clause(candidate, supplier) or candidate
+            if "zwischen" in quote.casefold():
+                rank = 0
+            elif _ADDRESS_HINT_RE.search(candidate):
+                rank = 1
+            else:
+                rank = 2
+            key = (rank, page_number, len(quote), quote)
+            if best is None or key[:3] < best[:3]:
+                best = key
+    if best is None:
+        return None
+    _rank, page_number, _length, candidate = best
+    evidence = _build_page_evidence(page_number, candidate, document, canonical)
+    if evidence is None:
+        return None
+    evidence.source_text = candidate
+    evidence.extraction_method = ExtractionMethod.PROGRAMMATIC
+    return evidence
+
+
+def _equipment_from_title_evidence(
+    contract: Any, title_evidence: Optional[SourceEvidence] = None
+) -> Optional[Any]:
+    """Derive one device deterministically from an evidence-bound contract title.
+
+    Framing contracts are titled `Rahmenvertrag Nr. X - <Geraet>` and the device
+    often never gets its own grounded fact (the model then omits page/quote and
+    the evidence gate drops it). The title's own source quote is already bound to
+    a real location, so the device name is read from that text instead of being
+    invented. Only used when no equipment fact was accepted at all, and only when
+    the candidate occurs verbatim in the bound title source.
+    """
+    title = getattr(getattr(contract, "identity", None), "contract_title", None)
+    if title_evidence is None:
+        title_evidence = getattr(getattr(contract, "identity", None), "evidence", None)
+    if not title or title_evidence is None:
+        return None
+    source_text = getattr(title_evidence, "source_text", "") or ""
+    normalized_source = " ".join(source_text.split()).casefold()
+    candidate = ""
+    for separator in (" - ", " – ", " — ", " –", " -"):
+        if separator in title:
+            tail = title.rsplit(separator, 1)[1].strip()
+            if len(tail) >= 3:
+                candidate = tail
+            break
+    if not candidate:
+        return None
+    if candidate.casefold() not in normalized_source:
+        return None
+    if not re.search(r"[A-Za-z\u00c4-\u00dc\u00e4-\u00fc]", candidate):
+        return None
+    if re.search(r"\bvertrag\b|\bRahmenvertrag\b", candidate, re.IGNORECASE):
+        return None
+    item = EquipmentModel(device_name=candidate)
+    item.evidence = title_evidence
+    return item
 
 
 def _merge_service_scope_facts(services: Any) -> None:
@@ -1256,6 +2120,32 @@ def _steady_annual_amount(rows: list[dict], *, expected_years: int | None = None
     return float(later[0])
 
 
+def _complete_scheduled_total(rows: list[dict], *, expected_years: int | None) -> float | None:
+    """Sum a complete, contiguous staged schedule without treating it as a quote."""
+    if not rows or expected_years is None or expected_years < 1:
+        return None
+    amounts: dict[int, float] = {}
+    currencies: set[str] = set()
+    for row in rows:
+        index = row.get("period_index")
+        money = row.get("amount")
+        amount = money.get("amount") if isinstance(money, dict) else None
+        currency = money.get("currency") if isinstance(money, dict) else None
+        if (
+            not isinstance(index, int) or isinstance(index, bool) or index < 1
+            or index in amounts
+            or not isinstance(amount, (int, float)) or isinstance(amount, bool)
+            or amount < 0
+            or not currency
+        ):
+            return None
+        amounts[index] = float(amount)
+        currencies.add(str(currency).upper())
+    if len(currencies) != 1 or sorted(amounts) != list(range(1, expected_years + 1)):
+        return None
+    return round(sum(amounts.values()), 2)
+
+
 # Deterministische Finanzklassifikations-Logik (GATE 1 - EUR 12.000):
 # Ein Betrag, dessen WAEHRUNGS-MEANING (annual/semi_annual/quarterly/monthly/
 # maintenance) nicht belegt ist, darf nie als wiederkehrende Verpflichtung in
@@ -1280,6 +2170,176 @@ _PERIOD_FIELDS: dict[str, re.Pattern[str]] = {
     "costs.maintenance_fee": re.compile(
         r"wartung|maintenance|service(?:geb[\u00fc]hr|gebuehr)|(?:service\s+)?fee\b", re.I),
 }
+
+
+_TEMPORAL_FIELDS = {
+    "dates.start_date",
+    "dates.end_date",
+    "dates.duration",
+    "dates.minimum_duration",
+}
+
+_TEMPORAL_DATE_FIELDS = {"dates.start_date", "dates.end_date"}
+
+_TEMPORAL_UNIT_BY_FIELD_UNIT = {
+    "year": "years",
+    "years": "years",
+    "month": "months",
+    "months": "months",
+    "week": "weeks",
+    "weeks": "weeks",
+    "day": "days",
+    "days": "days",
+    "hour": "hours",
+    "hours": "hours",
+}
+
+
+def _canonical_temporal_unit(unit: Any) -> Optional[str]:
+    return _TEMPORAL_UNIT_BY_FIELD_UNIT.get(str(unit or "").strip().casefold())
+
+
+def _temporal_date_candidates(value: Any) -> list[str]:
+    """ISO dates carried by a proposed date value or a signal literal."""
+    found: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for raw_key, raw_value in node.items():
+                key = str(raw_key).strip().casefold()
+                if key in {"date", "literal_value", "iso", "iso_date", "yyyy-mm-dd"}:
+                    iso = _date_signal_iso(str(raw_value))
+                    if iso:
+                        found.append(iso)
+                else:
+                    walk(raw_value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+        elif isinstance(node, str):
+            iso = _date_signal_iso(node)
+            if iso:
+                found.append(iso)
+
+    walk(value)
+    return found
+
+
+def _temporal_candidates(value: Any) -> list[dict]:
+    """Extract comparable (number, unit) pairs from a proposed date/duration."""
+    rows: list[dict] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            unit = None
+            number = None
+            for key, expected in (
+                ("years", "years"),
+                ("months", "months"),
+                ("weeks", "weeks"),
+                ("days", "days"),
+                ("hours", "hours"),
+                ("year", "years"),
+                ("month", "months"),
+                ("week", "weeks"),
+                ("day", "days"),
+                ("hour", "hours"),
+            ):
+                if node.get(key) is not None:
+                    unit = expected
+                    number = node.get(key)
+                    break
+            if unit is None and node.get("value") is not None and node.get("unit"):
+                unit = _canonical_temporal_unit(node.get("unit"))
+                number = node.get("value")
+            if unit is not None and number is not None:
+                try:
+                    rows.append({"value": int(float(number)), "unit": unit})
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            for nested in node.values():
+                walk(nested)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+        elif isinstance(node, str):
+            for match in re.finditer(
+                r"(\d+)\s*(Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?|Stunde(?:n)?"
+                r"|years?|months?|weeks?|days?|hours?)",
+                node,
+                re.IGNORECASE,
+            ):
+                stem = match.group(2).casefold()
+                for prefix, unit in (
+                    ("jahr", "years"),
+                    ("year", "years"),
+                    ("monat", "months"),
+                    ("month", "months"),
+                    ("woch", "weeks"),
+                    ("week", "weeks"),
+                    ("tag", "days"),
+                    ("day", "days"),
+                    ("stund", "hours"),
+                    ("hour", "hours"),
+                ):
+                    if stem.startswith(prefix):
+                        rows.append({"value": int(match.group(1)), "unit": unit})
+                        break
+
+    walk(value)
+    return rows
+
+
+def _signal_field(signal: Any, name: str) -> Any:
+    """Read a source-signal field from either the dataclass or its dict form."""
+    if isinstance(signal, dict):
+        return signal.get(name)
+    return getattr(signal, name, None)
+
+
+def _temporal_signal_supported(fact, signals) -> bool:
+    """A proposed date/duration must be corroborated by a signal on its page.
+
+    The model happily maps an unrelated sentence onto a date field (e.g. reading
+    "Dauer i.d.R. 2 - 3 Wochen" - an installation lead time - as the contract
+    duration). A temporal fact is only accepted when a `date`/`duration` source
+    signal on the evidence page carries the very same number *and* unit. This is
+    the deterministic counterpart to the financial classification gate.
+    """
+    value = getattr(fact, "value", None)
+    page = getattr(fact, "page", None)
+    same_page = [
+        signal
+        for signal in signals
+        if page is None or _signal_field(signal, "page") == page
+    ]
+
+    if fact.field in _TEMPORAL_DATE_FIELDS:
+        proposed_dates = set(_temporal_date_candidates(value))
+        if not proposed_dates:
+            return False
+        signal_dates: set[str] = set()
+        for signal in same_page:
+            if _signal_field(signal, "kind") != "date":
+                continue
+            signal_dates.update(_temporal_date_candidates(_signal_field(signal, "value")))
+            signal_dates.update(_temporal_date_candidates(_signal_field(signal, "quote")))
+        return bool(proposed_dates & signal_dates)
+
+    proposed = _temporal_candidates(value)
+    if not proposed:
+        return False
+    signal_rows: list[dict] = []
+    for signal in same_page:
+        if _signal_field(signal, "kind") != "duration":
+            continue
+        signal_rows.extend(_temporal_candidates(_signal_field(signal, "value")))
+        signal_rows.extend(_temporal_candidates(_signal_field(signal, "quote")))
+    for expected in proposed:
+        for row in signal_rows:
+            if row["value"] == expected["value"] and row["unit"] == expected["unit"]:
+                return True
+    return False
 
 
 def _financial_classification_verified(
@@ -1403,9 +2463,11 @@ class DirectContractHarness:
         types = field_types()
         source_signals = collect_source_signals(document)
         calls: list[dict] = []
+        analysis_id = str(uuid.uuid4())
         rejected: list[dict] = []
         evidence_rows: list[dict] = []
         accepted: list[dict] = []
+        accepted_evidence_by_field: dict[str, SourceEvidence] = {}
         visual_readings: dict[int, VisualPageReading] = {}
         issues: list[str] = []
         provider_id = model_id = None
@@ -1414,6 +2476,9 @@ class DirectContractHarness:
             provider, descriptor = await self.ai.harness_runtime()
             provider_id = descriptor.provider_id
             model_id = descriptor.model_id
+            for row in calls:
+                row["provider"] = provider_id
+                row["model"] = model_id
             if descriptor.capabilities.text is not True:
                 raise ValueError("Selected model does not support text analysis")
             if not provider.supports_structured_output:
@@ -1432,6 +2497,10 @@ class DirectContractHarness:
                 base_output,
                 int(getattr(self.settings, "harness_vision_output_tokens", base_output)),
             )
+            semantic_schema = ProposedFactBatch.model_json_schema()
+            system_prefix = SYSTEM + "\nOutput JSON schema: " + json.dumps(
+                semantic_schema, separators=(",", ":")
+            )
 
             async def call(purpose: str, prompt: str, schema_type, *, images=None, stage="semantic", output_budget=None):
                 schema = schema_type.model_json_schema()
@@ -1440,6 +2509,9 @@ class DirectContractHarness:
                 )
                 prompt_tokens = _estimate_tokens(system + prompt)
                 metric = {
+                    "analysis_id": analysis_id,
+                    "provider": provider_id or getattr(self.ai, "provider_id", None),
+                    "model": model_id or getattr(self.ai, "model_id", None),
                     "purpose": purpose,
                     "stage": stage,
                     "schema": schema_type.__name__,
@@ -1449,13 +2521,41 @@ class DirectContractHarness:
                     "failed": False,
                 }
                 calls.append(metric)
+
+                def safe_error_category(exc: Exception) -> str:
+                    category = getattr(exc, "category", None)
+                    if category:
+                        return str(category)
+                    if type(exc).__name__ == "ValidationError":
+                        return "schema_validation"
+                    if isinstance(exc, (ValueError, TypeError)):
+                        return "schema_validation"
+                    return "unknown"
+
                 output_tokens = base_output if output_budget is None else int(output_budget)
                 attempt = 0
+                allow_growth = bool(
+                    getattr(self.settings, "harness_allow_context_growth", False)
+                )
                 while True:
                     image_reserve = 1024 * len(images or [])
                     effective_context = _effective_context(
-                        prompt_tokens, output_tokens, capacity, descriptor.context_length, image_reserve
+                        prompt_tokens,
+                        output_tokens,
+                        capacity,
+                        descriptor.context_length,
+                        image_reserve,
+                        allow_growth=allow_growth,
                     )
+                    if not _fits_output_budget(
+                        prompt_tokens, output_tokens, effective_context, image_reserve
+                    ):
+                        shrunk = _shrunk_output_budget(
+                            prompt_tokens, effective_context, image_reserve
+                        )
+                        if shrunk < output_tokens:
+                            output_tokens = shrunk
+                            metric["output_budget_shrunk_to"] = shrunk
                     if attempt == 0:
                         metric["effective_context"] = effective_context
                     metric["retry_count"] = attempt
@@ -1511,7 +2611,7 @@ class DirectContractHarness:
                         metric["error_category"] = (
                             "truncated_output"
                             if str(exc) == "output_truncated"
-                            else "provider_or_schema_error"
+                            else safe_error_category(exc)
                         )
                         raise
 
@@ -1589,11 +2689,15 @@ class DirectContractHarness:
                     image = page_image_loader(page_number)
                     reading = await call(
                         f"vision:{page_number}",
-                        "Read this contract page visually. Transcribe only clearly visible text exactly, "
-                        "preserving dates, numbers, currency, punctuation and negation. "
-                        "Also record only explicit visual/layout relationships needed to interpret tables, "
-                        "rows, columns, labels, selected controls, service windows or signatures; do not infer "
-                        "contractual meaning. Put uncertain material in unresolved. "
+                        f"Read contract page {page_number} visually. The canonical OCR text layer "
+                        f"already covers this page. Return at most {_VISION_MAX_FRAGMENTS} short "
+                        f"fragments per list, each at most {_VISION_FRAGMENT_MAX_CHARS} characters. "
+                        "visible_text: only fragments that are missing from or clearly wrong in the "
+                        "OCR layer (dates, amounts, negated clauses), copied verbatim without ellipses. "
+                        "layout_relations: only explicit visual relationships such as 'this column "
+                        "header applies to that row', 'this checkbox is marked', 'signature block at "
+                        "the bottom of the page'. Do not repeat the full page text, do not summarize, "
+                        "and do not infer contractual meaning. Put anything uncertain in unresolved. "
                         f"Return page={page_number}.",
                         VisualPageReading,
                         images=[image],
@@ -1623,32 +2727,66 @@ class DirectContractHarness:
                     }
                 ]
                 guidance = _PACK_GUIDANCE.get(pack_name, "")
-                prompt = (
-                    f"Extract the {pack_name} contract facts from the source below. "
-                    "Use Qwen semantic understanding to decide what each literal value means. "
-                    "The literal source signals are observations, not final facts. "
-                    "Inspect every relevant signal and decide its contractual role. "
-                    "For every accepted fact page and exact quote are mandatory; copy the quote verbatim, without ellipses. "
-                    "Do not output fields outside this catalog. Omit facts that are not actually present."
-                    + (" " + guidance if guidance else "")
-                    + "\n\nFIELD CATALOG:\n"
-                    + json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
-                    + "\n\nLITERAL SOURCE SIGNALS (pages "
-                    + str(pack_pages)
-                    + "):\n"
-                    + json.dumps(pack_signals, ensure_ascii=False, separators=(",", ":"))
-                    + "\n\nCONTRACT SOURCE (pages "
-                    + str(pack_pages)
-                    + "):\n"
-                    + _pack_source(canonical, pack_pages, visual_readings)
-                )
-                batch = await call(
-                    f"semantic:{pack_name}",
-                    prompt,
-                    ProposedFactBatch,
-                    stage="semantic",
-                )
-                proposals.extend(batch.facts)
+                catalog_json = json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
+
+                def build_pack_prompt(pages: list[int], chunk_signals: list[dict]) -> str:
+                    return (
+                        f"Extract the {pack_name} contract facts from the source below. "
+                        "Use Qwen semantic understanding to decide what each literal value means. "
+                        "The literal source signals are observations, not final facts. "
+                        "Inspect every relevant signal and decide its contractual role. "
+                        "For every accepted fact page and exact quote are mandatory; copy the quote verbatim, without ellipses. "
+                        "Do not output fields outside this catalog. Omit facts that are not actually present."
+                        + (" " + guidance if guidance else "")
+                        + "\n\nFIELD CATALOG:\n"
+                        + catalog_json
+                        + "\n\nLITERAL SOURCE SIGNALS (pages "
+                        + str(pages)
+                        + "):\n"
+                        + json.dumps(chunk_signals, ensure_ascii=False, separators=(",", ":"))
+                        + "\n\nCONTRACT SOURCE (pages "
+                        + str(pages)
+                        + "):\n"
+                        + _pack_source(canonical, pages, visual_readings)
+                    )
+
+                # A single call must fit the operator's context budget together with
+                # its output budget. A too-large pack is therefore split into page
+                # chunks instead of being truncated mid-answer or silently dropped.
+                def chunk_signals_for(pages: list[int]) -> list[dict]:
+                    return [
+                        signal
+                        for signal in pack_signals
+                        if signal.get("page") is None or signal.get("page") in pages
+                    ]
+
+                def prompt_fits(pages: list[int]) -> bool:
+                    candidate = build_pack_prompt(pages, chunk_signals_for(pages))
+                    return _fits_output_budget(
+                        _estimate_tokens(system_prefix + candidate),
+                        base_output,
+                        capacity,
+                    )
+
+                def split_pages(pages: list[int], depth: int = 0) -> list[list[int]]:
+                    if prompt_fits(pages) or depth >= _PACK_SPLIT_MAX_DEPTH:
+                        return [pages]
+                    midpoint = max(1, len(pages) // 2)
+                    left, right = pages[:midpoint], pages[midpoint:]
+                    if not left or not right:
+                        return [pages]
+                    return split_pages(left, depth + 1) + split_pages(right, depth + 1)
+
+                for chunk_index, chunk_pages in enumerate(split_pages(pack_pages)):
+                    chunk_prompt = build_pack_prompt(chunk_pages, chunk_signals_for(chunk_pages))
+                    batch = await call(
+                        f"semantic:{pack_name}"
+                        + (f":chunk{chunk_index + 1}" if len(pack_pages) != len(chunk_pages) else ""),
+                        chunk_prompt,
+                        ProposedFactBatch,
+                        stage="semantic",
+                    )
+                    proposals.extend(batch.facts)
 
                 def locate(fact: ProposedFact):
                     quote = _clean_quote(fact.quote or "")
@@ -1860,6 +2998,16 @@ class DirectContractHarness:
                 (block, resolved_quote), visual_only = located
                 page = fact.page if block is None else block.page
 
+                if fact.field in _TEMPORAL_FIELDS and not _temporal_signal_supported(
+                    fact, source_signals
+                ):
+                    rejected.append({
+                        "field": fact.field, "page": page,
+                        "reason": "temporal_value_not_corroborated_by_signal",
+                        "quote": (fact.quote or "")[:240],
+                    })
+                    continue
+
                 if not _financial_classification_verified(
                     fact, visual_first_rows, resolved_page=page,
                 ):
@@ -1975,9 +3123,53 @@ class DirectContractHarness:
                         "confidence": fact.confidence,
                     }
                 )
+                # Per-field evidence is kept so later derivations can still be
+                # grounded in the fact's OWN source. The identity group's single
+                # evidence slot may be re-pointed to a stronger citation (e.g. an
+                # explicit supplier letterhead) and must not invalidate it.
+                accepted_evidence_by_field.setdefault(fact.field, source)
                 supported_count += 1
 
             _merge_service_scope_facts(getattr(contract, "services", None))
+
+            primary_title_derivation = None
+            primary_title = _primary_contract_title(canonical, document)
+            if primary_title is not None:
+                title_text, title_evidence = primary_title
+                accepted_title_evidence = accepted_evidence_by_field.get(
+                    "identity.contract_title"
+                )
+                if (
+                    not accepted_title_evidence
+                    or (accepted_title_evidence.page or 10**9) > (title_evidence.page or 10**9)
+                ):
+                    contract.identity.contract_title = title_text
+                    accepted_evidence_by_field["identity.contract_title"] = title_evidence
+                    evidence_rows = [
+                        row for row in evidence_rows
+                        if row.get("field") != "identity.contract_title"
+                    ]
+                    evidence_rows.append({
+                        "field": "identity.contract_title",
+                        "source": title_evidence.model_dump(mode="json"),
+                    })
+                    accepted = [
+                        row for row in accepted
+                        if row.get("field") != "identity.contract_title"
+                    ]
+                    accepted.append({
+                        "field": "identity.contract_title",
+                        "page": title_evidence.page,
+                        "quote": title_evidence.source_text,
+                        "confidence": None,
+                    })
+                    if accepted_title_evidence is None:
+                        supported_count += 1
+                    primary_title_derivation = {
+                        "field": "identity.contract_title",
+                        "derivation": "opening_page_contract_heading",
+                        "page": title_evidence.page,
+                    }
 
             scheduled_rows = [
                 {
@@ -1995,14 +3187,90 @@ class DirectContractHarness:
             # and currency can be proven; never inflate supported_count or forge
             # a quotation/evidence row for it.
             derived_facts: list[dict] = []
+            if primary_title_derivation is not None:
+                derived_facts.append(primary_title_derivation)
+            cost_derived = _derive_costs_from_price_tables(contract, canonical, document)
+            derived_facts.extend(cost_derived)
+            start_condition = _derive_start_condition(contract, canonical)
+            if start_condition is not None:
+                condition_page, condition_clause = start_condition
+                contract.dates.start_condition = condition_clause
+                contract.dates.evidence = _build_page_evidence(
+                    condition_page, condition_clause, document, canonical
+                )
+                derived_facts.append(
+                    {
+                        "field": "dates.start_condition",
+                        "derivation": "literal_start_trigger_clause",
+                        "page": condition_page,
+                        "start_condition": condition_clause,
+                    }
+                )
+            supplier_evidence = _bind_supplier_evidence(contract, canonical, document)
+            if supplier_evidence is not None:
+                contract.identity.evidence = supplier_evidence
+                derived_facts.append(
+                    {
+                        "field": "identity.supplier",
+                        "derivation": "explicit_supplier_letterhead_mention",
+                        "page": supplier_evidence.page,
+                    }
+                )
+            elif not (contract.identity.supplier or "").strip():
+                # The evidence gate rejected the model's supplier fact (missing
+                # page/quote). The party is still named verbatim in the document,
+                # so it is read from the text rather than left empty.
+                derived_supplier_evidence = _derive_supplier(contract, canonical, document)
+                if derived_supplier_evidence is not None:
+                    contract.identity.evidence = derived_supplier_evidence
+                    derived_facts.append(
+                        {
+                            "field": "identity.supplier",
+                            "derivation": "legal_form_party_mention",
+                            "page": derived_supplier_evidence.page,
+                            "supplier": contract.identity.supplier,
+                        }
+                    )
+            if not contract.equipment:
+                derived_equipment = _equipment_from_title_evidence(
+                    contract,
+                    accepted_evidence_by_field.get("identity.contract_title"),
+                )
+                if derived_equipment is not None:
+                    contract.equipment.append(derived_equipment)
+                    derived_facts.append(
+                        {
+                            "field": "equipment",
+                            "derivation": "device_name_from_bound_contract_title",
+                            "device_name": derived_equipment.device_name,
+                        }
+                    )
             duration = contract.dates.duration
+            if contract.dates.duration is None:
+                derived_duration = _duration_from_runtime_signal(
+                    contract, source_signals, document, canonical
+                )
+                if derived_duration is not None:
+                    contract.dates.duration = derived_duration[0]
+                    contract.dates.evidence = derived_duration[1]
+                    derived_facts.append(
+                        {
+                            "field": "dates.duration",
+                            "derivation": "literal_runtime_duration_signal",
+                            "duration": derived_duration[0].model_dump(mode="json"),
+                        }
+                    )
             unit = getattr(getattr(duration, "unit", None), "value", getattr(duration, "unit", None))
             expected_years = None
-            if duration is not None and str(unit).lower() in {"year", "years"}:
+            normalized_unit = str(unit).lower() if unit is not None else ""
+            if duration is not None and normalized_unit in {"year", "years", "month", "months"}:
                 try:
                     number = float(duration.value)
                     if number.is_integer() and number > 0:
-                        expected_years = int(number)
+                        if normalized_unit in {"year", "years"}:
+                            expected_years = int(number)
+                        elif int(number) % 12 == 0:
+                            expected_years = int(number) // 12
                 except (TypeError, ValueError, OverflowError):
                     pass
             schedule_currencies = {
@@ -2032,6 +3300,28 @@ class DirectContractHarness:
                         "source_verified_as_independent_fact": False,
                     }
                 )
+            if contract.costs.total_contract_value is None:
+                scheduled_total = _complete_scheduled_total(
+                    scheduled_rows, expected_years=expected_years
+                )
+                if scheduled_total is not None and complete_currency:
+                    total_currency = next(iter(schedule_currencies))
+                    contract.costs.total_contract_value = Money(
+                        amount=scheduled_total,
+                        currency=total_currency,
+                        period="contract_total",
+                    )
+                    derived_facts.append({
+                        "field": "costs.total_contract_value",
+                        "derivation": "sum_complete_staged_yearly_price_schedule",
+                        "source_fields": ["costs.scheduled_prices", "dates.duration"],
+                        "period_indexes": sorted(row["period_index"] for row in scheduled_rows),
+                        "period_amounts": [
+                            {"period_index": row["period_index"], **row["amount"]}
+                            for row in sorted(scheduled_rows, key=lambda item: item["period_index"])
+                        ],
+                        "source_verified_as_independent_fact": False,
+                    })
             if supported_count == 0:
                 issues.append("No source-grounded contract facts were delivered")
             if rejected:
@@ -2053,8 +3343,10 @@ class DirectContractHarness:
 
             diagnostics = {
                 "harness_version": "direct-v1",
+                "analysis_id": analysis_id,
                 "provider": provider_id,
                 "model": model_id,
+                "processing_stage": "complete",
                 "source_sha256": canonical.source_sha256,
                 "source_signals": source_signals,
                 "visual_first": visual_first_data,
@@ -2083,6 +3375,8 @@ class DirectContractHarness:
                 },
                 "issues": issues,
             }
+            for row in calls:
+                row["analysis_id"] = analysis_id
             contract.analysis.harness = {
                 **diagnostics,
                 "document_intelligence": canonical.provenance.model_dump(mode="json"),
@@ -2118,16 +3412,34 @@ class DirectContractHarness:
             )
 
         except Exception as exc:
+            category = getattr(exc, "category", None) or ""
+            status_code = getattr(exc, "status_code", None)
+            failed_calls = [row for row in calls if row.get("failed")]
+            last_failure = failed_calls[-1] if failed_calls else {}
+            failure_category = (
+                last_failure.get("error_category")
+                or category
+                or ("timeout" if type(exc).__name__ == "AITimeoutError" else "unknown")
+            )
+            processing_stage = last_failure.get("stage") or "setup"
+            for row in calls:
+                row["provider"] = provider_id or getattr(self.ai, "active_provider_id", lambda: None)()
+                row["model"] = model_id or getattr(self.ai, "active_model_id", lambda: None)()
+                row["analysis_id"] = analysis_id
             diagnostics = {
                 "harness_version": "direct-v1",
+                "analysis_id": analysis_id,
                 "provider": provider_id,
                 "model": model_id,
+                "processing_stage": processing_stage,
+                "safe_error_category": failure_category,
+                "request_id": analysis_id,
                 "source_sha256": canonical.source_sha256,
                 "source_signals": source_signals,
                 "calls": calls,
                 "call_count": len(calls),
                 "failure_count": sum(1 for row in calls if row.get("failed")),
-                "issues": [type(exc).__name__],
+                "issues": [failure_category],
             }
             return ContractAnalysisResult(
                 document_id=canonical.document_id or "",
@@ -2141,7 +3453,11 @@ class DirectContractHarness:
                 groups_processed=0,
                 processing_duration=time.monotonic() - started,
                 message="Analyse fehlgeschlagen.",
-                error=f"HarnessFailure purpose=direct category={type(exc).__name__}",
+                error=(
+                    f"HarnessFailure purpose={last_failure.get('purpose', 'setup')} "
+                    f"category={failure_category}"
+                    + (f" http_status={status_code}" if status_code else "")
+                ),
                 diagnostics=diagnostics,
             )
 

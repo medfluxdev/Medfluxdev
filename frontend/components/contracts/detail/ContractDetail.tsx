@@ -449,7 +449,7 @@ function ImportStateBanner({
 
   if (state.import_state === "analysis_ok") return null;
 
-  if (state.import_state === "analysis_failed") {
+  if (state.import_state === "analysis_failed" || state.import_state === "analysis_partial") {
     return (
       <section className="notice warning" role="alert">
         <strong>{state.state_label_de}.</strong>{" "}

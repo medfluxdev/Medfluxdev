@@ -12,6 +12,7 @@ from app.ai.harness.v3 import (
     _normalize_money_payload,
     _per_call_rows,
     _retry_output_plan,
+    _complete_scheduled_total,
     _staged_price_rows,
     _steady_annual_amount,
 )
@@ -451,6 +452,33 @@ async def test_equipment_and_service_hours_and_service_scope_normalize():
     assert "sla.availability_24_7" not in rejected_by
     assert "services.included_services" not in rejected_by
     assert "services.excluded_services" not in rejected_by
+
+
+@pytest.mark.asyncio
+async def test_early_source_equipment_survives_later_standard_terms_pages():
+    source = document()
+    source.pages.append(Page(
+        page_number=18,
+        width_pt=600,
+        height_pt=800,
+        text="Allgemeine Geschäftsbedingungen\n§ 1 Allgemeine Geschäftsbedingungen",
+        elements=[Element(
+            element_id="agb-18",
+            page=18,
+            reading_order=0,
+            text="Allgemeine Geschäftsbedingungen\n§ 1 Allgemeine Geschäftsbedingungen",
+            type="paragraph",
+            method="ocr",
+        )],
+    ))
+    source.canonical_text = "\n".join(page.text for page in source.pages)
+
+    result = await DirectContractHarness(settings(), ai()).analyze(source)
+
+    assert result.contract is not None, result.error
+    assert result.contract.equipment
+    assert result.contract.equipment[0].device_name == "Impella® AIC System"
+    assert result.contract.equipment[0].evidence.page == 3
 
 
 @pytest.mark.asyncio
@@ -1036,6 +1064,17 @@ def test_steady_annual_amount_derives_recurring_fee():
     assert _steady_annual_amount(
         [{"period_index": 1, "amount": {"amount": 8000.0}}]
     ) is None
+
+
+def test_complete_schedule_total_requires_every_year_and_one_currency():
+    rows = [
+        {"period_index": year, "amount": {"amount": 52500.0, "currency": "EUR"}}
+        for year in range(1, 5)
+    ]
+    assert _complete_scheduled_total(rows, expected_years=4) == 210000.0
+    assert _complete_scheduled_total(rows[:-1], expected_years=4) is None
+    conflicting = [*rows[:-1], {"period_index": 4, "amount": {"amount": 52500.0, "currency": "USD"}}]
+    assert _complete_scheduled_total(conflicting, expected_years=4) is None
 
 
 def test_retry_output_plan_uses_measured_budget():

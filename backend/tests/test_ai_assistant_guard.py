@@ -66,12 +66,20 @@ async def test_assistant_returns_503_when_local_model_unconfigured(monkeypatch):
 @pytest.mark.asyncio
 async def test_assistant_discards_answer_if_membership_revoked_during_generation(monkeypatch):
     org = uuid4()
-    actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4())
+    actor = SimpleNamespace(organization_slug="hospital", organization_id=org, account_id=uuid4(),
+                            role="admin", is_developer=False)
     account = SimpleNamespace(id=actor.account_id, is_active=True)
     calls = []
     monkeypatch.setattr(ai.settings, "auth_enabled", True)
+    class Rows:
+        def all(self):
+            return []
     monkeypatch.setattr(ai, "create_session", lambda: SimpleNamespace(
-        get=lambda cls, identifier: account, close=lambda: None))
+        get=lambda cls, identifier: account, scalars=lambda *args: Rows(),
+        scalar=lambda *args: None, close=lambda: None))
+    monkeypatch.setattr(ai, "current_scope_context", lambda: SimpleNamespace(
+        hospital_id=None, department_id=None))
+    monkeypatch.setattr(ai, "scoped_contract_ids", lambda *args: None)
     def fresh_actor(session, user, slug):
         calls.append(True)
         return actor if len(calls) == 1 else None
@@ -100,6 +108,64 @@ async def test_assistant_rejects_deactivated_account_before_model(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await ai.ai_assistant(request(actor), "hospital", ai.AssistantRequest(message="Hallo"), Response())
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_assistant_uses_latest_authorized_processed_contract_without_route_id(monkeypatch):
+    org, contract_id, extraction_id = uuid4(), uuid4(), uuid4()
+    actor = SimpleNamespace(
+        organization_slug="hospital", organization_id=org, account_id=uuid4(),
+        role="admin", is_developer=False,
+    )
+    account = SimpleNamespace(id=actor.account_id, is_active=True)
+    contract = SimpleNamespace(
+        id=contract_id, organization_id=org, accepted_extraction_id=extraction_id,
+        lifecycle_state="active", is_archived=False, contract_number="RAV-00074",
+        supplier="Abbott Medical GmbH", status="active", start_date=None, end_date=None,
+    )
+    scalar_values = iter([contract_id, contract, contract_id])
+
+    class Rows:
+        def all(self):
+            return []
+
+    class Session:
+        def get(self, *_args):
+            return account
+
+        def scalars(self, *_args):
+            return Rows()
+
+        def scalar(self, *_args):
+            return next(scalar_values)
+
+        def execute(self, *_args):
+            return Rows()
+
+        def close(self):
+            pass
+
+    prompt_seen = []
+    monkeypatch.setattr(ai.settings, "auth_enabled", True)
+    monkeypatch.setattr(ai, "create_session", Session)
+    monkeypatch.setattr(ai, "actor_for_account", lambda *_args: actor)
+    monkeypatch.setattr(ai, "current_scope_context", lambda: SimpleNamespace(
+        hospital_id=None, department_id=None))
+    monkeypatch.setattr(ai, "scoped_contract_ids", lambda *_args: None)
+    monkeypatch.setattr(ai._ai_service, "_ensure_provider", lambda: object())
+
+    async def answer(prompt, *_args, **_kwargs):
+        prompt_seen.append(prompt)
+        return "Der letzte Vertrag ist RAV-00074."
+
+    monkeypatch.setattr(ai._ai_service, "generate_text", answer)
+    result = await ai.ai_assistant(
+        request(actor), "hospital", ai.AssistantRequest(message="Was ist der letzte verarbeitete Vertrag?"), Response()
+    )
+
+    assert result.contract_id == contract_id
+    assert "zuletzt erfolgreich verarbeiteter Vertrag" in prompt_seen[0]
+    assert "RAV-00074" in prompt_seen[0]
 
 
 def test_assistant_rechecks_fresh_membership_scope(monkeypatch):

@@ -243,15 +243,51 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
         fresh = actor_for_account(session, account, organization_slug) if account is not None and account.is_active else None
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
+        if not _ai_service.configured:
+            raise HTTPException(status_code=503, detail="Kein lokales KI-Modell ausgewählt.")
+        resolved_contract_id = payload.contract_id
+        available_contracts: list[Contract] = []
+        if resolved_contract_id is None:
+            # Resolve implicit assistant context on the server and only inside
+            # the caller's fresh organization/hospital/department scope.
+            visible = _assistant_visible_contracts(session, fresh)
+            if visible is None or visible:
+                available_stmt = select(Contract).where(
+                    Contract.organization_id == fresh.organization_id,
+                    Contract.lifecycle_state == "active",
+                    Contract.is_archived.is_(False),
+                )
+                if visible is not None:
+                    available_stmt = available_stmt.where(Contract.id.in_(visible))
+                available_contracts = session.scalars(
+                    available_stmt.order_by(Contract.updated_at.desc().nullslast(), Contract.id).limit(20)
+                ).all()
+                latest_stmt = (
+                    select(Contract.id)
+                    .join(ContractExtraction, ContractExtraction.id == Contract.accepted_extraction_id)
+                    .where(
+                        Contract.organization_id == fresh.organization_id,
+                        Contract.lifecycle_state == "active",
+                        Contract.is_archived.is_(False),
+                        Contract.accepted_extraction_id.is_not(None),
+                        ContractExtraction.organization_id == fresh.organization_id,
+                        ContractExtraction.status.in_(("success", "partial")),
+                    )
+                )
+                if visible is not None:
+                    latest_stmt = latest_stmt.where(Contract.id.in_(visible))
+                resolved_contract_id = session.scalar(
+                    latest_stmt.order_by(ContractExtraction.created_at.desc(), Contract.id).limit(1)
+                )
         context = "Keine Vertragsdaten freigegeben."
         evidence: list[AssistantEvidence] = []
         extraction_id: UUID | None = None
-        if payload.contract_id is not None:
+        if resolved_contract_id is not None:
             visible = _assistant_visible_contracts(session, fresh)
-            if visible is not None and payload.contract_id not in visible:
+            if visible is not None and resolved_contract_id not in visible:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
             contract = session.scalar(select(Contract).where(
-                Contract.id == payload.contract_id,
+                Contract.id == resolved_contract_id,
                 Contract.organization_id == fresh.organization_id,
                 Contract.lifecycle_state == "active",
                 Contract.is_archived.is_(False),
@@ -294,16 +330,27 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                        f"Status: {contract.status or 'unbekannt'}\n"
                        f"Beginn: {contract.start_date or 'unbekannt'}\n"
                        f"Ende: {contract.end_date or 'unbekannt'}")
+            if payload.contract_id is None:
+                context = "Serverseitig ausgewählter zuletzt erfolgreich verarbeiteter Vertrag.\n" + context
+                if available_contracts:
+                    context += "\nFür den Benutzer sichtbare Verträge (höchstens 20; unverifizierte Übersicht):\n"
+                    context += "\n".join(
+                        f"- Nummer: {item.contract_number or 'unbekannt'}; Lieferant: {item.supplier or 'unbekannt'}; Status: {item.status or 'unbekannt'}"
+                        for item in available_contracts
+                    )
             if evidence:
                 context += "\nQuellenauszüge (nur verlinkte, akzeptierte Extraktion; Prüfstatus beachten):\n"
                 for index, item in enumerate(evidence, start=1):
                     context += (f"[{index}] Feld {item.field_ref}, Quelle {item.source_type}, Seite {item.page or 'nicht verfügbar'}, "
                                 f"Prüfung erforderlich: {item.requires_review}; "
                                 f"Auszug: {item.source_text}\n")
+        elif payload.contract_id is None and available_contracts:
+            context = "Für den Benutzer sichtbare Verträge (unverifizierte Übersicht):\n" + "\n".join(
+                f"- Nummer: {item.contract_number or 'unbekannt'}; Lieferant: {item.supplier or 'unbekannt'}; Status: {item.status or 'unbekannt'}"
+                for item in available_contracts
+            )
     finally:
         session.close()
-    if not _ai_service.configured:
-        raise HTTPException(status_code=503, detail="Kein lokales KI-Modell ausgewählt.")
     system = ("Du bist der freundliche lokale MedFlux-Assistent. Antworte in der Sprache "
               "des Nutzers und reagiere auf Begrüßungen und allgemeine Fragen natürlich "
               "und kurz, ohne unaufgeforderte Sicherheits- oder Haftungshinweise. "
@@ -333,12 +380,12 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
         fresh = actor_for_account(session, account, organization_slug) if account is not None and account.is_active else None
         if fresh is None or fresh.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
-        if payload.contract_id is not None:
+        if resolved_contract_id is not None:
             visible = _assistant_visible_contracts(session, fresh)
-            if visible is not None and payload.contract_id not in visible:
+            if visible is not None and resolved_contract_id not in visible:
                 raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
             contract_still_exists = session.scalar(select(Contract.id).where(
-                Contract.id == payload.contract_id,
+                Contract.id == resolved_contract_id,
                 Contract.organization_id == fresh.organization_id,
                 Contract.lifecycle_state == "active",
                 Contract.is_archived.is_(False),
@@ -367,10 +414,10 @@ async def ai_assistant(request: Request, organization_slug: str, payload: Assist
                     raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
                 still_linked = set(session.scalars(select(ContractDocument.document_version_id).where(
                     ContractDocument.organization_id == fresh.organization_id,
-                    ContractDocument.contract_id == payload.contract_id,
+                    ContractDocument.contract_id == resolved_contract_id,
                 )).all())
                 if any(item.document_version_id not in still_linked for item in evidence):
                     raise HTTPException(status_code=404, detail="Ressource nicht gefunden.")
     finally:
         session.close()
-    return AssistantResponse(answer=answer, contract_id=payload.contract_id, evidence=evidence)
+    return AssistantResponse(answer=answer, contract_id=resolved_contract_id, evidence=evidence)

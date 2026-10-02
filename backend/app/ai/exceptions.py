@@ -32,21 +32,47 @@ class AITimeoutError(AIProviderError):
     """Anfrage hat das konfigurierte Zeitlimit überschritten."""
 
     def __init__(self) -> None:
+        self.category = "timeout"
         super().__init__("Die lokale KI hat nicht rechtzeitig geantwortet (Zeitüberschreitung).")
 
 
 class AIHTTPError(AIProviderError):
-    """Ollama hat mit einem HTTP-Fehler geantwortet."""
+    """Ollama hat mit einem HTTP-Fehler geantwortet.
 
-    def __init__(self, status_code: int) -> None:
+    `category` ist eine streng begrenzte, inhaltsfreie Fehlerklasse (z. B.
+    `invalid_schema`), damit ein HTTP-Fehler in Diagnose und Oberfläche nicht als
+    undurchsichtiges `AIHTTPError` endet. Der rohe Antworttext wird bewusst
+    nicht übernommen, weil er angeforderte Inhalte enthalten kann.
+    """
+
+    MESSAGES = {
+        "invalid_schema": (
+            "Die lokale KI hat die strukturierte Ausgabe-Anweisung abgelehnt."
+        ),
+        "insufficient_memory": (
+            "Das KI-Modell benötigt mehr Arbeitsspeicher als verfügbar."
+        ),
+        "model_runner_stopped": (
+            "Das KI-Modell wurde beim Ausführen unerwartet beendet "
+            "(Speicher- oder Laufzeitproblem)."
+        ),
+    }
+
+    def __init__(self, status_code: int, category: str | None = None) -> None:
         self.status_code = status_code
-        super().__init__("Die lokale KI hat einen Fehler zurückgegeben.")
+        self.category = category
+        super().__init__(
+            self.MESSAGES.get(
+                category or "", "Die lokale KI hat einen Fehler zurückgegeben."
+            )
+        )
 
 
 class AIMalformedResponseError(AIProviderError):
     """Die Antwort von Ollama war kein gültiges JSON-Format."""
 
     def __init__(self) -> None:
+        self.category = "malformed_response"
         super().__init__("Die lokale KI hat eine ungültige Antwort geliefert.")
 
 
@@ -54,4 +80,5 @@ class AIEmptyResponseError(AIProviderError):
     """Die Antwort von Ollama enthielt keinen Text."""
 
     def __init__(self) -> None:
+        self.category = "empty_response"
         super().__init__("Die lokale KI hat keine Antwort geliefert.")

@@ -2,17 +2,47 @@
 
 Ollamas /api/chat erwartet als `format` ein EIGENSTÄNDIGES (selbstenthaltenes)
 JSON-Schema ohne `$ref`/`$defs`-Verweise (empirisch geprüft, STEP 8B). Dieses
-Modul leitet ein solches Schema determiniert aus dem bestehenden Pydantic-
+Modul leitet ein solches Schema deterministisch aus dem bestehenden Pydantic-
 Modell `Contract` ab – es wird KEIN zweites, manuell gepflegtes Schema gepflegt.
+
+Zusätzlich normalisiert `normalize_constrained_schema` beliebige Pydantic-
+Schemas für die grammatikbasierte Decodierung: Ollama lehnt jedes Teilschema ab,
+das ausschließlich Annotationsschlüssel (`title`, `default`, `description`)
+enthält und keinen strukturellen Typ trägt. Pydantic rendert genau so ein Feld
+vom Typ `Any` (z. B. `{"title": "Value"}`), was ohne Normalisierung mit HTTP 500
+`invalid JSON schema in format` endet. Die Validierungssemantik bleibt dabei
+unverändert: das permissive Blatt wird nur ergänzt, die Pydantic-Prüfung des
+Antwortmodells entscheidet weiterhin über Annahme oder Ablehnung.
 """
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from pydantic import BaseModel
 
 from app.models.contract import Contract
+
+_STRUCTURAL_KEYWORDS = frozenset(
+    {
+        "$ref",
+        "additionalProperties",
+        "allOf",
+        "anyOf",
+        "const",
+        "enum",
+        "items",
+        "oneOf",
+        "prefixItems",
+        "properties",
+        "required",
+        "type",
+    }
+)
+
+# Erlaubt jeden skalaren JSON-Wert; die fachliche Prüfung bleibt beim Antwortmodell.
+_PERMISSIVE_LEAF: dict[str, Any] = {"type": ["string", "number", "boolean", "null"]}
 
 
 def _deref(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
@@ -45,6 +75,48 @@ def pydantic_json_schema(model: type[BaseModel]) -> dict[str, Any]:
     defs: dict[str, Any] = dict(raw.get("$defs", {}))
     schema = {k: v for k, v in raw.items() if k not in ("$defs", "definitions")}
     return _deref(schema, defs)
+
+
+def _constrain(node: Any) -> Any:
+    """Sorgt rekursiv dafür, dass jedes Teilschema einen Typ trägt.
+
+    Nur Teilschemas *innerhalb* von `properties`/`items`/`anyOf`/... werden
+    bearbeitet; die Wurzel und verschachtelte `properties`-Container bleiben
+    unangetastet.
+    """
+    if isinstance(node, list):
+        return [_constrain(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+
+    for container in ("properties", "$defs", "definitions"):
+        block = node.get(container)
+        if isinstance(block, dict):
+            for name, sub in block.items():
+                block[name] = _constrain(sub)
+    for key in ("items", "additionalProperties", "contains"):
+        if isinstance(node.get(key), dict):
+            node[key] = _constrain(node[key])
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        if isinstance(node.get(key), list):
+            node[key] = _constrain(node[key])
+
+    if not (_STRUCTURAL_KEYWORDS & set(node)):
+        node.update(copy.deepcopy(_PERMISSIVE_LEAF))
+    return node
+
+
+def normalize_constrained_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Macht ein Pydantic-Schema für Ollamas `format`-Decoder nutzbar.
+
+    Ollama lehnt jedes Teilschema ab, das nur Annotationsschlüssel trägt und
+    keinen strukturellen Typ (z. B. das von Pydantic für `Any` erzeugte
+    `{"title": "Value"}`) mit HTTP 500 `invalid JSON schema in format` ab.
+    Solche Blätter erhalten ein permissives Typ-Union; alle übrigen Schlüssel –
+    auch `title`, `default`, `enum`, `maxLength` – bleiben unverändert erhalten.
+    Das Eingabedict wird nicht verändert.
+    """
+    return _constrain(copy.deepcopy(schema))
 
 
 def contract_json_schema() -> dict[str, Any]:
