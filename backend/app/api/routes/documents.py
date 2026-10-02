@@ -339,11 +339,9 @@ def document_source_region(
             if assigned is None or not linked or assigned.isdisjoint(linked):
                 raise _not_found()
 
-        doc_file = session.get(DocumentFile, version.document_file_id) if version.document_file_id is not None else None
-        ext = (doc_file.file_extension or "").lower() if doc_file else ""
-        if ext != "pdf":
-            raise HTTPException(status_code=415, detail="Quell-Geometrie nur für PDF verfügbar.")
-
+        # Stored extension metadata may be absent on genuine imported PDFs.
+        # Resolve only after the existing organization/ownership checks, then
+        # validate the actual content rather than trusting filename or MIME.
         svc = DocumentPersistenceService()
         try:
             content = svc.resolve_bytes_for_version(
@@ -353,6 +351,8 @@ def document_source_region(
             )
         except StorageError:
             raise _not_found()
+        if not content.startswith(b"%PDF-"):
+            raise HTTPException(status_code=415, detail="Quell-Geometrie nur für PDF verfügbar.")
         canonical = svc.resolve_canonical_for_version(
             session,
             organization_id=org.id,
