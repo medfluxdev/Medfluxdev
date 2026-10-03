@@ -11,8 +11,20 @@ export interface DocumentProcessResult {
   contract_id: string | null;
 }
 
-export function importDocuments(files: File[], organizationSlug: string) {
-  return apiUpload<ImportBatchResponse>("/api/documents/import", files, organizationSlug);
+export interface ImportAssignment {
+  hospital_id?: string;
+  responsible_department_id?: string;
+  beneficiary_department_ids?: string[];
+  cost_center_id?: string;
+}
+
+export function importDocuments(files: File[], organizationSlug: string, assignment?: ImportAssignment) {
+  return apiUpload<ImportBatchResponse>("/api/documents/import", files, organizationSlug, undefined, {
+    assignment_hospital_id: assignment?.hospital_id,
+    responsible_department_id: assignment?.responsible_department_id,
+    beneficiary_department_ids: assignment?.beneficiary_department_ids,
+    cost_center_id: assignment?.cost_center_id,
+  });
 }
 
 export function retryDocument(documentVersionId: string, organizationSlug: string) {

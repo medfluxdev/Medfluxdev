@@ -7,15 +7,24 @@ import type { ImportBatchResponse } from "@/lib/types";
 
 const apiUploadMock = vi.fn();
 const apiPostMock = vi.fn();
+const apiGetMock = vi.fn();
 vi.mock("@/lib/api", () => ({
   apiUpload: (...args: unknown[]) => apiUploadMock(...args),
   apiPost: (...args: unknown[]) => apiPostMock(...args),
+  apiGet: (...args: unknown[]) => apiGetMock(...args),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
   apiUploadMock.mockReset();
   apiPostMock.mockReset();
+  apiGetMock.mockReset();
+  apiGetMock.mockImplementation((path: string) => path.startsWith("/api/organization-structure")
+    ? Promise.resolve({ hospitals: [{ id: "hospital-1", name: "Klinikum Mitte", code: "KM", is_active: true }], departments: [
+      { id: "dept-resp", hospital_id: "hospital-1", parent_id: null, name: "Radiologie", code: "RAD", is_active: true },
+      { id: "dept-use", hospital_id: "hospital-1", parent_id: null, name: "Neurochirurgie", code: "NC", is_active: true },
+    ] })
+    : Promise.resolve({ items: [{ id: "center-1", hospital_id: "hospital-1", department_id: "dept-resp", code: "RAD-1", name: "Radiologie", is_active: true }] }));
 });
 
 async function selectedFile(name = "wartung.pdf", type = "application/pdf"): Promise<File> {
@@ -68,6 +77,26 @@ describe("Import (FE-08)", () => {
     expect(screen.getByText("Erfolgreich")).toBeInTheDocument();
     expect(screen.getByText("Fehlgeschlagen")).toBeInTheDocument();
     expect(screen.getByText("Dokumentanalyse konnte nicht abgeschlossen werden.")).toBeInTheDocument();
+  });
+
+  it("sendet die gewählte Vertragszuordnung gemeinsam mit dem Upload", async () => {
+    apiUploadMock.mockResolvedValue({ total: 1, successful: 1, failed: 0, duplicates: 0, documents: [] });
+    const utils = render(<ImportPage />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Krankenhaus für Import" })).toHaveValue("hospital-1"));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Verantwortlicher Bereich für Import" }), "dept-resp");
+    await userEvent.selectOptions(screen.getByRole("listbox", { name: "Nutzende Bereiche für Import" }), "dept-use");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Kostenstelle für Import" }), "center-1");
+    const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = await selectedFile();
+    await userEvent.upload(input, file);
+    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await waitFor(() => expect(apiUploadMock).toHaveBeenCalled());
+    expect(apiUploadMock).toHaveBeenCalledWith("/api/documents/import", [file], "test-klinik", undefined, {
+      assignment_hospital_id: "hospital-1",
+      responsible_department_id: "dept-resp",
+      beneficiary_department_ids: ["dept-use"],
+      cost_center_id: "center-1",
+    });
   });
 
   it("zeigt Teilanalyse ehrlich und verlinkt direkt auf die manuelle Prüfung", async () => {

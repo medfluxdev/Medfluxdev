@@ -171,14 +171,6 @@ def update_contract_ownership(contract_id: UUID, payload: ContractOwnershipUpdat
         if contract is None or contract.organization_id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
         _ensure_contract_visible(session, actor, contract)
-        # The legacy endpoint replaces every link. Once roles are classified,
-        # fail closed instead of silently destroying explicit responsibility.
-        if session.scalar(select(ContractDepartment.id).where(
-            ContractDepartment.contract_id == contract.id,
-            ContractDepartment.organization_id == actor.organization_id,
-            ContractDepartment.relation_role.is_not(None),
-        ).limit(1)) is not None:
-            raise HTTPException(status_code=409, detail="Explizite Abteilungsrollen vorhanden; Rollen zuerst gesondert verwalten.")
         _validate_responsible(session, actor.organization_id, payload.responsible_account_id)
         before = {
             "hospital_id": str(contract.hospital_id) if contract.hospital_id else None,

@@ -4805,3 +4805,280 @@ Offen:
   konkrete nächste Modell-/Schemaursache bleibt offen.
 - Gezielte Tests: **12 passed**. Der frühere breite Fokuslauf blieb bei 68 % hängen;
   kein vollständiger Backend-Lauf wurde bestätigt.
+
+## 2026-10-03 – Produktreferenz und Organisationsstruktur in der Oberfläche
+
+Status: Phase 1 der Oberfläche umgesetzt; weitere Produktphasen offen
+
+Ergebnisse:
+- `docs/MEDFLUX_PRODUCT_BUILD_PLAN.md` bündelt die Anforderungen an Verträge,
+  Organisation, Prüfung, Kosten, Fristen, Geräte, Suche und Assistent als deutsche
+  Produktreferenz. Die Anforderungen sind dort ausdrücklich von bereits gelieferten
+  Funktionen getrennt. Es wurden keine hebräischen UI-Texte ergänzt.
+- Die Organisationsansicht zeigt Abteilungen und Einheiten als verschachtelten Baum.
+  Einheiten können beim Anlegen einem Krankenhaus und optional einer übergeordneten
+  Einheit zugeordnet werden. Vorhandene Einheiten lassen sich umhängen; die Auswahl
+  schließt sich selbst und eigene Nachfahren aus. Die Backend-Prüfungen bleiben die
+  maßgebliche Grenze für Krankenhauszugehörigkeit und Zyklen.
+- Organisationspfade werden in der Baumansicht und in Kostenstellen-Auswahlen
+  angezeigt. Bereichsbezogene Kostenstellen erscheinen an der Einheit, klinikweite
+  Kostenstellen separat.
+- Die vorhandenen Backend-Routen für Vertragsrollen (verantwortlicher und nutzende
+  Bereiche) werden im Frontend noch nicht verwendet. Ihre Darstellung und Auswahl im
+  Import-/Contract360-Ablauf ist der nächste UI-Schritt.
+
+Dateien:
+- `docs/MEDFLUX_PRODUCT_BUILD_PLAN.md`
+- `frontend/lib/organization-tree.ts`
+- `frontend/lib/domain-api/organizations.ts`
+- `frontend/components/settings/OrganizationStructureManager.tsx`
+- `frontend/app/organization.css`
+- `frontend/test/organization-tree.test.ts`
+- `frontend/test/organization-structure-manager.test.tsx`
+
+Validierung:
+- Vollständiger Frontend-Testlauf: **165 passed** in 33 Testdateien; bestehende
+  React-`act(...)`-Warnungen erschienen in mehreren UI-Tests.
+- TypeScript-Prüfung mit `tsc --noEmit`: erfolgreich.
+- Lokale Organisationsseite auf Port 3011: HTTP 200; ein vollständiger visueller
+  Browservergleich wurde in diesem Schritt nicht bestätigt.
+- Keine Backend-Datenbank, kein Backend-Service und keine echten Vertragsdateien
+  wurden für diese UI-Änderung verwendet.
+
+Offen:
+- Vertragszuordnung für Krankenhaus, verantwortlichen Bereich, nutzende Bereiche und
+  Kostenstelle in Import und Contract360 integrieren.
+- Anwenderpfad anschließend mit den vorhandenen Rollen und Berechtigungen prüfen.
+- Das bestehende Arbeitsverzeichnis enthält weitere nicht zu diesem Schritt gehörende
+  lokale Artefakte; sie wurden nicht verändert oder aufgenommen.
+
+## 2026-10-03 – Vertragsrollen in Contract360
+
+Status: Zuordnung in Contract360 umgesetzt; Laufzeitprüfung gegen Testdatenbank offen
+
+Ergebnisse:
+- Contract360 lädt und zeigt Krankenhaus, verantwortlichen Bereich, nutzende Bereiche,
+  Kostenstelle und verantwortliche Person. Bereichsauswahlen enthalten den vollständigen
+  Organisationspfad; historische Verknüpfungen ohne dokumentierte Rolle werden als
+  ungeklärt ausgewiesen und nicht automatisch klassifiziert.
+- Die Rollen werden über die vorhandenen `department-roles`-Routen verwaltet. Der
+  Krankenhauswechsel ist gesperrt, solange explizite Bereichsrollen bestehen, weil die
+  Rollen-API sie an das Vertragskrankenhaus bindet.
+- Metadatenänderungen dürfen bereits klassifizierte Abteilungsbeziehungen nicht
+  überschreiben. Der Ownership-Service erlaubt solche Änderungen nur bei unveränderter
+  Abteilungsmenge und unverändertem Krankenhaus; veränderte Rollen müssen über den
+  dedizierten Rollenendpunkt laufen.
+- Deutsche Frontend-Regression prüft vollständige Pfade, Rollenanzeige und Speichern.
+  Backend-Regressionen decken den Erhalt beziehungsweise die Ablehnung veränderter
+  klassifizierter Beziehungen ab.
+
+Dateien:
+- `frontend/components/contracts/detail/ContractOwnershipPanel.tsx`
+- `frontend/lib/domain-api/ownership.ts`
+- `frontend/test/contract-ownership-roles.test.tsx`
+- `frontend/app/ownership.css`
+- `backend/app/api/routes/ownership.py`
+- `backend/app/ownership/service.py`
+- `backend/tests/test_contract_department_roles_a2.py`
+
+Validierung:
+- TypeScript-Prüfung: erfolgreich.
+- Zugehörige Contract360-Frontendtests: **11 passed**; neuer Rollen-Paneltest darin
+  enthalten. React-`act(...)`-Warnungen und eine jsdom-Canvas-Warnung aus vorhandenen
+  Komponenten erschienen im Lauf.
+- Backend-Pytest konnte nicht ausgeführt werden: die aktive Python-Installation enthält
+  `pytest` nicht (`No module named pytest`). Es wurden keine Tests oder Services mit
+  Datenbankverbindung gestartet.
+
+Zum damaligen Abschluss offen:
+- Backend-Regressionen in der vorgesehenen Projektumgebung ausführen.
+- Browserablauf gegen isolierte UAT-Datenbank prüfen, einschließlich unzulässiger
+  krankenhausübergreifender Zuordnung.
+
+### UAT-Nachtrag: Contract360-Zuordnung und Testumgebung
+
+- Backend-Regression `tests/test_contract_department_roles_a2.py`: **7 passed** im
+  isolierten, temporären Testschema der freigegebenen Trial-Datenbank; der Testlauf
+  beendete sich regulär, sodass das Testschema wieder entfernt wurde. Zusätzlich
+  erfolgreich im `MEDFLUX_UNIT_ONLY`-Modus ohne Datenbankverbindung.
+- Backend 8012 und Frontend 3011 wurden aus diesem Checkout für den UAT-Lauf gestartet.
+  Der API-Login-Preflight wurde zunächst durch die lokal fehlende CORS-Freigabe für
+  `127.0.0.1:3011` abgewiesen. Mit einer ausschließlich prozesslokalen CORS-Einstellung
+  antwortete er erfolgreich; kein CORS-Wert wurde in Projektdateien gespeichert.
+- UAT-Login und Contract360-Ansicht funktionierten. Die Vertragsliste enthielt unter
+  anderem OPTIS/RAV-00074 und SERVICEVERTRAG RADIOSURGERY; der Radiosurgery-Datensatz
+  zeigte EUR 52.500 jährliche Kosten.
+- Ein erfolgreicher Rollen-Speichervorgang und ein echter organisationsübergreifender
+  Negativtest waren nicht möglich: `/api/organization-structure` und die sichtbare
+  Einstellungsseite meldeten **0 Krankenhäuser, 0 Einheiten, 0 Kostenstellen**. Ohne
+  Teststruktur würde ein Save entweder unmöglich sein oder Änderungen an echten
+  Vertragsdaten erfordern. Es wurden deshalb keine Vertrags- oder Organisationsdaten
+  in UAT angelegt oder geändert.
+- Beim ersten UAT-Versuch zeigte der Browser veraltete Next.js-Chunkfehler; nach Start
+  des aktuellen Frontend-Devservers renderten Anmeldung, Vertragsliste, Radiosurgery-
+  Detail und Organisationsseite. Der Login-Fehler vor der CORS-Korrektur ist behoben.
+
+Nächster Schritt:
+- Eine ausdrücklich als synthetisch markierte Krankenhaus-/Einheitenstruktur in der
+  isolierten Testdatenbank über eine rücksetzbare Fixture bereitstellen und damit den
+  positiven Rollen-Save sowie die Ablehnung eines Bereichs aus einem anderen
+  Krankenhaus automatisiert gegen die API prüfen. Für die aktuelle UAT-Datenbank keine
+  Organisationsdaten ohne bestätigten Bereinigungsweg erzeugen.
+
+### Synthetischer API-Integrationstest für Vertragsrollen
+
+- Ergänzt wurde `tests/test_contract_department_roles_api.py`. Der Test legt nur im
+  pro Testlauf neu angelegten PostgreSQL-Testschema eine synthetische Organisation,
+  zwei Krankenhäuser, drei Bereiche, eine Kostenstelle, ein Testkonto und einen Vertrag
+  an.
+- Über die echten FastAPI-Routen prüft er erfolgreiches Rollen-Speichern und erneutes
+  Lesen, HTTP 422 für einen nutzenden Bereich aus dem zweiten Krankenhaus sowie das
+  Beibehalten beider Rollen beim Ändern von Kostenstelle und verantwortlicher Person.
+- Der kombinierte Backend-Lauf mit Rollen-API- und Modell-/Service-Regressionen endete
+  mit **8 passed**. Der pytest-Isolator entfernt das temporäre Testschema am Sessionende;
+  UAT-`public`-Daten wurden nicht geändert.
+- Zugehörige Frontend-Regressionen endeten mit **11 passed**; TypeScript-Prüfung war
+  erfolgreich. Vorhandene React-`act(...)`- und jsdom-Canvas-Warnungen bleiben sichtbar.
+- Die manuelle UI-Speicherprüfung in der echten UAT-Organisation bleibt mangels
+  Krankenhäusern/Einheiten dort offen. API-Verhalten und Frontend-Verhalten sind aber
+  jetzt separat durch isolierte Integrationstests und UI-Tests abgedeckt.
+
+Nächster Schritt:
+- Eine Betreiber-Teststruktur für die manuelle Importzuordnung in der isolierten UAT
+  bereitstellen; danach Upload und Contract360-Zuordnung mit mehreren Dateien prüfen.
+
+### Vertragszuordnung direkt beim Import
+
+Status: ABGESCHLOSSEN (Implementierung und isolierte Regressionen)
+Datum: 2026-10-03
+
+- Die Importseite bietet Administratoren und Vertragsmanagern nun Auswahlfelder für
+  Krankenhaus, verantwortlichen Bereich, nutzende Bereiche und Kostenstelle.
+- Die Werte werden zusammen mit den Dateien als Multipart-Felder gesendet. Der Import-
+  Endpunkt validiert vor der Verarbeitung aktive und organisations-/krankenhausgleiche
+  Zuordnungen sowie Rollen- und Kostenstellenkonsistenz. Vertragsmanager bleiben auf
+  ihren vorhandenen Krankenhaus-/Abteilungsbereich beschränkt.
+- Neue Verträge erhalten die explizite Zuordnung; Duplikate werden nicht umgehängt.
+  Analysefehler nach erfolgreicher Persistierung erhalten dieselbe Zuordnung, damit
+  spätere manuelle Prüfung nicht den organisatorischen Bezug verliert. Ohne explizite
+  Auswahl bleibt die bestehende Zuordnung aus dem aktuellen Arbeitsbereich bestehen.
+- Ergänzt wurden API-Weiterleitungs- und UI-Regressionen für den gemeinsamen Upload
+  samt Organisationsauswahl.
+
+Dateien:
+- `backend/app/api/routes/documents.py`
+- `backend/tests/test_document_import.py`
+- `frontend/app/import/page.tsx`
+- `frontend/app/globals.css`
+- `frontend/lib/api.ts`
+- `frontend/lib/domain-api/documents.ts`
+- `frontend/test/import.test.tsx`
+
+Validierung:
+- Backend `tests/test_document_import.py`: **14 passed** im `MEDFLUX_UNIT_ONLY`-Modus;
+  keine Trial-Datenbankverbindung.
+- Frontend `test/import.test.tsx`: **9 passed**; bestehende React-`act(...)`-Warnungen
+  aus asynchronen Seitenzustandsaktualisierungen bleiben sichtbar.
+- TypeScript `tsc --noEmit`: erfolgreich.
+- `git diff --check`: erfolgreich; Git meldete lediglich bestehende CRLF-Hinweise für
+  andere bereits geänderte Dateien.
+
+Grenze:
+- Noch nicht manuell gegen UAT geprüft, da die dortige Organisationsstruktur leer ist.
+- Die UAT-Organisation bleibt unverändert; der Integrationstest wurde ausschließlich im
+  vom pytest-Setup angelegten temporären Schema der freigegebenen Trial-DB ausgeführt.
+
+### DB-Integrationstest für Vertragszuordnung beim Import
+
+Status: ABGESCHLOSSEN (isolierter API-/Persistenztest)
+Datum: 2026-10-03
+
+- `tests/test_document_import_assignment_api.py` richtet im pytest-Testschema eine
+  synthetische Organisation mit zwei Krankenhäusern, verantwortlichem und nutzendem
+  Bereich, fremdem Bereich, Kostenstelle und Vertrag ein.
+- Der echte Import-Router speichert die Zuordnung: Krankenhaus, Kostenstelle,
+  `scope_type=department` sowie die beiden `contract_department`-Rollen werden direkt
+  aus der Datenbank zurückgelesen und geprüft.
+- Ein anschließender Importversuch mit einem Bereich des zweiten Krankenhauses wird mit
+  HTTP 422 abgelehnt, bevor der Processing-Stub aufgerufen wird. Der zuvor gespeicherte
+  Vertrag und seine Rollen bleiben unverändert.
+- Zusammen mit `tests/test_document_import.py` liefen beide Dateien gegen die
+  `sr415_flow`-Trial-Verbindung, aber ausschließlich im pytest-isolierten Schema:
+  **15 passed**. Der Session-Abbau entfernt dieses temporäre Schema; das UAT-`public`
+  wurde durch den Test nicht adressiert.
+
+Dateien:
+- `backend/tests/test_document_import_assignment_api.py`
+- `docs/PROJECT_PROGRESS.md`
+
+Nächster Schritt:
+- Keine weiteren Implementierungsarbeiten aus diesem Testschritt offen. Für UAT ist noch
+  eine vom Betreiber bereitgestellte Krankenhausstruktur erforderlich. Die in
+  `MEDFLUX_MASTER_HANDOVER.md` beschriebenen Storage-/Duplikatrisiken bleiben ein eigener,
+  noch nicht bearbeiteter Arbeitsstrang.
+
+### Gesamtregression nach den aktuellen technischen Änderungen
+
+Status: BESTANDENE AUTOMATISIERTE REGRESSION; RUNTIME-UAT NICHT ERSETZT
+Datum: 2026-10-03
+
+- Backend-Gesamtsuite im vorgesehenen Testmodus (`APP_ENV=test`, unauthentifizierter
+  Test-Opt-in) und gegen das vom pytest-isolator erzeugte Schema der freigegebenen
+  Trial-Verbindung: **1346 passed, 3 skipped**. Die drei opt-in Drift-/Migrationstests
+  wurden ohne ausdrücklich bereitgestellte disposable DB übersprungen. Das Testschema
+  wird nach dem Lauf von `conftest.py` entfernt.
+- Der erste Gesamtlauf machte sichtbar, dass zwei Regressionstestgruppen ihre
+  Authentifizierungsannahmen aus der lokalen Prozessumgebung erbten. Deren Fixtures sind
+  nun isoliert: Contract-Org-Sicherheitschecks laufen explizit ohne den unsicheren
+  Entwicklungs-Bypass; Runtime-Konfigurationstests setzen ihren eigenen sicheren
+  Ausgangszustand. Danach lief die komplette Backend-Suite erfolgreich.
+- Frontend: `npm run lint` erfolgreich mit fünf bestehenden React-Hook-Warnungen;
+  Vitest **34 Dateien / 167 Tests bestanden**; `npm run build` erfolgreich, inklusive
+  Typprüfung und statischer Seitenerstellung.
+- Der zusammengefasste `npm run verify` wurde zunächst im Sandbox-Modus durch verweigerten
+  Zugriff von esbuild auf den pnpm-gelinkten Paketpfad unterbrochen. Die Teilkommandos
+  wurden separat validiert; die Testausführung bestand nach genehmigtem Lauf außerhalb
+  der Sandbox. Der Build meldete Cache-Snapshot-Warnungen, wurde aber erfolgreich beendet.
+- `git diff --check` erfolgreich; nur CRLF-Hinweise zu bereits geänderten Dateien.
+
+Dateien dieses Verifikationsschritts:
+- `backend/tests/test_contract_delete_guard.py`
+- `backend/tests/test_security_runtime_config.py`
+- `docs/PROJECT_PROGRESS.md`
+
+Offen:
+- Diese Resultate belegen Tests und Produktionsbuild, aber keinen neuen Browser-/Pilotlauf
+  mit echten Verträgen. Die bekannte fehlende UAT-Organisationsstruktur, OPTIS-Duplikat-
+  und Storage-Drift-Befunde aus dem Master-Handover bleiben ungelöst.
+
+### Wiedereinstieg nach MEDFLUX_MASTER_HANDOVER
+
+Status: DOKUMENTATION GELESEN; KEINE WEITEREN CODEÄNDERUNGEN IN DIESEM SCHRITT
+Datum: 2026-10-03
+
+- `MEDFLUX_MASTER_HANDOVER.md` wurde vollständig gelesen (40 Abschnitte). Es beschreibt
+  die Architektur, die lokale Pilot-/Datenbanktopologie, die Dokument- und Evidence-Pipeline,
+  Rollen/Sicherheit, Tests sowie die konkreten Radiosurgery- und OPTIS-Befunde.
+- Der dokumentierte Stand ist die Baseline `c900b07` auf
+  `fix/frankfurt-contract-analysis-20261001`; dieser HEAD wurde beim Wiedereinstieg erneut
+  verifiziert. Die Hand-over-Aufnahme entstand vor den hier vorhandenen späteren
+  Working-Tree-Änderungen und ist daher keine vollständige Beschreibung des aktuellen Diffs.
+- Zentrale Lernpunkte für die Fortsetzung: der Produktwert hängt an belegten Fakten
+  (Quelle/Seite/Confidence) und deterministischer Berechnung; importiert ist nicht gleich
+  erfolgreich analysiert; OCR-Fallback, Fehlerdiagnostik, Storage↔DB-Drift und Duplikate
+  müssen als getrennte Fehlerklassen behandelt werden; Assistant-Berechtigungen müssen vor
+  und nach dem Modellaufruf fail-closed geprüft werden.
+- Die Hand-over-Prioritäten für spätere Arbeit sind Storage-/Datenbank-Abgleich und
+  Duplikatlebenszyklus bei OPTIS, danach die irreführende Umgebungs-/Modellinventur und der
+  npm/pnpm-Konflikt. Diese Risiken erfordern vor operativen Korrekturen eine explizite,
+  isolierte Verifikations- und Rücksetzstrategie; in diesem Schritt wurde daran nichts
+  ausgeführt.
+- Verifizierter Wiedereinstiegszustand: HEAD `c900b07ffcdd057ff987125a4d0d5ae5e1e9e137`;
+  Branch `fix/frankfurt-contract-analysis-20261001`. Die bestehenden Änderungen zu
+  Organisationsstruktur/Vertragsrollen und Importzuordnung sowie ungetrackte Dateien bleiben
+  unangetastet; nichts wurde gestaged oder committet.
+
+Nächster Schritt:
+- Vor weiteren Änderungen den konkreten Arbeitsauftrag anhand der Hand-over-Prioritäten
+  festlegen. Für die soeben ergänzte Importzuordnung steht noch ein echter, isolierter
+  DB-Integrationstest der Persistierung und Ablehnung krankenhausübergreifender IDs aus.

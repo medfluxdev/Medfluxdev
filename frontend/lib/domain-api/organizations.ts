@@ -11,6 +11,7 @@ export interface HospitalDto {
 export interface DepartmentDto {
   id: string;
   hospital_id: string;
+  parent_id?: string | null;
   name: string;
   code: string;
   is_active: boolean;
@@ -52,14 +53,14 @@ export function updateHospital(organizationSlug: string, hospitalId: string, pay
   );
 }
 
-export function createDepartment(organizationSlug: string, payload: { hospital_id: string; name: string; code: string }) {
+export function createDepartment(organizationSlug: string, payload: { hospital_id: string; parent_id?: string | null; name: string; code: string }) {
   return apiPost<Pick<DepartmentDto, "id" | "hospital_id" | "name" | "code">>(
     `/api/organization-structure/departments?${orgQuery(organizationSlug)}`,
     payload,
   );
 }
 
-export function updateDepartment(organizationSlug: string, departmentId: string, payload: Partial<Pick<DepartmentDto, "name" | "code" | "is_active">>) {
+export function updateDepartment(organizationSlug: string, departmentId: string, payload: Partial<Pick<DepartmentDto, "parent_id" | "name" | "code" | "is_active">>) {
   return apiPatch<DepartmentDto>(
     `/api/organization-structure/departments/${encodeURIComponent(departmentId)}?${orgQuery(organizationSlug)}`,
     payload,

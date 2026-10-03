@@ -13,6 +13,21 @@ class OwnershipError(ValueError):
     pass
 
 
+def validate_classified_department_links(
+    links: list[ContractDepartment],
+    department_ids: list[UUID],
+    hospital_id: UUID | None,
+    current_hospital_id: UUID | None,
+) -> bool:
+    classified = any(link.relation_role is not None for link in links)
+    if classified and (
+        set(department_ids) != {link.department_id for link in links}
+        or hospital_id != current_hospital_id
+    ):
+        raise OwnershipError("Explizite Abteilungsrollen bitte im Bereich Organisationszuordnung verwalten.")
+    return classified
+
+
 def _hospital(session: Session, organization_id: UUID, hospital_id: UUID | None):
     if hospital_id is None:
         return None
@@ -56,12 +71,13 @@ def assign_contract_ownership(
     # Serialize against the role-specific PUT endpoint, including non-HTTP callers.
     # A pre-check in the API alone would race with a concurrent role assignment.
     session.refresh(contract, with_for_update=True)
-    if session.scalar(select(ContractDepartment.id).where(
+    existing_links = session.scalars(select(ContractDepartment).where(
         ContractDepartment.organization_id == contract.organization_id,
         ContractDepartment.contract_id == contract.id,
-        ContractDepartment.relation_role.is_not(None),
-    ).limit(1)) is not None:
-        raise OwnershipError("Explizite Abteilungsrollen vorhanden; alte Zuordnung darf diese nicht überschreiben.")
+    )).all()
+    classified = validate_classified_department_links(
+        existing_links, department_ids, hospital_id, contract.hospital_id,
+    )
     hospital = _hospital(session, contract.organization_id, hospital_id)
     departments = _departments(session, contract.organization_id, hospital_id, department_ids)
     cost_center = _cost_center(session, contract.organization_id, hospital_id, cost_center_id)
@@ -75,13 +91,14 @@ def assign_contract_ownership(
     else:
         contract.scope_type = "organization"
 
-    session.execute(delete(ContractDepartment).where(ContractDepartment.contract_id == contract.id))
-    for department in departments:
-        session.add(ContractDepartment(
-            organization_id=contract.organization_id,
-            contract_id=contract.id,
-            department_id=department.id,
-        ))
+    if not classified:
+        session.execute(delete(ContractDepartment).where(ContractDepartment.contract_id == contract.id))
+        for department in departments:
+            session.add(ContractDepartment(
+                organization_id=contract.organization_id,
+                contract_id=contract.id,
+                department_id=department.id,
+            ))
     session.flush()
     return contract
 

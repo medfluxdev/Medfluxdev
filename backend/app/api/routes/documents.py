@@ -8,10 +8,11 @@ would form a second production processing architecture.
 
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Request
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
+from app.auth.dependencies import current_actor
 
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
@@ -19,11 +20,13 @@ from app.database.models import (
     Contract,
     AccountMembership,
     ContractDocument,
+    ContractDepartment,
     Department,
     DocumentFile,
     DocumentVersion,
     Hospital,
 )
+from app.database.models.organization_structure import CostCenter
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -162,12 +165,62 @@ def _validate_import_scope(organization_slug: str) -> None:
                 )
 
 
-def _assign_import_scope(organization_slug: str, contract_id: str | None, status: str) -> None:
-    """Persist the current hospital/department scope on newly imported contracts."""
-    if not contract_id or status != "imported":
+def _import_assignment_ids(assignment_hospital_id, responsible_department_id, beneficiary_department_ids, cost_center_id):
+    explicit = any((assignment_hospital_id, responsible_department_id, beneficiary_department_ids, cost_center_id))
+    if not explicit:
+        return None
+    try:
+        hospital_id = UUID(assignment_hospital_id) if assignment_hospital_id else None
+        responsible_id = UUID(responsible_department_id) if responsible_department_id else None
+        beneficiary_ids = [UUID(value) for value in beneficiary_department_ids]
+        center_id = UUID(cost_center_id) if cost_center_id else None
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="Ungültige Organisationszuordnung.") from exc
+    if hospital_id is None:
+        raise HTTPException(status_code=422, detail="Für die Zuordnung muss ein Krankenhaus gewählt werden.")
+    if beneficiary_ids and responsible_id is None:
+        raise HTTPException(status_code=422, detail="Nutzende Bereiche benötigen einen verantwortlichen Bereich.")
+    if responsible_id and responsible_id in beneficiary_ids or len(set(beneficiary_ids)) != len(beneficiary_ids):
+        raise HTTPException(status_code=422, detail="Abteilungen dürfen keine doppelten Rollen erhalten.")
+    return hospital_id, responsible_id, beneficiary_ids, center_id
+
+
+def _validate_import_assignment(organization_slug, assignment, actor):
+    if assignment is None:
+        return
+    with create_session() as session:
+        org = get_organization(session, organization_slug)
+        hospital_id, responsible_id, beneficiaries, center_id = assignment
+        hospital = session.get(Hospital, hospital_id)
+        if org is None or hospital is None or hospital.organization_id != org.id or not hospital.is_active:
+            raise HTTPException(status_code=422, detail="Das gewählte Krankenhaus ist ungültig oder inaktiv.")
+        scope = current_scope_context()
+        if actor.role != "admin" and not actor.is_developer and hospital.id != scope.hospital_id:
+            raise HTTPException(status_code=403, detail="Das gewählte Krankenhaus liegt außerhalb Ihres Arbeitsbereichs.")
+        requested = ([responsible_id] if responsible_id else []) + beneficiaries
+        departments = session.scalars(select(Department).where(
+            Department.id.in_(requested), Department.organization_id == org.id,
+            Department.hospital_id == hospital.id, Department.is_active.is_(True),
+        )).all() if requested else []
+        if len(departments) != len(requested):
+            raise HTTPException(status_code=422, detail="Alle gewählten Bereiche müssen aktiv und im selben Krankenhaus sein.")
+        if actor.role != "admin" and not actor.is_developer and scope.department_id is not None and any(item.id != scope.department_id for item in departments):
+            raise HTTPException(status_code=403, detail="Ein gewählter Bereich liegt außerhalb Ihres Arbeitsbereichs.")
+        center = session.get(CostCenter, center_id) if center_id else None
+        if center_id and (center is None or center.organization_id != org.id or center.hospital_id != hospital.id or not center.is_active):
+            raise HTTPException(status_code=422, detail="Die gewählte Kostenstelle ist ungültig oder gehört zu einem anderen Krankenhaus.")
+        if actor.role != "admin" and not actor.is_developer and scope.department_id is not None and center is not None and center.department_id not in (None, scope.department_id):
+            raise HTTPException(status_code=403, detail="Die gewählte Kostenstelle liegt außerhalb Ihres Arbeitsbereichs.")
+        if center is not None and center.department_id and center.department_id != responsible_id:
+            raise HTTPException(status_code=422, detail="Die Kostenstelle gehört nicht zum verantwortlichen Bereich.")
+
+
+def _assign_import_scope(organization_slug: str, contract_id: str | None, status: str, assignment=None) -> None:
+    """Persist explicit import assignment, or the current scope, on new contracts."""
+    if not contract_id or status not in {"imported", "analysis_failed"}:
         return
     scope = current_scope_context()
-    if scope.hospital_id is None and scope.department_id is None:
+    if assignment is None and scope.hospital_id is None and scope.department_id is None:
         return
     try:
         cid = UUID(contract_id)
@@ -186,13 +239,38 @@ def _assign_import_scope(organization_slug: str, contract_id: str | None, status
         if contract is None:
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
         try:
+            hospital_id, responsible_id, beneficiaries, cost_center_id = assignment if assignment is not None else (
+                scope.hospital_id, None, [], None
+            )
+            default_department_ids = [] if assignment is not None else ([scope.department_id] if scope.department_id else [])
             assign_contract_ownership(
                 session,
                 contract=contract,
-                hospital_id=scope.hospital_id,
-                department_ids=[scope.department_id] if scope.department_id else [],
-                cost_center_id=None,
+                hospital_id=hospital_id,
+                department_ids=([responsible_id] if responsible_id else []) + beneficiaries if assignment is not None else default_department_ids,
+                cost_center_id=cost_center_id,
             )
+            if assignment is not None and responsible_id is not None:
+                requested = [responsible_id, *beneficiaries]
+                links = session.scalars(select(ContractDepartment).where(
+                    ContractDepartment.organization_id == org.id,
+                    ContractDepartment.contract_id == contract.id,
+                )).all()
+                by_department = {link.department_id: link for link in links}
+                for link in links:
+                    if link.relation_role is not None and link.department_id not in requested:
+                        session.delete(link)
+                    elif link.department_id in requested:
+                        link.relation_role = None
+                session.flush()
+                for department_id in requested:
+                    link = by_department.get(department_id)
+                    if link is not None and link in session.deleted:
+                        link = None
+                    if link is None:
+                        link = ContractDepartment(organization_id=org.id, contract_id=contract.id, department_id=department_id)
+                        session.add(link)
+                    link.relation_role = "responsible" if department_id == responsible_id else "beneficiary"
             session.commit()
         except OwnershipError as exc:
             session.rollback()
@@ -246,13 +324,24 @@ async def reanalyze_document(
 
 @router.post("/import", response_model=ImportBatchResponse)
 async def import_documents(
+    request: Request,
     files: list[UploadFile] = File(default=[]),
     organization_slug: str = Query(min_length=1),
+    assignment_hospital_id: str | None = Form(default=None),
+    responsible_department_id: str | None = Form(default=None),
+    beneficiary_department_ids: list[str] = Form(default=[]),
+    cost_center_id: str | None = Form(default=None),
 ) -> ImportBatchResponse:
     if not files:
         return ImportBatchResponse(total=0, successful=0, failed=0, duplicates=0, documents=[])
 
     _validate_import_scope(organization_slug)
+    assignment = _import_assignment_ids(assignment_hospital_id, responsible_department_id, beneficiary_department_ids, cost_center_id)
+    if assignment is not None:
+        actor = current_actor(request, organization_slug)
+        if actor.role not in {"admin", "contract_manager"} and not actor.is_developer:
+            raise HTTPException(status_code=403, detail="Nur Administratoren und Vertragsmanager dürfen Verträge zuordnen.")
+        _validate_import_assignment(organization_slug, assignment, actor)
 
     results: list[ImportFileResult] = []
     for uploaded in files:
@@ -265,7 +354,7 @@ async def import_documents(
             content=raw,
         )
         processed_status = str(processed.status)
-        _assign_import_scope(organization_slug, processed.contract_id, processed_status)
+        _assign_import_scope(organization_slug, processed.contract_id, processed_status, assignment)
         results.append(
             ImportFileResult(
                 document_id=processed.document_id or None,

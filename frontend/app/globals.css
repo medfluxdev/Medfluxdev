@@ -1802,6 +1802,21 @@ button.scope-status:hover {
   gap: var(--space-5);
   align-items: start;
 }
+.import-assignment-card {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.import-assignment-card legend { padding: 0 6px; color: var(--text); font-size: var(--fs-sm); font-weight: var(--fw-bold); }
+.import-assignment-card > p { margin: 0; color: var(--text-muted); font-size: var(--fs-xs); }
+.import-assignment-card label { display: grid; gap: 5px; color: var(--text-secondary); font-size: var(--fs-xs); font-weight: var(--fw-semibold); }
+.import-assignment-card select { min-height: 40px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; background: var(--surface); color: var(--text); font: inherit; }
+.import-assignment-card select[multiple] { min-height: 100px; }
+.import-assignment-card:disabled { opacity: .72; }
 @media (max-width: 800px) {
   .import-layout {
     grid-template-columns: 1fr;

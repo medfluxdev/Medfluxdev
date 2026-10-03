@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { importDocuments, retryDocument } from "@/lib/domain-api/documents";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -10,6 +10,8 @@ import InlineAlert from "@/components/ui/InlineAlert";
 import PageHeader from "@/components/ui/PageHeader";
 import StatusBadge, { StatusTone } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
+import { getOrganizationStructure, listCostCenters, type CostCenterDto, type OrganizationStructureDto } from "@/lib/domain-api/organizations";
+import { departmentFullPath } from "@/lib/organization-tree";
 
 const statusLabel: Record<ImportStatus, string> = {
   imported: "Importiert",
@@ -43,6 +45,15 @@ function analysisLabel(result: ImportFileResult): string {
 
 export default function ImportPage() {
   const { organizationSlug, membership } = useAuth();
+  const canAssign = membership?.role === "admin" || membership?.role === "contract_manager";
+  const [organizationStructure, setOrganizationStructure] = useState<OrganizationStructureDto>({ hospitals: [], departments: [] });
+  const [costCenters, setCostCenters] = useState<CostCenterDto[]>([]);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [hospitalId, setHospitalId] = useState("");
+  const [responsibleDepartmentId, setResponsibleDepartmentId] = useState("");
+  const [beneficiaryDepartmentIds, setBeneficiaryDepartmentIds] = useState<string[]>([]);
+  const [costCenterId, setCostCenterId] = useState("");
   const [selected, setSelected] = useState<File[]>([]);
   const [rejectedSelection, setRejectedSelection] = useState<string[]>([]);
   const [results, setResults] = useState<ImportFileResult[] | null>(null);
@@ -52,6 +63,36 @@ export default function ImportPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const effectiveOrgSlug = organizationSlug ?? membership?.organization_slug ?? "krankenhaus";
+
+  useEffect(() => {
+    if (!canAssign) return;
+    let active = true;
+    setAssignmentLoading(true);
+    Promise.all([getOrganizationStructure(effectiveOrgSlug), listCostCenters(effectiveOrgSlug)])
+      .then(([structure, centers]) => {
+        if (!active) return;
+        setOrganizationStructure(structure);
+        setCostCenters(centers.items);
+        const preferredHospital = membership?.hospital_id ?? window.localStorage.getItem("medflux.hospitalId") ?? "";
+        const validHospital = structure.hospitals.some((item) => item.id === preferredHospital && item.is_active)
+          ? preferredHospital
+          : structure.hospitals.find((item) => item.is_active)?.id ?? "";
+        setHospitalId(validHospital);
+        setResponsibleDepartmentId(membership?.department_id ?? "");
+      })
+      .catch(() => { if (active) setAssignmentError("Die Organisationsstruktur konnte nicht geladen werden. Die Zuordnung ist derzeit nicht verfügbar."); })
+      .finally(() => { if (active) setAssignmentLoading(false); });
+    return () => { active = false; };
+  }, [canAssign, effectiveOrgSlug, membership?.department_id, membership?.hospital_id]);
+
+  const availableDepartments = useMemo(
+    () => organizationStructure.departments.filter((item) => item.is_active && item.hospital_id === hospitalId),
+    [organizationStructure.departments, hospitalId],
+  );
+  const availableCostCenters = useMemo(
+    () => costCenters.filter((item) => item.is_active && item.hospital_id === hospitalId && (!item.department_id || item.department_id === responsibleDepartmentId)),
+    [costCenters, hospitalId, responsibleDepartmentId],
+  );
 
   const addFiles = useCallback((list: FileList | null) => {
     if (!list) return;
@@ -82,11 +123,25 @@ export default function ImportPage() {
 
   const handleUpload = useCallback(async () => {
     if (selected.length === 0 || loading) return;
+    if (canAssign && assignmentLoading) return;
+    if (canAssign && assignmentError) {
+      setError("Bitte warten Sie, bis die Organisationszuordnung wieder verfügbar ist.");
+      return;
+    }
+    if (canAssign && beneficiaryDepartmentIds.length > 0 && !responsibleDepartmentId) {
+      setError("Bitte legen Sie zuerst den verantwortlichen Bereich fest.");
+      return;
+    }
     setLoading(true);
     setError(null);
     setResults(null);
     try {
-      const res = await importDocuments(selected, effectiveOrgSlug);
+      const res = await importDocuments(selected, effectiveOrgSlug, canAssign && hospitalId ? {
+        hospital_id: hospitalId,
+        responsible_department_id: responsibleDepartmentId || undefined,
+        beneficiary_department_ids: beneficiaryDepartmentIds,
+        cost_center_id: costCenterId || undefined,
+      } : undefined);
       setResults(res.documents);
       setSelected([]);
       setRejectedSelection([]);
@@ -95,7 +150,7 @@ export default function ImportPage() {
     } finally {
       setLoading(false);
     }
-  }, [selected, loading, effectiveOrgSlug]);
+  }, [selected, loading, effectiveOrgSlug, canAssign, assignmentLoading, assignmentError, hospitalId, responsibleDepartmentId, beneficiaryDepartmentIds, costCenterId]);
 
   const importAcceptedCount = useMemo(
     () => results?.filter((r) => r.status === "imported" || r.status === "analysis_failed").length ?? 0,
@@ -161,6 +216,38 @@ export default function ImportPage() {
             <span>Der aktuell in der Kopfzeile gewählte Krankenhaus-/Abteilungsbereich wird serverseitig dem neu angelegten Vertrag zugeordnet.</span>
           </div>
 
+          {canAssign && (
+            <fieldset className="import-assignment-card" disabled={assignmentLoading || loading || organizationStructure.hospitals.filter((item) => item.is_active).length === 0}>
+              <legend>Vertragszuordnung beim Import</legend>
+              <p>Die Auswahl wird bei neuen Verträgen gespeichert. Duplikate werden nicht neu zugeordnet.</p>
+              {assignmentError && <InlineAlert tone="critical" role="alert">{assignmentError}</InlineAlert>}
+              {!assignmentError && organizationStructure.hospitals.every((item) => !item.is_active) && !assignmentLoading && <p role="status">Es ist kein aktives Krankenhaus eingerichtet. Die Zuordnung kann unter Organisationseinstellungen eingerichtet werden.</p>}
+              <label>Krankenhaus
+                <select aria-label="Krankenhaus für Import" value={hospitalId} onChange={(event) => { setHospitalId(event.target.value); setResponsibleDepartmentId(""); setBeneficiaryDepartmentIds([]); setCostCenterId(""); }}>
+                  <option value="">Krankenhaus wählen</option>
+                  {organizationStructure.hospitals.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <label>Verantwortlicher Bereich
+                <select aria-label="Verantwortlicher Bereich für Import" value={responsibleDepartmentId} disabled={!hospitalId} onChange={(event) => { setResponsibleDepartmentId(event.target.value); setCostCenterId(""); }}>
+                  <option value="">Nicht festgelegt</option>
+                  {availableDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, availableDepartments)}</option>)}
+                </select>
+              </label>
+              <label>Nutzende Bereiche
+                <select aria-label="Nutzende Bereiche für Import" multiple value={beneficiaryDepartmentIds} disabled={!hospitalId} onChange={(event) => setBeneficiaryDepartmentIds(Array.from(event.target.selectedOptions, (option) => option.value))}>
+                  {availableDepartments.filter((item) => item.id !== responsibleDepartmentId).map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, availableDepartments)}</option>)}
+                </select>
+              </label>
+              <label>Kostenstelle
+                <select aria-label="Kostenstelle für Import" value={costCenterId} disabled={!hospitalId} onChange={(event) => setCostCenterId(event.target.value)}>
+                  <option value="">Nicht festgelegt</option>
+                  {availableCostCenters.map((item) => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
+                </select>
+              </label>
+            </fieldset>
+          )}
+
           <div
             className="dropzone"
             role="button"
@@ -196,7 +283,7 @@ export default function ImportPage() {
                 ))}
               </ul>
               <div className="import-actions">
-                <Button variant="primary" onClick={handleUpload}>Import starten ({selected.length})</Button>
+                <Button variant="primary" disabled={canAssign && assignmentLoading} onClick={handleUpload}>Import starten ({selected.length})</Button>
                 <Button onClick={() => { setSelected([]); setRejectedSelection([]); }}>Alle entfernen</Button>
               </div>
             </>

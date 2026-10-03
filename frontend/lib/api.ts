@@ -154,9 +154,14 @@ export async function apiUpload<T>(
   files: File[],
   slug?: string,
   timeoutMs: number = UPLOAD_TIMEOUT_MS,
+  fields?: Record<string, string | string[] | null | undefined>,
 ): Promise<T> {
   const form = new FormData();
   for (const file of files) form.append("files", file);
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    if (Array.isArray(value)) value.forEach((item) => form.append(key, item));
+    else if (value) form.append(key, value);
+  }
   const selected = typeof window !== "undefined" ? localStorage.getItem("medflux.organization_slug") : null;
   const effectiveSlug = selected || slug;
   const q = new URLSearchParams();

@@ -17,6 +17,13 @@ def _request(*, role="admin", organization_id=None, actor=True):
     return SimpleNamespace(state=SimpleNamespace(actor=identity))
 
 
+@pytest.fixture(autouse=True)
+def _keep_organization_isolation_checks_in_secure_mode(monkeypatch):
+    # CI enables the local unauthenticated test mode globally. These tests model
+    # authenticated actors, so exercise the fail-closed organization check.
+    monkeypatch.setattr(contracts.settings, "medflux_insecure_dev", False)
+
+
 def test_deletion_disabled_by_default(monkeypatch):
     monkeypatch.setattr(contracts.settings, "auth_enabled", True)
     monkeypatch.setattr(contracts.settings, "contracts_allow_delete", False)

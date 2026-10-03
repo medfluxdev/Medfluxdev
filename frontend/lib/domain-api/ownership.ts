@@ -1,4 +1,4 @@
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiGet, apiPatch, apiPut } from "@/lib/api";
 
 export interface ContractOwnershipDto {
   contract_id: string;
@@ -16,6 +16,13 @@ export interface AssigneeDto {
   role: string;
   hospital_id: string | null;
   department_id: string | null;
+}
+
+export interface ContractDepartmentRolesDto {
+  contract_id: string;
+  responsible_department_id: string | null;
+  beneficiary_department_ids: string[];
+  unclassified_department_ids: string[];
 }
 
 function orgQuery(organizationSlug: string) {
@@ -44,6 +51,23 @@ export function updateContractOwnership(
 ) {
   return apiPatch<ContractOwnershipDto>(
     `/api/ownership/contracts/${encodeURIComponent(contractId)}?${orgQuery(organizationSlug)}`,
+    payload,
+  );
+}
+
+export function getContractDepartmentRoles(organizationSlug: string, contractId: string) {
+  return apiGet<ContractDepartmentRolesDto>(
+    `/api/ownership/contracts/${encodeURIComponent(contractId)}/department-roles?${orgQuery(organizationSlug)}`,
+  );
+}
+
+export function updateContractDepartmentRoles(
+  organizationSlug: string,
+  contractId: string,
+  payload: { responsible_department_id: string; beneficiary_department_ids: string[] },
+) {
+  return apiPut<ContractDepartmentRolesDto>(
+    `/api/ownership/contracts/${encodeURIComponent(contractId)}/department-roles?${orgQuery(organizationSlug)}`,
     payload,
   );
 }

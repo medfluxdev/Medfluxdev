@@ -4,6 +4,7 @@ Arbeiten mit temporären Speicherverzeichnissen, keine externen Dateien.
 """
 
 import hashlib
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -201,3 +202,46 @@ def test_api_import_requires_organization_and_empty_batch_is_supported():
     body = response.json()
     assert body["total"] == 0
     assert body["documents"] == []
+
+
+def test_api_import_forwards_explicit_contract_assignment(monkeypatch):
+    from types import SimpleNamespace
+    from app.documents.processing import ProcessedDocument
+
+    class StubProcessingService:
+        def process(self, **kwargs):
+            return ProcessedDocument(
+                document_id="11111111-1111-1111-1111-111111111111",
+                document_version_id="22222222-2222-2222-2222-222222222222",
+                sha256="a" * 64,
+                original_filename=kwargs["original_filename"],
+                status="imported",
+                contract_id="33333333-3333-3333-3333-333333333333",
+            )
+
+    assignment = (
+        UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+        [UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")],
+        UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+    )
+    assigned = []
+    monkeypatch.setattr(documents_module, "_processing_service", StubProcessingService())
+    monkeypatch.setattr(documents_module, "_validate_import_scope", lambda _slug: None)
+    monkeypatch.setattr(documents_module, "current_actor", lambda *_args: SimpleNamespace(role="admin", is_developer=False))
+    monkeypatch.setattr(documents_module, "_validate_import_assignment", lambda _slug, value, _actor: assigned.append(value))
+    monkeypatch.setattr(documents_module, "_assign_import_scope", lambda _slug, cid, status, value: assigned.append((cid, status, value)))
+
+    client = TestClient(medflux_app)
+    response = client.post(
+        "/api/documents/import?organization_slug=krankenhaus",
+        files=[("files", ("neu.pdf", PDF_BYTES, "application/pdf"))],
+        data={
+            "assignment_hospital_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "responsible_department_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "beneficiary_department_ids": ["cccccccc-cccc-4ccc-8ccc-cccccccccccc"],
+            "cost_center_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        },
+    )
+    assert response.status_code == 200
+    assert assigned == [assignment, ("33333333-3333-3333-3333-333333333333", "imported", assignment)]

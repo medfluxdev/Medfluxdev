@@ -11,6 +11,7 @@ def _settings(**overrides) -> Settings:
         "auth_enabled": False,
         "app_secret_key": "change-me",
         "auth_cookie_secure": False,
+        "medflux_insecure_dev": False,
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)
