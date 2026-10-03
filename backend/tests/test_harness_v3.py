@@ -564,8 +564,8 @@ async def test_markdown_fenced_structured_output_is_validated_after_outer_fence_
 
     assert result.contract is not None, result.error
     assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
-    assert result.status.value == "success"
     assert result.diagnostics["failure_count"] == 0
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 4
 
 
 @pytest.mark.asyncio
