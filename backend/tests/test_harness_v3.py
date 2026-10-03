@@ -97,6 +97,37 @@ def test_primary_contract_title_prefers_canonical_text_with_trademark():
     assert result[1].source_text == "Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System"
 
 
+def test_primary_contract_title_prefers_opening_service_heading_over_later_terms():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-multipage-service-title",
+        source_sha256="f" * 64,
+        canonical_text=(
+            "SERVICEVERTRAG RADIOSURGERY\n"
+            "Allgemeine Geschäftsbedingungen für alle Lieferungen"
+        ),
+        pages=[
+            Page(
+                page_number=1, width_pt=600, height_pt=800,
+                text="SERVICEVERTRAG RADIOSURGERY", elements=[],
+            ),
+            Page(
+                page_number=18, width_pt=600, height_pt=800,
+                text="Allgemeine Geschäftsbedingungen für alle Lieferungen",
+                elements=[],
+            ),
+        ],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+
+    result = _primary_contract_title(canonical, document_model)
+
+    assert result is not None
+    assert result[0] == "SERVICEVERTRAG RADIOSURGERY"
+    assert result[1].page == 1
+    assert result[1].source_text == "SERVICEVERTRAG RADIOSURGERY"
+
+
 def test_explicit_contract_date_labels_bind_dates_and_reject_offer_date():
     canonical = DocumentIntelligenceResult(
         document_id="doc-dates",
@@ -515,6 +546,27 @@ def test_source_signals_find_reference_values():
     assert "4 Jahren" in values
     assert "2.226,00 EUR" in values
     assert "8.000,00 EUR" in values
+
+
+def test_source_signals_recognize_labelled_frame_contract_number():
+    canonical = DocumentIntelligenceResult(
+        document_id="optis-contract-number",
+        source_sha256="e" * 64,
+        pages=[Page(
+            page_number=1, width_pt=600, height_pt=800,
+            text="Rahmenvertrag Nr. RAV-00074 - OPTIS Mobile Next",
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="ocr"),
+    )
+    rows = collect_source_signals(DocumentModel.build(canonical))
+    matches = [
+        row for row in rows
+        if row["kind"] == "labelled_contract_number"
+    ]
+    assert [(row["value"], row["page"]) for row in matches] == [
+        ("RAV-00074", 1)
+    ]
 
 
 @pytest.mark.asyncio

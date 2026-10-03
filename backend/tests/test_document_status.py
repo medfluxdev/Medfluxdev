@@ -15,18 +15,25 @@ class _Rows:
 
 
 @pytest.mark.parametrize(
-    ("run_status", "expected_state", "retry"),
+    ("run_status", "extraction_status", "expected_state", "expected_analysis", "retry"),
     [
-        ("success", "analysis_ok", False),
-        ("partial", "analysis_partial", False),
-        ("failed", "analysis_failed", True),
+        ("success", "success", "analysis_ok", "success", False),
+        ("succeeded", "success", "analysis_ok", "success", False),
+        ("succeeded", "partial", "analysis_partial", "partial", False),
+        ("partial", "partial", "analysis_partial", "partial", False),
+        ("failed", "failed", "analysis_failed", "failed", True),
     ],
 )
-def test_import_state_distinguishes_analysis_outcomes(run_status, expected_state, retry):
+def test_import_state_distinguishes_processing_and_extraction_outcomes(
+    run_status, extraction_status, expected_state, expected_analysis, retry
+):
     contract = SimpleNamespace(accepted_extraction_id=uuid4())
     version = uuid4()
     run = SimpleNamespace(status=run_status, message="some safe message", error=None)
-    calls = iter([_Rows(version), _Rows(run)])
+    extraction = SimpleNamespace(
+        status=extraction_status, message="some safe message", error=None
+    )
+    calls = iter([_Rows(version), _Rows(run), _Rows(extraction)])
     session = SimpleNamespace(get=lambda *args: contract, scalars=lambda *args: next(calls))
 
     result = build_import_state(
@@ -34,6 +41,7 @@ def test_import_state_distinguishes_analysis_outcomes(run_status, expected_state
     )
 
     assert result["import_state"] == expected_state
+    assert result["analysis_status"] == expected_analysis
     assert result["can_retry"] is retry
     assert result["requires_review"] is (expected_state != "analysis_ok")
     if expected_state == "analysis_partial":
@@ -63,8 +71,8 @@ def test_safe_failure_message_does_not_expose_unknown_provider_payload():
 
 def test_successful_run_without_accepted_extraction_is_not_reported_as_success():
     version = uuid4()
-    run = SimpleNamespace(status="success", message="Analyse abgeschlossen.", error=None)
-    calls = iter([_Rows(version), _Rows(run)])
+    run = SimpleNamespace(status="succeeded", message="Verarbeitung abgeschlossen.", error=None)
+    calls = iter([_Rows(version), _Rows(run), _Rows(None)])
     session = SimpleNamespace(
         get=lambda *args: SimpleNamespace(accepted_extraction_id=None),
         scalars=lambda *args: next(calls),

@@ -3623,6 +3623,48 @@ class DirectContractHarness:
             # and currency can be proven; never inflate supported_count or forge
             # a quotation/evidence row for it.
             derived_facts: list[dict] = []
+            # OCR/source signals can recover a contract number when the model
+            # omits it, but only when the labelled source value is unambiguous.
+            if not contract.identity.contract_number:
+                labelled_numbers = {
+                    str(signal["value"]).strip()
+                    for signal in source_signals
+                    if signal.get("kind") == "labelled_contract_number"
+                    and str(signal.get("value") or "").strip()
+                }
+                if len(labelled_numbers) == 1:
+                    number = next(iter(labelled_numbers))
+                    signal = next(
+                        item for item in source_signals
+                        if item.get("kind") == "labelled_contract_number"
+                        and str(item.get("value") or "").strip() == number
+                    )
+                    source = _build_page_evidence(
+                        signal.get("page"), signal.get("quote") or number,
+                        document, canonical,
+                    )
+                    if source is not None:
+                        contract.identity.contract_number = number
+                        evidence_rows.append({
+                            "field": "identity.contract_number",
+                            "source": source.model_dump(mode="json"),
+                        })
+                        accepted.append({
+                            "field": "identity.contract_number",
+                            "page": source.page,
+                            "quote": source.source_text,
+                            "confidence": None,
+                        })
+                        accepted_evidence_by_field[
+                            "identity.contract_number"
+                        ] = source
+                        supported_count += 1
+                        derived_facts.append({
+                            "field": "identity.contract_number",
+                            "derivation": "unique_labelled_source_signal",
+                            "page": source.page,
+                            "source_verified_as_independent_fact": True,
+                        })
             labelled_dates = _explicit_labelled_contract_dates(
                 contract, canonical, document
             )

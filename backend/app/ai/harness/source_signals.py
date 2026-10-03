@@ -19,7 +19,7 @@ _DURATION_RE = re.compile(
     re.IGNORECASE,
 )
 _CONTRACT_NUMBER_RE = re.compile(
-    r"\b(?:Vertr\.?-?Nr\.?|Vertragsnummer|Vertrag\s*Nr\.?)\s*[:#]?\s*([A-Z0-9][A-Z0-9._/-]{2,})",
+    r"\b(?:Vertr\.?-?Nr\.?|Vertragsnummer|Vertrag\s*Nr\.?|Rahmenvertrag(?:s)?\s*Nr\.?)\s*[:#]?\s*([A-Z0-9][A-Z0-9._/-]{2,})",
     re.IGNORECASE,
 )
 _RENEWAL_NEGATION_RE = re.compile(

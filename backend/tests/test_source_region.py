@@ -2,6 +2,8 @@
 
 import fitz
 
+from app.api.routes.documents import _is_pdf_extension
+
 from app.documents.intelligence.canonical import (
     AtomicUnit,
     BoundingRegion,
@@ -12,6 +14,12 @@ from app.documents.intelligence.canonical import (
     ProcessingProvenance,
 )
 from app.documents.source_region import resolve_narrowest_region
+
+
+def test_pdf_extension_accepts_database_dot_extension():
+    assert _is_pdf_extension(".pdf")
+    assert _is_pdf_extension("PDF")
+    assert not _is_pdf_extension(".docx")
 
 
 def _pdf(text: str, *, repeat: bool = False) -> bytes:

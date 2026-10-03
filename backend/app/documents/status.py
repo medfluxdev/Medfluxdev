@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.database.models import (
     Contract,
     ContractDocument,
+    ContractExtraction,
     ProcessingRun,
 )
 
@@ -76,6 +77,7 @@ def build_import_state(session: Session, *, organization_id, contract_id, detail
     ).first()
 
     run = None
+    extraction = None
     if version_id is not None:
         run = session.scalars(
             select(ProcessingRun)
@@ -86,29 +88,62 @@ def build_import_state(session: Session, *, organization_id, contract_id, detail
             .order_by(ProcessingRun.created_at.desc(), ProcessingRun.id.desc())
             .limit(1)
         ).first()
+        extraction = session.scalars(
+            select(ContractExtraction)
+            .where(
+                (ContractExtraction.document_version_id == version_id)
+                & (ContractExtraction.organization_id == organization_id)
+            )
+            .order_by(ContractExtraction.created_at.desc(), ContractExtraction.id.desc())
+            .limit(1)
+        ).first()
 
     state = "analysis_ok" if accepted else "uploaded"
     can_retry = False
     message: str | None = None
     analysis_status: str | None = None
 
-    if run is not None:
-        analysis_status = run.status
-        if run.status == "running":
-            state = "processing"
-        elif run.status == "success" and accepted:
-            state = "analysis_ok"
-        elif run.status == "partial":
-            state = "analysis_partial"
-            message = _fail_reason(run)
-        else:  # failed, or a success without an accepted extraction
-            state = "analysis_failed"
-            can_retry = True
-            message = (
-                "Analyseergebnis wurde nicht sicher übernommen; bitte erneut verarbeiten."
-                if run.status == "success" and not accepted
-                else _fail_reason(run)
-            )
+    run_status = getattr(run, "status", None)
+    extraction_status = getattr(extraction, "status", None)
+    if run_status == "running":
+        state = "processing"
+        analysis_status = "processing"
+    elif run_status == "failed":
+        state = "analysis_failed"
+        analysis_status = "failed"
+        can_retry = True
+        message = _fail_reason(run)
+    elif run_status == "partial":
+        state = "analysis_partial"
+        analysis_status = "partial"
+        message = _fail_reason(run)
+    elif extraction_status == "partial":
+        # PDF/OCR processing can succeed while semantic extraction is partial.
+        # The UI state must follow the latest AI extraction, not the OCR run.
+        state = "analysis_partial"
+        analysis_status = "partial"
+        message = _fail_reason(extraction)
+    elif extraction_status == "failed":
+        state = "analysis_failed"
+        analysis_status = "failed"
+        can_retry = True
+        message = _fail_reason(extraction)
+    elif extraction_status == "success" and accepted:
+        state = "analysis_ok"
+        analysis_status = "success"
+    elif run_status in {"success", "succeeded"}:
+        # Some older callers used "success"; ProcessingRun currently stores
+        # "succeeded". Neither implies that an extraction was accepted.
+        analysis_status = "success"
+        state = "analysis_ok" if accepted else "analysis_failed"
+        can_retry = not accepted
+        if not accepted:
+            message = "Analyseergebnis wurde nicht sicher übernommen; bitte erneut verarbeiten."
+    elif extraction_status is not None:
+        state = "analysis_failed"
+        analysis_status = "failed"
+        can_retry = True
+        message = _fail_reason(extraction)
 
     review_section = detail.get("review") or {}
     requires_review = bool(

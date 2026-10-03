@@ -35,6 +35,10 @@ from app.ownership.service import OwnershipError, assign_contract_ownership
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
+
+def _is_pdf_extension(value: str | None) -> bool:
+    return str(value or "").strip().lstrip(".").casefold() == "pdf"
+
 _processing_service = DocumentProcessingService()
 
 
@@ -340,8 +344,7 @@ def document_source_region(
                 raise _not_found()
 
         doc_file = session.get(DocumentFile, version.document_file_id) if version.document_file_id is not None else None
-        ext = (doc_file.file_extension or "").lower() if doc_file else ""
-        if ext != "pdf":
+        if not _is_pdf_extension(doc_file.file_extension if doc_file else None):
             raise HTTPException(status_code=415, detail="Quell-Geometrie nur für PDF verfügbar.")
 
         svc = DocumentPersistenceService()

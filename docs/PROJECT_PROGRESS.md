@@ -4724,3 +4724,84 @@ Abnahmelauf, kein neuer MVP-Hauptschritt.
   Die UAT bestätigt die Schutzwirkung, nicht eine vollautomatische Freigabe der Dokumente.
 - Kein Push oder Merge. Änderungen für diesen Pilot sind für einen neuen Commit auf dem
   bestehenden Branch vorgesehen.
+
+### OPTIS-UAT-Wiederholung, OCR-Quellposition und Nummernbeleg
+
+- Die gescannte OPTIS-Originaldatei wurde auf dem isolierten Stack erneut verarbeitet;
+  die Quelldatei blieb unverändert und außerhalb des Repositories. Das Ergebnis wurde
+  in Contract360 geprüft: `RAV-00074`, Abbott Medical GmbH, 04.06.2025–03.06.2029,
+  aktiver Vertrag und `OPTIS™ Mobile Next Imaging System`.
+- Die Kostenanzeige enthält einmalig EUR 12.000, Aufbau/Installation EUR 9.500 sowie
+  bedingte Stückpreise EUR 180 und EUR 200. Ein wiederkehrender Jahrespreis wurde nicht
+  belegt und blieb leer. Der Lauf endete erwartungsgemäß `partial` mit Review, da
+  Geräteidentität/-beziehung nur teilweise belegt war.
+- `/api/documents/{version}/source-region` lehnte `.pdf` fälschlich mit HTTP 415 ab,
+  weil die Endung mit führendem Punkt verglichen wurde. Die Prüfung normalisiert nun
+  führende Punkte/Leerraum und Groß-/Kleinschreibung. Der echte OPTIS-Aufruf lieferte
+  danach HTTP 200 und Seite 1; die Position blieb ehrlich `coarse` (OCR-Atomgeometrie).
+- `source_signals` erkannte `Rahmenvertrag Nr.` bisher nicht. Die Regex deckt diese
+  deutsche Vertragsnummernform jetzt ab; ein eindeutiger wörtlicher Treffer wird in
+  Harness V3 mit Seitenbeleg als `identity.contract_number` übernommen. Mehrdeutige
+  Nummernsignale werden nicht automatisch gewählt.
+- Gezielte DB-freie Regressionen: **28 passed**, 5 bekannte PyMuPDF/SWIG-Warnungen.
+  Ein zunächst zu breit gewählter Integrationstest hätte per autouse fixture die
+  PostgreSQL-Konfiguration des Moduls verwendet; der Lauf wurde sofort beendet, bevor
+  irgendein Testergebnis entstand. Danach liefen ausschließlich DB-freie Tests.
+- Die Browser-Frontend-Seite auf 3011 zeigte `Cannot find module './vendor-chunks/@swc.js'`.
+  Damit wurde kein visueller UI-Retest der neuen API-Ausgabe beansprucht; Contract360-
+  Daten wurden über die authentifizierte API geprüft. Verbleibende pnpm-Artefakte und
+  `.playwright-mcp/`/Screenshot wurden nicht verändert oder eingecheckt.
+- Die gescannten Originale werden als echte Acceptance-Eingaben verwendet. Sie sind
+  keine ungeprüften Trainingslabels: eine spätere Anpassung muss pro repräsentativem
+  Scan eine menschlich bestätigte Soll-Angabe mit Seite und wörtlichem Beleg erhalten;
+  Dokumente und OCR-Rohdaten bleiben lokal.
+
+## 2026-10-03 – Acceptance-Basis aus lokalem Vertragsbestand
+
+Status: IN ARBEIT
+
+Ergebnisse:
+- Lokale Vertrags- und UI-Referenzen bleiben außerhalb des Repositorys; keine echten
+  Vertragsdateien, OCR-Ausgaben oder Mitarbeiterdaten wurden in Fixtures kopiert.
+- Ergänzte Regression für mehrseitige Serviceverträge: Der Eröffnungstitel
+  `SERVICEVERTRAG RADIOSURGERY` bleibt Vertragsidentität, auch wenn auf der letzten
+  Seite allgemeine Geschäftsbedingungen vorkommen. Der Beleg muss auf Seite 1 liegen.
+- Bestehende OPTIS-Titel-/Datumstests, mehrjährige Finanzplan-Tests, quellgebundene
+  Geräte-Tests, Review-/Fehlerstatus-Tests und Assistentenkontext-Tests wurden als
+  vorhandene Abdeckung identifiziert.
+
+Validierung:
+- Neue Radiosurgery-Titelregression: **1 passed** (gezielter pytest-Aufruf im
+  `MEDFLUX_UNIT_ONLY`-Modus; keine Datenbankverbindung).
+- Breiter fokussierter Backend-Lauf erreichte 68 %, blieb anschließend ohne Ausgabe
+  hängen und wurde abgebrochen; somit kein vollständiges Regressionsergebnis.
+
+Offen:
+- Als nächste Acceptance-Stufe fehlt ein gemeinsamer, mehrseitiger Szenariotest, der
+  OCR-/Visionsignale, Vertragsidentität, Finanzplan, Gerätebeziehungen, Seitenbelege
+  und Review-Entscheidung zusammen prüft.
+- Die 36 lokalen Vertrags-PDFs sind überwiegend bildbasiert. Vor jeder Modellanpassung
+  ist pro repräsentativer Stichprobe eine menschlich bestätigte Soll-Ausgabe mit
+  Feldwert, Seite und Beleg nötig. Rohdateien bleiben lokal und werden nicht versioniert.
+
+### Radiosurgery-UAT-Wiederholung und Zustandskorrektur
+
+- Die Verarbeitung des echten 18-seitigen Vertrags wurde auf dem isolierten lokalen
+  Stack (Backend 8012, PostgreSQL 55432, Ollama `qwen3.5:4b`) wiederholt. Docling/OCR
+  endete erfolgreich; der KI-Lauf benötigte rund 166 Sekunden und ergab korrekt
+  `partial` mit manueller Prüfung.
+- Bestätigt extrahiert wurden `SERVICEVERTRAG RADIOSURGERY`, Brainlab Sales GmbH,
+  wiederkehrend EUR 52.500/Jahr und EUR 210.000 Gesamtwert; drei Geräte/Systeme
+  wurden erkannt und blieben wegen unvollständiger Identitätsbelege prüfpflichtig.
+  Vertragsnummer und eindeutige Kalenderdaten fehlten weiterhin.
+- Fehlerursache der falschen UI-Meldung: `build_import_state` wertete den Status des
+  Docling-`ProcessingRun` statt den neuesten KI-`ContractExtraction` aus. Dadurch
+  wurde ein OCR-Lauf `succeeded` als Analysefehler behandelt, obwohl die Analyse
+  `partial` war. Statusabbildung und gezielte Regressionen wurden korrigiert; die
+  API liefert nun `analysis_partial`, `analysis_status=partial` und Review-Hinweis.
+- Im gespeicherten Harness-Diagnoseobjekt wurden 15 fehlgeschlagene Calls von 28
+  sichtbar: 7 Vision-Seiten und 8 semantische Chunks mit Kategorie `malformed_json`;
+  alle hatten `done_reason=stop`. Damit ist dies kein Request-Timeout, und die
+  konkrete nächste Modell-/Schemaursache bleibt offen.
+- Gezielte Tests: **12 passed**. Der frühere breite Fokuslauf blieb bei 68 % hängen;
+  kein vollständiger Backend-Lauf wurde bestätigt.
