@@ -33,6 +33,7 @@ from app.ai.harness.pipeline import _find_quote, RETRIEVAL_TERMS, field_types, s
 from app.ai.harness.source_signals import collect_source_signals
 from app.documents.intelligence.hybrid import route_summary, visual_candidate_pages
 from app.ai.service import AIService
+from app.ai.schema import normalize_constrained_schema
 from app.core.config import Settings
 from app.models.contract import Contract
 from app.models.enums import ExtractionStatus, ReviewFlag, ValidationStatus
@@ -1166,7 +1167,7 @@ class DirectContractHarness:
             base_output = int(getattr(self.settings, "harness_output_tokens", 1800))
 
             async def call(purpose: str, prompt: str, schema_type, *, images=None, stage="semantic"):
-                schema = schema_type.model_json_schema()
+                schema = normalize_constrained_schema(schema_type.model_json_schema())
                 system = SYSTEM + "\nOutput JSON schema: " + json.dumps(
                     schema, separators=(",", ":")
                 )

@@ -174,6 +174,10 @@ class FakeProvider:
     ):
         title = schema["title"]
         if title == "ProposedFactBatch":
+            value_schema = schema["properties"]["facts"]["items"]["properties"]["value"]
+            assert value_schema["type"] == [
+                "object", "array", "string", "number", "boolean", "null"
+            ]
             if "semantic:core" in text:
                 raise AssertionError("purpose must not leak into prompt")
             if "identity.contract_number" in text:
