@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # Lokale KI. Provider-Endpunkte sind konfigurierbar; das aktive Modell
     # wird ausschließlich durch den Benutzer in der DB ausgewählt.
     ai_provider: str = "ollama"
-    harness_context_tokens: int = 8192
+    harness_context_tokens: int = 32768
     harness_output_tokens: int = 1800
     harness_max_calls: int = 32
     harness_engine: str = "v3"
