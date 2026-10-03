@@ -548,6 +548,27 @@ async def test_invalid_optional_vision_output_keeps_ocr_extraction_and_requires_
 
 
 @pytest.mark.asyncio
+async def test_markdown_fenced_structured_output_is_validated_after_outer_fence_removal():
+    class FencedProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            return f"```json\n{raw}\n```"
+
+    result = await DirectContractHarness(
+        settings(), ai(FencedProvider())
+    ).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert result.status.value == "success"
+    assert result.diagnostics["failure_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_equipment_and_service_hours_and_service_scope_normalize():
     # UAT-Defekte: (1) equipment als List-of-Strings verworfen, (2)
     # sla.service_hours mit start/end_time/days zu {} kollabiert und verworfen,
