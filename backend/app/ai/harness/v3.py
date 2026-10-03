@@ -149,7 +149,7 @@ def measured_output_budget(
     if not purpose.startswith(("semantic:", "vision:")):
         return None
     margin = int(capacity) - int(prompt_tokens) - 512
-    candidate = min(8192, margin)
+    candidate = min(3200, margin)
     return candidate if candidate >= int(base_output) + 128 else None
 
 
@@ -1226,12 +1226,23 @@ class DirectContractHarness:
                     + "):\n"
                     + _pack_source(canonical, pack_pages, visual_readings)
                 )
-                batch = await call(
-                    f"semantic:{pack_name}",
-                    prompt,
-                    ProposedFactBatch,
-                    stage="semantic",
-                )
+                try:
+                    batch = await call(
+                        f"semantic:{pack_name}",
+                        prompt,
+                        ProposedFactBatch,
+                        stage="semantic",
+                    )
+                except ValidationError:
+                    issues.append(
+                        f"Semantic extraction pack {pack_name} failed schema validation"
+                    )
+                    continue
+                except RuntimeError as exc:
+                    if str(exc) != "output_truncated":
+                        raise
+                    issues.append(f"Semantic extraction pack {pack_name} was truncated")
+                    continue
                 proposals.extend(batch.facts)
 
             def locate(fact: ProposedFact):
