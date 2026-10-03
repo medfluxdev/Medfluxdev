@@ -8,11 +8,33 @@ Modell `Contract` ab – es wird KEIN zweites, manuell gepflegtes Schema gepfleg
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 from pydantic import BaseModel
 
 from app.models.contract import Contract
+
+_STRUCTURAL_KEYWORDS = frozenset(
+    {
+        "$ref",
+        "additionalProperties",
+        "allOf",
+        "anyOf",
+        "const",
+        "enum",
+        "items",
+        "oneOf",
+        "prefixItems",
+        "properties",
+        "required",
+        "type",
+    }
+)
+
+_PERMISSIVE_LEAF: dict[str, Any] = {
+    "type": ["object", "array", "string", "number", "boolean", "null"]
+}
 
 
 def _deref(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
@@ -45,6 +67,41 @@ def pydantic_json_schema(model: type[BaseModel]) -> dict[str, Any]:
     defs: dict[str, Any] = dict(raw.get("$defs", {}))
     schema = {k: v for k, v in raw.items() if k not in ("$defs", "definitions")}
     return _deref(schema, defs)
+
+
+def _constrain(node: Any) -> Any:
+    if isinstance(node, list):
+        return [_constrain(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+
+    for container in ("properties", "$defs", "definitions"):
+        block = node.get(container)
+        if isinstance(block, dict):
+            for name, sub in block.items():
+                block[name] = _constrain(sub)
+    for key in ("items", "additionalProperties", "contains"):
+        if isinstance(node.get(key), dict):
+            node[key] = _constrain(node[key])
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        if isinstance(node.get(key), list):
+            node[key] = _constrain(node[key])
+
+    if not (_STRUCTURAL_KEYWORDS & set(node)):
+        node.update(copy.deepcopy(_PERMISSIVE_LEAF))
+    return node
+
+
+def normalize_constrained_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Inline schema references and type annotation-only leaves for Ollama."""
+    copied = copy.deepcopy(schema)
+    defs = dict(copied.get("$defs", copied.get("definitions", {})))
+    without_defs = {
+        key: value
+        for key, value in copied.items()
+        if key not in ("$defs", "definitions")
+    }
+    return _constrain(_deref(without_defs, defs))
 
 
 def contract_json_schema() -> dict[str, Any]:
