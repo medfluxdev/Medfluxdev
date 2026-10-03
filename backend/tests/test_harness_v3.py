@@ -363,6 +363,10 @@ def test_production_constructor_accepts_settings_only():
     assert harness.ai is not None
 
 
+def test_default_harness_context_budget_supports_long_contract_prompts():
+    assert Settings(_env_file=None).harness_context_tokens == 32768
+
+
 def test_source_signals_find_reference_values():
     rows = collect_source_signals(DocumentModel.build(document()))
     values = {row["value"] for row in rows}
