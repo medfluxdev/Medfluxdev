@@ -383,6 +383,38 @@ async def test_direct_harness_delivers_grounded_contract_without_block_ids():
 
 
 @pytest.mark.asyncio
+async def test_invalid_optional_vision_output_keeps_ocr_extraction_and_requires_review():
+    class InvalidVisionProvider(FakeProvider):
+        def __init__(self):
+            self.invalid_vision_responses = 1
+
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if (
+                schema["title"] == "VisualPageReading"
+                and self.invalid_vision_responses
+            ):
+                self.invalid_vision_responses -= 1
+                return "not-json"
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(InvalidVisionProvider())
+    ).analyze(document(), page_image_loader=lambda _page: b"test-image")
+
+    assert result.contract is not None, result.error
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert result.status.value == "partial"
+    assert result.requires_review is True
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 4
+    assert result.diagnostics["failure_count"] == 1
+    assert any("Visual reading for page" in issue for issue in result.diagnostics["issues"])
+
+
+@pytest.mark.asyncio
 async def test_equipment_and_service_hours_and_service_scope_normalize():
     # UAT-Defekte: (1) equipment als List-of-Strings verworfen, (2)
     # sla.service_hours mit start/end_time/days zu {} kollabiert und verworfen,

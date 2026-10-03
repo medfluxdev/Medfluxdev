@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.ai.harness.document import Block, DocumentModel
 from app.ai.harness.pipeline import _find_quote, RETRIEVAL_TERMS, field_types, strict_value
@@ -1148,18 +1148,27 @@ class DirectContractHarness:
                 )
                 for page_number in candidate_pages[:max_visual]:
                     image = page_image_loader(page_number)
-                    reading = await call(
-                        f"vision:{page_number}",
-                        "Read this contract page visually. Transcribe only clearly visible text exactly, "
-                        "preserving dates, numbers, currency, punctuation and negation. "
-                        "Also record only explicit visual/layout relationships needed to interpret tables, "
-                        "rows, columns, labels, selected controls, service windows or signatures; do not infer "
-                        "contractual meaning. Put uncertain material in unresolved. "
-                        f"Return page={page_number}.",
-                        VisualPageReading,
-                        images=[image],
-                        stage="vision",
-                    )
+                    try:
+                        reading = await call(
+                            f"vision:{page_number}",
+                            "Read this contract page visually. Transcribe only clearly visible text exactly, "
+                            "preserving dates, numbers, currency, punctuation and negation. "
+                            "Also record only explicit visual/layout relationships needed to interpret tables, "
+                            "rows, columns, labels, selected controls, service windows or signatures; do not infer "
+                            "contractual meaning. Put uncertain material in unresolved. "
+                            f"Return page={page_number}.",
+                            VisualPageReading,
+                            images=[image],
+                            stage="vision",
+                        )
+                    except ValidationError:
+                        # OCR text remains a usable source when an optional visual
+                        # reading is malformed. Keep the failed call in diagnostics,
+                        # require human review, and continue semantic extraction.
+                        issues.append(
+                            f"Visual reading for page {page_number} failed schema validation"
+                        )
+                        continue
                     visual_readings[page_number] = reading
 
             if not any((page.text or "").strip() for page in canonical.pages) and not visual_readings:
