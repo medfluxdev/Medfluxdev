@@ -16,8 +16,10 @@ Struktur (Root Cause PR-5 Defect 1):
 - Das Produktschema `public` bleibt unveraendert. "Demo/UAT"-Fixtures koennen
   nie mehr in der Produkt-DB landen.
 
-Wenn PostgreSQL nicht erreichbar ist, laeuft die Suite wie bisher weiter
-(Persistenz-Tests skippen selbst), das Produktschema bleibt unberuehrt.
+Vor jedem DB-gestuetzten pytest-Lauf wird der dedizierte Test-Cluster gestartet
+falls noetig und seine Identitaet verifiziert. Bei fehlender/abweichender
+Identitaet bricht pytest fail-closed ab; die konfigurierte Produkt-URL wird
+niemals als Fallback verwendet.
 """
 
 from __future__ import annotations
@@ -37,6 +39,8 @@ from app.database.base import Base
 logger = logging.getLogger("medflux.tests")
 
 TEST_SCHEMA = "medflux_test_" + uuid.uuid4().hex
+TEST_DATABASE_URL: str | None = None
+TEST_SCHEMA_CREATED = False
 
 
 def _schema_url(base_url: str, *, include_public: bool = True) -> str:
@@ -47,13 +51,23 @@ def _schema_url(base_url: str, *, include_public: bool = True) -> str:
 
 
 def pytest_sessionstart(session) -> None:
-    base_url = config.settings.database_url
-    config.settings.database_url = _schema_url(base_url)
-    from app.database.session import reset_engine_for_tests
-    reset_engine_for_tests()
+    global TEST_DATABASE_URL, TEST_SCHEMA_CREATED
     if os.environ.get("MEDFLUX_UNIT_ONLY") == "1":
         config.settings.database_url = "postgresql+psycopg://invalid@127.0.0.1:1/disabled"
         return
+    try:
+        from app.testing.test_database import prepare_test_database
+
+        base_url = prepare_test_database()
+        TEST_DATABASE_URL = base_url
+    except Exception as exc:
+        raise pytest.UsageError(
+            "Test database safety/identity check failed; refusing database tests"
+        ) from exc
+
+    config.settings.database_url = _schema_url(base_url)
+    from app.database.session import reset_engine_for_tests
+    reset_engine_for_tests()
     try:
         admin = create_engine(
             base_url,
@@ -63,6 +77,7 @@ def pytest_sessionstart(session) -> None:
         with admin.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
             conn.execute(text(f"CREATE SCHEMA {TEST_SCHEMA}"))
+            TEST_SCHEMA_CREATED = True
         admin.dispose()
 
         # Alle weiteren Engines/Sessions der Tests laufen gegen das Test-Schema.
@@ -115,11 +130,11 @@ def _reset_login_rate_limit_between_tests():
 
 
 def pytest_sessionfinish(session, exitstatus):
-    if os.environ.get("MEDFLUX_UNIT_ONLY") == "1":
+    if os.environ.get("MEDFLUX_UNIT_ONLY") == "1" or not TEST_SCHEMA_CREATED or not TEST_DATABASE_URL:
         return
     from app.database.session import reset_engine_for_tests
     reset_engine_for_tests()
-    engine = create_engine(config.settings.database_url, isolation_level="AUTOCOMMIT")
+    engine = create_engine(TEST_DATABASE_URL, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as conn:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{TEST_SCHEMA}" CASCADE'))
