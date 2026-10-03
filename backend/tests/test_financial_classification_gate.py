@@ -367,6 +367,68 @@ def test_anchor_on_other_amount_in_same_quote_never_binds():
     assert _financial_classification_verified(proposed, _vision_only_rows()) is False
 
 
+def test_explicit_one_time_and_special_price_labels_block_wrong_recurring_or_total_roles():
+    investment_as_annual = SimpleNamespace(
+        field="costs.annual_cost",
+        page=3,
+        value="12.000,00 EUR",
+        quote=(
+            "Anteilige Zahlung für Investitionsgut: 12.000,00 EUR. "
+            "Die Zahlung wird zu Beginn der Vertragslaufzeit fällig."
+        ),
+    )
+    special_stk_as_total = SimpleNamespace(
+        field="costs.total_contract_value",
+        page=3,
+        value="2.395,00 EUR",
+        quote=(
+            "Sonderkondition Sicherheitstechnische Kontrolle: "
+            "Sonderpreis in Höhe von 2.395,00 EUR"
+        ),
+    )
+    unlabelled_amount_as_total = SimpleNamespace(
+        field="costs.total_contract_value",
+        page=3,
+        value="9.500,00 EUR",
+        quote="€ 9.500,00",
+    )
+    explicitly_labelled_total = SimpleNamespace(
+        field="costs.total_contract_value",
+        page=3,
+        value="21.500,00 EUR",
+        quote="Gesamtpreis netto: 21.500,00 EUR",
+    )
+
+    assert _financial_classification_verified(investment_as_annual, []) is False
+    assert _financial_classification_verified(special_stk_as_total, []) is False
+    assert _financial_classification_verified(unlabelled_amount_as_total, []) is False
+    assert _financial_classification_verified(explicitly_labelled_total, []) is True
+
+
+def test_scheduled_price_requires_year_and_matching_amount_in_same_quote():
+    false_schedule = SimpleNamespace(
+        field="costs.scheduled_prices",
+        page=3,
+        value=[{
+            "period_index": 1,
+            "amount": {"amount": 2395.0, "currency": "EUR"},
+        }],
+        quote="Sonderpreis für die Sicherheitstechnische Kontrolle (STK): 2.395,00 EUR",
+    )
+    grounded_schedule = SimpleNamespace(
+        field="costs.scheduled_prices",
+        page=1,
+        value=[{
+            "period_index": 1,
+            "amount": {"amount": 52500.0, "currency": "EUR"},
+        }],
+        quote="1. Jahr Gesamtpreis netto | 52.500,00 EUR",
+    )
+
+    assert _financial_classification_verified(false_schedule, []) is False
+    assert _financial_classification_verified(grounded_schedule, []) is True
+
+
 def test_two_amounts_same_page_do_not_cross_bind_periodicity():
     # An unrelated corroborated row (matched ANNUAL label but a DIFFERENT amount)
     # must not bind a period to the proposed one-time amount.
@@ -507,8 +569,7 @@ def test_legacy_paths_unaffected():
     assert _financial_classification_verified(annual, []) is True
     # 2) Non-periodic fields never impacted, even with visual rows present.
     for other in ("identity.supplier", "dates.start_date",
-                  "termination.notice_period",
-                  "costs.scheduled_prices", "costs.variable_charges"):
+                  "termination.notice_period", "costs.variable_charges"):
         fact = SimpleNamespace(field=other, page=3, value="x",
                                quote="Verguetung 12.000 EUR pauschal.")
         assert _financial_classification_verified(

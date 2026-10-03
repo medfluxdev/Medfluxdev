@@ -98,6 +98,31 @@ def _wire_fact_value(value: str) -> Any:
     return value
 
 
+def _wire_fact_value_for_schema(value: Any) -> str:
+    """Keep the compact wire schema string-only without losing JSON values."""
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _unwrap_json_code_fence(raw: str) -> str:
+    """Remove one Markdown fence only when it encloses the complete JSON reply."""
+    lines = raw.strip().splitlines()
+    if len(lines) < 3:
+        return raw
+
+    opening = lines[0].strip().casefold()
+    if opening not in {"```", "```json"} or lines[-1].strip() != "```":
+        return raw
+
+    candidate = "\n".join(lines[1:-1]).strip()
+    try:
+        json.loads(candidate)
+    except (TypeError, ValueError):
+        return raw
+    return candidate
+
+
 # A visual reading is *complementary* to the canonical OCR text layer, never a
 # second full-page transcription. Unbounded transcription of a dense scanned
 # contract page cannot fit the vision output budget: the model hits the token
@@ -1883,17 +1908,19 @@ def _derive_supplier(contract: Any, canonical: Any, document: Any) -> Optional[A
     1. the contracting-parties sentence ``zwischen A und B`` -> A is the vendor;
     2. otherwise the letterhead line carrying a legal form.
 
-    Only a name that literally carries a legal form is accepted, the hospital
-    customer is excluded, and an already accepted AI supplier is never replaced.
+    Only a name that literally carries a legal form is accepted and hospital
+    customers are excluded. A source-grounded letterhead candidate can replace
+    a model value that is absent or appears only in weaker boilerplate.
     """
     identity = getattr(contract, "identity", None)
     if identity is None:
         return None
     existing = (getattr(identity, "supplier", None) or "").strip()
-    if existing:
-        return None
     customer = (getattr(identity, "customer", None) or "").strip()
     customer_key = _org_key(customer)
+    customer_looks_like_hospital = bool(
+        re.search(r"\b(?:krankenhaus|klinik|klinikum|hospital)\b", customer, re.IGNORECASE)
+    )
 
     best: Optional[tuple[int, int, int, str, str]] = None
     for page in canonical.pages:
@@ -1903,7 +1930,11 @@ def _derive_supplier(contract: Any, canonical: Any, document: Any) -> Optional[A
             if not candidate or "|" in candidate or len(candidate) > 2000:
                 continue
             for name, rank in _supplier_candidates(candidate):
-                if customer_key and _org_key(name) == customer_key:
+                if (
+                    customer_looks_like_hospital
+                    and customer_key
+                    and _org_key(name) == customer_key
+                ):
                     continue
                 if _org_key(name) in _KNOWN_NON_PARTIES:
                     continue
@@ -1913,6 +1944,42 @@ def _derive_supplier(contract: Any, canonical: Any, document: Any) -> Optional[A
     if best is None:
         return None
     _rank, page_number, _length, name, source_line = best
+    if existing and _org_key(existing) == _org_key(name):
+        return None
+    if existing:
+        existing_pattern = r"\s+".join(re.escape(piece) for piece in existing.split())
+        for page in canonical.pages:
+            for line in (page.text or "").splitlines():
+                candidate = " ".join(line.split())
+                if re.search(existing_pattern, candidate, re.IGNORECASE) is None:
+                    continue
+                # A verbatim party name tied to a party clause or address is
+                # stronger than a regex candidate that may be only a substring.
+                boilerplate_definition = bool(
+                    re.search(r"\b(?:bezeichnet|bedeutet|im sinne|defined as)\b", candidate, re.IGNORECASE)
+                )
+                if not boilerplate_definition and (
+                    "zwischen" in candidate.casefold()
+                    or _ADDRESS_HINT_RE.search(candidate)
+                    or re.search(r"\b(?:vertr\.?[- ]?nr|lieferant|anbieter)\b", candidate, re.IGNORECASE)
+                ):
+                    return None
+                if not boilerplate_definition and len(candidate) <= 120 and _LEGAL_FORM_RE.search(candidate):
+                    return None
+        existing_rank: Optional[int] = None
+        for page in canonical.pages:
+            for line in (page.text or "").splitlines():
+                candidate = " ".join(line.split())
+                if re.search(existing_pattern, candidate, re.IGNORECASE) is None:
+                    continue
+                for existing_candidate, candidate_rank in _supplier_candidates(candidate):
+                    if _org_key(existing_candidate) == _org_key(existing):
+                        existing_rank = (
+                            candidate_rank
+                            if existing_rank is None else min(existing_rank, candidate_rank)
+                        )
+        if existing_rank is not None and existing_rank <= _rank:
+            return None
     clause = _parties_clause(source_line, name)
     quote = clause or _clean_quote(source_line)
     if len(quote) > 400:
@@ -1924,6 +1991,73 @@ def _derive_supplier(contract: Any, canonical: Any, document: Any) -> Optional[A
     evidence.extraction_method = ExtractionMethod.PROGRAMMATIC
     identity.supplier = name
     return evidence
+
+
+def _derive_customer_from_parties(
+    contract: Any, canonical: Any, document: Any
+) -> Optional[tuple[str, SourceEvidence]]:
+    """Resolve the non-supplier party from an explicit "zwischen A und B" clause.
+
+    The function only changes customer identity when one legal entity in the
+    clause matches the already source-grounded supplier. It does not infer a
+    party from a generic "Klinik" label or from address proximity.
+    """
+    identity = getattr(contract, "identity", None)
+    supplier = (getattr(identity, "supplier", None) or "").strip()
+    if identity is None or not supplier:
+        return None
+    supplier_key = _org_key(supplier)
+    for page in canonical.pages:
+        for line in (page.text or "").splitlines():
+            match = re.search(r"\bzwischen\s+(.{1,1200})", line, re.IGNORECASE)
+            if match is None:
+                continue
+            split = re.search(r"\s+und\s+", match.group(1), re.IGNORECASE)
+            if split is None:
+                continue
+            party_spans = [
+                (match.start(1), match.start(1) + split.start()),
+                (match.start(1) + split.end(), match.end(1)),
+            ]
+            parties: list[tuple[str, int, int]] = []
+            for start, end in party_spans:
+                segment = line[start:end].strip(" ,;.-")
+                legal_form = _LEGAL_FORM_RE.search(segment)
+                if legal_form is None:
+                    parties = []
+                    break
+                leading = len(line[start:end]) - len(line[start:end].lstrip(" ,;.-"))
+                name_end = start + leading + legal_form.end()
+                name = _clean_quote(line[start + leading:name_end])
+                parties.append((name, start + leading, name_end))
+            if len(parties) != 2:
+                continue
+            keys = [_org_key(row[0]) for row in parties]
+            supplier_index = next(
+                (
+                    index for index, key in enumerate(keys)
+                    if key == supplier_key or key in supplier_key or supplier_key in key
+                ),
+                None,
+            )
+            if supplier_index is None:
+                continue
+            customer, _customer_start, customer_end = parties[1 - supplier_index]
+            quote_start = match.start()
+            quote_end = customer_end
+            quote = _clean_quote(line[quote_start:quote_end])
+            if len(quote) > 400:
+                quote = customer
+            evidence = _build_page_evidence(page.page_number, quote, document, canonical)
+            if evidence is None:
+                continue
+            evidence.source_text = quote
+            evidence.extraction_method = ExtractionMethod.PROGRAMMATIC
+            old_customer = (getattr(identity, "customer", None) or "").strip()
+            evidence.requires_review = bool(old_customer and _org_key(old_customer) != _org_key(customer))
+            identity.customer = customer
+            return customer, evidence
+    return None
 
 
 def _supplier_candidates(line: str) -> list[tuple[str, int]]:
@@ -2663,6 +2797,87 @@ def _financial_classification_verified(
     visual row whose value matches the amount and whose label/quote carries the
     anchor. The legacy/hybrid path without visual-first rows is unchanged.
     """
+    quote_lower = (getattr(fact, "quote", None) or "").casefold()
+    if fact.field == "costs.scheduled_prices":
+        proposed_rows = getattr(fact, "value", None)
+        quote = getattr(fact, "quote", None) or ""
+        if not isinstance(proposed_rows, list) or not proposed_rows:
+            return False
+        quote_amounts = [
+            parsed for match in _MONEY_LITERAL_RE.finditer(quote)
+            for parsed in [_money_amount(match.group(0))]
+            if parsed is not None
+        ]
+        if not quote_amounts:
+            return False
+        for row in proposed_rows:
+            if not isinstance(row, dict):
+                return False
+            index = row.get("period_index")
+            if not isinstance(index, int) or index < 1:
+                return False
+            year_patterns = (
+                rf"\b{index}\s*\.\s*jahr\b",
+                rf"\bjahr\s*{index}\b",
+            )
+            if not any(re.search(pattern, quote, re.IGNORECASE) for pattern in year_patterns):
+                return False
+            amount_value = row.get("amount")
+            amounts = _money_amounts_from_value(amount_value)
+            if len(amounts) != 1 or not any(
+                abs(amount - amounts[0]) < 0.001 for amount in quote_amounts
+            ):
+                return False
+        return True
+    if fact.field == "costs.total_contract_value" and any(
+        marker in quote_lower
+        for marker in (
+            "sonderkondition",
+            "sonderpreis",
+            "sicherheitstechnische kontrolle",
+            "preis pro stück",
+            "preis pro stuck",
+            "pro stück",
+            "pro stuck",
+            "ausgleichszahlung/stück",
+            "ausgleichszahlung/stuck",
+        )
+    ):
+        return False
+    if fact.field == "costs.total_contract_value":
+        total_anchor = re.compile(
+            r"\b(?:gesamt(?:auftragswert|vertragswert|preis|betrag)|"
+            r"total\s+(?:contract|order)\s+value)\b",
+            re.IGNORECASE,
+        )
+        quoted_amounts = [
+            parsed for match in _MONEY_LITERAL_RE.finditer(getattr(fact, "quote", "") or "")
+            for parsed in [_money_amount(match.group(0))]
+            if parsed is not None
+        ]
+        expected_amounts = _money_amounts_from_value(getattr(fact, "value", None))
+        if (
+            not total_anchor.search(getattr(fact, "quote", "") or "")
+            or len(quoted_amounts) != 1
+            or len(expected_amounts) != 1
+            or abs(quoted_amounts[0] - expected_amounts[0]) >= 0.001
+        ):
+            return False
+    if fact.field in _PERIOD_FIELDS and fact.field != "costs.one_time_cost" and any(
+        marker in quote_lower
+        for marker in (
+            "anteilige zahlung für investitionsgut",
+            "anteilige zahlung fur investitionsgut",
+            "fällig zu beginn der vertragslaufzeit",
+            "fallig zu beginn der vertragslaufzeit",
+            "einzelkomponenten",
+            "preis pro stück",
+            "preis pro stuck",
+            "sonderkondition",
+            "sonderpreis",
+        )
+    ):
+        return False
     anchor = _PERIOD_FIELDS.get(fact.field)
     if anchor is None:
         # Nicht-disretionäre Felder (identity, dates, termination, SLA-Liste,
@@ -2862,6 +3077,7 @@ class DirectContractHarness:
 
                 output_tokens = base_output if output_budget is None else int(output_budget)
                 attempt = 0
+                request_system = system
                 allow_growth = bool(
                     getattr(self.settings, "harness_allow_context_growth", False)
                 )
@@ -2891,7 +3107,7 @@ class DirectContractHarness:
                     try:
                         raw = await provider.generate_request(
                             prompt,
-                            system,
+                            request_system,
                             schema,
                             output_tokens,
                             effective_context,
@@ -2911,17 +3127,24 @@ class DirectContractHarness:
                             prompt_tokens = int(actual_prompt_tokens)
                         if metric["done_reason"] in {"length", "max_tokens"}:
                             raise RuntimeError("output_truncated")
+                        structured_raw = _unwrap_json_code_fence(raw)
                         if schema_type is ProposedFactBatch:
                             try:
-                                raw_value = json.loads(raw)
+                                raw_value = json.loads(structured_raw)
                             except ValueError:
                                 # Preserve Pydantic's sanitized json_invalid
                                 # classification for diagnostics/review logic.
-                                schema_type.model_validate_json(raw)
+                                schema_type.model_validate_json(structured_raw)
                                 raise
                             if isinstance(raw_value, list):
+                                wire_items = [
+                                    ({**item, "value": _wire_fact_value_for_schema(item["value"])}
+                                     if isinstance(item, dict) and "value" in item
+                                     else item)
+                                    for item in raw_value
+                                ]
                                 wire_batch = ProposedFactBatchOutput.model_validate(
-                                    raw_value
+                                    wire_items
                                 )
                                 parsed = ProposedFactBatch(
                                     facts=[
@@ -2939,10 +3162,29 @@ class DirectContractHarness:
                                 # legacy object envelope; validation remains strict.
                                 parsed = ProposedFactBatch.model_validate(raw_value)
                         else:
-                            parsed = schema_type.model_validate_json(raw)
+                            parsed = schema_type.model_validate_json(structured_raw)
                         metric["succeeded"] = True
                         return parsed
                     except Exception as exc:
+                        if isinstance(exc, ValidationError) and attempt == 0:
+                            category = safe_error_category(exc)
+                            if category in {"malformed_json", "schema_validation"}:
+                                metric["first_error_category"] = category
+                                metric["structured_output_retry_count"] = 1
+                                metric["retry_decision"] = "structured_output_repair_retry"
+                                request_system = (
+                                    system
+                                    + "\nThe previous response did not satisfy this schema. "
+                                    "Return exactly one complete JSON value matching the schema. "
+                                    "Do not use Markdown fences, comments, prose, or extra keys. "
+                                    "Keep strings and lists within the schema limits; omit optional "
+                                    "entries rather than exceed them. For semantic fact batches, "
+                                    "encode object or list values as compact JSON text strings."
+                                )
+                                prompt_tokens = _estimate_tokens(request_system + prompt)
+                                metric["repair_prompt_tokens"] = prompt_tokens
+                                attempt += 1
+                                continue
                         if str(exc) == "output_truncated" and attempt == 0:
                             metric["truncation_count"] = 1
                             next_output, decision = _retry_output_plan(
@@ -3711,30 +3953,58 @@ class DirectContractHarness:
                         "start_condition": condition_clause,
                     }
                 )
-            supplier_evidence = _bind_supplier_evidence(contract, canonical, document)
-            if supplier_evidence is not None:
-                contract.identity.evidence = supplier_evidence
+            proposed_supplier = (contract.identity.supplier or "").strip()
+            derived_supplier_evidence = _derive_supplier(contract, canonical, document)
+            if derived_supplier_evidence is not None:
+                contract.identity.evidence = derived_supplier_evidence
                 derived_facts.append(
                     {
                         "field": "identity.supplier",
-                        "derivation": "explicit_supplier_letterhead_mention",
-                        "page": supplier_evidence.page,
+                        "derivation": "source_ranked_legal_form_party_mention",
+                        "page": derived_supplier_evidence.page,
+                        "supplier": contract.identity.supplier,
+                        "requires_review": bool(proposed_supplier),
                     }
                 )
-            elif not (contract.identity.supplier or "").strip():
-                # The evidence gate rejected the model's supplier fact (missing
-                # page/quote). The party is still named verbatim in the document,
-                # so it is read from the text rather than left empty.
-                derived_supplier_evidence = _derive_supplier(contract, canonical, document)
-                if derived_supplier_evidence is not None:
-                    contract.identity.evidence = derived_supplier_evidence
+                if proposed_supplier:
+                    issues.append("Source-grounded supplier evidence conflicts with the proposed supplier")
+            else:
+                supplier_evidence = _bind_supplier_evidence(contract, canonical, document)
+                if supplier_evidence is not None:
+                    contract.identity.evidence = supplier_evidence
                     derived_facts.append(
                         {
                             "field": "identity.supplier",
-                            "derivation": "legal_form_party_mention",
-                            "page": derived_supplier_evidence.page,
-                            "supplier": contract.identity.supplier,
+                            "derivation": "explicit_supplier_letterhead_mention",
+                            "page": supplier_evidence.page,
                         }
+                    )
+            customer_fact = _derive_customer_from_parties(
+                contract, canonical, document
+            )
+            if customer_fact is not None:
+                customer_name, customer_evidence = customer_fact
+                evidence_rows.append({
+                    "field": "identity.customer",
+                    "source": customer_evidence.model_dump(mode="json"),
+                })
+                accepted.append({
+                    "field": "identity.customer",
+                    "page": customer_evidence.page,
+                    "quote": customer_evidence.source_text,
+                    "confidence": None,
+                })
+                supported_count += 1
+                derived_facts.append({
+                    "field": "identity.customer",
+                    "derivation": "other_legal_party_in_explicit_between_clause",
+                    "page": customer_evidence.page,
+                    "customer": customer_name,
+                    "requires_review": customer_evidence.requires_review,
+                })
+                if customer_evidence.requires_review:
+                    issues.append(
+                        "Source-grounded customer party conflicts with the proposed customer"
                     )
             if not contract.equipment:
                 derived_equipment = _equipment_from_title_evidence(
@@ -3792,33 +4062,44 @@ class DirectContractHarness:
                             "duration": derived_duration[0].model_dump(mode="json"),
                         }
                     )
-            if contract.dates.duration is None:
-                table_duration = _duration_from_offer_table(
-                    contract, canonical, document
-                )
-                if table_duration is not None:
-                    duration_value, duration_evidence, duration_quote = table_duration
-                    contract.dates.duration = duration_value
-                    if contract.dates.evidence is None:
-                        contract.dates.evidence = duration_evidence
-                    evidence_rows.append({
-                        "field": "dates.duration",
-                        "source": duration_evidence.model_dump(mode="json"),
-                    })
-                    accepted.append({
-                        "field": "dates.duration",
-                        "page": duration_evidence.page,
-                        "quote": duration_quote,
-                        "confidence": None,
-                    })
-                    supported_count += 1
-                    derived_facts.append({
-                        "field": "dates.duration",
-                        "derivation": "title_bound_offer_term_table",
-                        "page": duration_evidence.page,
-                        "duration": duration_value.model_dump(mode="json"),
-                        "requires_review": True,
-                    })
+            table_duration = _duration_from_offer_table(
+                contract, canonical, document
+            )
+            if table_duration is not None:
+                duration_value, duration_evidence, duration_quote = table_duration
+                previous_duration = contract.dates.duration
+                contract.dates.duration = duration_value
+                if previous_duration is not None and (
+                    float(previous_duration.value) != float(duration_value.value)
+                    or getattr(previous_duration.unit, "value", previous_duration.unit)
+                    != getattr(duration_value.unit, "value", duration_value.unit)
+                ):
+                    issues.append(
+                        "Title-bound service term table conflicts with the proposed contract duration"
+                    )
+                contract.dates.evidence = duration_evidence
+                evidence_rows.append({
+                    "field": "dates.duration",
+                    "source": duration_evidence.model_dump(mode="json"),
+                })
+                accepted.append({
+                    "field": "dates.duration",
+                    "page": duration_evidence.page,
+                    "quote": duration_quote,
+                    "confidence": None,
+                })
+                supported_count += 1
+                derived_facts.append({
+                    "field": "dates.duration",
+                    "derivation": "title_bound_offer_term_table",
+                    "page": duration_evidence.page,
+                    "duration": duration_value.model_dump(mode="json"),
+                    "previous_duration": (
+                        previous_duration.model_dump(mode="json")
+                        if previous_duration is not None else None
+                    ),
+                    "requires_review": previous_duration is not None,
+                })
             duration = contract.dates.duration
             unit = getattr(getattr(duration, "unit", None), "value", getattr(duration, "unit", None))
             expected_years = None
@@ -3860,12 +4141,23 @@ class DirectContractHarness:
                         "source_verified_as_independent_fact": False,
                     }
                 )
-            if contract.costs.total_contract_value is None:
-                scheduled_total = _complete_scheduled_total(
-                    scheduled_rows, expected_years=expected_years
-                )
-                if scheduled_total is not None and complete_currency:
-                    total_currency = next(iter(schedule_currencies))
+            scheduled_total = _complete_scheduled_total(
+                scheduled_rows, expected_years=expected_years
+            )
+            if scheduled_total is not None and complete_currency:
+                total_currency = next(iter(schedule_currencies))
+                previous_total = contract.costs.total_contract_value
+                if previous_total is not None and (
+                    float(previous_total.amount) != scheduled_total
+                    or str(previous_total.currency).upper() != total_currency
+                ):
+                    issues.append(
+                        "Complete yearly price schedule conflicts with the proposed total contract value"
+                    )
+                if previous_total is None or (
+                    float(previous_total.amount) != scheduled_total
+                    or str(previous_total.currency).upper() != total_currency
+                ):
                     contract.costs.total_contract_value = Money(
                         amount=scheduled_total,
                         currency=total_currency,
@@ -3880,6 +4172,11 @@ class DirectContractHarness:
                             {"period_index": row["period_index"], **row["amount"]}
                             for row in sorted(scheduled_rows, key=lambda item: item["period_index"])
                         ],
+                        "previous_total_contract_value": (
+                            previous_total.model_dump(mode="json")
+                            if previous_total is not None else None
+                        ),
+                        "requires_review": previous_total is not None,
                         "source_verified_as_independent_fact": False,
                     })
             if supported_count == 0:

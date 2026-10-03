@@ -18,6 +18,12 @@ from app.ai.harness.v3 import (
     _primary_contract_title,
     _explicit_labelled_contract_dates,
     _derive_start_condition,
+    _duration_from_offer_table,
+    _derive_supplier,
+    _derive_customer_from_parties,
+    _unwrap_json_code_fence,
+    _wire_fact_value,
+    _wire_fact_value_for_schema,
 )
 from app.ai.schemas import ModelCapabilities, ModelDescriptor
 from app.core.config import Settings
@@ -28,7 +34,7 @@ from app.documents.intelligence.canonical import (
     ProcessingProvenance,
 )
 from app.models.contract import Contract
-from app.models.values import FlexibleDate
+from app.models.values import Duration, FlexibleDate
 
 
 
@@ -224,6 +230,106 @@ def test_contract_date_pair_skips_unrelated_datum_in_reordered_ocr():
     assert contract.dates.start_condition is None
     assert all("Datum:\n15.04.2025" in row["quote"] for row in derived)
     assert _derive_start_condition(contract, canonical) is None
+
+
+def test_title_bound_offer_term_table_overrides_unrelated_model_duration():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-term-table",
+        source_sha256="f" * 64,
+        pages=[Page(
+            page_number=1,
+            width_pt=600,
+            height_pt=800,
+            text=(
+                "Laufzeit in Anzahl Monaten\n"
+                "SERVICEVERTRAG RADIOSURGERY | 82020-28 | EXACTRAC X-RAY | 48\n"
+                "Die Preise gelten ab Ausstellungsdatum für 90 Tage"
+            ),
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+    contract.identity.contract_title = "SERVICEVERTRAG RADIOSURGERY"
+    contract.dates.duration = Duration(value=30, unit="days")
+
+    result = _duration_from_offer_table(contract, canonical, document_model)
+
+    assert result is not None
+    duration, evidence, quote = result
+    assert duration == Duration(value=48, unit="months")
+    assert evidence.page == 1
+    assert evidence.requires_review is True
+    assert quote.endswith("| 48")
+
+
+def test_source_ranked_supplier_letterhead_replaces_weaker_model_party():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-supplier-party",
+        source_sha256="a" * 64,
+        pages=[Page(
+            page_number=1,
+            width_pt=600,
+            height_pt=800,
+            text=(
+                "Brainlab Sales GmbH Olof-Palme-Straße 9 81829 Munich Germany\n"
+                "SERVICEVERTRAG RADIOSURGERY"
+            ),
+            elements=[],
+        ), Page(
+            page_number=7,
+            width_pt=600,
+            height_pt=800,
+            text='"BRAINLAB" bezeichnet die BRAINLAB Gesellschaft, welche im ANGEBOT spezifiziert ist.',
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+    contract.identity.supplier = "BRAINLAB Gesellschaft"
+    contract.identity.customer = "Brainlab Sales GmbH"
+
+    evidence = _derive_supplier(contract, canonical, document_model)
+
+    assert contract.identity.supplier == "Brainlab Sales GmbH"
+    assert evidence is not None
+    assert evidence.page == 1
+    assert "81829" in evidence.source_text
+
+
+def test_customer_is_resolved_as_other_legal_party_from_between_clause():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-customer-party",
+        source_sha256="b" * 64,
+        pages=[Page(
+            page_number=1,
+            width_pt=600,
+            height_pt=800,
+            text=(
+                "zwischen Abbott Medical GmbH Betriebsstätte Wetzlar "
+                "Schanzenfeldstr. 2 35578 Wetzlar und Krankenhaus Nordwest GmbH "
+                "Steinbacher Hohl 2-26 60488 Frankfurt"
+            ),
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+    contract.identity.supplier = "Abbott Medical GmbH"
+    contract.identity.customer = "Klinik"
+
+    result = _derive_customer_from_parties(contract, canonical, document_model)
+
+    assert result is not None
+    customer, evidence = result
+    assert customer == "Krankenhaus Nordwest GmbH"
+    assert contract.identity.customer == customer
+    assert evidence.page == 1
+    assert evidence.requires_review is True
+    assert "zwischen Abbott Medical GmbH" in evidence.source_text
 
 
 def document():
@@ -537,6 +643,24 @@ def test_production_constructor_accepts_settings_only():
     assert harness.ai is not None
 
 
+def test_json_code_fence_unwrap_requires_a_complete_json_document():
+    fenced = '```json\n{"page": 1}\n```'
+    assert _unwrap_json_code_fence(fenced) == '{"page": 1}'
+
+    extra_text = 'Model result:\n```json\n{"page": 1}\n```'
+    assert _unwrap_json_code_fence(extra_text) == extra_text
+
+    invalid_body = '```json\n{"page":}\n```'
+    assert _unwrap_json_code_fence(invalid_body) == invalid_body
+
+
+def test_structured_wire_value_round_trips_json_objects():
+    value = {"amount": 52500, "currency": "EUR", "period": "annual"}
+    encoded = _wire_fact_value_for_schema(value)
+    assert json.loads(encoded) == value
+    assert _wire_fact_value(encoded) == value
+
+
 def test_source_signals_find_reference_values():
     rows = collect_source_signals(DocumentModel.build(document()))
     values = {row["value"] for row in rows}
@@ -646,6 +770,62 @@ async def test_malformed_semantic_pack_preserves_other_fact_groups():
     assert core_call["failed"] is True
     assert core_call["error_category"] == "malformed_json"
     assert any("Semantic core response" in issue for issue in result.diagnostics["issues"])
+
+
+@pytest.mark.asyncio
+async def test_harness_accepts_fully_fenced_vision_and_semantic_json(monkeypatch):
+    monkeypatch.setattr("app.ai.harness.v3.visual_candidate_pages", lambda _doc: [1])
+
+    class FencedProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            return f"```json\n{raw}\n```"
+
+    result = await DirectContractHarness(settings(), ai(FencedProvider())).analyze(
+        document(), page_image_loader=lambda _page: "test-image"
+    )
+
+    assert result.contract is not None, result.error
+    assert not [call for call in result.diagnostics["calls"] if call.get("failed")]
+    assert any(call.get("purpose") == "vision:1" for call in result.diagnostics["calls"])
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert result.contract.costs.annual_cost.amount == 8000
+
+
+@pytest.mark.asyncio
+async def test_harness_retries_one_invalid_structured_response():
+    class RecoverableMalformedCoreProvider(FakeProvider):
+        def __init__(self):
+            self.core_calls = 0
+
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if schema["title"] == "ProposedFactBatch" and "Extract the core contract facts" in text:
+                self.core_calls += 1
+                if self.core_calls == 1:
+                    return "```json\n{\"facts\": [}\n```"
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    provider = RecoverableMalformedCoreProvider()
+    result = await DirectContractHarness(settings(), ai(provider)).analyze(document())
+
+    assert result.contract is not None, result.error
+    core_call = next(
+        call for call in result.diagnostics["calls"]
+        if call.get("purpose") == "semantic:core:chunk1"
+    )
+    assert core_call["failed"] is False
+    assert core_call["succeeded"] is True
+    assert core_call["structured_output_retry_count"] == 1
+    assert core_call["first_error_category"] == "malformed_json"
+    assert provider.core_calls == 2
 
 
 @pytest.mark.asyncio
