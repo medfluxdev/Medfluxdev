@@ -149,7 +149,7 @@ def measured_output_budget(
     if not purpose.startswith(("semantic:", "vision:")):
         return None
     margin = int(capacity) - int(prompt_tokens) - 512
-    candidate = min(3200, margin)
+    candidate = min(8192, margin)
     return candidate if candidate >= int(base_output) + 128 else None
 
 
