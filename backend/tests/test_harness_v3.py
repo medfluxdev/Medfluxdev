@@ -994,6 +994,40 @@ async def test_truncated_output_is_retried_with_reduced_output_budget():
 
 
 @pytest.mark.asyncio
+async def test_truncated_semantic_pack_keeps_other_grounded_pack_results_for_review():
+    class PaymentTruncatingProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if schema["title"] == "ProposedFactBatch" and text.startswith(
+                "Extract the payment"
+            ):
+                self.last_done_reason = "length"
+                self.last_usage = {
+                    "prompt_tokens": 3000,
+                    "completion_tokens": max_tokens,
+                }
+                return '{"facts":['
+            self.last_done_reason = None
+            self.last_usage = {}
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(PaymentTruncatingProvider())
+    ).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert result.contract.equipment[0].device_name == "Impella® AIC System"
+    assert result.status.value == "partial"
+    assert result.requires_review is True
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 4
+    assert any("payment was truncated" in issue for issue in result.diagnostics["issues"])
+
+
+@pytest.mark.asyncio
 async def test_unknown_applicability_junk_without_quote_is_not_auto_bound():
     class JunkProvider(FakeProvider):
         async def generate_request(
@@ -1094,7 +1128,7 @@ def test_retry_output_plan_uses_measured_budget():
     assert plan[1] == "output_budget_stage_retry"
 
     long_contract_plan = _retry_output_plan("semantic:payment", 21641, 32768, 1800)
-    assert long_contract_plan[0] == 8192
+    assert long_contract_plan[0] == 3200
 
     plan = _retry_output_plan("semantic:core", 7600, 8192, 1800)
     assert plan[0] is None
