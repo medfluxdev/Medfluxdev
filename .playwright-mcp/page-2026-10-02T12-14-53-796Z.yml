@@ -1,0 +1,30 @@
+- generic [active] [ref=e1]:
+  - link "Zum Hauptinhalt springen" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=e5]:
+    - generic [ref=e6]:
+      - img "MedFlux" [ref=e9]
+      - region [ref=e10]:
+        - heading "Willkommen" [level=2] [ref=e11]
+        - paragraph [ref=e12]: Melden Sie sich bei Ihrem MedFlux-Konto an.
+        - generic [ref=e13]:
+          - generic [ref=e14]:
+            - text: E-Mail
+            - textbox "E-Mail" [ref=e15]:
+              - /placeholder: E-Mail-Adresse eingeben
+              - text: flow@klinik.local
+          - generic [ref=e16]:
+            - text: Passwort
+            - generic [ref=e17]:
+              - textbox "Passwort Passwort anzeigen" [ref=e18]:
+                - /placeholder: Passwort eingeben
+                - text: FlowPass_sr415_2026
+              - button "Passwort anzeigen" [ref=e19] [cursor=pointer]
+          - alert [ref=e38]: Die Verbindung zum Server ist fehlgeschlagen. Bitte prüfen Sie Ihre Netzwerkverbindung.
+          - button "Anmelden" [ref=e23] [cursor=pointer]
+        - generic "MedFlux Vorteile" [ref=e24]:
+          - generic [ref=e25]: Sicher
+          - generic [ref=e29]: Schnell
+          - generic [ref=e33]: Intelligent
+  - region "Benachrichtigungen"
+  - alert [ref=e4]

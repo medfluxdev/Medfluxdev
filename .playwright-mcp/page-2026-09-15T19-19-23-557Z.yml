@@ -1,0 +1,64 @@
+- generic [active] [ref=f11e1]:
+  - link "Zum Hauptinhalt springen" [ref=f11e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=f11e3]:
+    - complementary [ref=f11e4]:
+      - link "Medflux Contract Intelligence" [ref=f11e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f11e7]:
+          - strong [ref=f11e8]: Medflux
+          - generic [ref=f11e9]: Contract Intelligence
+      - navigation "Hauptnavigation" [ref=f11e10]:
+        - generic [ref=f11e11]:
+          - generic [ref=f11e12]: Arbeitsbereich
+          - navigation "Arbeitsbereich" [ref=f11e13]:
+            - link [ref=f11e14] [cursor=pointer]:
+              - /url: /
+            - link [ref=f11e18] [cursor=pointer]:
+              - /url: /contracts
+            - link [ref=f11e23] [cursor=pointer]:
+              - /url: /work-queue
+            - link [ref=f11e28] [cursor=pointer]:
+              - /url: /equipment
+            - link [ref=f11e32] [cursor=pointer]:
+              - /url: /import
+        - generic [ref=f11e36]:
+          - generic [ref=f11e37]: Kontrolle
+          - navigation "Kontrolle" [ref=f11e38]:
+            - link [ref=f11e39] [cursor=pointer]:
+              - /url: /review
+            - link [ref=f11e44] [cursor=pointer]:
+              - /url: /nachweise
+            - link [ref=f11e49] [cursor=pointer]:
+              - /url: /audit
+            - link [ref=f11e54] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=f11e59]:
+          - generic [ref=f11e60]: System
+          - navigation "System" [ref=f11e61]:
+            - link [ref=f11e62] [cursor=pointer]:
+              - /url: /settings
+      - generic [ref=f11e67]:
+        - generic [ref=f11e68]:
+          - generic [ref=f11e69]:
+            - generic [ref=f11e70]: Lokale KI
+            - generic [ref=f11e71]: Prüfe…
+          - paragraph [ref=f11e73]: Lokale VerarbeitungKeine externen Modellaufrufe
+        - generic [ref=f11e74]:
+          - generic [aria-hidden] [ref=f11e75]: K
+          - generic [ref=f11e76]:
+            - text: Krankenhaus
+            - generic [ref=f11e77]: Arbeitsbereich krankenhaus
+    - main [ref=f11e78]:
+      - generic [ref=f11e79]:
+        - heading "Archiv" [level=1] [ref=f11e81]
+        - generic [ref=f11e82]:
+          - search [ref=f11e83]:
+            - searchbox "Globale Suche" [ref=f11e87]
+          - link "Vertrag importieren" [ref=f11e88] [cursor=pointer]:
+            - /url: /import
+      - generic [ref=f11e90]:
+        - generic [ref=f11e91]: Nicht-destruktives Ablegen
+        - paragraph [ref=f11e92]: Archiv wird geladen…
+  - region "Benachrichtigungen"
+  - alert [ref=f11e93]

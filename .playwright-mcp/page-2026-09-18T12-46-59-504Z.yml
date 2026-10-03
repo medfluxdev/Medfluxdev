@@ -1,0 +1,367 @@
+- generic [ref=f4e1]:
+  - link "Zum Hauptinhalt springen" [ref=f4e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=f4e5]:
+    - complementary [ref=f4e6]:
+      - link "MedFlux Startseite" [ref=f4e8] [cursor=pointer]:
+        - /url: /
+        - img "MedFlux" [ref=f4e10]
+      - navigation "Hauptnavigation" [ref=f4e11]:
+        - generic [ref=f4e12]:
+          - generic [ref=f4e13]: Arbeitsbereich
+          - generic [ref=f4e14]:
+            - link "Übersicht" [ref=f4e15] [cursor=pointer]:
+              - /url: /
+            - link "Verträge" [ref=f4e20] [cursor=pointer]:
+              - /url: /contracts
+            - link "Geräte" [ref=f4e26] [cursor=pointer]:
+              - /url: /equipment
+            - link "To-dos" [ref=f4e32] [cursor=pointer]:
+              - /url: /work-queue
+        - generic [ref=f4e38]:
+          - generic [ref=f4e39]: Dokumente & Prüfung
+          - generic [ref=f4e40]:
+            - link "Import" [ref=f4e41] [cursor=pointer]:
+              - /url: /import
+            - link "Prüfungen" [ref=f4e46] [cursor=pointer]:
+              - /url: /review
+            - link "Nachweise" [ref=f4e52] [cursor=pointer]:
+              - /url: /nachweise
+            - link "Archiv" [ref=f4e58] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=f4e64]:
+          - generic [ref=f4e65]: Administration
+          - generic [ref=f4e66]:
+            - link "Audit" [ref=f4e67] [cursor=pointer]:
+              - /url: /audit
+            - link "Admin Dashboard" [ref=f4e73] [cursor=pointer]:
+              - /url: /admin
+            - link "Einstellungen" [ref=f4e79] [cursor=pointer]:
+              - /url: /settings
+    - main [ref=f4e85]:
+      - generic [ref=f4e86]:
+        - generic [aria-hidden] [ref=f4e88]: Vertrag 360
+        - generic [ref=f4e89]:
+          - generic "Arbeitsbereich auswählen"
+          - link "Analysen" [ref=f4e90] [cursor=pointer]:
+            - /url: /analysen
+          - search "Verträge durchsuchen" [ref=f4e91]:
+            - generic [ref=f4e92]: Vertragsnummer suchen
+            - searchbox "Vertragsnummer suchen" [ref=f4e93]
+          - group [ref=f4e94]:
+            - generic "0 offene Hinweise" [ref=f4e95] [cursor=pointer]:
+              - generic [aria-hidden] [ref=f4e96]: 🔔
+          - group [ref=f4e97]:
+            - generic "Kontomenü öffnen" [ref=f4e98] [cursor=pointer]:
+              - generic [ref=f4e99]: A
+              - generic [ref=f4e100]:
+                - strong [ref=f4e101]: Admin
+                - generic [ref=f4e102]: Administrator
+      - generic [ref=f4e103]:
+        - generic [ref=f4e104]:
+          - generic [ref=f4e106]:
+            - heading "Organisation & Verantwortlichkeit" [level=2] [ref=f4e107]
+            - paragraph [ref=f4e108]: Vertrag organisatorisch zuordnen und eine verantwortliche Person festlegen.
+          - generic [ref=f4e109]:
+            - generic [ref=f4e110]:
+              - generic [ref=f4e111]: Krankenhaus
+              - combobox "Krankenhaus" [ref=f4e112]:
+                - option "Organisationsweit" [selected]
+            - generic [ref=f4e113]: Abteilungen
+            - generic [ref=f4e116]:
+              - generic [ref=f4e117]: Kostenstelle
+              - combobox "Kostenstelle" [disabled] [ref=f4e118]:
+                - option "Keine Kostenstelle" [selected]
+            - generic [ref=f4e119]:
+              - generic [ref=f4e120]: Verantwortlich
+              - combobox "Verantwortlich" [ref=f4e121]:
+                - option "Nicht zugewiesen" [selected]
+                - option "Admin"
+            - button "Zuordnung speichern" [ref=f4e123] [cursor=pointer]
+        - generic [ref=f4e124]:
+          - generic [ref=f4e125]:
+            - generic [ref=f4e126]:
+              - generic [ref=f4e127]: Verträge / 40015645
+              - heading "Full-Service-Vertrag für das Impella®AIC System" [level=1] [ref=f4e128]
+              - paragraph [ref=f4e129]: Nr. 40015645 · ABIOMED Europe GmbH
+            - generic [ref=f4e130]:
+              - generic [ref=f4e131]: Aktiv
+              - generic [ref=f4e132]: "Risiko: Unbekannt"
+          - navigation "Vertragsbereiche" [ref=f4e133]:
+            - button "Übersicht" [active] [ref=f4e134] [cursor=pointer]
+            - button "Laufzeit & Kündigung" [ref=f4e135] [cursor=pointer]
+            - button "Finanzen" [ref=f4e136] [cursor=pointer]
+            - button "Leistungen & SLA" [ref=f4e137] [cursor=pointer]
+            - button "Geräte" [ref=f4e138] [cursor=pointer]
+            - button "Dokumente & Prüfung" [ref=f4e139] [cursor=pointer]
+          - generic [ref=f4e140]:
+            - generic [ref=f4e555]:
+              - generic [ref=f4e556]:
+                - generic [ref=f4e557]: Status
+                - strong [ref=f4e558]: Aktiv
+                - generic [ref=f4e559]: Systemwert
+              - generic [ref=f4e560]:
+                - generic [ref=f4e561]: Vertragsende
+                - strong [ref=f4e562]: 31.03.2029
+                - generic [ref=f4e563]: Berechnet
+              - generic [ref=f4e564]:
+                - generic [ref=f4e565]: Jährliche Kosten
+                - strong [ref=f4e566]: 8.000,00 €
+                - generic [ref=f4e567]: Berechnet
+              - generic [ref=f4e568]:
+                - generic [ref=f4e569]: Kündigungsfrist
+                - strong [ref=f4e570]: Nicht verfügbar
+                - generic [ref=f4e571]: Fehlt
+              - generic [ref=f4e572]:
+                - generic [ref=f4e573]: Risiko
+                - strong [ref=f4e574]: Unbekannt
+                - generic [ref=f4e575]: Systemwert
+            - generic [ref=f4e576]:
+              - generic [ref=f4e577]:
+                - generic [ref=f4e579]:
+                  - heading "Leistungsüberblick" [level=2] [ref=f4e580]
+                  - paragraph [ref=f4e581]: Kurzer Überblick über den Vertragsumfang
+                - generic [ref=f4e582]: Keine eindeutig bestätigten Leistungen.
+              - generic [ref=f4e583]:
+                - generic [ref=f4e585]:
+                  - heading "Daten & Prüfung" [level=2] [ref=f4e586]
+                  - paragraph [ref=f4e587]: Qualität und Nachvollziehbarkeit
+                - generic [ref=f4e588]:
+                  - button "23 Nachweise" [ref=f4e589] [cursor=pointer]:
+                    - strong [ref=f4e590]: "23"
+                    - generic [ref=f4e591]: Nachweise
+                  - button "1 Dokumente" [ref=f4e592] [cursor=pointer]:
+                    - strong [ref=f4e593]: "1"
+                    - generic [ref=f4e594]: Dokumente
+                  - button "9 Offene Prüfungen" [ref=f4e595] [cursor=pointer]:
+                    - strong [ref=f4e596]: "9"
+                    - generic [ref=f4e597]: Offene Prüfungen
+        - region [ref=f4e184]:
+          - generic [ref=f4e186]:
+            - heading "Vertragsentscheidung" [level=2] [ref=f4e187]
+            - paragraph [ref=f4e188]: Operative Entscheidung getrennt von extrahierten Vertragsfakten.
+          - generic [ref=f4e189]:
+            - generic [ref=f4e190]:
+              - text: Entscheidung
+              - combobox "Entscheidung" [ref=f4e191] [cursor=pointer]:
+                - option "Weiter beobachten" [selected]
+                - option "Verlängern"
+                - option "Neu verhandeln"
+                - option "Kündigen"
+            - generic [ref=f4e192]:
+              - text: Wirksam am
+              - textbox "Wirksam am" [ref=f4e193]
+            - generic [ref=f4e194]:
+              - text: Notiz
+              - textbox "Notiz" [ref=f4e195]
+            - button "Entscheidung anlegen" [ref=f4e197] [cursor=pointer]
+          - paragraph [ref=f4e199]: Noch keine operative Lifecycle-Entscheidung.
+        - region [ref=f4e200]:
+          - generic [ref=f4e201]:
+            - generic [ref=f4e202]:
+              - heading "Vertragsintelligenz" [level=2] [ref=f4e203]
+              - paragraph [ref=f4e204]: Beziehungen, Pflichten, Regelprüfungen und kontrollierte Handlungsvorschläge aus dem autoritativen Backend.
+            - button "Aktualisieren" [ref=f4e205] [cursor=pointer]
+          - paragraph [ref=f4e206]: Für diesen Vertrag liegen noch keine zusätzlichen Intelligence-Datensätze vor.
+        - region [ref=f4e207]:
+          - generic [ref=f4e209]:
+            - heading "Backend-Vollanalyse" [level=2] [ref=f4e210]
+            - paragraph [ref=f4e211]: Zusätzliche autoritative Berechnungen, Risikoerklärungen und Analyse-Metadaten aus dem Backend.
+          - generic [ref=f4e212]:
+            - generic [ref=f4e213]:
+              - heading "Erklärbares Risiko" [level=3] [ref=f4e214]
+              - generic [ref=f4e215]:
+                - generic [ref=f4e216]: "Analyse: unknown"
+                - generic [ref=f4e218]: "Vertragsprojektion: unknown"
+                - generic [ref=f4e220]: 0 Gründe
+              - paragraph [ref=f4e222]: Keine expliziten Risiko-Findings vorhanden.
+            - generic [ref=f4e223]:
+              - heading "Vertragsautorität & Konflikte" [level=3] [ref=f4e224]
+              - generic [ref=f4e225]:
+                - generic [ref=f4e226]:
+                  - strong [ref=f4e227]: "0"
+                  - text: Beziehungen
+                - generic [ref=f4e228]:
+                  - strong [ref=f4e229]: "0"
+                  - text: Konflikte
+              - paragraph [ref=f4e230]: Keine Autoritätskonflikte erkannt.
+          - generic [ref=f4e231]:
+            - 'heading "Was-wäre-wenn: Kündigung" [level=3] [ref=f4e232]'
+            - paragraph [ref=f4e233]: Die Berechnung kommt vollständig aus dem deterministischen Backend und verwendet nur akzeptierte Jahreskosten und Vertragsdaten.
+            - generic [ref=f4e234]:
+              - generic [ref=f4e235]:
+                - text: Kündigungsdatum
+                - textbox "Kündigungsdatum" [ref=f4e236]
+              - button "Szenario berechnen" [disabled] [ref=f4e238]
+          - generic [ref=f4e239]:
+            - heading "Vollständige Vertragsdaten aus dem Backend" [level=3] [ref=f4e240]
+            - generic [ref=f4e241]:
+              - generic [ref=f4e242]:
+                - heading "Laufzeit & Verlängerung" [level=4] [ref=f4e243]
+                - generic [ref=f4e244]:
+                  - generic [ref=f4e245]:
+                    - term [ref=f4e246]: Ereignisbasierter Beginn
+                    - definition [ref=f4e247]: –
+                  - generic [ref=f4e248]:
+                    - term [ref=f4e249]: Bestätigtes Ereignisdatum
+                    - definition [ref=f4e250]: –
+                  - generic [ref=f4e251]:
+                    - term [ref=f4e252]: Tage bis Kündigungsfrist
+                    - definition [ref=f4e253]: –
+                  - generic [ref=f4e254]:
+                    - term [ref=f4e255]: Status-Erklärung
+                    - definition [ref=f4e256]: as_of_date 2026-09-18 liegt vor dem Ende 2029-03-31.
+              - generic [ref=f4e257]:
+                - heading "Kosten & Steuer" [level=4] [ref=f4e258]
+                - list [ref=f4e259]:
+                  - listitem [ref=f4e260]:
+                    - strong [ref=f4e261]: "per call: 2.226,00 EUR"
+                    - text: ": 2.226,00 € · explicit · Bedingte Position: 2226.0 EUR je per_call; nicht in Fix-/Gesamtwert addiert."
+            - generic [ref=f4e262]:
+              - generic [ref=f4e263]:
+                - heading "Leistungsumfang" [level=4] [ref=f4e264]
+                - strong [ref=f4e265]: Enthalten
+                - paragraph [ref=f4e266]: Keine zusätzlichen enthaltenen Leistungen.
+                - strong [ref=f4e267]: Ausgeschlossen
+                - list [ref=f4e268]:
+                  - listitem [ref=f4e269]: Sturzschäden, vorsätzliche Schäden und Schäden durch Höhere Gewalt
+                - paragraph [ref=f4e270]: "Im Vertragstext nicht zweifelsfrei belegt: Wartung, Inspektion / Sichtprüfung, Reparatur, Kalibrierung, Softwarepflege / Updates, Fernwartung, Technischer Support, Ersatzteile im Wartungsumfang, Verbrauchsmaterial, Notdienst / Einsatz außerhalb der Arbeitszeit."
+                - paragraph [ref=f4e271]:
+                  - strong [ref=f4e272]: "24/7:"
+                  - text: Unbekannt
+              - generic [ref=f4e273]:
+                - heading "Geräte – vollständige Vertragsbeziehung" [level=4] [ref=f4e274]
+                - list [ref=f4e275]:
+                  - listitem [ref=f4e276]:
+                    - strong [ref=f4e277]: Impella®AIC System
+                    - generic [ref=f4e278]: "Identifikation: exact · Beziehung: exact"
+                    - button "Quelle anzeigen" [ref=f4e279] [cursor=pointer]
+          - generic [ref=f4e280]:
+            - heading "Analyse-/Verarbeitungshistorie" [level=3] [ref=f4e281]
+            - table [ref=f4e283]:
+              - rowgroup [ref=f4e284]:
+                - row [ref=f4e285]:
+                  - columnheader "Status" [ref=f4e286]
+                  - columnheader "Provider" [ref=f4e287]
+                  - columnheader "OCR" [ref=f4e288]
+                  - columnheader "Seiten" [ref=f4e289]
+                  - columnheader "Dauer" [ref=f4e290]
+                  - columnheader "Ergebnis" [ref=f4e291]
+                  - columnheader "Zeitpunkt" [ref=f4e292]
+              - rowgroup [ref=f4e293]:
+                - row [ref=f4e294]:
+                  - cell "Erfolgreich" [ref=f4e295]
+                  - cell "docling · 2.123.1" [ref=f4e298]
+                  - cell "aktiv" [ref=f4e299]
+                  - cell "9" [ref=f4e300]
+                  - cell "45.33 s" [ref=f4e301]
+                  - cell "5 erfolgreich / 7 fehlgeschlagen" [ref=f4e302]
+                  - cell "18.09.26, 14:37" [ref=f4e303]
+                - row [ref=f4e304]:
+                  - cell "Erfolgreich" [ref=f4e305]
+                  - cell "docling · 2.123.1" [ref=f4e308]
+                  - cell "aktiv" [ref=f4e309]
+                  - cell "9" [ref=f4e310]
+                  - cell "45.33 s" [ref=f4e311]
+                  - cell "5 erfolgreich / 7 fehlgeschlagen" [ref=f4e312]
+                  - cell "17.09.26, 18:29" [ref=f4e313]
+                - row [ref=f4e314]:
+                  - cell "Teilweise (prüfen)" [ref=f4e315]
+                  - cell "docling · 2.123.1" [ref=f4e318]
+                  - cell "aktiv" [ref=f4e319]
+                  - cell "9" [ref=f4e320]
+                  - cell "45.33 s" [ref=f4e321]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e322]
+                  - cell "17.09.26, 18:26" [ref=f4e323]
+                - row [ref=f4e324]:
+                  - cell "Teilweise (prüfen)" [ref=f4e325]
+                  - cell "docling · 2.123.1" [ref=f4e328]
+                  - cell "aktiv" [ref=f4e329]
+                  - cell "9" [ref=f4e330]
+                  - cell "45.33 s" [ref=f4e331]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e332]
+                  - cell "17.09.26, 18:26" [ref=f4e333]
+                - row [ref=f4e334]:
+                  - cell "Teilweise (prüfen)" [ref=f4e335]
+                  - cell "docling · 2.123.1" [ref=f4e338]
+                  - cell "aktiv" [ref=f4e339]
+                  - cell "9" [ref=f4e340]
+                  - cell "45.33 s" [ref=f4e341]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e342]
+                  - cell "17.09.26, 18:26" [ref=f4e343]
+                - row [ref=f4e344]:
+                  - cell "Teilweise (prüfen)" [ref=f4e345]
+                  - cell "docling · 2.123.1" [ref=f4e348]
+                  - cell "aktiv" [ref=f4e349]
+                  - cell "9" [ref=f4e350]
+                  - cell "45.33 s" [ref=f4e351]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e352]
+                  - cell "17.09.26, 18:26" [ref=f4e353]
+                - row [ref=f4e354]:
+                  - cell "Teilweise (prüfen)" [ref=f4e355]
+                  - cell "docling · 2.123.1" [ref=f4e358]
+                  - cell "aktiv" [ref=f4e359]
+                  - cell "9" [ref=f4e360]
+                  - cell "45.33 s" [ref=f4e361]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e362]
+                  - cell "17.09.26, 18:24" [ref=f4e363]
+                - row [ref=f4e364]:
+                  - cell "Erfolgreich" [ref=f4e365]
+                  - cell "docling · 2.123.1" [ref=f4e368]
+                  - cell "aktiv" [ref=f4e369]
+                  - cell "9" [ref=f4e370]
+                  - cell "45.33 s" [ref=f4e371]
+                  - cell "5 erfolgreich / 7 fehlgeschlagen" [ref=f4e372]
+                  - cell "17.09.26, 18:03" [ref=f4e373]
+                - row [ref=f4e374]:
+                  - cell "Erfolgreich" [ref=f4e375]
+                  - cell "docling · 2.123.1" [ref=f4e378]
+                  - cell "aktiv" [ref=f4e379]
+                  - cell "9" [ref=f4e380]
+                  - cell "45.33 s" [ref=f4e381]
+                  - cell "5 erfolgreich / 7 fehlgeschlagen" [ref=f4e382]
+                  - cell "17.09.26, 18:00" [ref=f4e383]
+                - row [ref=f4e384]:
+                  - cell "Teilweise (prüfen)" [ref=f4e385]
+                  - cell "docling · 2.123.1" [ref=f4e388]
+                  - cell "aktiv" [ref=f4e389]
+                  - cell "9" [ref=f4e390]
+                  - cell "45.33 s" [ref=f4e391]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e392]
+                  - cell "17.09.26, 17:57" [ref=f4e393]
+                - row [ref=f4e394]:
+                  - cell "Teilweise (prüfen)" [ref=f4e395]
+                  - cell "docling · 2.123.1" [ref=f4e398]
+                  - cell "aktiv" [ref=f4e399]
+                  - cell "9" [ref=f4e400]
+                  - cell "45.33 s" [ref=f4e401]
+                  - cell "Teilweise analysiert – 5 erfolgreich / 7 fehlgeschlagen" [ref=f4e402]
+                  - cell "16.09.26, 17:46" [ref=f4e403]
+                - row [ref=f4e404]:
+                  - cell "Erfolgreich" [ref=f4e405]
+                  - cell "docling · 2.123.1" [ref=f4e408]
+                  - cell "aktiv" [ref=f4e409]
+                  - cell "9" [ref=f4e410]
+                  - cell "45.33 s" [ref=f4e411]
+                  - cell "5 erfolgreich / 7 fehlgeschlagen" [ref=f4e412]
+                  - cell "16.09.26, 14:17" [ref=f4e413]
+        - region [ref=f4e414]:
+          - generic [ref=f4e416]:
+            - heading "Rechnungsprüfung" [level=2] [ref=f4e417]
+            - paragraph [ref=f4e418]: Vergleich mit der akzeptierten, vom Backend berechneten Vertragsbasis.
+          - generic [ref=f4e419]:
+            - generic [ref=f4e420]:
+              - text: Vertragsposition
+              - combobox "Vertragsposition" [ref=f4e421]:
+                - option "Jährliche wiederkehrende Kosten · 8.000,00 €" [selected]
+                - 'option "per call: 2.226,00 EUR · 2.226,00 €"'
+            - generic [ref=f4e422]:
+              - text: Rechnungsbetrag
+              - textbox "Rechnungsbetrag" [ref=f4e423]:
+                - /placeholder: 0,00
+            - generic [ref=f4e424]:
+              - text: Währung
+              - textbox "Währung" [ref=f4e425]: EUR
+            - button "Rechnung prüfen" [disabled] [ref=f4e427]
+  - region "Benachrichtigungen"
+  - alert [ref=f4e4]

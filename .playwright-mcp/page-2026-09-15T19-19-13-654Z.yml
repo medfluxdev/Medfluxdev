@@ -1,0 +1,64 @@
+- generic [active] [ref=f8e1]:
+  - link "Zum Hauptinhalt springen" [ref=f8e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=f8e3]:
+    - complementary [ref=f8e4]:
+      - link "Medflux Contract Intelligence" [ref=f8e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f8e7]:
+          - strong [ref=f8e8]: Medflux
+          - generic [ref=f8e9]: Contract Intelligence
+      - navigation "Hauptnavigation" [ref=f8e10]:
+        - generic [ref=f8e11]:
+          - generic [ref=f8e12]: Arbeitsbereich
+          - navigation "Arbeitsbereich" [ref=f8e13]:
+            - link [ref=f8e14] [cursor=pointer]:
+              - /url: /
+            - link [ref=f8e18] [cursor=pointer]:
+              - /url: /contracts
+            - link [ref=f8e23] [cursor=pointer]:
+              - /url: /work-queue
+            - link [ref=f8e28] [cursor=pointer]:
+              - /url: /equipment
+            - link [ref=f8e32] [cursor=pointer]:
+              - /url: /import
+        - generic [ref=f8e36]:
+          - generic [ref=f8e37]: Kontrolle
+          - navigation "Kontrolle" [ref=f8e38]:
+            - link [ref=f8e39] [cursor=pointer]:
+              - /url: /review
+            - link [ref=f8e44] [cursor=pointer]:
+              - /url: /nachweise
+            - link [ref=f8e49] [cursor=pointer]:
+              - /url: /audit
+            - link [ref=f8e54] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=f8e59]:
+          - generic [ref=f8e60]: System
+          - navigation "System" [ref=f8e61]:
+            - link [ref=f8e62] [cursor=pointer]:
+              - /url: /settings
+      - generic [ref=f8e67]:
+        - generic [ref=f8e68]:
+          - generic [ref=f8e69]:
+            - generic [ref=f8e70]: Lokale KI
+            - generic [ref=f8e71]: Prüfe…
+          - paragraph [ref=f8e73]: Lokale VerarbeitungKeine externen Modellaufrufe
+        - generic [ref=f8e74]:
+          - generic [aria-hidden] [ref=f8e75]: K
+          - generic [ref=f8e76]:
+            - text: Krankenhaus
+            - generic [ref=f8e77]: Arbeitsbereich krankenhaus
+    - main [ref=f8e78]:
+      - generic [ref=f8e79]:
+        - heading "Prüfungen" [level=1] [ref=f8e81]
+        - generic [ref=f8e82]:
+          - search [ref=f8e83]:
+            - searchbox "Globale Suche" [ref=f8e87]
+          - link "Vertrag importieren" [ref=f8e88] [cursor=pointer]:
+            - /url: /import
+      - generic [ref=f8e90]:
+        - generic [ref=f8e91]: Manuelle Prüfung · Faktengenauigkeit
+        - paragraph [ref=f8e92]: Prüfungsliste wird geladen…
+  - region "Benachrichtigungen"
+  - alert [ref=f8e93]

@@ -1,0 +1,377 @@
+- generic [ref=f3e1]:
+  - link "Zum Hauptinhalt springen" [ref=f3e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=f3e5]:
+    - complementary [ref=f3e183]:
+      - link "MedFlux Startseite" [ref=f3e185] [cursor=pointer]:
+        - /url: /
+        - img "MedFlux" [ref=f3e187]
+      - navigation "Hauptnavigation" [ref=f3e188]:
+        - generic [ref=f3e189]:
+          - generic [ref=f3e190]: Arbeitsbereich
+          - generic [ref=f3e191]:
+            - link "Übersicht" [ref=f3e192] [cursor=pointer]:
+              - /url: /
+            - link "Verträge" [ref=f3e197] [cursor=pointer]:
+              - /url: /contracts
+            - link "Geräte" [ref=f3e203] [cursor=pointer]:
+              - /url: /equipment
+            - link "To-dos" [ref=f3e209] [cursor=pointer]:
+              - /url: /work-queue
+        - generic [ref=f3e215]:
+          - generic [ref=f3e216]: Dokumente & Prüfung
+          - generic [ref=f3e217]:
+            - link "Import" [ref=f3e218] [cursor=pointer]:
+              - /url: /import
+            - link "Prüfungen" [ref=f3e223] [cursor=pointer]:
+              - /url: /review
+            - link "Nachweise" [ref=f3e229] [cursor=pointer]:
+              - /url: /nachweise
+            - link "Archiv" [ref=f3e235] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=f3e241]:
+          - generic [ref=f3e242]: Administration
+          - generic [ref=f3e243]:
+            - link "Audit" [ref=f3e244] [cursor=pointer]:
+              - /url: /audit
+            - link "Admin Dashboard" [ref=f3e250] [cursor=pointer]:
+              - /url: /admin
+            - link "Einstellungen" [ref=f3e256] [cursor=pointer]:
+              - /url: /settings
+    - main [ref=f3e262]:
+      - generic [ref=f3e263]:
+        - generic [aria-hidden] [ref=f3e265]: Vertrag 360
+        - generic [ref=f3e266]:
+          - generic "Arbeitsbereich auswählen"
+          - link "Analysen" [ref=f3e267] [cursor=pointer]:
+            - /url: /analysen
+          - search "Verträge durchsuchen" [ref=f3e268]:
+            - generic [ref=f3e269]: Vertragsnummer suchen
+            - searchbox "Vertragsnummer suchen" [ref=f3e270]
+          - group [ref=f3e271]:
+            - generic "3 offene Hinweise" [ref=f3e272] [cursor=pointer]:
+              - generic [aria-hidden] [ref=f3e273]: 🔔
+              - generic [ref=f3e274]: "3"
+          - group [ref=f3e275]:
+            - generic "Kontomenü öffnen" [ref=f3e276] [cursor=pointer]:
+              - generic [ref=f3e277]: T
+              - generic [ref=f3e278]:
+                - strong [ref=f3e279]: Trial Admin
+                - generic [ref=f3e280]: Administrator
+      - generic [ref=f3e281]:
+        - generic [ref=f3e282]:
+          - generic [ref=f3e284]:
+            - heading "Organisation & Verantwortlichkeit" [level=2] [ref=f3e285]
+            - paragraph [ref=f3e286]: Vertrag organisatorisch zuordnen und eine verantwortliche Person festlegen.
+          - generic [ref=f3e287]:
+            - generic [ref=f3e288]:
+              - generic [ref=f3e289]: Krankenhaus
+              - combobox "Krankenhaus" [ref=f3e290]:
+                - option "Organisationsweit" [selected]
+            - generic [ref=f3e291]: Abteilungen
+            - generic [ref=f3e294]:
+              - generic [ref=f3e295]: Kostenstelle
+              - combobox "Kostenstelle" [disabled] [ref=f3e296]:
+                - option "Keine Kostenstelle" [selected]
+            - generic [ref=f3e297]:
+              - generic [ref=f3e298]: Verantwortlich
+              - combobox "Verantwortlich" [ref=f3e299]:
+                - option "Nicht zugewiesen" [selected]
+                - option "Trial Admin"
+            - button "Zuordnung speichern" [ref=f3e301] [cursor=pointer]
+        - generic [ref=f3e302]:
+          - generic [ref=f3e303]:
+            - generic [ref=f3e304]:
+              - generic [ref=f3e305]: Verträge / 01a0f82c-53ba-7e6f-b297-4298d69da1a6
+              - heading "Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System" [level=1] [ref=f3e306]
+              - paragraph [ref=f3e307]: Abbott Medical GmbH
+            - generic [ref=f3e308]:
+              - button "Archivieren" [ref=f3e309] [cursor=pointer]
+              - generic [ref=f3e310]: Unbekannt
+              - generic [ref=f3e311]: "Risiko: Mittel"
+              - button "Manuelle Prüfung" [ref=f3e312] [cursor=pointer]
+          - navigation "Vertragsbereiche" [ref=f3e313]:
+            - button "Übersicht" [ref=f3e314] [cursor=pointer]
+            - button "Laufzeit & Kündigung" [ref=f3e315] [cursor=pointer]
+            - button "Finanzen" [ref=f3e316] [cursor=pointer]
+            - button "Leistungen & SLA" [ref=f3e317] [cursor=pointer]
+            - button "Geräte" [ref=f3e318] [cursor=pointer]
+            - button "Dokumente & Prüfung" [ref=f3e319] [cursor=pointer]
+          - generic [ref=f3e320]:
+            - generic [ref=f3e321]:
+              - generic [ref=f3e322]:
+                - generic [ref=f3e323]: Status
+                - strong [ref=f3e324]: Unbekannt
+                - generic [ref=f3e325]: Systemwert
+              - generic [ref=f3e326]:
+                - generic [ref=f3e327]: Vertragsende
+                - strong [ref=f3e328]: Nicht verfügbar
+                - generic [ref=f3e329]: Fehlt
+              - generic [ref=f3e330]:
+                - generic [ref=f3e331]: Jährliche Kosten
+                - strong [ref=f3e332]: Nicht verfügbar
+                - generic [ref=f3e333]: Fehlt
+              - generic [ref=f3e334]:
+                - generic [ref=f3e335]: Kündigungsfrist
+                - strong [ref=f3e336]: Nicht verfügbar
+                - generic [ref=f3e337]: Fehlt
+              - generic [ref=f3e338]:
+                - generic [ref=f3e339]: Risiko
+                - strong [ref=f3e340]: Mittel
+                - generic [ref=f3e341]: Systemwert
+            - generic [ref=f3e342]:
+              - generic [ref=f3e344]:
+                - heading "Handlungsbedarf" [level=2] [ref=f3e345]
+                - paragraph [ref=f3e346]: Offene Aufgaben und relevante Warnungen
+              - generic [ref=f3e347]:
+                - button [ref=f3e348]:
+                  - text: Mittel
+                  - strong [ref=f3e350]: Vertragsdaten unklar
+                  - text: Prüfung erforderlich
+                - button [ref=f3e351]:
+                  - text: Mittel
+                  - strong [ref=f3e353]: Fehlende verlässliche Kostenangabe
+                  - text: Prüfung erforderlich
+                - button [ref=f3e354]:
+                  - text: Niedrig
+                  - generic [ref=f3e355]:
+                    - strong [ref=f3e356]: "Geräte-Zuordnung prüfen: OPTIS™ Mobile Next Imaging System"
+                    - paragraph [ref=f3e357]: "Gerät 'OPTIS™ Mobile Next Imaging System': Identität oder Quellenbeleg für die Vertrags-Zuordnung unvollständig; manuelle Prüfung erforderlich."
+                  - text: Prüfung erforderlich
+                - button [ref=f3e358]:
+                  - text: Mittel
+                  - strong [ref=f3e360]: Vertragsdaten unklar
+                  - text: Prüfung erforderlich
+                - button [ref=f3e361]:
+                  - text: Mittel
+                  - strong [ref=f3e363]: Fehlende verlässliche Kostenangabe
+                  - text: Prüfung erforderlich
+            - generic [ref=f3e364]:
+              - generic [ref=f3e365]:
+                - generic [ref=f3e367]:
+                  - heading "Leistungsüberblick" [level=2] [ref=f3e368]
+                  - paragraph [ref=f3e369]: Kurzer Überblick über den Vertragsumfang
+                - generic [ref=f3e370]: Keine eindeutig bestätigten Leistungen.
+              - generic [ref=f3e371]:
+                - generic [ref=f3e373]:
+                  - heading "Daten & Prüfung" [level=2] [ref=f3e374]
+                  - paragraph [ref=f3e375]: Qualität und Nachvollziehbarkeit
+                - generic [ref=f3e376]:
+                  - button "8 Nachweise" [ref=f3e377] [cursor=pointer]:
+                    - strong [ref=f3e378]: "8"
+                    - generic [ref=f3e379]: Nachweise
+                  - button "1 Dokumente" [ref=f3e380] [cursor=pointer]:
+                    - strong [ref=f3e381]: "1"
+                    - generic [ref=f3e382]: Dokumente
+                  - button "3 Offene Prüfungen" [ref=f3e383] [cursor=pointer]:
+                    - strong [ref=f3e384]: "3"
+                    - generic [ref=f3e385]: Offene Prüfungen
+        - region [ref=f3e386]:
+          - generic [ref=f3e388]:
+            - heading "Vertragsentscheidung" [level=2] [ref=f3e389]
+            - paragraph [ref=f3e390]: Operative Entscheidung getrennt von extrahierten Vertragsfakten.
+          - generic [ref=f3e391]:
+            - generic [ref=f3e392]:
+              - text: Entscheidung
+              - combobox "Entscheidung" [ref=f3e393] [cursor=pointer]:
+                - option "Weiter beobachten" [selected]
+                - option "Verlängern"
+                - option "Neu verhandeln"
+                - option "Kündigen"
+            - generic [ref=f3e394]:
+              - text: Wirksam am
+              - textbox "Wirksam am" [ref=f3e395]
+            - generic [ref=f3e396]:
+              - text: Notiz
+              - textbox "Notiz" [ref=f3e397]
+            - button "Entscheidung anlegen" [ref=f3e399] [cursor=pointer]
+          - paragraph [ref=f3e401]: Noch keine operative Lifecycle-Entscheidung.
+        - region [ref=f3e402]:
+          - generic [ref=f3e403]:
+            - generic [ref=f3e404]:
+              - heading "Vertragsintelligenz" [level=2] [ref=f3e405]
+              - paragraph [ref=f3e406]: Beziehungen, Pflichten, Regelprüfungen und kontrollierte Handlungsvorschläge aus dem autoritativen Backend.
+            - button "Aktualisieren" [ref=f3e407] [cursor=pointer]
+          - paragraph [ref=f3e484]: Für diesen Vertrag liegen noch keine zusätzlichen Intelligence-Datensätze vor.
+        - region [ref=f3e411]:
+          - generic [ref=f3e413]:
+            - heading "Backend-Vollanalyse" [level=2] [ref=f3e414]
+            - paragraph [ref=f3e415]: Zusätzliche autoritative Berechnungen, Risikoerklärungen und Analyse-Metadaten aus dem Backend.
+          - generic [ref=f3e485]:
+            - generic [ref=f3e486]:
+              - heading "Erklärbares Risiko" [level=3] [ref=f3e487]
+              - generic [ref=f3e488]:
+                - generic [ref=f3e489]: "Analyse: unknown"
+                - generic [ref=f3e491]: "Vertragsprojektion: medium"
+                - generic [ref=f3e493]: 0 Gründe
+              - paragraph [ref=f3e495]: Keine expliziten Risiko-Findings vorhanden.
+            - generic [ref=f3e496]:
+              - heading "Vertragsautorität & Konflikte" [level=3] [ref=f3e497]
+              - generic [ref=f3e498]:
+                - generic [ref=f3e499]:
+                  - strong [ref=f3e500]: "0"
+                  - text: Beziehungen
+                - generic [ref=f3e501]:
+                  - strong [ref=f3e502]: "0"
+                  - text: Konflikte
+              - paragraph [ref=f3e503]: Keine Autoritätskonflikte erkannt.
+          - generic [ref=f3e419]:
+            - 'heading "Was-wäre-wenn: Kündigung" [level=3] [ref=f3e420]'
+            - paragraph [ref=f3e421]: Die Berechnung kommt vollständig aus dem deterministischen Backend und verwendet nur akzeptierte Jahreskosten und Vertragsdaten.
+            - generic [ref=f3e422]:
+              - generic [ref=f3e423]:
+                - text: Kündigungsdatum
+                - textbox "Kündigungsdatum" [ref=f3e424]
+              - button "Szenario berechnen" [disabled] [ref=f3e426]
+          - generic [ref=f3e427]:
+            - heading "Vollständige Vertragsdaten aus dem Backend" [level=3] [ref=f3e428]
+            - generic [ref=f3e429]:
+              - generic [ref=f3e430]:
+                - heading "Laufzeit & Verlängerung" [level=4] [ref=f3e431]
+                - generic [ref=f3e432]:
+                  - generic [ref=f3e433]:
+                    - term [ref=f3e434]: Ereignisbasierter Beginn
+                    - definition [ref=f3e435]: Er startet an dem Tag der Installation und Inbetriebnahme
+                  - generic [ref=f3e436]:
+                    - term [ref=f3e437]: Bestätigtes Ereignisdatum
+                    - definition [ref=f3e438]: –
+                  - generic [ref=f3e439]:
+                    - term [ref=f3e440]: Tage bis Kündigungsfrist
+                    - definition [ref=f3e441]: –
+                  - generic [ref=f3e442]:
+                    - term [ref=f3e443]: Status-Erklärung
+                    - definition [ref=f3e444]: Kein deterministisches Ende. Status unbekannt.
+              - generic [ref=f3e445]:
+                - heading "Kosten & Steuer" [level=4] [ref=f3e446]
+                - list [ref=f3e447]:
+                  - listitem [ref=f3e448]:
+                    - strong [ref=f3e449]: Einmalig
+                    - text: ": 12.000,00 € · calculated · Einmalig: extrahierter Betrag 12000.0 EUR."
+                  - listitem [ref=f3e450]:
+                    - strong [ref=f3e451]: Einmalig (Aufbau/Installation)
+                    - text: ": 9.500,00 € · calculated · Einmalig (Aufbau/Installation): extrahierter Betrag 9500.0 EUR."
+                  - listitem [ref=f3e452]:
+                    - strong [ref=f3e453]: PressureWire X Kabelloser FFR-Druckmessdraht, 175cm
+                    - text: ": 180,00 € · explicit · Bedingte Position: 180.0 EUR je per_piece; nicht in Fix-/Gesamtwert addiert."
+                  - listitem [ref=f3e454]:
+                    - strong [ref=f3e455]: Dragonfly™ OpStar OCT-Katheter Kit
+                    - text: ": 200,00 € · explicit · Bedingte Position: 200.0 EUR je per_piece; nicht in Fix-/Gesamtwert addiert."
+            - generic [ref=f3e456]:
+              - generic [ref=f3e457]:
+                - heading "Leistungsumfang" [level=4] [ref=f3e458]
+                - strong [ref=f3e459]: Enthalten
+                - paragraph [ref=f3e460]: Keine zusätzlichen enthaltenen Leistungen.
+                - strong [ref=f3e461]: Ausgeschlossen
+                - paragraph [ref=f3e462]: Keine expliziten Ausschlüsse.
+                - paragraph [ref=f3e463]: "Im Vertragstext nicht zweifelsfrei belegt: Wartung, Inspektion / Sichtprüfung, Reparatur, Kalibrierung, Softwarepflege / Updates, Fernwartung, Technischer Support, Ersatzteile im Wartungsumfang, Verbrauchsmaterial, Notdienst / Einsatz außerhalb der Arbeitszeit."
+                - paragraph [ref=f3e464]:
+                  - strong [ref=f3e465]: "24/7:"
+                  - text: Unbekannt
+              - generic [ref=f3e466]:
+                - heading "Geräte – vollständige Vertragsbeziehung" [level=4] [ref=f3e467]
+                - list [ref=f3e468]:
+                  - listitem [ref=f3e469]:
+                    - strong [ref=f3e470]: OPTIS™ Mobile Next Imaging System
+                    - generic [ref=f3e471]: "Identifikation: partial · Beziehung: partial"
+                    - paragraph [ref=f3e472]: "Prüfgründe: Geräte-Identität oder Vertragsbezug nicht vollständig belegt: Serien-/Inventarnummer und zugehörigen Quellenbeleg prüfen."
+                    - button "Quelle anzeigen" [active] [ref=f3e473] [cursor=pointer]
+          - generic [ref=f3e474]:
+            - heading "Analyse-/Verarbeitungshistorie" [level=3] [ref=f3e475]
+            - table [ref=f3e505]:
+              - rowgroup [ref=f3e506]:
+                - row [ref=f3e507]:
+                  - columnheader "Status" [ref=f3e508]
+                  - columnheader "Provider" [ref=f3e509]
+                  - columnheader "OCR" [ref=f3e510]
+                  - columnheader "Seiten" [ref=f3e511]
+                  - columnheader "Dauer" [ref=f3e512]
+                  - columnheader "Ergebnis" [ref=f3e513]
+                  - columnheader "Zeitpunkt" [ref=f3e514]
+              - rowgroup [ref=f3e515]:
+                - row [ref=f3e516]:
+                  - cell "Erfolgreich" [ref=f3e517]
+                  - cell "docling · 2.123.1" [ref=f3e520]
+                  - cell "aktiv" [ref=f3e521]
+                  - cell "9" [ref=f3e522]
+                  - cell "79.17 s" [ref=f3e523]
+                  - cell "2 erfolgreich / 4 fehlgeschlagen" [ref=f3e524]
+                  - cell "01.10.26, 20:19" [ref=f3e525]
+                - row [ref=f3e526]:
+                  - cell "Erfolgreich" [ref=f3e527]
+                  - cell "docling · 2.123.1" [ref=f3e530]
+                  - cell "aktiv" [ref=f3e531]
+                  - cell "9" [ref=f3e532]
+                  - cell "79.17 s" [ref=f3e533]
+                  - cell "2 erfolgreich / 4 fehlgeschlagen" [ref=f3e534]
+                  - cell "01.10.26, 17:51" [ref=f3e535]
+                - row [ref=f3e536]:
+                  - cell "Teilweise (prüfen)" [ref=f3e537]
+                  - cell "docling · 2.123.1" [ref=f3e540]
+                  - cell "aktiv" [ref=f3e541]
+                  - cell "9" [ref=f3e542]
+                  - cell "79.17 s" [ref=f3e543]
+                  - cell "Teilweise analysiert – 2 erfolgreich / 4 fehlgeschlagen" [ref=f3e544]
+                  - cell "01.10.26, 14:48" [ref=f3e545]
+                - row [ref=f3e546]:
+                  - cell "Teilweise (prüfen)" [ref=f3e547]
+                  - cell "docling · 2.123.1" [ref=f3e550]
+                  - cell "aktiv" [ref=f3e551]
+                  - cell "9" [ref=f3e552]
+                  - cell "79.17 s" [ref=f3e553]
+                  - cell "Teilweise analysiert – 2 erfolgreich / 4 fehlgeschlagen" [ref=f3e554]
+                  - cell "01.10.26, 13:44" [ref=f3e555]
+                - row [ref=f3e556]:
+                  - cell "Teilweise (prüfen)" [ref=f3e557]
+                  - cell "docling · 2.123.1" [ref=f3e560]
+                  - cell "aktiv" [ref=f3e561]
+                  - cell "9" [ref=f3e562]
+                  - cell "79.17 s" [ref=f3e563]
+                  - cell "Teilweise analysiert – 2 erfolgreich / 4 fehlgeschlagen" [ref=f3e564]
+                  - cell "01.10.26, 13:43" [ref=f3e565]
+                - row [ref=f3e566]:
+                  - cell "Teilweise (prüfen)" [ref=f3e567]
+                  - cell "docling · 2.123.1" [ref=f3e570]
+                  - cell "aktiv" [ref=f3e571]
+                  - cell "9" [ref=f3e572]
+                  - cell "79.17 s" [ref=f3e573]
+                  - cell "Teilweise analysiert – 2 erfolgreich / 4 fehlgeschlagen" [ref=f3e574]
+                  - cell "01.10.26, 13:32" [ref=f3e575]
+        - region [ref=f3e477]:
+          - generic [ref=f3e479]:
+            - heading "Rechnungsprüfung" [level=2] [ref=f3e480]
+            - paragraph [ref=f3e481]: Vergleich mit der akzeptierten, vom Backend berechneten Vertragsbasis.
+          - generic [ref=f3e576]:
+            - generic [ref=f3e577]:
+              - text: Vertragsposition
+              - combobox "Vertragsposition" [ref=f3e578]:
+                - option "Einmalig · 12.000,00 €" [selected]
+                - option "Einmalig (Aufbau/Installation) · 9.500,00 €"
+                - option "PressureWire X Kabelloser FFR-Druckmessdraht, 175cm · 180,00 €"
+                - option "Dragonfly™ OpStar OCT-Katheter Kit · 200,00 €"
+            - generic [ref=f3e579]:
+              - text: Rechnungsbetrag
+              - textbox "Rechnungsbetrag" [ref=f3e580]:
+                - /placeholder: 0,00
+            - generic [ref=f3e581]:
+              - text: Währung
+              - textbox "Währung" [ref=f3e582]: EUR
+            - button "Rechnung prüfen" [disabled] [ref=f3e584]
+        - region "Intelligence-Quelle" [ref=f3e585]:
+          - generic [ref=f3e586]:
+            - generic [ref=f3e587]:
+              - heading "Intelligence-Quelle" [level=2] [ref=f3e588]
+              - paragraph [ref=f3e589]: Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System
+            - button "Schließen" [ref=f3e590] [cursor=pointer]
+          - region "Quellansicht (PDF)" [ref=f3e591]:
+            - toolbar "PDF-Ansicht steuern" [ref=f3e592]:
+              - button "Vorherige Seite" [disabled] [ref=f3e593]: ←
+              - generic [ref=f3e594]: Seite 1 / 9
+              - button "Nächste Seite" [ref=f3e595] [cursor=pointer]: →
+              - button "Zoom verkleinern" [ref=f3e597] [cursor=pointer]: –
+              - button "Zoom zurücksetzen" [ref=f3e598] [cursor=pointer]: 100%
+              - button "Zoom vergrößern" [ref=f3e599] [cursor=pointer]: +
+            - paragraph [ref=f3e603]: "Quelle: Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System · ungefähre Lage auf Seite 1 (keine exakte Position)"
+    - complementary "Lokaler KI-Assistent" [ref=f3e482]:
+      - button "KI-Assistent" [ref=f3e483] [cursor=pointer]
+  - region "Benachrichtigungen"
+  - alert [ref=f3e4]

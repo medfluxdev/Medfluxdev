@@ -1,0 +1,27 @@
+- generic [ref=f4e1]:
+  - link "Zum Hauptinhalt springen" [ref=f4e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=f4e3]:
+    - generic [ref=f4e4]:
+      - img "MedFlux" [ref=f4e7]
+      - region [ref=f4e8]:
+        - heading "Willkommen" [level=2] [ref=f4e9]
+        - paragraph [ref=f4e10]: Melden Sie sich bei Ihrem MedFlux-Konto an.
+        - generic [ref=f4e11]:
+          - generic [ref=f4e12]:
+            - text: E-Mail
+            - textbox "E-Mail" [active] [ref=f4e13]:
+              - /placeholder: E-Mail-Adresse eingeben
+          - generic [ref=f4e14]:
+            - text: Passwort
+            - generic [ref=f4e15]:
+              - textbox "Passwort Passwort anzeigen" [ref=f4e16]:
+                - /placeholder: Passwort eingeben
+              - button "Passwort anzeigen" [ref=f4e17] [cursor=pointer]
+          - button "Anmelden" [ref=f4e21] [cursor=pointer]
+        - generic "MedFlux Vorteile" [ref=f4e22]:
+          - generic [ref=f4e23]: Sicher
+          - generic [ref=f4e27]: Schnell
+          - generic [ref=f4e31]: Intelligent
+  - region "Benachrichtigungen"
+  - alert [ref=f4e36]

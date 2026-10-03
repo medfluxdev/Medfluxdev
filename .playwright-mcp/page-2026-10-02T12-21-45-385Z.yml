@@ -1,0 +1,149 @@
+- generic [active] [ref=f1e1]:
+  - link "Zum Hauptinhalt springen" [ref=f1e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=f1e37]:
+    - complementary [ref=f1e38]:
+      - link "MedFlux Startseite" [ref=f1e40] [cursor=pointer]:
+        - /url: /
+        - img "MedFlux" [ref=f1e42]
+      - navigation "Hauptnavigation" [ref=f1e43]:
+        - generic [ref=f1e44]:
+          - generic [ref=f1e45]: Arbeitsbereich
+          - generic [ref=f1e46]:
+            - link "Übersicht" [ref=f1e47] [cursor=pointer]:
+              - /url: /
+            - link "Verträge" [ref=f1e52] [cursor=pointer]:
+              - /url: /contracts
+            - link "Geräte" [ref=f1e58] [cursor=pointer]:
+              - /url: /equipment
+            - link "To-dos" [ref=f1e64] [cursor=pointer]:
+              - /url: /work-queue
+        - generic [ref=f1e70]:
+          - generic [ref=f1e71]: Dokumente & Prüfung
+          - generic [ref=f1e72]:
+            - link "Import" [ref=f1e73] [cursor=pointer]:
+              - /url: /import
+            - link "Prüfungen" [ref=f1e78] [cursor=pointer]:
+              - /url: /review
+            - link "Nachweise" [ref=f1e84] [cursor=pointer]:
+              - /url: /nachweise
+            - link "Archiv" [ref=f1e90] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=f1e96]:
+          - generic [ref=f1e97]: Administration
+          - generic [ref=f1e98]:
+            - link "Audit" [ref=f1e99] [cursor=pointer]:
+              - /url: /audit
+            - link "Admin Dashboard" [ref=f1e105] [cursor=pointer]:
+              - /url: /admin
+            - link "Einstellungen" [ref=f1e111] [cursor=pointer]:
+              - /url: /settings
+    - main [ref=f1e117]:
+      - generic [ref=f1e118]:
+        - generic [aria-hidden] [ref=f1e120]: Admin Dashboard
+        - generic [ref=f1e121]:
+          - generic "Arbeitsbereich auswählen"
+          - link "Analysen" [ref=f1e122] [cursor=pointer]:
+            - /url: /analysen
+          - search "Verträge durchsuchen" [ref=f1e123]:
+            - generic [ref=f1e124]: Vertragsnummer suchen
+            - searchbox "Vertragsnummer suchen" [ref=f1e125]
+          - group [ref=f1e126]:
+            - generic "0 offene Hinweise" [ref=f1e127] [cursor=pointer]:
+              - generic [aria-hidden] [ref=f1e128]: 🔔
+          - group [ref=f1e129]:
+            - generic "Kontomenü öffnen" [ref=f1e130] [cursor=pointer]:
+              - generic [ref=f1e131]: F
+              - generic [ref=f1e132]:
+                - strong [ref=f1e133]: Flow Admin
+                - generic [ref=f1e134]: Administrator
+      - generic [ref=f1e135]:
+        - generic [ref=f1e136]:
+          - generic [ref=f1e137]:
+            - generic [ref=f1e138]: Organisation verwalten
+            - heading "Admin Dashboard" [level=1] [ref=f1e139]
+            - paragraph [ref=f1e140]: "SR415 Flow Clinic: Verträge, Aufgaben, Benutzer und Aktivitäten auf einen Blick."
+          - generic [ref=f1e141]:
+            - generic [ref=f1e142]: F
+            - generic [ref=f1e143]:
+              - strong [ref=f1e144]: Flow Admin
+              - generic [ref=f1e145]: Administrator · flow@klinik.local
+        - region "Administrationskennzahlen" [ref=f1e146]:
+          - article [ref=f1e147]:
+            - generic [ref=f1e148]: Offene Aufgaben
+            - strong [ref=f1e149]: "0"
+            - text: priorisierte Handlungspunkte
+          - article [ref=f1e150]:
+            - generic [ref=f1e151]: Manuelle Prüfungen
+            - strong [ref=f1e152]: "0"
+            - text: Angaben mit Prüfbedarf
+          - article [ref=f1e153]:
+            - generic [ref=f1e154]: Benutzer
+            - strong [ref=f1e155]: "1"
+            - generic [ref=f1e156]: 1 Konten insgesamt
+          - article [ref=f1e157]:
+            - generic [ref=f1e158]: Intelligence Events
+            - strong [ref=f1e159]: "0"
+            - text: zuletzt sichtbare Ereignisse
+        - region "Schnellzugriffe" [ref=f1e160]:
+          - link "Verträge verwalten Bestand, Zuordnung und Verantwortliche →" [ref=f1e161] [cursor=pointer]:
+            - /url: /contracts
+            - generic [ref=f1e162]:
+              - strong [ref=f1e163]: Verträge verwalten
+              - generic [ref=f1e164]: Bestand, Zuordnung und Verantwortliche
+            - generic [ref=f1e165]: →
+          - link "Aufgaben bearbeiten Fristen, Risiken und offene Entscheidungen →" [ref=f1e166] [cursor=pointer]:
+            - /url: /work-queue
+            - generic [ref=f1e167]:
+              - strong [ref=f1e168]: Aufgaben bearbeiten
+              - generic [ref=f1e169]: Fristen, Risiken und offene Entscheidungen
+            - generic [ref=f1e170]: →
+          - link "Benutzer & Rollen Konten und Zugriffsbereiche verwalten →" [ref=f1e171] [cursor=pointer]:
+            - /url: /settings/users
+            - generic [ref=f1e172]:
+              - strong [ref=f1e173]: Benutzer & Rollen
+              - generic [ref=f1e174]: Konten und Zugriffsbereiche verwalten
+            - generic [ref=f1e175]: →
+          - link "Audit öffnen Änderungen nachvollziehen →" [ref=f1e176] [cursor=pointer]:
+            - /url: /audit
+            - generic [ref=f1e177]:
+              - strong [ref=f1e178]: Audit öffnen
+              - generic [ref=f1e179]: Änderungen nachvollziehen
+            - generic [ref=f1e180]: →
+          - button "Verträge exportieren Scope-gefilterte CSV mit aktuellem Vertragsbestand ↓" [ref=f1e181] [cursor=pointer]:
+            - generic [ref=f1e182]:
+              - strong [ref=f1e183]: Verträge exportieren
+              - generic [ref=f1e184]: Scope-gefilterte CSV mit aktuellem Vertragsbestand
+            - generic [ref=f1e185]: ↓
+        - generic [ref=f1e186]:
+          - generic [ref=f1e187]:
+            - generic [ref=f1e188]:
+              - generic [ref=f1e189]:
+                - heading "Letzte Aktivitäten" [level=2] [ref=f1e190]
+                - paragraph [ref=f1e191]: Authentifizierte Änderungen in dieser Organisation
+              - link "Alle anzeigen" [ref=f1e192] [cursor=pointer]:
+                - /url: /audit
+            - paragraph [ref=f1e194]: Noch keine Aktivitäten vorhanden.
+          - generic [ref=f1e195]:
+            - generic [ref=f1e197]:
+              - heading "Intelligence Events" [level=2] [ref=f1e198]
+              - paragraph [ref=f1e199]: Backend-Ereignisse im aktuell sichtbaren Vertragsbereich
+            - paragraph [ref=f1e201]: Keine Intelligence Events vorhanden.
+          - generic [ref=f1e202]:
+            - generic [ref=f1e203]:
+              - generic [ref=f1e204]:
+                - heading "Benutzerübersicht" [level=2] [ref=f1e205]
+                - paragraph [ref=f1e206]: Konten im aktuellen Arbeitsbereich
+              - link "Verwalten" [ref=f1e207] [cursor=pointer]:
+                - /url: /settings/users
+            - generic [ref=f1e209]:
+              - generic [ref=f1e210]: F
+              - generic [ref=f1e211]:
+                - strong [ref=f1e212]: Flow Admin
+                - generic [ref=f1e213]: flow@klinik.local
+              - generic [ref=f1e214]: Administrator
+              - generic [ref=f1e215]: Aktiv
+    - complementary "Lokaler KI-Assistent" [ref=f1e216]:
+      - button "KI-Assistent" [ref=f1e217] [cursor=pointer]
+  - region "Benachrichtigungen"
+  - alert [ref=f1e36]

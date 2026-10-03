@@ -1,0 +1,150 @@
+- generic [active] [ref=e1]:
+  - link "Zum Hauptinhalt springen" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e5]:
+    - complementary [ref=e266]:
+      - link "MedFlux Startseite" [ref=e268] [cursor=pointer]:
+        - /url: /
+        - img "MedFlux" [ref=e270]
+      - navigation "Hauptnavigation" [ref=e271]:
+        - generic [ref=e272]:
+          - generic [ref=e273]: Arbeitsbereich
+          - generic [ref=e274]:
+            - link "Übersicht" [ref=e275] [cursor=pointer]:
+              - /url: /
+            - link "Verträge" [ref=e280] [cursor=pointer]:
+              - /url: /contracts
+            - link "Geräte" [ref=e286] [cursor=pointer]:
+              - /url: /equipment
+            - link "To-dos" [ref=e292] [cursor=pointer]:
+              - /url: /work-queue
+        - generic [ref=e298]:
+          - generic [ref=e299]: Dokumente & Prüfung
+          - generic [ref=e300]:
+            - link "Import" [ref=e301] [cursor=pointer]:
+              - /url: /import
+            - link "Prüfungen" [ref=e306] [cursor=pointer]:
+              - /url: /review
+            - link "Nachweise" [ref=e312] [cursor=pointer]:
+              - /url: /nachweise
+            - link "Archiv" [ref=e318] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=e324]:
+          - generic [ref=e325]: Administration
+          - generic [ref=e326]:
+            - link "Audit" [ref=e327] [cursor=pointer]:
+              - /url: /audit
+            - link "Admin Dashboard" [ref=e333] [cursor=pointer]:
+              - /url: /admin
+            - link "Einstellungen" [ref=e339] [cursor=pointer]:
+              - /url: /settings
+    - main [ref=e345]:
+      - generic [ref=e346]:
+        - generic [aria-hidden] [ref=e348]: Verträge
+        - generic [ref=e349]:
+          - generic "Arbeitsbereich auswählen"
+          - link "Analysen" [ref=e350] [cursor=pointer]:
+            - /url: /analysen
+          - search "Verträge durchsuchen" [ref=e351]:
+            - generic [ref=e352]: Vertragsnummer suchen
+            - searchbox "Vertragsnummer suchen" [ref=e353]
+          - group [ref=e354]:
+            - generic "1 offene Hinweise" [ref=e355] [cursor=pointer]:
+              - generic [aria-hidden] [ref=e356]: 🔔
+              - generic [ref=e357]: "1"
+          - group [ref=e358]:
+            - generic "Kontomenü öffnen" [ref=e359] [cursor=pointer]:
+              - generic [ref=e360]: A
+              - generic [ref=e361]:
+                - strong [ref=e362]: Admin
+                - generic [ref=e363]: Administrator
+      - generic [ref=e364]:
+        - generic [ref=e365]:
+          - heading "Verträge" [level=1] [ref=e366]
+          - paragraph [ref=e367]: 1 Vertrag
+        - region "Verträge suchen und filtern" [ref=e368]:
+          - search [ref=e369]:
+            - generic [ref=e370]: Verträge durchsuchen
+            - searchbox "Verträge durchsuchen" [ref=e371]
+            - button "Zurücksetzen" [ref=e372] [cursor=pointer]
+            - button "Erweiterte Filter" [ref=e373] [cursor=pointer]
+          - group "Schnellfilter" [ref=e374]:
+            - button "Kritische Kündigungsfrist" [ref=e375] [cursor=pointer]
+            - button "Automatische Verlängerung" [ref=e376] [cursor=pointer]
+            - button "Handlungsbedarf" [ref=e377] [cursor=pointer]
+            - button "Manuelle Prüfung" [ref=e378] [cursor=pointer]
+            - button "Endet bald" [ref=e379] [cursor=pointer]
+            - button "Alle Filter zurücksetzen" [disabled] [ref=e380]
+        - region "Vertragsliste" [ref=e381]:
+          - generic [ref=e382]:
+            - combobox "Sortierung" [ref=e383]:
+              - option "Empfohlene Sortierung" [selected]
+              - option "Titel"
+              - option "Lieferant"
+              - option "Vertragsende"
+              - option "Kündigungsfrist"
+              - option "Jährliche Kosten"
+              - option "Risiko"
+              - option "Zuletzt aktualisiert"
+            - button "Aufsteigend ↑" [ref=e384] [cursor=pointer]
+            - combobox "Einträge pro Seite" [ref=e385]:
+              - option "25 pro Seite" [selected]
+              - option "50 pro Seite"
+              - option "100 pro Seite"
+          - generic [ref=e386]:
+            - generic [ref=e387]:
+              - generic "Aktive Filter" [ref=e388]: Keine Filter aktiv
+              - generic "Gespeicherte Ansichten" [ref=e391]:
+                - generic [ref=e392]: Ansichten
+                - generic [ref=e393]:
+                  - generic [ref=e394]: Name der Ansicht
+                  - textbox "Name der Ansicht" [ref=e395]:
+                    - /placeholder: z. B. Kritische Verträge
+                  - button "Ansicht speichern" [disabled] [ref=e396] [cursor=pointer]
+                - generic [ref=e397]: Noch keine lokalen Ansichten gespeichert.
+            - generic "Tabellendarstellung" [ref=e398]:
+              - group "Tabellendichte" [ref=e399]:
+                - button "Komfortabel" [pressed] [ref=e400] [cursor=pointer]
+                - button "Kompakt" [ref=e401] [cursor=pointer]
+              - button "Spalten" [ref=e403] [cursor=pointer]
+            - generic "Vertragstabelle horizontal scrollen" [ref=e404]:
+              - table [ref=e405]:
+                - rowgroup [ref=e406]:
+                  - row [ref=e407]:
+                    - columnheader "Nr." [ref=e408]
+                    - columnheader "Vertrag" [ref=e409]
+                    - columnheader "Lieferant" [ref=e410]
+                    - columnheader "Status" [ref=e411]
+                    - columnheader "Risiko" [ref=e412]
+                    - columnheader "Jährl. Kosten" [ref=e413]
+                    - columnheader "Vertragsende" [ref=e414]
+                    - columnheader "Künd. bis" [ref=e415]
+                    - columnheader "Warnung" [ref=e416]
+                - rowgroup [ref=e417]:
+                  - row [ref=e418] [cursor=pointer]:
+                    - rowheader [ref=e419]:
+                      - link "40015645 öffnen" [ref=e420]:
+                        - /url: /contracts/01a0aa27-f57b-7b4f-9659-5aadfed6f6c9
+                        - text: "40015645"
+                    - cell "Full-Service-Vertrag für das Impella®AIC System öffnen Full-Service-Vertrag für das Impella®AIC System in Schnellansicht öffnen ABIOMED Europe GmbH" [ref=e421]:
+                      - generic [ref=e422]:
+                        - link "Full-Service-Vertrag für das Impella®AIC System öffnen" [ref=e423]:
+                          - /url: /contracts/01a0aa27-f57b-7b4f-9659-5aadfed6f6c9
+                          - text: Full-Service-Vertrag für das Impella®AIC System
+                        - button "Full-Service-Vertrag für das Impella®AIC System in Schnellansicht öffnen" [ref=e424]: Vorschau
+                      - generic [ref=e425]: ABIOMED Europe GmbH
+                    - cell "ABIOMED Europe GmbH" [ref=e426]
+                    - cell "Aktiv" [ref=e427]
+                    - cell "Hoch" [ref=e429]
+                    - cell "8.000,00 €" [ref=e431]
+                    - cell "31.03.2029" [ref=e432]
+                    - cell "–" [ref=e433]
+                    - cell "Hoch Berechnungskonflikt" [ref=e434]:
+                      - generic [ref=e435]: Hoch
+                      - generic [ref=e436]: Berechnungskonflikt
+          - navigation "Seitennavigation" [ref=e437]:
+            - button "← Zurück" [disabled] [ref=e438]
+            - generic [ref=e439]: Seite 1
+            - button "Weiter →" [disabled] [ref=e440]
+  - region "Benachrichtigungen"
+  - alert [ref=e4]: Verträge · Medflux

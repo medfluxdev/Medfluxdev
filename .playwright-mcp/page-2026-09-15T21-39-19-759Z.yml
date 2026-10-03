@@ -1,0 +1,114 @@
+- generic [active] [ref=e1]:
+  - link "Zum Hauptinhalt springen" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - generic [ref=e5]:
+    - complementary [ref=e6]:
+      - link "MedFlux Startseite" [ref=e8] [cursor=pointer]:
+        - /url: /
+        - img "MedFlux" [ref=e10]
+      - navigation "Hauptnavigation" [ref=e11]:
+        - generic [ref=e12]:
+          - generic [ref=e13]: Arbeitsbereich
+          - generic [ref=e14]:
+            - link "Übersicht" [ref=e15] [cursor=pointer]:
+              - /url: /
+            - link "Verträge" [ref=e20] [cursor=pointer]:
+              - /url: /contracts
+            - link "Geräte" [ref=e26] [cursor=pointer]:
+              - /url: /equipment
+            - link "To-dos" [ref=e32] [cursor=pointer]:
+              - /url: /work-queue
+        - generic [ref=e38]:
+          - generic [ref=e39]: Dokumente & Prüfung
+          - generic [ref=e40]:
+            - link "Import" [ref=e41] [cursor=pointer]:
+              - /url: /import
+            - link "Prüfungen" [ref=e46] [cursor=pointer]:
+              - /url: /review
+            - link "Nachweise" [ref=e52] [cursor=pointer]:
+              - /url: /nachweise
+            - link "Archiv" [ref=e58] [cursor=pointer]:
+              - /url: /archiv
+        - generic [ref=e64]:
+          - generic [ref=e65]: Administration
+          - generic [ref=e66]:
+            - link "Audit" [ref=e67] [cursor=pointer]:
+              - /url: /audit
+            - link "Admin Dashboard" [ref=e73] [cursor=pointer]:
+              - /url: /admin
+            - link "Einstellungen" [ref=e79] [cursor=pointer]:
+              - /url: /settings
+    - main [ref=e85]:
+      - generic [ref=e86]:
+        - generic [aria-hidden] [ref=e88]: Einstellungen
+        - generic [ref=e89]:
+          - generic "Arbeitsbereich auswählen"
+          - link "Analysen" [ref=e90] [cursor=pointer]:
+            - /url: /analysen
+          - search "Verträge durchsuchen" [ref=e91]:
+            - generic [ref=e92]: Vertragsnummer suchen
+            - searchbox "Vertragsnummer suchen" [ref=e93]
+          - group [ref=e94]:
+            - generic "0 offene Hinweise" [ref=e95] [cursor=pointer]:
+              - generic [aria-hidden] [ref=e96]: 🔔
+          - group [ref=e97]:
+            - generic "Kontomenü öffnen" [ref=e98] [cursor=pointer]:
+              - generic [ref=e99]: A
+              - generic [ref=e100]:
+                - strong [ref=e101]: Admin
+                - generic [ref=e102]: Administrator
+      - link "Mein Profil" [ref=e104] [cursor=pointer]:
+        - /url: /profile
+        - generic [aria-hidden] [ref=e105]: 👤
+        - text: Mein Profil
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - heading "Einstellungen" [level=1] [ref=e108]
+          - paragraph [ref=e109]: Laufzeit- und Systemstatus der lokalen Medflux-Installation.
+        - generic [ref=e110]:
+          - navigation "Einstellungsbereiche" [ref=e111]:
+            - link "Mein Profil" [ref=e112] [cursor=pointer]:
+              - /url: /profile
+            - button "Allgemein" [ref=e113] [cursor=pointer]
+            - button "Lokale KI" [ref=e114] [cursor=pointer]
+            - button "Dokumentenverarbeitung" [ref=e115] [cursor=pointer]
+            - button "Speicher & Daten" [ref=e116] [cursor=pointer]
+            - button "Benutzer & Sicherheit" [ref=e117] [cursor=pointer]
+            - button "System & Diagnose" [ref=e118] [cursor=pointer]
+          - region [ref=e120]:
+            - heading "Lokale KI" [level=2] [ref=e121]
+            - status [ref=e125]:
+              - generic [ref=e126]: Es gibt kein Standardmodell. Provider und Modell werden bewusst ausgewählt und serverseitig gespeichert. Ohne gespeicherte Auswahl startet Medflux keine KI-Analyse. Gespeicherte Verträge werden beim Wechsel des Modells nicht automatisch neu analysiert.
+            - generic [ref=e127]:
+              - generic [ref=e128]:
+                - text: KI-Provider
+                - generic [ref=e129]: erreichbar
+              - combobox "KI-Provider erreichbar" [ref=e131]:
+                - option "– Provider auswählen –"
+                - option "Ollama" [selected]
+                - option "LM Studio (nicht erreichbar)"
+                - option "llama.cpp (nicht erreichbar)"
+            - generic [ref=e132]:
+              - generic [ref=e133]: KI-Modell
+              - combobox "KI-Modell" [ref=e134]:
+                - option "– Modell auswählen –"
+                - option "qwen3-vl:8b-instruct" [selected]
+                - option "qwen3:14b"
+                - option "aya-expanse:8b"
+                - option "qwen3:8b"
+            - generic [ref=e135]:
+              - generic [ref=e136]: Fähigkeiten
+              - generic "Fähigkeiten" [ref=e137]:
+                - generic [ref=e138]: Text
+                - generic [ref=e150]: Vision / Bild
+            - generic [ref=e140]:
+              - generic [ref=e141]: Aktive Auswahl
+              - generic [ref=e142]: Bereit
+              - paragraph [ref=e144]: "Bereit: 'Ollama' mit Modell 'qwen3:8b'."
+            - generic [ref=e145]:
+              - button "Auswahl speichern" [ref=e146] [cursor=pointer]
+              - button "KI-Verbindung testen" [ref=e147] [cursor=pointer]
+            - group [ref=e148]:
+              - generic "Erweiterte Einstellungen" [ref=e149] [cursor=pointer]
+  - region "Benachrichtigungen"
+  - alert [ref=e4]

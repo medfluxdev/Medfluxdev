@@ -1,0 +1,5 @@
+- generic [active] [ref=f17e1]:
+  - link "Zum Hauptinhalt springen" [ref=f17e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - status [ref=f17e3]: MedFlux wird geladen…
+  - region "Benachrichtigungen"
