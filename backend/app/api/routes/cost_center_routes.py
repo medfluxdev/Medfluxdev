@@ -21,6 +21,13 @@ class CostCenterPayload(BaseModel):
     name: str
 
 
+class CostCenterUpdate(BaseModel):
+    department_id: UUID | None = None
+    code: str | None = None
+    name: str | None = None
+    is_active: bool | None = None
+
+
 def _organization(session, organization_slug: str):
     organization = session.scalar(select(Organization).where(Organization.slug == organization_slug))
     if organization is None:
@@ -111,5 +118,62 @@ def add_item(payload: CostCenterPayload, request: Request, organization_slug: st
         )
         session.commit()
         return {"id": str(row.id), "code": row.code, "name": row.name}
+    finally:
+        session.close()
+
+
+@router.patch("/{cost_center_id}")
+def update_item(cost_center_id: UUID, payload: CostCenterUpdate, request: Request, organization_slug: str):
+    """WP1.2: edit / activate / deactivate a cost center (admin only, same organization)."""
+    actor = current_actor(request, organization_slug)
+    if actor.role != "admin" and not actor.is_developer:
+        raise HTTPException(status_code=403, detail="Nur Administratoren dürfen Kostenstellen ändern.")
+    session = create_session()
+    try:
+        organization = _organization(session, organization_slug)
+        row = session.get(CostCenter, cost_center_id)
+        if row is None or row.organization_id != organization.id or organization.id != actor.organization_id:
+            raise HTTPException(status_code=404, detail="Kostenstelle nicht gefunden.")
+        if "department_id" in payload.model_fields_set:
+            department = session.get(Department, payload.department_id) if payload.department_id else None
+            if payload.department_id is not None and (department is None or department.hospital_id != row.hospital_id):
+                raise HTTPException(status_code=422, detail="Die Abteilung gehört nicht zum Krankenhaus.")
+            row.department_id = department.id if department else None
+        if payload.code is not None:
+            code = payload.code.strip().upper()
+            if not code:
+                raise HTTPException(status_code=422, detail="Code ist erforderlich.")
+            row.code = code
+        if payload.name is not None:
+            name = payload.name.strip()
+            if not name:
+                raise HTTPException(status_code=422, detail="Bezeichnung ist erforderlich.")
+            row.name = name
+        if payload.is_active is not None:
+            row.is_active = payload.is_active
+        session.add(
+            ActivityLog(
+                organization_id=actor.organization_id,
+                hospital_id=row.hospital_id,
+                department_id=row.department_id,
+                account_id=actor.account_id,
+                display_name_snapshot=actor.display_name,
+                role_snapshot="developer" if actor.is_developer else actor.role,
+                event_name="cost_center.updated",
+                object_type="cost_center",
+                object_id=row.id,
+                context_data={"code": row.code, "name": row.name, "is_active": row.is_active,
+                              "department_id": str(row.department_id) if row.department_id else None},
+            )
+        )
+        session.commit()
+        return {
+            "id": str(row.id),
+            "hospital_id": str(row.hospital_id),
+            "department_id": str(row.department_id) if row.department_id else None,
+            "code": row.code,
+            "name": row.name,
+            "is_active": row.is_active,
+        }
     finally:
         session.close()

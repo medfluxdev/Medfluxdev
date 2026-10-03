@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -8,7 +8,8 @@ from app.auth.dependencies import current_actor
 from app.core.scope_context import current_scope_context
 from app.database.models.activity_log import ActivityLog
 from app.database.models.organization import Organization
-from app.database.models.organization_structure import Department, Hospital
+from app.database.models.organization_structure import DEPARTMENT_UNIT_TYPES, CostCenter, Department, Hospital
+from app.organization_structure.search import search_structure
 from app.database.session import create_session
 
 router = APIRouter(prefix="/api/organization-structure", tags=["organization-structure"])
@@ -32,13 +33,27 @@ class DepartmentCreate(BaseModel):
     hospital_id: UUID
     name: str
     code: str
+    unit_type: str | None = None
 
 
 class DepartmentUpdate(BaseModel):
     parent_id: UUID | None = None
     name: str | None = None
     code: str | None = None
+    unit_type: str | None = None
     is_active: bool | None = None
+
+
+def _normalize_unit_type(value: str | None) -> str | None:
+    """Lower-case German unit label or None; anything else is a 422 (never guessed)."""
+    if value is None:
+        return None
+    cleaned = value.strip().casefold()
+    if not cleaned:
+        return None
+    if cleaned not in DEPARTMENT_UNIT_TYPES:
+        raise HTTPException(status_code=422, detail="Ungültiger Einheitentyp. Erlaubt: " + ", ".join(DEPARTMENT_UNIT_TYPES) + ".")
+    return cleaned
 
 
 def _validate_department_parent(session, *, organization_id: UUID, hospital_id: UUID, department_id: UUID | None, parent_id: UUID | None):
@@ -114,7 +129,8 @@ def structure(request: Request, organization_slug: str):
         departments = session.scalars(department_stmt.order_by(Department.name.asc())).all()
         return {
             "hospitals": [{"id": str(row.id), "name": row.name, "code": row.code, "address": row.address, "is_active": row.is_active} for row in hospitals],
-            "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "parent_id": str(row.parent_id) if row.parent_id else None, "name": row.name, "code": row.code, "is_active": row.is_active} for row in departments],
+            "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "parent_id": str(row.parent_id) if row.parent_id else None, "name": row.name, "code": row.code, "unit_type": row.unit_type, "is_active": row.is_active} for row in departments],
+            "unit_types": list(DEPARTMENT_UNIT_TYPES),
         }
     finally:
         session.close()
@@ -168,12 +184,12 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         if hospital is None or hospital.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Krankenhaus nicht gefunden.")
         _validate_department_parent(session, organization_id=organization.id, hospital_id=hospital.id, department_id=None, parent_id=payload.parent_id)
-        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=payload.name.strip(), code=payload.code.strip().upper(), is_active=True)
+        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=payload.name.strip(), code=payload.code.strip().upper(), unit_type=_normalize_unit_type(payload.unit_type), is_active=True)
         session.add(row)
         session.flush()
-        _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code})
+        _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "unit_type": row.unit_type})
         session.commit()
-        return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code}
+        return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "unit_type": row.unit_type}
     finally:
         session.close()
 
@@ -208,9 +224,40 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
             row.parent_id = payload.parent_id
         if payload.name is not None: row.name = payload.name.strip() or row.name
         if payload.code is not None: row.code = payload.code.strip().upper() or row.code
+        if "unit_type" in payload.model_fields_set: row.unit_type = _normalize_unit_type(payload.unit_type)
         if payload.is_active is not None: row.is_active = payload.is_active
         _record_activity(session, actor, event_name="department.updated", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "is_active": row.is_active})
         session.commit()
-        return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "is_active": row.is_active}
+        return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "unit_type": row.unit_type, "is_active": row.is_active}
+    finally:
+        session.close()
+
+
+@router.get("/search")
+def search(request: Request, organization_slug: str, q: str = Query("", max_length=120)):
+    """WP1.3: find units and cost centers by name or code; every hit carries its full path and hospital."""
+    actor = current_actor(request, organization_slug)
+    session = create_session()
+    try:
+        organization = _organization(session, organization_slug)
+        if organization.id != actor.organization_id:
+            raise HTTPException(status_code=404, detail="Organisation nicht gefunden.")
+        hospital_stmt = select(Hospital).where(Hospital.organization_id == organization.id)
+        department_stmt = select(Department).where(Department.organization_id == organization.id)
+        cost_center_stmt = select(CostCenter).where(CostCenter.organization_id == organization.id)
+        if actor.role != "admin" and not actor.is_developer:
+            scope = current_scope_context()
+            if scope.hospital_id is None:
+                return {"query": q, "items": []}
+            hospital_stmt = hospital_stmt.where(Hospital.id == scope.hospital_id)
+            department_stmt = department_stmt.where(Department.hospital_id == scope.hospital_id)
+            cost_center_stmt = cost_center_stmt.where(CostCenter.hospital_id == scope.hospital_id)
+        hits = search_structure(
+            q,
+            hospitals=session.scalars(hospital_stmt).all(),
+            departments=session.scalars(department_stmt).all(),
+            cost_centers=session.scalars(cost_center_stmt).all(),
+        )
+        return {"query": q, "items": [hit.as_dict() for hit in hits]}
     finally:
         session.close()

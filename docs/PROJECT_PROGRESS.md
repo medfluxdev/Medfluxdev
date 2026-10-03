@@ -5082,3 +5082,20 @@ Nächster Schritt:
 - Vor weiteren Änderungen den konkreten Arbeitsauftrag anhand der Hand-over-Prioritäten
   festlegen. Für die soeben ergänzte Importzuordnung steht noch ein echter, isolierter
   DB-Integrationstest der Persistierung und Ablehnung krankenhausübergreifender IDs aus.
+
+## 2026-10-03 – WP1: Organisationsstruktur-Vervollständigung (Einheitentyp, Kostenstellen-Pflege, Struktursuche)
+
+Grundlage: `docs/architecture/WORKPLAN_ORGSTRUKTUR_PHASE1_20261003.md` (Anforderungsdokumente vom 26.09.2026 und „Organisationsstruktur“).
+
+**Umgesetzt (DoD-Kette):**
+- Model/Migration: `department.unit_type` (optional; `klinik|abteilung|bereich|einheit|station|funktionsbereich`, Check-Constraint `ck_department_unit_type`), Alembic `d5e7f9a01003` — additiv, keine Zeile verändert. Auf dem 55432-Trial-Cluster angewendet (`c4d6e8f00930 → d5e7f9a01003`).
+- Backend API: `PATCH /api/cost-centers/{id}` (Bezeichnung, Code, Abteilung im selben Krankenhaus, aktiv/inaktiv; Activity-Log `cost_center.updated`); `GET /api/organization-structure/search?q=` (Einheiten und Kostenstellen nach Name/Code, jeder Treffer mit vollständigem Pfad `A › B › C` und Krankenhaus; Scope-Filter wie `GET /api/organization-structure`); `unit_type` in Department-Create/Update/Read, `unit_types` in der Strukturantwort.
+- Frontend: Einheitentyp-Auswahl im Formular „Einheit hinzufügen“ und Anzeige im Baum; Kostenstellen-Chips mit „Bearbeiten“/„Deaktivieren|Aktivieren“; Suchfeld „Einheit oder Kostenstelle suchen“ (z. B. `471120` → `471120 – CT · Radiologie › CT · Krankenhaus Heidelberg`).
+- Tests: `backend/tests/test_org_structure_search_wp1.py` (rein, 5), `backend/tests/test_cost_center_patch_and_search_api_wp1.py` (DB, 2), `frontend/test/organization-structure-wp1.test.tsx` (3). Bestehende Tests angepasst (Mock-Exporte).
+- Tooling: `scripts/run_wp1_tests.bat` (Guard-Diagnose + pytest + vitest + tsc, Ergebnisse unter `local-archive/test-results/`), `scripts/migrate_trial_db.bat` (nur 55432), `START_MEDFLUX_PILOT.bat` (WSL-55432 + Backend + Frontend + Browser).
+
+**Verifikation (2026-10-03, lokal):** Backend WP1 15 passed; Backend-Gesamtlauf 1377 passed / 3 skipped / 0 failed (Test-Env `AUTH_ENABLED=false`, `MEDFLUX_INSECURE_DEV=true`); Frontend 9/9 passed; `tsc --noEmit` sauber; laufendes Backend liefert beide neuen Routen (OpenAPI) mit 401 ohne Session.
+
+**Entscheidungen (vorläufig, änderbar):** `unit_type` optional; Kostenverteilung in Analysen standardmäßig nach verantwortlicher Einheit (WP5); E-Mail-Versand nach In-App-Benachrichtigung (WP4).
+
+**Offen (nächste WPs):** WP2 Finanzfelder (Zahlungsintervall, Netto/Brutto beide Varianten, Preisanpassung), WP3 Review-Provenienz, WP4 Benachrichtigungen/E-Mail, WP5 Analysen.

@@ -8,12 +8,24 @@ export interface HospitalDto {
   is_active: boolean;
 }
 
+export type DepartmentUnitType = "klinik" | "abteilung" | "bereich" | "einheit" | "station" | "funktionsbereich";
+
+export const DEPARTMENT_UNIT_TYPE_LABELS: Record<DepartmentUnitType, string> = {
+  klinik: "Klinik",
+  abteilung: "Abteilung",
+  bereich: "Bereich",
+  einheit: "Einheit",
+  station: "Station",
+  funktionsbereich: "Funktionsbereich",
+};
+
 export interface DepartmentDto {
   id: string;
   hospital_id: string;
   parent_id?: string | null;
   name: string;
   code: string;
+  unit_type?: DepartmentUnitType | null;
   is_active: boolean;
 }
 
@@ -29,6 +41,21 @@ export interface CostCenterDto {
 export interface OrganizationStructureDto {
   hospitals: HospitalDto[];
   departments: DepartmentDto[];
+  unit_types?: DepartmentUnitType[];
+}
+
+export interface StructureSearchHitDto {
+  kind: "department" | "cost_center";
+  id: string;
+  code: string;
+  name: string;
+  hospital_id: string;
+  hospital_name: string;
+  path: string[];
+  path_label: string;
+  unit_type: DepartmentUnitType | null;
+  department_id: string | null;
+  is_active: boolean;
 }
 
 function orgQuery(organizationSlug: string) {
@@ -53,14 +80,14 @@ export function updateHospital(organizationSlug: string, hospitalId: string, pay
   );
 }
 
-export function createDepartment(organizationSlug: string, payload: { hospital_id: string; parent_id?: string | null; name: string; code: string }) {
+export function createDepartment(organizationSlug: string, payload: { hospital_id: string; parent_id?: string | null; name: string; code: string; unit_type?: DepartmentUnitType | null }) {
   return apiPost<Pick<DepartmentDto, "id" | "hospital_id" | "name" | "code">>(
     `/api/organization-structure/departments?${orgQuery(organizationSlug)}`,
     payload,
   );
 }
 
-export function updateDepartment(organizationSlug: string, departmentId: string, payload: Partial<Pick<DepartmentDto, "parent_id" | "name" | "code" | "is_active">>) {
+export function updateDepartment(organizationSlug: string, departmentId: string, payload: Partial<Pick<DepartmentDto, "parent_id" | "name" | "code" | "unit_type" | "is_active">>) {
   return apiPatch<DepartmentDto>(
     `/api/organization-structure/departments/${encodeURIComponent(departmentId)}?${orgQuery(organizationSlug)}`,
     payload,
@@ -75,5 +102,19 @@ export function createCostCenter(organizationSlug: string, payload: { hospital_i
   return apiPost<Pick<CostCenterDto, "id" | "code" | "name">>(
     `/api/cost-centers?${orgQuery(organizationSlug)}`,
     payload,
+  );
+}
+
+export function updateCostCenter(organizationSlug: string, costCenterId: string, payload: Partial<Pick<CostCenterDto, "department_id" | "code" | "name" | "is_active">>) {
+  return apiPatch<CostCenterDto>(
+    `/api/cost-centers/${encodeURIComponent(costCenterId)}?${orgQuery(organizationSlug)}`,
+    payload,
+  );
+}
+
+export function searchOrganizationStructure(organizationSlug: string, query: string, signal?: AbortSignal) {
+  return apiGet<{ query: string; items: StructureSearchHitDto[] }>(
+    `/api/organization-structure/search?${orgQuery(organizationSlug)}&q=${encodeURIComponent(query)}`,
+    signal,
   );
 }

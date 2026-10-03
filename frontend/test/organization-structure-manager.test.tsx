@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import OrganizationStructureManager from "@/components/settings/OrganizationStructureManager";
 
 const mocks = vi.hoisted(() => ({
+  DEPARTMENT_UNIT_TYPE_LABELS: {
+    klinik: "Klinik", abteilung: "Abteilung", bereich: "Bereich",
+    einheit: "Einheit", station: "Station", funktionsbereich: "Funktionsbereich",
+  },
+  searchOrganizationStructure: vi.fn(),
+  updateCostCenter: vi.fn(),
   createDepartment: vi.fn(),
   createCostCenter: vi.fn(),
   createHospital: vi.fn(),

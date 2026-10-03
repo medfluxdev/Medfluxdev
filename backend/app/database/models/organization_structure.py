@@ -31,6 +31,9 @@ class Hospital(Base):
     )
 
 
+DEPARTMENT_UNIT_TYPES = ("klinik", "abteilung", "bereich", "einheit", "station", "funktionsbereich")
+
+
 class Department(Base):
     __tablename__ = "department"
 
@@ -46,11 +49,17 @@ class Department(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Optional German unit label (WP1.1). NULL = not classified; never guessed.
+    unit_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         UniqueConstraint("hospital_id", "code", name="uq_department_hospital_code"),
+        CheckConstraint(
+            "unit_type IS NULL OR unit_type IN ('klinik', 'abteilung', 'bereich', 'einheit', 'station', 'funktionsbereich')",
+            name="ck_department_unit_type",
+        ),
         UniqueConstraint("id", "organization_id", "hospital_id", name="uq_department_id_org_hospital"),
         ForeignKeyConstraint(["parent_id", "organization_id", "hospital_id"], ["department.id", "department.organization_id", "department.hospital_id"], name="fk_department_parent_same_scope"),
         CheckConstraint("parent_id IS NULL OR parent_id <> id", name="ck_department_not_self_parent"),
