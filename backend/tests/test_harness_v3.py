@@ -10,6 +10,7 @@ from app.ai.harness.v3 import (
     DirectContractHarness,
     HarnessV3,
     _normalize_money_payload,
+    _pack_pages,
     _per_call_rows,
     _retry_output_plan,
     _staged_price_rows,
@@ -365,6 +366,40 @@ def test_source_signals_find_reference_values():
     assert "4 Jahren" in values
     assert "2.226,00 EUR" in values
     assert "8.000,00 EUR" in values
+
+
+def test_payment_pack_uses_bounded_keyword_pages_without_falling_back_to_entire_document():
+    pages = [
+        Page(
+            page_number=number,
+            width_pt=600,
+            height_pt=800,
+            text=("Zahlbar nach Rechnung in EUR pro Jahr" if number <= 3 else "Leistungsbeschreibung"),
+            elements=[],
+        )
+        for number in range(1, 7)
+    ]
+    canonical = SimpleNamespace(pages=pages)
+    signals = [{"kind": "money", "page": number} for number in range(1, 7)]
+
+    selected = _pack_pages(
+        ("payment",),
+        canonical,
+        signals,
+        expand_keywords=True,
+        page_limit=2,
+        fallback_all=False,
+    )
+
+    assert selected == [1, 2]
+    assert _pack_pages(
+        ("payment",),
+        SimpleNamespace(pages=pages[3:]),
+        [],
+        expand_keywords=True,
+        page_limit=2,
+        fallback_all=False,
+    ) == []
 
 
 @pytest.mark.asyncio

@@ -73,7 +73,7 @@ PACKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...], bool], ...] = (
     ("commercial", ("costs.",), ("costs", "payment"), False),
     ("payment", ("payment.", "costs.tax_basis", "costs.tax_rate_percent",
                  "costs.price_adjustment_clause", "costs.price_indexation",
-                 "costs.discounts"), ("payment", "costs"), True),
+                 "costs.discounts"), ("payment",), True),
     ("operations", ("equipment", "services.", "sla."), ("equipment", "services", "sla"), True),
 )
 
@@ -212,7 +212,6 @@ _SIGNAL_TOPICS = {
     "dates": {"date", "duration"},
     "termination": {"date", "duration", "renewal_negation"},
     "costs": {"money"},
-    "payment": {"money"},
 }
 
 # Obergrenze fuer die pro Pack gelieferten Quellseiten.  Signal-Seiten haben
@@ -227,6 +226,9 @@ def _pack_pages(
     canonical,
     source_signals,
     expand_keywords: bool = True,
+    *,
+    page_limit: int | None = None,
+    fallback_all: bool = True,
 ) -> list[int]:
     """Deterministic per-pack source page selection.
 
@@ -259,7 +261,7 @@ def _pack_pages(
         # The page cap applies only to packs that already have signal anchors.
         # Packs without literals (e.g. services) keep full keyword recall so their
         # annex pages are never dropped.
-        limit = _PACK_MAX_PAGES if wanted else None
+        limit = page_limit if page_limit is not None else (_PACK_MAX_PAGES if wanted else None)
         if keywords:
             for page in canonical.pages:
                 page_number = page.page_number
@@ -271,7 +273,11 @@ def _pack_pages(
                     wanted.add(page_number)
 
     if not wanted:
-        return sorted(page.page_number for page in canonical.pages)
+        return (
+            sorted(page.page_number for page in canonical.pages)
+            if fallback_all
+            else []
+        )
     return sorted(wanted)
 
 
@@ -1179,7 +1185,14 @@ class DirectContractHarness:
             proposals: list[ProposedFact] = []
             for pack_name, selectors, topics, expand_keywords in PACKS:
                 catalog = _field_catalog(types, selectors)
-                pack_pages = _pack_pages(topics, canonical, source_signals, expand_keywords)
+                pack_pages = _pack_pages(
+                    topics,
+                    canonical,
+                    source_signals,
+                    expand_keywords,
+                    page_limit=5 if pack_name == "payment" else None,
+                    fallback_all=pack_name != "payment",
+                )
                 pack_signals = [
                     signal
                     for signal in source_signals
