@@ -80,6 +80,41 @@ python -m venv .venv
 # Windows: .\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
+### Datenbankkonfiguration
+
+Medflux unterstützt drei Datenbankumgebungen. **Wichtig:** Die richtige Umgebung muss vor dem Starten des Backends konfiguriert werden.
+
+#### Option 1: Docker Compose (empfohlen für Tests und Demo)
+```bash
+docker-compose up -d postgres
+cd backend
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+# DATABASE_URL wird automatisch in docker-compose.yml gesetzt
+```
+
+#### Option 2: Windows Local Development (WSL Test-Cluster auf Port 55432)
+```bash
+# Umgebungsvariable setzen (vor Backend-Start):
+set MEDFLUX_TEST_DATABASE_URL=postgresql+psycopg://sr415_flow:<PASSWORD>@127.0.0.1:55432/medflux_trial_20261001
+# ODER
+set MEDFLUX_TRIAL_DSN=postgresql+psycopg://sr415_flow:<PASSWORD>@127.0.0.1:55432/medflux_trial_20261001
+
+cd backend
+python -m venv .venv
+# Windows: .\.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+⚠️ **Wichtig:** `DATABASE_URL` sollte für Option 2 NICHT gesetzt werden (Konflikt mit Fail-Closed-Validierung).
+
+#### Option 3: CI/CD (GitHub Actions)
+Automatisch – keine Konfiguration erforderlich.
+
+**Siehe `docs/DATABASE_CONFIGURATION.md` für vollständige Anleitung.**
 ```
 
 ### Tests (Backend)
