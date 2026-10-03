@@ -922,5 +922,8 @@ def test_retry_output_plan_uses_measured_budget():
     assert plan[0] is not None
     assert plan[1] == "output_budget_stage_retry"
 
+    long_contract_plan = _retry_output_plan("semantic:payment", 21641, 32768, 1800)
+    assert long_contract_plan[0] == 8192
+
     plan = _retry_output_plan("semantic:core", 7600, 8192, 1800)
     assert plan[0] is None
