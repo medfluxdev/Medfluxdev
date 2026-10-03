@@ -525,6 +525,119 @@ _MONEY_PERIOD_BY_FIELD = {
     "costs.one_time_cost": "once",
 }
 
+_MONEY_LITERAL_RE = re.compile(
+    r"(?<!\w)(?:(?P<prefix_currency>EUR|USD|GBP|€|\$|£)\s*"
+    r"(?P<prefix_amount>\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)|"
+    r"(?P<suffix_amount>\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)\s*"
+    r"(?P<suffix_currency>EUR|USD|GBP|€|\$|£))(?!\w)",
+    re.IGNORECASE,
+)
+
+_PERIOD_ANCHORS = {
+    "costs.annual_cost": re.compile(
+        r"(?:\b(?:jährlich(?:e|er|es)?|jährl\.?|jaehrlich(?:e|er|es)?|jaehrl\.?|"
+        r"pro\s+jahr|je\s+jahr|per\s+annum|annual(?:ly)?|yearly|per\s+year|each\s+year)\b|"
+        r"(?<!\w)p\.?\s*a\.?(?!\w))",
+        re.IGNORECASE,
+    ),
+    "costs.monthly_cost": re.compile(
+        r"\b(?:monatlich(?:e|er|es)?|pro\s+monat|je\s+monat|monthly|per\s+month|each\s+month)\b",
+        re.IGNORECASE,
+    ),
+    "costs.quarterly_cost": re.compile(
+        r"\b(?:vierteljährlich(?:e|er|es)?|vierteljaehrlich(?:e|er|es)?|"
+        r"pro\s+quartal|je\s+quartal|quarterly|per\s+quarter)\b",
+        re.IGNORECASE,
+    ),
+    "costs.semi_annual_cost": re.compile(
+        r"\b(?:halbjährlich(?:e|er|es)?|halbjaehrlich(?:e|er|es)?|pro\s+halbjahr|"
+        r"alle\s+sechs\s+monate|"
+        r"semi[- ]annual(?:ly)?|twice\s+a\s+year)\b",
+        re.IGNORECASE,
+    ),
+}
+
+_TOTAL_VALUE_ANCHOR = re.compile(
+    r"\b(?:gesamt(?:vertragswert|auftragswert|preis|betrag|kosten)|"
+    r"vertragsgesamtwert|total\s+(?:contract|order|price|amount)|contract\s+value)\b",
+    re.IGNORECASE,
+)
+
+_NEGATED_CLASSIFICATION = re.compile(
+    r"\b(?:nicht\s+(?:jährlich|jaehrlich|monatlich|vierteljährlich|"
+    r"vierteljaehrlich|halbjährlich|halbjaehrlich|pro\s+jahr|je\s+jahr|p\.?\s*a\.?|"
+    r"pro\s+monat|je\s+monat|pro\s+quartal|je\s+quartal|pro\s+halbjahr|"
+    r"gesamt(?:vertragswert|auftragswert|preis|betrag|kosten))|"
+    r"keine?\s+(?:jährliche|jaehrliche|monatliche|vierteljährliche|vierteljaehrliche|"
+    r"halbjährliche|halbjaehrliche|gesamt(?:vertragswert|auftragswert|preis|betrag|kosten))|"
+    r"not\s+(?:annual|yearly|monthly|quarterly|semi[- ]annual|a\s+total)|"
+    r"non[- ](?:annual|yearly|monthly|quarterly|semi[- ]annual))\b",
+    re.IGNORECASE,
+)
+
+
+def _money_amount_from_value(value: Any) -> float | None:
+    if isinstance(value, dict):
+        value = value.get("amount")
+    elif hasattr(value, "amount"):
+        value = value.amount
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return _money_amount(value)
+    return None
+
+
+def _money_literals_in_source_quote(quote: str) -> list[tuple[float, str]]:
+    literals: list[tuple[float, str]] = []
+    for match in _MONEY_LITERAL_RE.finditer(quote or ""):
+        raw = match.group("prefix_amount") or match.group("suffix_amount")
+        amount = _money_amount(raw)
+        if amount is not None:
+            currency = match.group("prefix_currency") or match.group("suffix_currency") or ""
+            normalized_currency = {
+                "€": "EUR", "$": "USD", "£": "GBP"
+            }.get(currency, currency.upper())
+            literals.append((amount, normalized_currency))
+    return literals
+
+
+def _money_currency_from_value(value: Any) -> str | None:
+    if isinstance(value, dict):
+        currency = value.get("currency") or value.get("currency_code")
+    else:
+        currency = getattr(value, "currency", None)
+    if not isinstance(currency, str) or not currency.strip():
+        return None
+    normalized = currency.strip().upper()
+    return {"€": "EUR", "$": "USD", "£": "GBP"}.get(normalized, normalized)
+
+
+def _financial_source_rejection(field: str, value: Any, quote: str) -> str | None:
+    """Require cost classification and the exact amount to share source evidence."""
+    if field in _PERIOD_ANCHORS:
+        if _NEGATED_CLASSIFICATION.search(quote or ""):
+            return "financial_period_not_explicit_in_evidence"
+        anchor = _PERIOD_ANCHORS[field]
+        if not anchor.search(quote or ""):
+            return "financial_period_not_explicit_in_evidence"
+    elif field == "costs.total_contract_value":
+        if _NEGATED_CLASSIFICATION.search(quote or ""):
+            return "financial_total_not_explicit_in_evidence"
+        if not _TOTAL_VALUE_ANCHOR.search(quote or ""):
+            return "financial_total_not_explicit_in_evidence"
+    else:
+        return None
+
+    expected = _money_amount_from_value(value)
+    quoted = _money_literals_in_source_quote(quote)
+    if expected is None or len(quoted) != 1 or abs(quoted[0][0] - expected) >= 0.005:
+        return "financial_amount_not_bound_to_classification_evidence"
+    expected_currency = _money_currency_from_value(value)
+    if expected_currency and quoted[0][1] != expected_currency:
+        return "financial_amount_not_bound_to_classification_evidence"
+    return None
+
 
 # Zulaessige Felder eines Equipment-Objekts (vgl. app.models.contract.Equipment).
 # Alles andere (v. a. 'evidence') wird verworfen – die Evidenz bindet der Harness
@@ -1361,6 +1474,19 @@ class DirectContractHarness:
                     continue
 
                 (block, resolved_quote), visual_only = located
+                financial_rejection = _financial_source_rejection(
+                    fact.field, value, resolved_quote
+                )
+                if financial_rejection:
+                    rejected.append(
+                        {
+                            "field": fact.field,
+                            "reason": financial_rejection,
+                            "page": fact.page,
+                            "quote": resolved_quote[:240],
+                        }
+                    )
+                    continue
                 page = fact.page if block is None else block.page
                 source = SourceEvidence(
                     document_id=canonical.document_id,
