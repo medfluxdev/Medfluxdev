@@ -15,6 +15,9 @@ from app.ai.harness.v3 import (
     _complete_scheduled_total,
     _staged_price_rows,
     _steady_annual_amount,
+    _primary_contract_title,
+    _explicit_labelled_contract_dates,
+    _derive_start_condition,
 )
 from app.ai.schemas import ModelCapabilities, ModelDescriptor
 from app.core.config import Settings
@@ -24,6 +27,8 @@ from app.documents.intelligence.canonical import (
     Page,
     ProcessingProvenance,
 )
+from app.models.contract import Contract
+from app.models.values import FlexibleDate
 
 
 
@@ -69,6 +74,125 @@ def settings(**overrides):
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)
+
+
+def test_primary_contract_title_prefers_canonical_text_with_trademark():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-title",
+        source_sha256="a" * 64,
+        canonical_text="Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System",
+        pages=[Page(
+            page_number=1, width_pt=600, height_pt=800,
+            text="Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System",
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+
+    result = _primary_contract_title(canonical, document_model)
+
+    assert result is not None
+    assert result[0] == "Rahmenvertrag Nr. RAV-00074 - OPTIS™ Mobile Next Imaging System"
+    assert result[1].source_text == "Rahmenvertrag Nr. RAV-00074 4 - OPTIS™ Mobile Next Imaging System"
+
+
+def test_explicit_contract_date_labels_bind_dates_and_reject_offer_date():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-dates",
+        source_sha256="b" * 64,
+        pages=[Page(
+            page_number=1, width_pt=600, height_pt=800,
+            text=(
+                "Datum: 15.04.2025\nVERTRAGS-STARTDATUM\n04.06.2025\n"
+                "VERTRAGS-ENDDATUM\n03.06.2029"
+            ),
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+    contract.dates.start_condition = "Er startet an dem Tag der Installation und Inbetriebnahme"
+
+    derived = _explicit_labelled_contract_dates(contract, canonical, document_model)
+
+    assert str(contract.dates.start_date.date) == "2025-06-04"
+    assert str(contract.dates.end_date.date) == "2029-06-03"
+    assert contract.dates.start_condition is None
+    assert [row["field"] for row in derived] == [
+        "dates.start_date", "dates.end_date"
+    ]
+    assert all(row["source"].page == 1 for row in derived)
+
+
+def test_explicit_contract_date_labels_reject_conflicting_values():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-conflicting-dates",
+        source_sha256="c" * 64,
+        pages=[
+            Page(page_number=1, width_pt=600, height_pt=800,
+                 text="VERTRAGS-STARTDATUM\n04.06.2025", elements=[]),
+            Page(page_number=2, width_pt=600, height_pt=800,
+                 text="VERTRAGS-STARTDATUM\n05.06.2025", elements=[]),
+        ],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+
+    derived = _explicit_labelled_contract_dates(contract, canonical, document_model)
+
+    assert contract.dates.start_date is None
+    assert not any(row["field"] == "dates.start_date" for row in derived)
+
+
+def test_explicit_contract_date_label_overrides_conflicting_model_value():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-model-date-conflict",
+        source_sha256="d" * 64,
+        pages=[Page(
+            page_number=1, width_pt=600, height_pt=800,
+            text="VERTRAGS-ENDDATUM\n03.06.2029", elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+    contract.dates.end_date = FlexibleDate(date="2025-06-04")
+
+    derived = _explicit_labelled_contract_dates(contract, canonical, document_model)
+
+    assert str(contract.dates.end_date.date) == "2029-06-03"
+    assert derived[0]["model_conflict"] is True
+
+
+def test_contract_date_pair_skips_unrelated_datum_in_reordered_ocr():
+    canonical = DocumentIntelligenceResult(
+        document_id="doc-reordered-date-table",
+        source_sha256="e" * 64,
+        pages=[Page(
+            page_number=1, width_pt=600, height_pt=800,
+            text=(
+                "INSTALLATIONSDATUM\n04.06.2025\nSERIEN-NUMMER\n20488972\n"
+                "VERTRAGS-STARTDATUM\nVERTRAGS-ENDDATUM\n04.06.2025\n"
+                "Datum:\n15.04.2025\n03.06.2029"
+            ),
+            elements=[],
+        )],
+        provenance=ProcessingProvenance(provider="docling"),
+    )
+    document_model = DocumentModel.build(canonical)
+    contract = Contract()
+    contract.dates.start_condition = "Er startet an dem Tag der Installation und Inbetriebnahme"
+
+    derived = _explicit_labelled_contract_dates(contract, canonical, document_model)
+
+    assert str(contract.dates.start_date.date) == "2025-06-04"
+    assert str(contract.dates.end_date.date) == "2029-06-03"
+    assert contract.dates.start_condition is None
+    assert all("Datum:\n15.04.2025" in row["quote"] for row in derived)
+    assert _derive_start_condition(contract, canonical) is None
 
 
 def document():
@@ -410,6 +534,116 @@ async def test_direct_harness_delivers_grounded_contract_without_block_ids():
     assert result.diagnostics["supported_count"] >= 8
     assert result.diagnostics["evidence_count"] >= 8
     assert result.diagnostics["stage_call_counts"]["semantic"] == 4
+
+
+@pytest.mark.asyncio
+async def test_malformed_optional_vision_response_falls_back_to_text(monkeypatch):
+    monkeypatch.setattr("app.ai.harness.v3.visual_candidate_pages", lambda _doc: [1])
+
+    class MalformedVisionProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if schema["title"] == "VisualPageReading":
+                return '{"page": 1, "visible_text": ['
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(MalformedVisionProvider())
+    ).analyze(document(), page_image_loader=lambda _page: "test-image")
+
+    assert result.contract is not None, result.error
+    assert result.status.value == "partial"
+    assert result.requires_review is True
+    vision_call = next(
+        call for call in result.diagnostics["calls"]
+        if call.get("purpose") == "vision:1"
+    )
+    assert vision_call["failed"] is True
+    assert vision_call["error_category"] == "malformed_json"
+    assert any("Vision response on page 1" in issue for issue in result.diagnostics["issues"])
+
+
+@pytest.mark.asyncio
+async def test_malformed_semantic_pack_preserves_other_fact_groups():
+    class MalformedCoreProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if schema["title"] == "ProposedFactBatch" and "Extract the core contract facts" in text:
+                return '{"facts": ['
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(MalformedCoreProvider())
+    ).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert result.status.value == "partial"
+    assert result.requires_review is True
+    assert result.contract.costs.annual_cost.amount == 8000
+    assert result.contract.equipment[0].device_name == "Impella\u00ae AIC System"
+    core_call = next(
+        call for call in result.diagnostics["calls"]
+        if call.get("purpose") == "semantic:core:chunk1"
+    )
+    assert core_call["failed"] is True
+    assert core_call["error_category"] == "malformed_json"
+    assert any("Semantic core response" in issue for issue in result.diagnostics["issues"])
+
+
+@pytest.mark.asyncio
+async def test_truncated_semantic_chunk_is_split_and_retried(monkeypatch):
+    from app.ai.harness import v3 as harness_module
+
+    original_pack_pages = harness_module._pack_pages
+
+    def force_two_operations_pages(topics, canonical, source_signals, expand_keywords):
+        if "equipment" in topics:
+            return [1, 2]
+        return original_pack_pages(topics, canonical, source_signals, expand_keywords)
+
+    monkeypatch.setattr(harness_module, "_pack_pages", force_two_operations_pages)
+
+    class TruncatedOperationsProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if (
+                schema["title"] == "ProposedFactBatch"
+                and "Extract the operations contract facts" in text
+                and "CONTRACT SOURCE (pages [1, 2])" in text
+            ):
+                self.last_done_reason = "length"
+                self.last_usage = {"prompt_tokens": 3000, "completion_tokens": max_tokens}
+                return await super().generate_request(
+                    text, system, schema, max_tokens, context_tokens, images
+                )
+            self.last_done_reason = None
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(TruncatedOperationsProvider())
+    ).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert result.status.value == "partial"
+    assert result.requires_review is True
+    assert any(
+        call.get("purpose") == "semantic:operations:chunk1a"
+        for call in result.diagnostics["calls"]
+    )
+    assert any(
+        call.get("purpose") == "semantic:operations:chunk1b"
+        for call in result.diagnostics["calls"]
+    )
+    assert any("output was truncated" in issue for issue in result.diagnostics["issues"])
 
 
 @pytest.mark.asyncio

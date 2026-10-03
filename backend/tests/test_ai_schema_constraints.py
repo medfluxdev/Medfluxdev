@@ -16,7 +16,11 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from app.ai.harness.v3 import ProposedFactBatch, VisualPageReading
+from app.ai.harness.v3 import (
+    ProposedFactBatch,
+    ProposedFactBatchOutput,
+    VisualPageReading,
+)
 from app.ai.providers.ollama import OllamaProvider, _safe_error_category
 from app.ai.schema import normalize_constrained_schema, pydantic_json_schema
 from app.core.config import Settings
@@ -39,12 +43,14 @@ def test_annotation_only_subschema_gets_permissive_type():
 
     fixed = normalize_constrained_schema(_AnyFact.model_json_schema())
     value = fixed["properties"]["value"]
-    assert set(value["type"]) == {"string", "number", "boolean", "null"}
+    assert set(value["type"]) == {
+        "object", "array", "string", "number", "boolean", "null"
+    }
 
 
 def test_normalization_keeps_annotation_keywords():
     normalized = normalize_constrained_schema(ProposedFactBatch.model_json_schema())
-    item = normalized["$defs"]["ProposedFact"]["properties"]
+    item = normalized["properties"]["facts"]["items"]["properties"]
     assert item["field"]["title"] == "Field"
     assert item["quote"]["default"] == ""
     assert item["applicability"]["enum"] == [
@@ -57,11 +63,18 @@ def test_normalization_keeps_annotation_keywords():
 
 def test_normalization_preserves_optionals_enums_and_bounds():
     normalized = normalize_constrained_schema(ProposedFactBatch.model_json_schema())
-    item = normalized["$defs"]["ProposedFact"]["properties"]
+    item = normalized["properties"]["facts"]["items"]["properties"]
     assert item["page"]["anyOf"] == [{"type": "integer"}, {"type": "null"}]
     assert item["confidence"]["anyOf"][0]["minimum"] == 0.0
     assert item["confidence"]["anyOf"][0]["maximum"] == 1.0
-    assert normalized["$defs"]["ProposedFact"]["required"] == ["field", "value"]
+    assert normalized["properties"]["facts"]["items"]["required"] == ["field", "value"]
+
+
+def test_normalization_inlines_references_for_ollama():
+    normalized = normalize_constrained_schema(ProposedFactBatch.model_json_schema())
+    rendered = json.dumps(normalized)
+    assert "$ref" not in rendered
+    assert "$defs" not in rendered
 
 
 def test_normalization_does_not_mutate_input():
@@ -86,7 +99,9 @@ def test_normalization_reaches_nested_containers():
     }
     fixed = normalize_constrained_schema(schema)
     label = fixed["properties"]["rows"]["items"]["properties"]["label"]
-    assert set(label["type"]) == {"string", "number", "boolean", "null"}
+    assert set(label["type"]) == {
+        "object", "array", "string", "number", "boolean", "null"
+    }
 
 
 def test_equipment_name_cleaning_preserves_verbatim_multiword_name():
@@ -99,7 +114,9 @@ def test_equipment_name_cleaning_preserves_verbatim_multiword_name():
 def test_normalization_handles_any_of_alternatives():
     schema = {"anyOf": [{"title": "Free"}, {"type": "string"}]}
     fixed = normalize_constrained_schema(schema)
-    assert set(fixed["anyOf"][0]["type"]) == {"string", "number", "boolean", "null"}
+    assert set(fixed["anyOf"][0]["type"]) == {
+        "object", "array", "string", "number", "boolean", "null"
+    }
 
 
 def test_already_constrained_schema_is_unchanged():
@@ -133,7 +150,7 @@ async def test_provider_normalizes_schema_before_sending_it():
             text=json.dumps(
                 {
                     "model": "minicpm",
-                    "message": {"content": '{"facts":[]}'},
+                    "message": {"content": '[]'},
                     "done": True,
                     "done_reason": "stop",
                     "prompt_eval_count": 10,
@@ -146,12 +163,16 @@ async def test_provider_normalizes_schema_before_sending_it():
     provider._get_client = lambda: _client(handler)  # type: ignore[method-assign]
 
     raw = await provider.generate_request(
-        "prompt", "system", ProposedFactBatch.model_json_schema(), 128, 4096, None
+        "prompt", "system", ProposedFactBatchOutput.model_json_schema(), 128, 4096, None
     )
 
-    assert json.loads(raw) == {"facts": []}
-    sent_value = captured["payload"]["format"]["$defs"]["ProposedFact"]["properties"]["value"]
-    assert set(sent_value["type"]) == {"string", "number", "boolean", "null"}
+    assert json.loads(raw) == []
+    sent_schema = captured["payload"]["format"]
+    assert "$ref" not in json.dumps(sent_schema)
+    assert "$defs" not in sent_schema
+    assert sent_schema["type"] == "array"
+    sent_value = sent_schema["items"]["properties"]["value"]
+    assert sent_value["type"] == "string"
 
 
 def _client(handler) -> httpx.AsyncClient:
@@ -735,6 +756,46 @@ def test_price_table_rows_are_read_literally():
     assert amounts == [9500.0]
 
 
+def test_explicit_contiguous_year_price_rows_are_recovered_with_page_evidence():
+    from app.ai.harness.v3 import _explicit_yearly_price_schedule
+
+    text = (
+        "Waehrung: EUR\n"
+        "*Jahr 1: Gesamtpreis Netto | 52.500,00\n"
+        "Jahr 2: Gesamtpreis Netto | 52.500,00\n"
+        "Jahr 3: Gesamtpreis Netto | 52.500,00\n"
+        "Jahr 4: Gesamtpreis Netto | 52.500,00\n"
+    )
+    result = _explicit_yearly_price_schedule(
+        _StubCanonical([_StubCanonicalPage(1, text)]), _StubDocument()
+    )
+
+    assert result is not None
+    page, rows, evidence = result
+    assert page == 1
+    assert [row.period_index for row in rows] == [1, 2, 3, 4]
+    assert [row.amount.amount for row in rows] == [52500.0] * 4
+    assert all(row.amount.currency == "EUR" for row in rows)
+    assert evidence.page == 1
+    assert "Jahr 4" in evidence.source_text
+
+
+def test_explicit_year_price_rows_reject_gaps_or_missing_currency():
+    from app.ai.harness.v3 import _explicit_yearly_price_schedule
+
+    gapped = _StubCanonical([_StubCanonicalPage(1, (
+        "EUR\nJahr 1: Gesamtpreis Netto | 52.500,00\n"
+        "Jahr 3: Gesamtpreis Netto | 52.500,00\n"
+    ))])
+    no_currency = _StubCanonical([_StubCanonicalPage(1, (
+        "Jahr 1: Gesamtpreis Netto | 52.500,00\n"
+        "Jahr 2: Gesamtpreis Netto | 52.500,00\n"
+    ))])
+
+    assert _explicit_yearly_price_schedule(gapped, _StubDocument()) is None
+    assert _explicit_yearly_price_schedule(no_currency, _StubDocument()) is None
+
+
 def test_price_tables_never_invent_a_recurring_budget():
     from app.ai.harness.v3 import _derive_costs_from_price_tables
 
@@ -929,6 +990,119 @@ def test_primary_contract_heading_wins_over_later_standard_terms_heading():
     assert title == "SERVICEVERTRAG RADIOSURGERY"
     assert evidence.page == 2
     assert evidence.source_text == title
+
+
+def test_primary_contract_heading_ignores_indexed_contracts_on_first_page():
+    from types import SimpleNamespace
+    from app.ai.harness.v3 import _primary_contract_title
+
+    index = (
+        "1 | 82020-28 | SERVICEVERTRAG SYSTEMHARDWARE / ANWENDUNGSSUPPORT "
+        "EXACTRAC X-RAY | 48\n"
+        "5 | 85020-02 | SERVICEVERTRAG SYSTEMHARDWARE NODE SERVER | 1 | 48"
+    )
+    canonical = SimpleNamespace(pages=[
+        SimpleNamespace(page_number=1, text=index),
+        SimpleNamespace(page_number=2, text="SERVICEVERTRAG RADIOSURGERY"),
+        SimpleNamespace(page_number=3, text="Leistungsbeschreibung"),
+    ])
+    document = SimpleNamespace(pages_blocks={
+        1: [SimpleNamespace(text=index, reading_order=0, source_type="page")],
+        2: [SimpleNamespace(text="SERVICEVERTRAG RADIOSURGERY", reading_order=0, source_type="page")],
+        3: [SimpleNamespace(text="Leistungsbeschreibung", reading_order=0, source_type="page")],
+    })
+
+    result = _primary_contract_title(canonical, document)
+
+    assert result is not None
+    title, evidence = result
+    assert title == "SERVICEVERTRAG RADIOSURGERY"
+    assert evidence.page == 2
+
+
+def test_equipment_names_are_bound_to_the_explicit_service_scope_sentence():
+    from types import SimpleNamespace
+    from app.ai.harness.v3 import _equipment_from_service_scope
+
+    text = (
+        "SERVICEVERTRAG RADIOSURGERY\n"
+        "Servicevertrag für ein ExacTrac X-Ray und ein ExacTrac Infrared System "
+        "sowie für die Prep/Review Workstation, einschließlich der unten genannten Leistungen."
+    )
+    canonical = _StubCanonical([_StubCanonicalPage(2, text)])
+    document = SimpleNamespace(pages_blocks={
+        2: [SimpleNamespace(text=text, reading_order=0, source_type="page")],
+    })
+
+    result = _equipment_from_service_scope(canonical, document, page_number=2)
+
+    assert result is not None
+    items, evidence = result
+    assert [item.device_name for item in items] == [
+        "ExacTrac X-Ray",
+        "ExacTrac Infrared System",
+        "Prep/Review Workstation",
+    ]
+    assert evidence.page == 2
+    assert all(item.evidence.page == 2 for item in items)
+
+
+def test_generic_service_scope_does_not_create_equipment():
+    from types import SimpleNamespace
+    from app.ai.harness.v3 import _equipment_from_service_scope
+
+    text = "Servicevertrag für die Pflege und den Support, einschließlich Reaktion im Störungsfall."
+    canonical = _StubCanonical([_StubCanonicalPage(2, text)])
+    document = SimpleNamespace(pages_blocks={
+        2: [SimpleNamespace(text=text, reading_order=0, source_type="page")],
+    })
+
+    assert _equipment_from_service_scope(canonical, document, page_number=2) is None
+
+
+def test_offer_term_table_binds_months_to_the_selected_contract_title():
+    from types import SimpleNamespace
+    from app.ai.harness.v3 import _duration_from_offer_table
+
+    header = "Pos. Art.-Nr. | Beschreibung Anz. Monaten | Laufzeit in"
+    row = "1 | | SERVICEVERTRAGRADIOSURGERY 82020-28 SERVICEVERTRAG EXACTRAC | 48"
+    page_text = f"{header}\n{row}"
+    canonical = _StubCanonical([_StubCanonicalPage(1, page_text)])
+    document = SimpleNamespace(pages_blocks={
+        1: [SimpleNamespace(text=page_text, reading_order=0, source_type="page")],
+    })
+    contract = SimpleNamespace(
+        identity=SimpleNamespace(contract_title="SERVICEVERTRAG RADIOSURGERY")
+    )
+
+    result = _duration_from_offer_table(contract, canonical, document)
+
+    assert result is not None
+    duration, evidence, _quote = result
+    assert duration.value == 48
+    assert duration.unit.value == "months"
+    assert evidence.page == 1
+    assert evidence.requires_review is True
+
+
+def test_offer_term_table_refuses_conflicting_title_bound_durations():
+    from types import SimpleNamespace
+    from app.ai.harness.v3 import _duration_from_offer_table
+
+    text = (
+        "Laufzeit in Monaten\n"
+        "SERVICEVERTRAG RADIOSURGERY | 48\n"
+        "SERVICEVERTRAG RADIOSURGERY | 36\n"
+    )
+    canonical = _StubCanonical([_StubCanonicalPage(1, text)])
+    document = SimpleNamespace(pages_blocks={
+        1: [SimpleNamespace(text=text, reading_order=0, source_type="page")],
+    })
+    contract = SimpleNamespace(
+        identity=SimpleNamespace(contract_title="SERVICEVERTRAG RADIOSURGERY")
+    )
+
+    assert _duration_from_offer_table(contract, canonical, document) is None
 
 
 def test_primary_contract_heading_uses_generic_contract_markers():

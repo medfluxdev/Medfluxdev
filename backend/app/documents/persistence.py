@@ -139,11 +139,21 @@ class DocumentPersistenceService:
             )
         ).first()
         if existing is not None:
+            ref = canonical_storage_key(existing.id, existing.file_extension)
+            if existing.storage_key != ref:
+                raise StorageError("Ungueltige Dokumentreferenz")
+            # Duplicate detection must not mask a lost original. The caller has
+            # supplied bytes whose SHA-256 matches this row, so restore the
+            # canonical object before returning the existing version.
+            if not self._storage.exists_reference(ref):
+                self._storage.write_reference(ref, content)
             ver = self._version_for_file(session, existing, version_no)
+            if ver is not None and ver.storage_key != ref:
+                raise StorageError("Ungueltige Dokumentreferenz")
             return StoredDocument(
                 document_file_id=str(existing.id),
                 document_version_id=str(ver.id) if ver else "",
-                storage_key=existing.storage_key,
+                storage_key=ref,
                 sha256=sha256,
                 file_extension=extension,
                 mime_type=existing.mime_type,

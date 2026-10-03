@@ -135,6 +135,29 @@ def test_duplicate_sha_idempotent_no_second_file(db, svc):
     assert len(rows) == 1
 
 
+def test_duplicate_upload_restores_missing_original_bytes(db, svc):
+    org = _org(db)
+    name, content = _pdf()
+    original = svc.store_original(
+        db, organization_id=org.id, original_filename=name,
+        content_type="application/pdf", content=content,
+    )
+    svc._storage.delete_reference(original.storage_key)
+    assert not svc._storage.exists_reference(original.storage_key)
+
+    duplicate = svc.store_original(
+        db, organization_id=org.id, original_filename=name,
+        content_type="application/pdf", content=content,
+    )
+
+    assert duplicate.duplicate is True
+    assert duplicate.document_file_id == original.document_file_id
+    assert duplicate.document_version_id == original.document_version_id
+    assert svc._storage.read_reference(duplicate.storage_key) == content
+    rows = db.scalars(select(DocumentFile).where(DocumentFile.sha256 == original.sha256)).all()
+    assert len(rows) == 1
+
+
 # ---------------------------------------------------------------------------
 # Lesepfad: vertragsgebundene, org-gebundene Byte-Auslieferung
 # ---------------------------------------------------------------------------

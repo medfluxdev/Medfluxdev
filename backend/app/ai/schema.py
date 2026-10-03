@@ -41,8 +41,11 @@ _STRUCTURAL_KEYWORDS = frozenset(
     }
 )
 
-# Erlaubt jeden skalaren JSON-Wert; die fachliche Prüfung bleibt beim Antwortmodell.
-_PERMISSIVE_LEAF: dict[str, Any] = {"type": ["string", "number", "boolean", "null"]}
+# Erlaubt jeden JSON-Wert. Die fachliche Prüfung bleibt beim Antwortmodell;
+# insbesondere darf `Any` auch strukturierte Vertragswerte (Objekte/Arrays) liefern.
+_PERMISSIVE_LEAF: dict[str, Any] = {
+    "type": ["object", "array", "string", "number", "boolean", "null"]
+}
 
 
 def _deref(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
@@ -112,11 +115,20 @@ def normalize_constrained_schema(schema: dict[str, Any]) -> dict[str, Any]:
     Ollama lehnt jedes Teilschema ab, das nur Annotationsschlüssel trägt und
     keinen strukturellen Typ (z. B. das von Pydantic für `Any` erzeugte
     `{"title": "Value"}`) mit HTTP 500 `invalid JSON schema in format` ab.
-    Solche Blätter erhalten ein permissives Typ-Union; alle übrigen Schlüssel –
-    auch `title`, `default`, `enum`, `maxLength` – bleiben unverändert erhalten.
-    Das Eingabedict wird nicht verändert.
+    Der Decoder unterstützt außerdem keine `$ref`/`$defs`; diese werden vor
+    der Normalisierung inline aufgelöst. Solche Blätter erhalten ein
+    permissives Typ-Union für alle JSON-Werttypen; alle übrigen Schlüssel –
+    auch `title`, `default`, `enum`, `maxLength` – bleiben erhalten. Das
+    Eingabedict wird nicht verändert.
     """
-    return _constrain(copy.deepcopy(schema))
+    copied = copy.deepcopy(schema)
+    defs = dict(copied.get("$defs", copied.get("definitions", {})))
+    without_defs = {
+        key: value
+        for key, value in copied.items()
+        if key not in ("$defs", "definitions")
+    }
+    return _constrain(_deref(without_defs, defs))
 
 
 def contract_json_schema() -> dict[str, Any]:

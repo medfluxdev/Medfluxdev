@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError
 
 from app.ai.harness.document import Block, DocumentModel
 from app.ai.harness.pipeline import (
@@ -41,10 +41,11 @@ from app.ai.harness.pipeline import (
 from app.ai.harness.source_signals import collect_source_signals
 from app.documents.intelligence.hybrid import route_summary, visual_candidate_pages
 from app.ai.service import AIService
+from app.ai.schema import normalize_constrained_schema
 from app.core.config import Settings
 from app.models.contract import Contract
 from app.models.contract import Equipment as EquipmentModel
-from app.models.contract import VariableCharge
+from app.models.contract import ScheduledPrice, VariableCharge
 from app.models.enums import (
     ExtractionMethod,
     ExtractionStatus,
@@ -52,7 +53,7 @@ from app.models.enums import (
     ValidationStatus,
 )
 from app.models.evidence import BoundingBox, SourceEvidence
-from app.models.values import Duration, Money, TimeUnit
+from app.models.values import Duration, FlexibleDate, Money, TimeUnit
 
 
 class ProposedFact(BaseModel):
@@ -67,6 +68,34 @@ class ProposedFact(BaseModel):
 
 class ProposedFactBatch(BaseModel):
     facts: list[ProposedFact] = Field(default_factory=list)
+
+
+class _ProposedFactWire(BaseModel):
+    """Minimal string-only item schema used for reliable constrained output."""
+
+    field: str
+    value: str
+    page: int | None = None
+    quote: str = ""
+
+
+class ProposedFactBatchOutput(RootModel[list[_ProposedFactWire]]):
+    """Flat root-array wire format; the harness still consumes ProposedFactBatch."""
+
+    model_config = ConfigDict(title="ProposedFactBatch")
+
+
+def _wire_fact_value(value: str) -> Any:
+    """Decode JSON-shaped string values while leaving ordinary contract text intact."""
+    text = value.strip()
+    if text.casefold() in {"true", "false", "null"}:
+        return json.loads(text.casefold())
+    if text.startswith(("{", "[", '"')):
+        try:
+            return json.loads(text)
+        except ValueError:
+            pass
+    return value
 
 
 # A visual reading is *complementary* to the canonical OCR text layer, never a
@@ -1222,6 +1251,13 @@ _TITLE_EXCLUSIONS = (
 _TITLE_MARKERS = ("servicevertrag", "rahmenvertrag", "wartungsvertrag", "kaufvertrag", "vertrag")
 
 
+def _normalize_contract_heading(value: str) -> str:
+    # Some OCR/table exports place the table row number between the contract
+    # number and heading (e.g. "RAV-00074 4 - OPTIS..."). Keep the source quote
+    # untouched; remove only this isolated number immediately before "-".
+    return re.sub(r"\s+", " ", re.sub(r"(\bRAV-\d+\s+)\d{1,2}(\s+-\s+)", r"\1\2", value)).strip()
+
+
 def _primary_contract_title(canonical, document) -> Optional[tuple[str, SourceEvidence]]:
     """Select a short, source-backed contract heading from the opening pages.
 
@@ -1230,8 +1266,21 @@ def _primary_contract_title(canonical, document) -> Optional[tuple[str, SourceEv
     standard legal boilerplate keeps those headings from replacing the principal
     contract identity without relying on any vendor or product name.
     """
+    candidates: list[tuple[int, int, int, str, str]] = []
     for page in sorted(canonical.pages, key=lambda item: item.page_number)[:3]:
-        candidates: list[tuple[int, str, str]] = []
+        # Prefer canonical text (the PDF/OCR reading supplied to the harness),
+        # which can retain symbols lost or replaced in layout-block text.
+        for raw_line in (page.text or "").splitlines():
+            line = re.sub(r"\s+", " ", raw_line).strip(" \t\r\n:;|-")
+            lowered = line.casefold()
+            if not line or len(line) > 140 or any(term in lowered for term in _TITLE_EXCLUSIONS):
+                continue
+            if not any(term in lowered for term in _TITLE_MARKERS):
+                continue
+            if re.search(r"\b(?:paragraf|paragraph|artikel|article|seite|page)\s+\d", lowered):
+                continue
+            priority = 0 if lowered.startswith(("servicevertrag", "rahmenvertrag", "wartungsvertrag")) else 1
+            candidates.append((priority, page.page_number, len(line), _normalize_contract_heading(line), line))
         for block in sorted(
             document.pages_blocks.get(page.page_number, []),
             key=lambda item: getattr(item, "reading_order", 0),
@@ -1246,13 +1295,87 @@ def _primary_contract_title(canonical, document) -> Optional[tuple[str, SourceEv
                 if re.search(r"\b(?:paragraf|paragraph|artikel|article|seite|page)\s+\d", lowered):
                     continue
                 priority = 0 if lowered.startswith(("servicevertrag", "rahmenvertrag", "wartungsvertrag")) else 1
-                candidates.append((priority, line, line))
-        if candidates:
-            _priority, title, quote = min(candidates, key=lambda row: (row[0], len(row[1])))
-            evidence = _build_page_evidence(page.page_number, quote, document, canonical)
-            if evidence is not None:
-                return title, evidence
+                candidates.append((priority, page.page_number, len(line), _normalize_contract_heading(line), line))
+    for _priority, page_number, _length, title, quote in sorted(candidates):
+        evidence = _build_page_evidence(page_number, quote, document, canonical)
+        if evidence is not None:
+            return title, evidence
     return None
+
+
+def _explicit_labelled_contract_dates(
+    contract: Any, canonical: Any, document: Any
+) -> list[dict]:
+    """Bind only dates immediately following explicit contract-date labels."""
+    paired: dict[str, tuple[int, str, str]] = {}
+    start_label = re.compile(r"vertrags[- ]startdatum\s*:?", re.IGNORECASE)
+    end_label = re.compile(r"vertrags[- ]enddatum\s*:?", re.IGNORECASE)
+    generic_date_label = re.compile(r"datum\s*:?", re.IGNORECASE)
+    for page in canonical.pages:
+        lines = [line.strip() for line in (page.text or "").splitlines()]
+        start_indexes = [i for i, line in enumerate(lines) if start_label.fullmatch(line)]
+        end_indexes = [i for i, line in enumerate(lines) if end_label.fullmatch(line)]
+        if not start_indexes or not end_indexes:
+            continue
+        first_label = min(start_indexes[0], end_indexes[0])
+        last_label = max(start_indexes[0], end_indexes[0])
+        date_rows: list[tuple[int, str]] = []
+        for index in range(first_label, min(len(lines), last_label + 10)):
+            if generic_date_label.fullmatch(lines[index]):
+                continue
+            if index and generic_date_label.fullmatch(lines[index - 1]):
+                continue
+            normalized = _date_signal_iso(lines[index])
+            if normalized is not None:
+                date_rows.append((index, normalized))
+        unique_dates = list(dict.fromkeys(value for _index, value in date_rows))
+        if len(unique_dates) != 2:
+            continue
+        quote_end = max(index for index, _value in date_rows) + 1
+        quote = "\n".join(lines[first_label:quote_end])
+        paired["start_date"] = (page.page_number, quote, unique_dates[0])
+        paired["end_date"] = (page.page_number, quote, unique_dates[1])
+
+    derived: list[dict] = []
+    for field, label in (
+        ("start_date", r"vertrags[- ]startdatum"),
+        ("end_date", r"vertrags[- ]enddatum"),
+    ):
+        candidates = [paired[field]] if field in paired else []
+        if not candidates:
+            for page in canonical.pages:
+                lines = [re.sub(r"\s+", " ", line).strip() for line in (page.text or "").splitlines()]
+                for index, line in enumerate(lines):
+                    if not re.fullmatch(rf"{label}\s*:?", line, re.IGNORECASE):
+                        continue
+                    following = next((item for item in lines[index + 1:index + 3] if item), "")
+                    normalized = _date_signal_iso(following)
+                    if normalized is not None:
+                        candidates.append((page.page_number, f"{line} {following}".strip(), normalized))
+        distinct = {row[2] for row in candidates}
+        if len(distinct) != 1 or not candidates:
+            continue
+        page_number, quote, normalized = candidates[0]
+        existing_date = getattr(getattr(contract.dates, field), "date", None)
+        model_conflict = existing_date is not None and str(existing_date) != normalized
+        evidence = _build_page_evidence(page_number, quote, document, canonical)
+        if evidence is None:
+            continue
+        setattr(contract.dates, field, FlexibleDate(date=normalized))
+        if field == "start_date":
+            contract.dates.start_condition = None
+        if contract.dates.evidence is None:
+            contract.dates.evidence = evidence
+        derived.append({
+            "field": f"dates.{field}",
+            "derivation": "explicit_labelled_contract_date",
+            "page": page_number,
+            "date": normalized,
+            "quote": quote,
+            "source": evidence,
+            "model_conflict": model_conflict,
+        })
+    return derived
 
 
 def _duration_from_runtime_signal(
@@ -1310,6 +1433,48 @@ def _duration_from_runtime_signal(
         if rank == best_rank:
             return duration, evidence
     return None
+
+
+def _duration_from_offer_table(
+    contract: Any, canonical: Any, document: Any
+) -> Optional[tuple[Any, SourceEvidence, str]]:
+    """Read a title-bound duration from an offer table's labelled month column.
+
+    The row must contain the selected contract title, end in one unambiguous
+    integer duration, and share a page with a Laufzeit/Monaten column heading.
+    The OCR column order can be uncertain, so its evidence is always flagged for
+    human review even when the numeric row is unique.
+    """
+    title = (getattr(getattr(contract, "identity", None), "contract_title", None) or "").strip()
+    title_key = re.sub(r"[^a-z0-9]", "", title.casefold())
+    if not title_key:
+        return None
+    candidates: list[tuple[int, str, str]] = []
+    for page in sorted(canonical.pages, key=lambda item: item.page_number)[:3]:
+        page_text = page.text or ""
+        if not re.search(r"laufzeit", page_text, re.IGNORECASE) or not re.search(
+            r"monat", page_text, re.IGNORECASE
+        ):
+            continue
+        for raw_line in page_text.splitlines():
+            condensed = re.sub(r"[^a-z0-9]", "", raw_line.casefold())
+            if title_key not in condensed or "|" not in raw_line:
+                continue
+            final_cell = raw_line.rsplit("|", 1)[-1].strip()
+            if not re.fullmatch(r"\d{1,3}", final_cell):
+                continue
+            months = int(final_cell)
+            if 1 <= months <= 600:
+                candidates.append((page.page_number, raw_line.strip(), final_cell))
+    values = {row[2] for row in candidates}
+    if len(values) != 1 or not candidates:
+        return None
+    page_number, row_quote, raw_months = candidates[0]
+    evidence = _build_page_evidence(page_number, row_quote, document, canonical)
+    if evidence is None:
+        return None
+    evidence.requires_review = True
+    return _make_duration(int(raw_months), "months"), evidence, row_quote
 
 
 def _make_duration(number: int, unit: str) -> Optional[Any]:
@@ -1525,6 +1690,75 @@ def _derive_costs_from_price_tables(
     return derived
 
 
+_YEAR_PRICE_ROW_RE = re.compile(
+    r"^\s*[\*•]?\s*(?:vertrags)?jahr\s+(?P<index>\d{1,2})\s*[:.)-]?\s*(?P<label>.*)$",
+    re.IGNORECASE,
+)
+_BARE_PRICE_AMOUNT_RE = re.compile(
+    r"(?<![\w/])(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?(?!\w)"
+)
+
+
+def _explicit_yearly_price_schedule(canonical: Any, document: Any):
+    """Recover a fully labelled year-by-year net/gross schedule from source rows.
+
+    This is intentionally narrower than general price extraction: every row must
+    name a contract year and a total price, the rows must be contiguous from year
+    one, and the page must explicitly identify EUR. It does not turn arbitrary
+    numbers or per-unit prices into recurring costs.
+    """
+    for page in canonical.pages:
+        page_text = page.text or ""
+        currency = _currency_from_text(page_text)
+        if currency is None:
+            continue
+        rows: dict[int, tuple[float, str]] = {}
+        for raw_line in page_text.splitlines():
+            match = _YEAR_PRICE_ROW_RE.match(raw_line)
+            if match is None:
+                continue
+            label = match.group("label")
+            if "gesamtpreis" not in label.casefold() or not re.search(
+                r"\b(?:netto|brutto)\b", label, re.IGNORECASE
+            ):
+                continue
+            cells = _table_cells(label)
+            amount_cells = [
+                cell for cell in cells
+                if _BARE_PRICE_AMOUNT_RE.fullmatch(cell.strip())
+            ]
+            if len(amount_cells) != 1:
+                continue
+            amount = _money_amount(amount_cells[0])
+            if amount is None:
+                continue
+            period_index = int(match.group("index"))
+            if period_index in rows:
+                rows.pop(period_index)
+                continue
+            rows[period_index] = (amount, raw_line.strip())
+
+        indices = sorted(rows)
+        if len(indices) < 2 or indices != list(range(1, indices[-1] + 1)):
+            continue
+        quote = "\n".join(rows[index][1] for index in indices)
+        evidence = _build_page_evidence(
+            page.page_number, quote, document, canonical
+        )
+        if evidence is None:
+            continue
+        schedule = [
+            ScheduledPrice(
+                period_index=index,
+                period_label=f"Jahr {index}",
+                amount=Money(amount=rows[index][0], currency=currency),
+            )
+            for index in indices
+        ]
+        return page.page_number, schedule, evidence
+    return None
+
+
 def _condition_clause(page_text: str) -> Optional[str]:
     for line in (page_text or "").splitlines():
         if any(marker in line.casefold() for marker in _CONDITION_CLAUSE_MARKERS):
@@ -1559,7 +1793,7 @@ def _derive_start_condition(
     The contract deliberately has no calendar start date, only a trigger. That is
     a literal clause, so it is read from the source instead of being inferred.
     """
-    if contract.dates.start_condition:
+    if contract.dates.start_condition or getattr(contract.dates, "start_date", None) is not None:
         return None
     found: list[tuple[int, str]] = []
     for page in canonical.pages:
@@ -1804,6 +2038,82 @@ def _equipment_from_title_evidence(
     item = EquipmentModel(device_name=candidate)
     item.evidence = title_evidence
     return item
+
+
+def _equipment_from_service_scope(
+    canonical: Any,
+    document: Any,
+    *,
+    page_number: int | None = None,
+) -> tuple[list[Any], SourceEvidence] | None:
+    """Extract explicitly enumerated product names from a service-scope sentence.
+
+    The rule is deliberately limited to a sentence tied to a service agreement,
+    its grammatical equipment list, and product-like names (system/workstation,
+    model token, or digits). This avoids turning generic service nouns into
+    equipment relationships.
+    """
+    pages = sorted(canonical.pages, key=lambda item: item.page_number)
+    if page_number is not None:
+        pages = [page for page in pages if page.page_number == page_number]
+    else:
+        pages = pages[:3]
+    split_items = re.compile(
+        r"\s+(?:und|sowie)\s+(?=(?:(?:f[üu]r)\s+)?"
+        r"(?:ein(?:e|en|em|er)?|die|das|der)\s+)",
+        re.IGNORECASE,
+    )
+    article_prefix = re.compile(
+        r"^(?:(?:f[üu]r)\s+)?(?:ein(?:e|en|em|er)?|die|das|der)\s+",
+        re.IGNORECASE,
+    )
+    generic_product_hint = re.compile(
+        r"\b(?:system|workstation|gerät|anlage|device|machine|platform)\b",
+        re.IGNORECASE,
+    )
+    camel_case_model = re.compile(
+        r"\b[A-ZÄÖÜ][a-zäöüß]+[A-Z][A-Za-z0-9]*\b|\d"
+    )
+    for page in pages:
+        for raw_line in (page.text or "").splitlines():
+            service = re.search(r"\bservicevertrag\s+f[üu]r\s+", raw_line, re.IGNORECASE)
+            if service is None:
+                continue
+            remainder = raw_line[service.end():]
+            end = re.search(
+                r"\s*,?\s*(?:einschließlich|einschliesslich|including)\b|[.;]",
+                remainder,
+                re.IGNORECASE,
+            )
+            scope = remainder[:end.start()] if end else remainder
+            names = []
+            for part in split_items.split(scope):
+                candidate = article_prefix.sub("", part).strip(" \t,;:.")
+                candidate = re.sub(r"\s+", " ", candidate)
+                if (
+                    len(candidate) >= 5
+                    and (
+                        generic_product_hint.search(candidate)
+                        or camel_case_model.search(candidate)
+                    )
+                    and candidate.casefold() not in {name.casefold() for name in names}
+                ):
+                    names.append(candidate)
+            if not names:
+                continue
+            quote = raw_line.strip()
+            evidence = _build_page_evidence(
+                page.page_number, quote, document, canonical
+            )
+            if evidence is None:
+                continue
+            equipment = []
+            for name in names:
+                item = EquipmentModel(device_name=name)
+                item.evidence = evidence
+                equipment.append(item)
+            return equipment, evidence
+    return None
 
 
 def _merge_service_scope_facts(services: Any) -> None:
@@ -2497,13 +2807,22 @@ class DirectContractHarness:
                 base_output,
                 int(getattr(self.settings, "harness_vision_output_tokens", base_output)),
             )
-            semantic_schema = ProposedFactBatch.model_json_schema()
+            semantic_schema = normalize_constrained_schema(
+                ProposedFactBatchOutput.model_json_schema()
+            )
             system_prefix = SYSTEM + "\nOutput JSON schema: " + json.dumps(
                 semantic_schema, separators=(",", ":")
             )
 
             async def call(purpose: str, prompt: str, schema_type, *, images=None, stage="semantic", output_budget=None):
-                schema = schema_type.model_json_schema()
+                wire_schema_type = (
+                    ProposedFactBatchOutput
+                    if schema_type is ProposedFactBatch
+                    else schema_type
+                )
+                schema = normalize_constrained_schema(
+                    wire_schema_type.model_json_schema()
+                )
                 system = SYSTEM + "\nOutput JSON schema: " + json.dumps(
                     schema, separators=(",", ":")
                 )
@@ -2526,7 +2845,16 @@ class DirectContractHarness:
                     category = getattr(exc, "category", None)
                     if category:
                         return str(category)
-                    if type(exc).__name__ == "ValidationError":
+                    if isinstance(exc, ValidationError):
+                        errors = exc.errors(
+                            include_url=False,
+                            include_context=False,
+                            include_input=False,
+                        )
+                        if errors and all(
+                            item.get("type") == "json_invalid" for item in errors
+                        ):
+                            return "malformed_json"
                         return "schema_validation"
                     if isinstance(exc, (ValueError, TypeError)):
                         return "schema_validation"
@@ -2583,7 +2911,35 @@ class DirectContractHarness:
                             prompt_tokens = int(actual_prompt_tokens)
                         if metric["done_reason"] in {"length", "max_tokens"}:
                             raise RuntimeError("output_truncated")
-                        parsed = schema_type.model_validate_json(raw)
+                        if schema_type is ProposedFactBatch:
+                            try:
+                                raw_value = json.loads(raw)
+                            except ValueError:
+                                # Preserve Pydantic's sanitized json_invalid
+                                # classification for diagnostics/review logic.
+                                schema_type.model_validate_json(raw)
+                                raise
+                            if isinstance(raw_value, list):
+                                wire_batch = ProposedFactBatchOutput.model_validate(
+                                    raw_value
+                                )
+                                parsed = ProposedFactBatch(
+                                    facts=[
+                                        ProposedFact(
+                                            field=fact.field,
+                                            value=_wire_fact_value(fact.value),
+                                            page=fact.page,
+                                            quote=fact.quote,
+                                        )
+                                        for fact in wire_batch.root
+                                    ]
+                                )
+                            else:
+                                # Existing providers/tests may still supply the
+                                # legacy object envelope; validation remains strict.
+                                parsed = ProposedFactBatch.model_validate(raw_value)
+                        else:
+                            parsed = schema_type.model_validate_json(raw)
                         metric["succeeded"] = True
                         return parsed
                     except Exception as exc:
@@ -2687,23 +3043,34 @@ class DirectContractHarness:
                 )
                 for page_number in candidate_pages[:max_visual]:
                     image = page_image_loader(page_number)
-                    reading = await call(
-                        f"vision:{page_number}",
-                        f"Read contract page {page_number} visually. The canonical OCR text layer "
-                        f"already covers this page. Return at most {_VISION_MAX_FRAGMENTS} short "
-                        f"fragments per list, each at most {_VISION_FRAGMENT_MAX_CHARS} characters. "
-                        "visible_text: only fragments that are missing from or clearly wrong in the "
-                        "OCR layer (dates, amounts, negated clauses), copied verbatim without ellipses. "
-                        "layout_relations: only explicit visual relationships such as 'this column "
-                        "header applies to that row', 'this checkbox is marked', 'signature block at "
-                        "the bottom of the page'. Do not repeat the full page text, do not summarize, "
-                        "and do not infer contractual meaning. Put anything uncertain in unresolved. "
-                        f"Return page={page_number}.",
-                        VisualPageReading,
-                        images=[image],
-                        stage="vision",
-                        output_budget=vision_output,
-                    )
+                    try:
+                        reading = await call(
+                            f"vision:{page_number}",
+                            f"Read contract page {page_number} visually. The canonical OCR text layer "
+                            f"already covers this page. Return at most {_VISION_MAX_FRAGMENTS} short "
+                            f"fragments per list, each at most {_VISION_FRAGMENT_MAX_CHARS} characters. "
+                            "visible_text: only fragments that are missing from or clearly wrong in the "
+                            "OCR layer (dates, amounts, negated clauses), copied verbatim without ellipses. "
+                            "layout_relations: only explicit visual relationships such as 'this column "
+                            "header applies to that row', 'this checkbox is marked', 'signature block at "
+                            "the bottom of the page'. Do not repeat the full page text, do not summarize, "
+                            "and do not infer contractual meaning. Put anything uncertain in unresolved. "
+                            f"Return page={page_number}.",
+                            VisualPageReading,
+                            images=[image],
+                            stage="vision",
+                            output_budget=vision_output,
+                        )
+                    except ValidationError:
+                        # Vision only supplements the canonical OCR layer. A malformed or
+                        # out-of-schema optional vision response must not prevent the grounded
+                        # text extraction from running; keep the uncertainty explicit instead.
+                        issues.append(
+                            "Vision response on page %s did not match its schema; "
+                            "text extraction continued and requires manual review"
+                            % page_number
+                        )
+                        continue
                     visual_readings[page_number] = reading
 
             if not any((page.text or "").strip() for page in canonical.pages) and not visual_readings:
@@ -2732,6 +3099,8 @@ class DirectContractHarness:
                 def build_pack_prompt(pages: list[int], chunk_signals: list[dict]) -> str:
                     return (
                         f"Extract the {pack_name} contract facts from the source below. "
+                        "Return one JSON array of fact objects, without an outer facts wrapper. "
+                        "Each value must be plain text; encode structured/list values as compact JSON text. "
                         "Use Qwen semantic understanding to decide what each literal value means. "
                         "The literal source signals are observations, not final facts. "
                         "Inspect every relevant signal and decide its contractual role. "
@@ -2777,16 +3146,57 @@ class DirectContractHarness:
                         return [pages]
                     return split_pages(left, depth + 1) + split_pages(right, depth + 1)
 
+                async def request_pack_chunk(
+                    pages: list[int], chunk_label: str, depth: int = 0
+                ) -> list[ProposedFact]:
+                    chunk_prompt = build_pack_prompt(pages, chunk_signals_for(pages))
+                    purpose = f"semantic:{pack_name}:{chunk_label}"
+                    try:
+                        batch = await call(
+                            purpose,
+                            chunk_prompt,
+                            ProposedFactBatch,
+                            stage="semantic",
+                        )
+                        return batch.facts
+                    except ValidationError as exc:
+                        # A malformed response for one semantic pack must not
+                        # discard independently grounded facts from other packs.
+                        # Keep the failed call in diagnostics and require review.
+                        issues.append(
+                            "Semantic %s response did not match its schema (%s); "
+                            "other fact groups continued and require manual review"
+                            % (pack_name, type(exc).__name__)
+                        )
+                        return []
+                    except RuntimeError as exc:
+                        if str(exc) != "output_truncated":
+                            raise
+                        if len(pages) > 1 and depth < _PACK_SPLIT_MAX_DEPTH:
+                            midpoint = max(1, len(pages) // 2)
+                            left, right = pages[:midpoint], pages[midpoint:]
+                            issues.append(
+                                "Semantic %s output was truncated and its source pages "
+                                "were subdivided; manual review is required" % pack_name
+                            )
+                            return await request_pack_chunk(
+                                left, chunk_label + "a", depth + 1
+                            ) + await request_pack_chunk(
+                                right, chunk_label + "b", depth + 1
+                            )
+                        issues.append(
+                            "Semantic %s output remained truncated at minimum page "
+                            "size; this fact group requires manual review" % pack_name
+                        )
+                        return []
+
                 for chunk_index, chunk_pages in enumerate(split_pages(pack_pages)):
-                    chunk_prompt = build_pack_prompt(chunk_pages, chunk_signals_for(chunk_pages))
-                    batch = await call(
-                        f"semantic:{pack_name}"
-                        + (f":chunk{chunk_index + 1}" if len(pack_pages) != len(chunk_pages) else ""),
-                        chunk_prompt,
-                        ProposedFactBatch,
-                        stage="semantic",
+                    chunk_label = (
+                        f"chunk{chunk_index + 1}"
+                        if len(pack_pages) != len(chunk_pages)
+                        else "chunk1"
                     )
-                    proposals.extend(batch.facts)
+                    proposals.extend(await request_pack_chunk(chunk_pages, chunk_label))
 
                 def locate(fact: ProposedFact):
                     quote = _clean_quote(fact.quote or "")
@@ -3139,10 +3549,7 @@ class DirectContractHarness:
                 accepted_title_evidence = accepted_evidence_by_field.get(
                     "identity.contract_title"
                 )
-                if (
-                    not accepted_title_evidence
-                    or (accepted_title_evidence.page or 10**9) > (title_evidence.page or 10**9)
-                ):
+                if contract.identity.contract_title != title_text:
                     contract.identity.contract_title = title_text
                     accepted_evidence_by_field["identity.contract_title"] = title_evidence
                     evidence_rows = [
@@ -3171,6 +3578,35 @@ class DirectContractHarness:
                         "page": title_evidence.page,
                     }
 
+            staged_price_derivation = None
+            if not contract.costs.scheduled_prices:
+                staged_schedule = _explicit_yearly_price_schedule(
+                    canonical, document
+                )
+                if staged_schedule is not None:
+                    schedule_page, schedule_rows, schedule_evidence = staged_schedule
+                    contract.costs.scheduled_prices.extend(schedule_rows)
+                    if contract.costs.evidence is None:
+                        contract.costs.evidence = schedule_evidence
+                    evidence_rows.append({
+                        "field": "costs.scheduled_prices",
+                        "source": schedule_evidence.model_dump(mode="json"),
+                    })
+                    accepted.append({
+                        "field": "costs.scheduled_prices",
+                        "page": schedule_page,
+                        "quote": schedule_evidence.source_text,
+                        "confidence": None,
+                    })
+                    supported_count += 1
+                    staged_price_derivation = {
+                        "field": "costs.scheduled_prices",
+                        "derivation": "explicit_contiguous_year_price_rows",
+                        "page": schedule_page,
+                        "period_indexes": [row.period_index for row in schedule_rows],
+                        "source_verified_as_independent_fact": True,
+                    }
+
             scheduled_rows = [
                 {
                     "period_index": row.period_index,
@@ -3187,8 +3623,35 @@ class DirectContractHarness:
             # and currency can be proven; never inflate supported_count or forge
             # a quotation/evidence row for it.
             derived_facts: list[dict] = []
+            labelled_dates = _explicit_labelled_contract_dates(
+                contract, canonical, document
+            )
+            for date_fact in labelled_dates:
+                source = date_fact.pop("source")
+                quote = date_fact.pop("quote")
+                model_conflict = date_fact.pop("model_conflict")
+                evidence_rows.append({
+                    "field": date_fact["field"],
+                    "source": source.model_dump(mode="json"),
+                })
+                accepted.append({
+                    "field": date_fact["field"],
+                    "page": source.page,
+                    "quote": quote,
+                    "confidence": None,
+                })
+                accepted_evidence_by_field[date_fact["field"]] = source
+                supported_count += 1
+                if model_conflict:
+                    issues.append(
+                        "Explicit labelled contract date conflicts with model output: %s"
+                        % date_fact["field"]
+                    )
+                derived_facts.append(date_fact)
             if primary_title_derivation is not None:
                 derived_facts.append(primary_title_derivation)
+            if staged_price_derivation is not None:
+                derived_facts.append(staged_price_derivation)
             cost_derived = _derive_costs_from_price_tables(contract, canonical, document)
             derived_facts.extend(cost_derived)
             start_condition = _derive_start_condition(contract, canonical)
@@ -3245,6 +3708,33 @@ class DirectContractHarness:
                             "device_name": derived_equipment.device_name,
                         }
                     )
+
+            if not contract.equipment:
+                title_source = accepted_evidence_by_field.get(
+                    "identity.contract_title"
+                )
+                scope_equipment = _equipment_from_service_scope(
+                    canonical,
+                    document,
+                    page_number=(title_source.page if title_source else None),
+                )
+                if scope_equipment is not None:
+                    scope_items, scope_evidence = scope_equipment
+                    contract.equipment.extend(scope_items)
+                    for item in scope_items:
+                        accepted.append({
+                            "field": "equipment",
+                            "page": scope_evidence.page,
+                            "quote": scope_evidence.source_text,
+                            "confidence": None,
+                        })
+                        supported_count += 1
+                    derived_facts.append({
+                        "field": "equipment",
+                        "derivation": "literal_service_scope_equipment_list",
+                        "page": scope_evidence.page,
+                        "count": len(scope_items),
+                    })
             duration = contract.dates.duration
             if contract.dates.duration is None:
                 derived_duration = _duration_from_runtime_signal(
@@ -3260,6 +3750,34 @@ class DirectContractHarness:
                             "duration": derived_duration[0].model_dump(mode="json"),
                         }
                     )
+            if contract.dates.duration is None:
+                table_duration = _duration_from_offer_table(
+                    contract, canonical, document
+                )
+                if table_duration is not None:
+                    duration_value, duration_evidence, duration_quote = table_duration
+                    contract.dates.duration = duration_value
+                    if contract.dates.evidence is None:
+                        contract.dates.evidence = duration_evidence
+                    evidence_rows.append({
+                        "field": "dates.duration",
+                        "source": duration_evidence.model_dump(mode="json"),
+                    })
+                    accepted.append({
+                        "field": "dates.duration",
+                        "page": duration_evidence.page,
+                        "quote": duration_quote,
+                        "confidence": None,
+                    })
+                    supported_count += 1
+                    derived_facts.append({
+                        "field": "dates.duration",
+                        "derivation": "title_bound_offer_term_table",
+                        "page": duration_evidence.page,
+                        "duration": duration_value.model_dump(mode="json"),
+                        "requires_review": True,
+                    })
+            duration = contract.dates.duration
             unit = getattr(getattr(duration, "unit", None), "value", getattr(duration, "unit", None))
             expected_years = None
             normalized_unit = str(unit).lower() if unit is not None else ""
@@ -3283,7 +3801,7 @@ class DirectContractHarness:
             )
             steady_annual = (
                 _steady_annual_amount(scheduled_rows, expected_years=expected_years)
-                if expected_years is not None and complete_currency else None
+                if complete_currency else None
             )
             if steady_annual is not None and contract.costs.annual_cost is None:
                 contract.costs.annual_cost = Money(

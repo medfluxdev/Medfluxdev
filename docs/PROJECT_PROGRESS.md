@@ -4678,3 +4678,49 @@ numerischer Wert-Handling. Daher verbessert umgesetzt statt uebernommen.
 **Naechster Schritt:**
 - Abschlussbericht (dieser Runde) an den Eigentuemer; Push erfolgt, PR/Branch bereit.
 - Merge in `JAMAL` nur nach expliziter Freigabe; keine Bereitstellung.
+
+### Pilot-Wiederholung: Radiosurgery + OPTIS, 2026-10-03
+
+**Status:** Beide realen Dokumente wurden über den lokalen Import-/Reanalysepfad im
+isolierten UAT erneut verarbeitet. Die Analyse endet in beiden Fällen kontrolliert als
+`partial` / manuelle Prüfung; keine der unvollständigen Antworten wurde stillschweigend
+freigegeben. Der MVP-Fortschritt bleibt **18/18 (100 %)**; dies ist ein Stabilitäts- und
+Abnahmelauf, kein neuer MVP-Hauptschritt.
+
+**Behobene Befunde:**
+- `_primary_contract_title` nutzt nun auch kanonischen Seitentext und bindet den Titel
+  weiterhin an den Quellbeleg. Ein enger OCR-Zeilenartefakt-Filter entfernt eine isolierte
+  Nummer zwischen `RAV-00074` und dem OPTIS-Titel, ohne das Zitat im Beleg zu verändern.
+- `_explicit_labelled_contract_dates` liest Vertragsstart/-ende aus expliziten Labels,
+  berücksichtigt die durch OCR vertauschte Tabellenlesereihenfolge und ignoriert ein
+  dazwischenliegendes, allgemeines Angebotsfeld `Datum`. Eindeutige Quellfelder haben
+  Vorrang vor widersprechendem Modelloutput; der Widerspruch bleibt ein Review-Grund.
+- Ein explizites Kalenderdatum unterdrückt die zusätzliche ereignisbasierte Startbedingung
+  als parallelen Startwert.
+- Ergänzte Regressionen für OPTIS-Titel/OCR-Artefakt, gleichseitiges Start-/Enddatum,
+  nicht vertragsbezogenes Datum, widersprechende Quelldaten und Modellkonflikt.
+
+**Validierung:**
+- Backend-Fokus: `test_harness_v3.py`, `test_ai_schema_constraints.py`,
+  `test_harness_v3_money_ocr.py` — **137 passed**, 5 bekannte PyMuPDF/SWIG-Deprecation-
+  Warnings.
+- Radiosurgery (18 Seiten): Titel `SERVICEVERTRAG RADIOSURGERY`, Brainlab Sales GmbH,
+  EUR 52.500 wiederkehrend pro Jahr, EUR 210.000 Gesamtwert und drei quellgebundene
+  Systeme/Geräte. Analyse bleibt `partial`/Review wegen fehlerhafter Modellantworten und
+  fehlender eindeutiger Kalenderdaten.
+- OPTIS (9 Seiten): Titel `Rahmenvertrag Nr. RAV-00074 - OPTIS™ Mobile Next Imaging
+  System`, Abbott Medical GmbH, 04.06.2025–03.06.2029, aktive Laufzeit und
+  `OPTIS™ Mobile Next Imaging System`. Keine feste jährliche Vertragsgebühr aus dem
+  kanonischen Dokument belegt; EUR 12.000 und EUR 9.500 sind einmalig, Verbrauchsprodukte
+  sind Stückkosten. Deshalb bleibt annual recurring `not_calculable` und manuelle Prüfung
+  erforderlich.
+- Beide Dokumente wurden über Backend 8011, Frontend 3010 und ausschließlich die
+  isolierte PostgreSQL-Datenbank 55432 verarbeitet; der Closed-Barrier-Launcher bestätigte
+  bei jedem Neustart Ziel-Datenbank und Server.
+
+**Offen:**
+- Beide Verträge bleiben prüfpflichtig. Radiosurgery hat weiterhin Modell-/Schemafehler
+  in einzelnen Extraktionsgruppen; OPTIS hat keinen belegten wiederkehrenden Jahrespreis.
+  Die UAT bestätigt die Schutzwirkung, nicht eine vollautomatische Freigabe der Dokumente.
+- Kein Push oder Merge. Änderungen für diesen Pilot sind für einen neuen Commit auf dem
+  bestehenden Branch vorgesehen.
