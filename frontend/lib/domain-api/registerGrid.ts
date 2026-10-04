@@ -149,3 +149,55 @@ export function saveBlob(blob: Blob, filename: string) {
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+export type RenewalUrgency = "missed" | "critical" | "soon" | "planned" | "unknown" | "none";
+
+export interface RenewalListItem {
+  contract_id: string;
+  register_number: string | null;
+  short_description: string | null;
+  partner: string | null;
+  cancel_by: string;
+  days_left: number;
+  urgency: RenewalUrgency;
+  possible_end: string | null;
+  annual_cost: string | null;
+  responsible: string | null;
+  decision: { decision: string; label: string; status: string } | null;
+}
+
+export interface RenewalBrief {
+  contract_id: string;
+  register_number: string | null;
+  short_description: string | null;
+  business_status: string;
+  term_model: string | null;
+  as_of: string;
+  urgency: RenewalUrgency;
+  days_left: number | null;
+  cancel_by: string | null;
+  current_end: string | null;
+  next_end_if_no_action: string | null;
+  if_no_action: string;
+  annual_cost: string | null;
+  renewal_cost: string | null;
+  price_adjustment_notes: string[];
+  partner: string | null;
+  partner_contracts: { contract_id: string; register_number: string | null; short_description: string | null }[];
+  responsible: string | null;
+  reminder_recipient: string | null;
+  documents: number;
+  review_pending: boolean;
+  open_deadlines: { due_date: string; title: string }[];
+  decision: { id: string; decision: string; label: string; status: string; note: string | null; by: string; at: string | null } | null;
+  hints: { kind: "action" | "check" | "info"; text: string; reason: string }[];
+  explanation: string[];
+}
+
+export function listRenewals(organizationSlug: string, days = 120) {
+  return apiGet<{ as_of: string; days: number; items: RenewalListItem[] }>(`/api/register/renewals?${org(organizationSlug)}&days=${days}`);
+}
+
+export function getRenewalBrief(organizationSlug: string, contractId: string) {
+  return apiGet<RenewalBrief>(`/api/contracts/${encodeURIComponent(contractId)}/renewal-brief?${org(organizationSlug)}`);
+}

@@ -38,6 +38,7 @@ from app.reports.grid import (
     totals,
     tree,
 )
+from app.reports.renewal import decision_summary, renewal_brief, upcoming_renewals, urgency
 from app.reports.views import ViewError, create_view, delete_view, list_views, update_view, view_payload
 
 router = APIRouter(tags=["register-grid"])
@@ -302,5 +303,58 @@ def remove_view(view_id: UUID, request: Request, organization_slug: str):
             raise _view_http(exc)
         session.commit()
         return {"deleted": True}
+    finally:
+        session.close()
+
+
+# --------------------------------------------------------------------------- renewal briefs (13a)
+
+@router.get("/api/register/renewals")
+def get_renewals(request: Request, organization_slug: str, days: int = 120):
+    actor = current_actor(request, organization_slug)
+    as_of = date.today()
+    session = create_session()
+    try:
+        rows, _ = _rows(session, actor, GridSpec(), as_of)
+        upcoming = upcoming_renewals(rows, as_of, min(max(days, 1), 730))
+        decisions = decision_summary(session, [row.contract_id for row in upcoming])
+        return {
+            "as_of": as_of.isoformat(),
+            "days": days,
+            "items": [
+                {
+                    "contract_id": str(row.contract_id),
+                    "register_number": row.values["register_number"],
+                    "short_description": row.values["short_description"],
+                    "partner": row.values["partner"],
+                    "cancel_by": row.values["cancel_by"].isoformat(),
+                    "days_left": (row.values["cancel_by"] - as_of).days,
+                    "urgency": urgency(row.values["cancel_by"], as_of),
+                    "possible_end": row.values["possible_end"].isoformat() if row.values["possible_end"] else None,
+                    "annual_cost": str(row.values["annual_cost"]) if row.values["annual_cost"] is not None else None,
+                    "responsible": row.values["responsible"],
+                    "decision": decisions.get(row.contract_id),
+                }
+                for row in upcoming
+            ],
+        }
+    finally:
+        session.close()
+
+
+@router.get("/api/contracts/{contract_id}/renewal-brief")
+def get_renewal_brief(contract_id: UUID, request: Request, organization_slug: str):
+    actor = current_actor(request, organization_slug)
+    session = create_session()
+    try:
+        contract = session.scalars(
+            select(Contract).where(Contract.id == contract_id, Contract.organization_id == actor.organization_id)
+        ).first()
+        visible = _visible(session, actor)
+        if contract is not None and not is_admin(actor) and visible is not None and contract.id not in visible:
+            contract = None
+        if contract is None:
+            raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
+        return renewal_brief(session, contract, date.today(), visible)
     finally:
         session.close()

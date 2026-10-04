@@ -26,6 +26,7 @@ import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
 import ContractHistoryPanel from "./ContractHistoryPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
+import ContractRenewalBrief from "./ContractRenewalBrief";
 import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
@@ -374,7 +375,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "remarks" && <ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} />}
         {activeTab === "history" && <ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
-        {activeTab === "deadlines" && <ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />}
+        {activeTab === "deadlines" && <><ContractRenewalBrief contractId={data.contract_id} orgSlug={orgSlug} /><ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} /></>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 

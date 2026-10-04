@@ -43,6 +43,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Vertragsregister", href: "/register", icon: "catalogs" },
     { label: "Vertragspartner", href: "/partners", icon: "partners" },
     { label: "Termine", href: "/termine", icon: "deadlines" },
+    { label: "Verlängerungen", href: "/verlaengerungen", icon: "deadlines" },
     { label: "Geräte", href: "/equipment", icon: "equipment" },
     { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
   ]},
