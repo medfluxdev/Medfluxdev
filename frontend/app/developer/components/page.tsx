@@ -57,6 +57,13 @@ export default function ComponentReferencePage() {
       <PageHeader title="UI-Bausteine" description="Lebende Referenz für Tokens und gemeinsame Komponenten. Regeln: docs/FRONTEND_CONVENTIONS.md." />
 
       <div className="stack-4">
+        <SectionCard title="Hervorgehobener Seitenkopf">
+          <p className="field-hint">PageHeader mit variant=&quot;highlight&quot; – nur für Einstiegs- und Übersichtsseiten, höchstens einer je Seite. In hell und dunkel gleich.</p>
+          <div className="page-hero" role="presentation">
+            <div><span className="page-hero-eyebrow">Bereich</span><strong>Seitentitel</strong><p>Kurze Beschreibung der Seite.</p></div>
+            <div className="page-actions"><button type="button" className="btn">Aktion</button><button type="button" className="btn btn-primary">Hauptaktion</button></div>
+          </div>
+        </SectionCard>
         <SectionCard title="Schrift">
           <div className="stack-3">
             {TYPE_SCALE.map(([token, label]) => (

@@ -433,8 +433,6 @@
 
 /* ---------- Mein Tag ---------- */
 .my-day { display: grid; gap: var(--space-6); }
-.my-day-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); }
-.my-day-head h1 { font-size: var(--text-display); }
 .my-day-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--space-4); }
 .my-day-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--space-4); align-items: start; }
 .my-day-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
@@ -504,3 +502,36 @@
 .user-import-table input { min-width: 12rem; font-family: var(--font-mono); }
 .user-import-table tr.is-flagged td, .user-import-table tr.is-flagged th { background: var(--color-danger-bg); }
 .user-import-errors { margin: 0; padding-left: var(--space-4); color: var(--color-danger); font-size: var(--text-small); }
+
+/* ---------- Hervorgehobener Seitenkopf (PageHeader variant="highlight") ---------- */
+.page-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-highlight-from), var(--color-highlight-to));
+  color: var(--color-highlight-text);
+  box-shadow: var(--shadow-lg);
+}
+.page-hero > div { display: grid; gap: var(--space-1); min-width: 0; }
+.page-hero h1, .page-hero > div > strong { color: inherit; font-size: var(--text-display); line-height: var(--leading-title); }
+.page-hero p { margin: 0; color: var(--color-highlight-muted); max-width: 72ch; }
+.page-hero .page-hero-eyebrow { color: var(--color-highlight-eyebrow); font-size: var(--text-caption); font-weight: var(--weight-bold); letter-spacing: 0.09em; text-transform: uppercase; }
+.page-hero .page-actions { margin-top: 0; }
+.page-hero .btn:not(.btn-primary) { border-color: currentcolor; background: transparent; color: inherit; }
+.page-hero .btn:not(.btn-primary):hover { background: var(--color-highlight-to); color: inherit; }
+.page-hero :focus-visible { outline-color: var(--color-highlight-text); }
+@media (max-width: 640px) {
+  .page-hero { align-items: flex-start; flex-direction: column; padding: var(--space-5) var(--space-4); }
+  .page-hero h1, .page-hero > div > strong { font-size: var(--text-title-m); }
+}
+@media (forced-colors: active) {
+  .page-hero { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
+}
+
+/* ---------- Design-Schalter (Hell/Dunkel) ---------- */
+.auth-theme-toggle { position: absolute; top: var(--space-4); right: var(--space-4); }

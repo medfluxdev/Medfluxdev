@@ -27,6 +27,16 @@ body {
   width: 48px;
 }
 
+/* Dunkles Design: aufgehellte Logo-Fassung (gleiche Regeln wie tokens.css) */
+.medflux-logo__image--dark { display: none; }
+:root[data-theme="dark"] .medflux-logo__image--light { display: none; }
+:root[data-theme="dark"] .medflux-logo__image--dark { display: block; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .medflux-logo__image--light { display: none; }
+  :root:not([data-theme="light"]) .medflux-logo__image--dark { display: block; }
+}
+
 /* Core actions */
 .btn-primary,
 .auth-submit,

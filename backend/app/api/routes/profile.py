@@ -27,7 +27,7 @@ class UiPreferences(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    theme: Literal["system", "light", "dark"] = "system"
+    theme: Literal["system", "light", "dark"] = "light"
     text_size: Literal["normal", "large", "xlarge"] = "normal"
     density: Literal["comfortable", "compact"] = "comfortable"
     sidebar_collapsed: bool = False

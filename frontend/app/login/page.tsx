@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 import MedFluxLogo from "@/components/brand/MedFluxLogo";
+import ThemeToggle from "@/components/shell/ThemeToggle";
 
 function DocumentIcon() {
   return (
@@ -72,6 +73,7 @@ function LoginContent() {
 
   return (
     <main className="auth-page" id="main-content">
+      <ThemeToggle className="auth-theme-toggle" />
       <div className="auth-login-shell">
         <header className="auth-login-brand">
           <MedFluxLogo priority />

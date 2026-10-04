@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import KpiTile from "@/components/ui/KpiTile";
+import PageHeader from "@/components/ui/PageHeader";
 import Skeleton from "@/components/ui/Skeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
@@ -67,13 +68,15 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
 
   return (
     <div className="page my-day">
-      <header className="my-day-head">
-        <div>
-          <h1>{greeting(now)}{firstName ? `, ${firstName}` : ""}</h1>
-          <p className="field-hint">{new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now)}</p>
-        </div>
-        {role === "admin" || role === "contract_manager" || account?.is_developer ? <Link href="/contracts/new" className="btn btn-primary">Vertrag anlegen</Link> : null}
-      </header>
+      <PageHeader
+        variant="highlight"
+        className="my-day-head"
+        eyebrow="Mein Tag"
+        documentTitle="Mein Tag"
+        title={`${greeting(now)}${firstName ? `, ${firstName}` : ""}`}
+        description={new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(now)}
+        actions={role === "admin" || role === "contract_manager" || account?.is_developer ? <Link href="/contracts/new" className="btn btn-primary">Vertrag anlegen</Link> : undefined}
+      />
 
       {failed ? <p className="alert alert--critical" role="alert">Die Übersicht konnte nicht geladen werden. <button type="button" className="btn btn-sm" onClick={load}>Erneut laden</button></p> : null}
 

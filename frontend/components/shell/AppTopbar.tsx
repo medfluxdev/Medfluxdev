@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import OrganizationScopePicker from "@/components/OrganizationScopePicker";
 import { useAuth } from "@/components/auth/AuthProvider";
 import NotificationCenter from "@/components/shell/NotificationCenter";
+import ThemeToggle from "@/components/shell/ThemeToggle";
 import Breadcrumbs, { type Crumb } from "@/components/ui/Breadcrumbs";
 import { ROLE_LABELS, type AccountRole } from "@/lib/auth-types";
 import { Icon, pageFor } from "./navigation";
@@ -68,6 +69,7 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
         {account?.is_developer && prefs.developerMode && onOpenDeveloper ? (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenDeveloper} aria-label="Entwicklerdetails öffnen">DEV</button>
         ) : null}
+        <ThemeToggle />
         {account && membership ? <NotificationCenter /> : null}
         {account && role ? (
           <details ref={menuRef} className="shell-menu">
@@ -95,9 +97,9 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
                 <legend>Darstellung</legend>
                 <label>Design
                   <select value={prefs.theme} onChange={(event) => updatePrefs({ theme: event.target.value as ThemePreference })}>
-                    <option value="system">Wie System</option>
                     <option value="light">Hell</option>
                     <option value="dark">Dunkel</option>
+                    <option value="system">Wie System</option>
                   </select>
                 </label>
                 <label>Textgröße

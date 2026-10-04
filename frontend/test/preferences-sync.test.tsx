@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readPreferences, useServerPreferenceSync, writePreferences, DEFAULT_PREFERENCES } from "@/components/shell/preferences";
+import { readPreferences, useServerPreferenceSync, writePreferences, DEFAULT_PREFERENCES, PREFERENCES_BOOTSTRAP } from "@/components/shell/preferences";
 
 const api = vi.hoisted(() => ({ apiGet: vi.fn(), apiPut: vi.fn().mockResolvedValue({}) }));
 vi.mock("@/lib/api", () => api);
@@ -41,5 +41,23 @@ describe("Darstellung auf dem Server", () => {
   it("synchronisiert ohne Anmeldung nicht", () => {
     renderHook(() => useServerPreferenceSync(null));
     expect(api.apiGet).not.toHaveBeenCalled();
+  });
+});
+
+describe("Standarddesign", () => {
+  it("ist hell, auch ohne gespeicherte Einstellung vor dem ersten Zeichnen", () => {
+    expect(DEFAULT_PREFERENCES.theme).toBe("light");
+    new Function(PREFERENCES_BOOTSTRAP)();
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("laesst Dunkel und Wie System weiter zu", () => {
+    localStorage.setItem("medflux.preferences", JSON.stringify({ theme: "dark" }));
+    new Function(PREFERENCES_BOOTSTRAP)();
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.setItem("medflux.preferences", JSON.stringify({ theme: "system" }));
+    new Function(PREFERENCES_BOOTSTRAP)();
+    expect(document.documentElement).not.toHaveAttribute("data-theme");
   });
 });

@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import PageHeader from "@/components/ui/PageHeader";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 
@@ -52,9 +53,7 @@ export default function SystemOrganizationsPage() {
 
   return (
     <div className="page org-settings-page">
-      <div className="org-settings-head">
-        <div><span>Systemverwaltung</span><h1>Organisationen</h1><p>Mandanten anlegen und anschließend deren Krankenhausstruktur verwalten.</p></div>
-      </div>
+      <PageHeader variant="highlight" eyebrow="Systemverwaltung" title="Organisationen" description="Mandanten anlegen und anschließend deren Krankenhausstruktur verwalten." />
 
       {message ? <div className={`user-admin-message${message.error ? " error" : ""}`}>{message.text}</div> : null}
 

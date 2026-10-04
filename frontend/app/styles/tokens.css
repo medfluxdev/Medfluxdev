@@ -92,6 +92,13 @@
   --color-text-accent: var(--blue-700);
   --color-link: var(--blue-700);
 
+  /* Hervorgehobener Seitenkopf: in hell und dunkel gleich dunkel (Markenbanner) */
+  --color-highlight-from: var(--neutral-900);
+  --color-highlight-to: var(--blue-800);
+  --color-highlight-text: var(--neutral-0);
+  --color-highlight-muted: var(--neutral-100);
+  --color-highlight-eyebrow: var(--teal-400);
+
   --color-border: var(--neutral-200);
   --color-border-subtle: var(--neutral-100);
   --color-border-strong: var(--neutral-300);

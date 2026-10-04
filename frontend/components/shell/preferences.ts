@@ -17,7 +17,8 @@ export interface Preferences {
   developerMode: boolean;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { theme: "system", textSize: "normal", density: "comfortable", sidebarCollapsed: false, developerMode: false };
+// Hell ist Standard; Dunkel und "Wie System" bleiben jederzeit waehlbar.
+export const DEFAULT_PREFERENCES: Preferences = { theme: "light", textSize: "normal", density: "comfortable", sidebarCollapsed: false, developerMode: false };
 const STORAGE_KEY = "medflux.preferences";
 const EVENT = "medflux:preferences";
 
@@ -114,5 +115,5 @@ export function useServerPreferenceSync(accountId: string | null) {
   }, [accountId]);
 }
 
-// Vor dem ersten Zeichnen ausfuehren, damit das dunkle Design nicht aufblitzt.
-export const PREFERENCES_BOOTSTRAP = `try{var p=JSON.parse(localStorage.getItem("${STORAGE_KEY}")||"{}");var r=document.documentElement;if(p.theme&&p.theme!=="system")r.setAttribute("data-theme",p.theme);if(p.textSize&&p.textSize!=="normal")r.setAttribute("data-text-size",p.textSize);if(p.density==="compact")r.setAttribute("data-density","compact")}catch(e){}`;
+// Vor dem ersten Zeichnen ausfuehren, damit kein falsches Design aufblitzt.
+export const PREFERENCES_BOOTSTRAP = `try{var p=JSON.parse(localStorage.getItem("${STORAGE_KEY}")||"{}");var r=document.documentElement;var t=p.theme||"light";if(t!=="system")r.setAttribute("data-theme",t);if(p.textSize&&p.textSize!=="normal")r.setAttribute("data-text-size",p.textSize);if(p.density==="compact")r.setAttribute("data-density","compact")}catch(e){}`;

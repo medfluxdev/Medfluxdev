@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import PageHeader from "@/components/ui/PageHeader";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -52,7 +53,7 @@ export default function DeveloperDashboard() {
   if (!account?.is_developer) return <section className="cw-section"><h1>Keine Berechtigung</h1><p className="cw-muted">Dieser Bereich ist ausschließlich für den Medflux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
 
   return <div className={styles.page}>
-    <section className={styles.hero}><div><span>Systemverwaltung</span><h1>Developer Dashboard</h1><p>Technischer Zustand, lokale KI und alle Medflux-Organisationen.</p></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? "Prüfe…" : "Status aktualisieren"}</button></section>
+    <PageHeader variant="highlight" eyebrow="Systemverwaltung" title="Developer Dashboard" description="Technischer Zustand, lokale KI und alle Medflux-Organisationen." actions={<button type="button" className="btn" onClick={() => void load()} disabled={loading}>{loading ? "Prüfe…" : "Status aktualisieren"}</button>} />
     {message?.text ? <div className={`${styles.message}${message.error ? ` ${styles.messageError}` : ""}`} role="status">{message.text}</div> : null}
 
     <section className={styles.statusGrid} aria-label="Systemstatus">

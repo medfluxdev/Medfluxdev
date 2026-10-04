@@ -14,6 +14,8 @@ for (const theme of ["light", "dark"] as const) {
     test.use({ colorScheme: theme });
     for (const path of PAGES) {
       test(`${path}`, async ({ page }, info) => {
+        // Standard ist hell; das dunkle Design wird wie im Kontomenue gewaehlt.
+        await page.addInitScript((value) => window.localStorage.setItem("medflux.preferences", JSON.stringify({ theme: value })), theme);
         await page.goto(path);
         await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
         await page.waitForLoadState("networkidle");
