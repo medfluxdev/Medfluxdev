@@ -445,7 +445,7 @@
 .my-day-date { color: var(--color-text-muted); font-size: var(--text-small); font-variant-numeric: tabular-nums; }
 .my-day-date.is-overdue { color: var(--color-danger); font-weight: var(--weight-semibold); }
 .my-day-count { font-size: var(--text-title-s); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; text-align: right; }
-@media (max-width: 640px) { .my-day-list li { grid-template-columns: 1fr auto; } .my-day-list li > :first-child { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .my-day-list li { grid-template-columns: 1fr auto; } .my-day-list li:not(:has(.my-day-count)) > :first-child { grid-column: 1 / -1; } }
 .kpi .btn-link { justify-self: start; }
 .my-day-list li:has(.my-day-count) { grid-template-columns: 2.5rem minmax(0, 1fr); }
 .empty-state h3,

@@ -77,3 +77,18 @@ Keine Inline-Styles außer für wirklich dynamische Werte (z. B. Breite eines Ba
 - `npm run verify` = ESLint + stylelint + Vitest + `next build`.
 - Ende-zu-Ende: `scripts/run_e2e.ps1` (Playwright-Journeys + axe + Bildvergleich) gegen eine eigene Wegwerf-Datenbank, nie gegen Produktdaten.
 - Bildvergleich nach gewollten Layoutänderungen mit `npx playwright test e2e/visual.spec.ts --update-snapshots` erneuern und die Bilder mitcommitten.
+
+## 8. Leistungsbudget
+
+Gemessen mit `next build` (Spalte „First Load JS“). Stand 2026-10-04:
+
+| Messgröße | Ist | Budget |
+|---|---|---|
+| Gemeinsamer Anteil aller Seiten | 87,8 kB | ≤ 95 kB |
+| Größte Seite (`/contracts/[id]`) | 140 kB | ≤ 150 kB |
+| Übrige Seiten | 88–108 kB | ≤ 120 kB |
+
+- Was erst in einem Reiter oder nach einer Aktion gebraucht wird, über `next/dynamic` laden (Vorbild: `components/contracts/detail/lazy.tsx`); `pdfjs-dist` lädt erst beim Öffnen eines Dokuments.
+- Lighthouse (lokal, Chrome DevTools, Desktop): Ziel Leistung ≥ 90, Barrierefreiheit 100, Best Practices ≥ 95. Prüfen auf `/`, `/register` und einer Vertragsseite, wenn ein PR neue Abhängigkeiten oder große Komponenten bringt.
+- Prüf-Build neben laufendem `next dev`: `NEXT_DIST_DIR=.next-verify npx next build`.
+- Entwicklermodus (Kontomenü) zeigt API-Zeiten; Anfragen über 1 s sind markiert.

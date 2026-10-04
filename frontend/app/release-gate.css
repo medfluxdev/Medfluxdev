@@ -9,7 +9,6 @@
 
 .table-wrap,
 .fr-table-wrap,
-.cw-tabs,
 .cw-subtabs,
 .cw-document-sidebar {
   max-width: 100%;
@@ -33,14 +32,11 @@ canvas {
   }
 
   .profile-header,
-  .cw-header,
-  .dashboard-feature-head,
   .user-admin-head,
   .org-settings-head {
     min-width: 0;
   }
 
-  .cw-tabs,
   .cw-subtabs {
     scrollbar-width: thin;
   }
@@ -59,13 +55,11 @@ canvas {
   }
 
   .cw-integrated-panel .detail-card,
-  .dashboard-feature-card,
   .cw-section,
   .cw-info-card {
     padding-inline: 12px;
   }
 
-  .cw-header h1,
   .profile-header h1 {
     overflow-wrap: anywhere;
   }

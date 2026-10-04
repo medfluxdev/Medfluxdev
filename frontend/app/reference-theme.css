@@ -43,73 +43,6 @@ body {
 }
 
 /* Dashboard reference hero */
-.dashboard-page .page-header {
-  margin-bottom: 18px;
-}
-
-.welcome-hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  padding: 26px 28px;
-  margin-bottom: 26px;
-  color: var(--color-text-inverse);
-  background: linear-gradient(110deg, var(--color-info-fill) 0%, var(--color-success-fill) 52%, var(--color-brand) 100%);
-  box-shadow: var(--shadow-md);
-}
-
-.welcome-hero:after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(0, 52, 92, 0.08), transparent 45%);
-}
-
-.welcome-hero > div {
-  position: relative;
-  z-index: var(--z-raised);
-}
-
-.welcome-hero h2 {
-  margin: 0;
-  font-size: var(--text-title-l);
-  line-height: 1.2;
-  font-weight: 750;
-  letter-spacing: -0.03em;
-  color: var(--color-text-inverse);
-}
-
-.welcome-hero p {
-  margin: 9px 0 17px;
-  font-size: var(--text-small);
-  color: var(--color-text-inverse);
-}
-
-.hero-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 17px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  text-decoration: none;
-  font-size: var(--text-small);
-  font-weight: 700;
-  box-shadow: var(--shadow-sm);
-}
-
-.hero-action:hover {
-  background: var(--color-surface-subtle);
-}
-
-.hero-action span {
-  font-size: var(--text-title-m);
-  font-weight: 400;
-  line-height: 1;
-}
 
 /* KPI cards */
 .intel-strip {
@@ -119,7 +52,6 @@ body {
 }
 
 .intel,
-.kpi-card,
 .kpi {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -132,21 +64,10 @@ body {
   padding: 0;
 }
 
-.intel:before,
-.kpi-card:before {
+.intel:before {
   display: none;
 }
 
-.intel .kpi-card {
-  border: 0;
-  box-shadow: none;
-  border-radius: inherit;
-  height: 100%;
-  min-height: 106px;
-  padding: 18px 20px;
-}
-
-.intel-label,
 .kpi-label {
   color: var(--color-text-subtle);
   font-size: var(--text-small);
@@ -155,20 +76,11 @@ body {
   letter-spacing: 0;
 }
 
-.intel-value,
 .kpi-value {
   color: var(--color-text);
   font-size: var(--text-title-l);
   font-weight: 750;
   margin-top: 10px;
-}
-
-.dashboard-data-state {
-  margin-bottom: 14px;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--color-text-subtle);
-  font-size: var(--text-caption);
 }
 
 /* Cards and panels across the app */
@@ -204,11 +116,6 @@ body {
   color: var(--color-text);
 }
 
-.dash-grid,
-.lower-grid {
-  gap: 18px;
-}
-
 /* Empty states */
 .state-box {
   border: 1px solid var(--color-border);
@@ -234,7 +141,6 @@ body {
 
 /* Buttons */
 .btn,
-.icon-btn,
 .settings-nav-item,
 .settings-nav a {
   border-radius: var(--radius-sm);
@@ -278,8 +184,7 @@ tbody tr:hover {
 }
 
 /* Status styling stays semantic, but visually matches the reference. */
-.status-badge,
-.freshness-pill {
+.status-badge {
   border-radius: var(--radius-pill);
   box-shadow: none;
 }
@@ -302,9 +207,5 @@ tbody tr:hover {
 @media (max-width: 640px) {
   .intel-strip {
     grid-template-columns: 1fr;
-  }
-
-  .welcome-hero {
-    padding: 22px 20px;
   }
 }

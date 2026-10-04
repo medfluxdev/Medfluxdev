@@ -31,8 +31,7 @@ body {
 .btn-primary,
 .auth-submit,
 .user-admin-form button,
-.user-edit-row button,
-.sidebar-login-btn {
+.user-edit-row button {
   background: var(--brand-blue);
   border-color: var(--brand-blue);
   color: var(--color-text-inverse);
@@ -41,8 +40,7 @@ body {
 .btn-primary:hover:not(:disabled),
 .auth-submit:hover:not(:disabled),
 .user-admin-form button:hover:not(:disabled),
-.user-edit-row button:hover:not(:disabled),
-.sidebar-login-btn:hover {
+.user-edit-row button:hover:not(:disabled) {
   background: var(--brand-blue-hover);
   border-color: var(--brand-blue-hover);
 }
@@ -51,16 +49,7 @@ a {
   text-decoration-color: color-mix(in srgb, var(--brand-teal), transparent 42%);
 }
 
-.hero-action {
-  color: var(--brand-blue);
-}
-
 /* Identity-led dashboard area */
-.welcome-hero {
-  background: radial-gradient(circle at 92% 18%, rgba(255,255,255,0.18), transparent 24%),
-    linear-gradient(120deg, var(--brand-teal) 0%, var(--color-brand) 48%, var(--brand-blue) 100%);
-  box-shadow: var(--shadow-lg);
-}
 
 /* Login */
 .auth-page {
@@ -153,14 +142,10 @@ a {
 .card,
 .detail-card,
 .intel,
-.kpi-card,
 .kpi {
   border-color: var(--color-border);
 }
 
-.side-ai,
-.org-card,
-.account-card,
 .state-icon {
   background: var(--color-surface-subtle);
 }

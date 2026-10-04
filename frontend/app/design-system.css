@@ -162,18 +162,6 @@ textarea,
   to { transform: rotate(360deg); }
 }
 
-.table-density-comfortable th,
-.table-density-comfortable td {
-  min-height: var(--table-row-comfortable);
-  padding-block: 0.75rem;
-}
-
-.table-density-compact th,
-.table-density-compact td {
-  min-height: var(--table-row-compact);
-  padding-block: 0.4rem;
-}
-
 @media (max-width: 640px) {
   .page-header h1 {
     font-size: var(--text-title-m);
