@@ -10,7 +10,8 @@ export default async function globalSetup(config: FullConfig) {
   mkdirSync("e2e/.auth", { recursive: true });
   const browser = await chromium.launch();
   const page = await browser.newPage({ locale: "de-DE" });
-  await page.goto(`${baseURL}/login`);
+  // Erst nach dem Laden aller Skripte klicken, sonst sendet das Formular ohne React-Handler.
+  await page.goto(`${baseURL}/login`, { waitUntil: "networkidle" });
   await page.getByPlaceholder("E-Mail-Adresse eingeben").fill(login);
   await page.getByPlaceholder("Passwort eingeben").fill(password);
   await page.getByRole("button", { name: "Anmelden" }).click();

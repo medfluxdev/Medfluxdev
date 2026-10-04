@@ -17,7 +17,7 @@ All phases U0–U10 are implemented on branch `feature/ui-refactor` (stacked on 
 | U2 Components | done | Dialog, Drawer, Tabs, DataTable, Badge, Breadcrumbs, Skeleton, Tooltip, KpiTile, form guards. Not built: Combobox, DateField, MoneyField, Popover, row selection in DataTable (native controls kept). |
 | U3 Navigation | done | 6 areas, icon rail, phone drawer, Ctrl+K palette, shortcuts. |
 | U4 Key screens | done | Contract page (object header, 7 tabs), one list `/register`, "Mein Tag", import wizard. |
-| U5 Roles | done | Plain language, field help, admin set-up checklist, "Ansicht als Rolle", history filters in the URL, developer mode (context + API timings), conventions, style guide. **Open:** bulk user import (needs a decision on how initial passwords are issued). |
+| U5 Roles | done | Plain language, field help, admin set-up checklist, "Ansicht als Rolle", history filters in the URL, developer mode (context + API timings), conventions, style guide. Bulk user import from CSV: the admin sets each first password (from the list, typed or generated), check first, all-or-nothing. |
 | U6 Accessibility | done | axe sweep on 25 pages in light, dark and forced colours; catalog tabs fixed; forced-colors rules. |
 | U7 Performance | done | Lazy PDF viewer and tab panels: contract page 150 → 140 kB first load. Optimistic updates and hover prefetch not added. INP not measured yet. |
 | U8 Personalisation | done | Theme/text size/density/sidebar saved per account (`/api/profile/preferences`); dark mode reviewed on all main pages. |

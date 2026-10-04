@@ -5236,6 +5236,17 @@ Branch `feature/ui-refactor` (auf `feature/register-gaps`). Plan: `docs/architec
 
 **Verifikation:** Backend 1573 passed / 3 skipped / 1 failed (vorbestehend, OCR-Umgebung `test_ocr_word_data_empty_when_unavailable`). Frontend `npm run verify` grün (45 Dateien / 178 Tests, Build). Playwright 146/146 (Journeys, axe-Sweep, Layout, Bildvergleich Desktop + Telefon) gegen die Wegwerf-DB.
 
-**Offen:** Massenimport von Benutzern (Entscheidung zur Vergabe der Erstpasswörter nötig); Combobox/Datums-/Betragsfeld als eigene Bausteine; Lighthouse noch manuell; Usability-Runde mit Anwendern (SUS, Aufgabenzeiten); restliche Alt-CSS-Dateien (~170 KB) weiter zusammenführen.
+**Offen:** Combobox/Datums-/Betragsfeld als eigene Bausteine; Lighthouse noch manuell; Usability-Runde mit Anwendern (SUS, Aufgabenzeiten); restliche Alt-CSS-Dateien (~170 KB) weiter zusammenführen.
 
 **Nächster Schritt:** Abnahme im Browser, Merge der Feature-Branches nach `main`, danach `alembic upgrade head` auf der Produktivdatenbank (jetzt bis `m4b6c8d01004`).
+
+### Nachtrag 2026-10-04 – Benutzer-Massenimport
+
+Entscheidung des Product Owners: Der Administrator vergibt jedem neuen Benutzer das Erstpasswort.
+
+- Backend: `POST /api/users/import` (`app/auth/user_import.py`), nur `user.admin`. Erst prüfen (`dry_run`), dann alles oder nichts. Prüft je Zeile E-Mail (doppelt in der Liste / schon vorhanden), Name, Rolle (deutsche Bezeichnungen oder Codes, leer = Leser), Krankenhaus und Bereich (Kürzel oder Name, eindeutig, aktiv, in der eigenen Organisation), Erstpasswort (mindestens 10 Zeichen, nicht gleich E-Mail/Name). Einzel- und Massenanlage nutzen denselben Helfer `_create_member`. Audit: `account.created` je Benutzer und `account.bulk_imported`; Passwörter werden weder zurückgegeben noch protokolliert. Höchstens 500 Zeilen.
+- Frontend: Abschnitt „Mehrere Benutzer importieren“ unter `/settings/users` (`components/users/UserImport.tsx`, `lib/user-import-csv.ts`): Vorlage, CSV aus Excel (Semikolon/Komma/Tab), Vorschau mit Fehlern je Zeile, Erstpasswort je Zeile eintragen oder „Fehlende Passwörter erzeugen“ (Zufallsgenerator des Browsers), Anlegen erst nach fehlerfreier Prüfung, danach optional „Zugangsdaten herunterladen“ mit Hinweis zum Löschen.
+- Nebenbei: doppelter „Mein Profil“-Knopf im Einstellungsrahmen entfernt; Benutzerseite mit Seitenabstand und ohne waagerechtes Scrollen auf dem Telefon; Anmeldeformular mit `method="post"` (kein Absenden über die Adresse vor dem Laden); Arbeitsbereichsauswahl mit gültiger ARIA-Rolle.
+- Tests: Backend `tests/test_user_import.py` (3); Frontend `test/user-import.test.tsx` (5); Playwright-Journey 9 (Liste hochladen, fehlendes Passwort erkannt, Passwörter erzeugen, anlegen, Anmeldung des neuen Benutzers mit dem Erstpasswort).
+- Verifikation: Backend 1576 passed / 3 skipped / 1 failed (vorbestehend, OCR); `npm run verify` grün (46 Dateien); Playwright 147/147.
+- Hinweis: Ein Zwang zum Passwortwechsel bei der ersten Anmeldung gibt es noch nicht.

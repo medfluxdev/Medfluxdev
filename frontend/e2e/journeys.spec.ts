@@ -101,3 +101,41 @@ trailer<</Size 6/Root 1 0 R>>
 startxref
 0
 %%EOF`;
+
+test("9 – Benutzer per Liste importieren und mit Erstpasswort anmelden", async ({ page, browser }, info) => {
+  const tag = Date.now().toString(36);
+  const email = `leser-${tag}@medflux.test`;
+  // Erstpasswort wird nur fuer diesen Lauf erzeugt und nirgends gespeichert.
+  const firstPassword = `E2e-${crypto.randomUUID()}`;
+  const csv = `E-Mail;Name;Rolle;Krankenhaus;Bereich;Erstpasswort
+${email};Lea Leser ${tag};Leser;NORD;Radiologie;${firstPassword}
+prueferin-${tag}@medflux.test;Pia Prüferin ${tag};Prüfer;Klinikum Nord;;
+`;
+
+  await page.goto("/settings/users");
+  await page.getByLabel("Liste auswählen").setInputFiles({ name: "benutzer.csv", mimeType: "text/csv", buffer: Buffer.from(csv, "utf-8") });
+  await expect(page.getByText("2 Benutzer in der Liste")).toBeVisible();
+
+  await page.getByRole("button", { name: "Liste prüfen" }).click();
+  await expect(page.getByText("Erstpasswort fehlt.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "2 Benutzer anlegen" })).toBeDisabled();
+  await checkA11y(page, info, "benutzer-import");
+
+  await page.getByRole("button", { name: "Fehlende Passwörter erzeugen" }).click();
+  await page.getByRole("button", { name: "Liste prüfen" }).click();
+  await expect(page.getByText("geprüft, keine Fehler", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "2 Benutzer anlegen" }).click();
+  await expect(page.getByText("2 Benutzer angelegt", { exact: false })).toBeVisible();
+  await expect(page.getByText(email)).toBeVisible();
+
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] }, locale: "de-DE" });
+  const fresh = await context.newPage();
+  await fresh.goto("/login", { waitUntil: "networkidle" });
+  await fresh.getByPlaceholder("E-Mail-Adresse eingeben").fill(email);
+  await fresh.getByPlaceholder("Passwort eingeben").fill(firstPassword);
+  await fresh.getByRole("button", { name: "Anmelden" }).click();
+  await fresh.waitForURL((url) => !url.pathname.startsWith("/login"));
+  await expect(fresh.getByRole("heading", { level: 1, name: /Lea/ })).toBeVisible();
+  await expect(fresh.getByRole("link", { name: "Vertrag anlegen" })).toHaveCount(0);
+  await context.close();
+});

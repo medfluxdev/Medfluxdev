@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app.auth.credential_store import derive_password
 from app.auth.dependencies import current_actor
+from app.auth.user_import import ImportRow, import_users
 from app.auth.permissions import require
 from app.auth.service import create_account
 from app.database.models import Account, AccountMembership
@@ -120,42 +121,48 @@ def list_users(request: Request, organization_slug: str):
         session.close()
 
 
+def _create_member(session, actor, *, email: str, display_name: str, password: str, role: str,
+                   hospital_id: UUID | None, department_id: UUID | None) -> tuple[Account, AccountMembership]:
+    hospital_id, department_id = _validate_create_scope(
+        session, actor.organization_id, role=role, hospital_id=hospital_id, department_id=department_id,
+    )
+    account = create_account(
+        session,
+        login_name=email,
+        display_name=display_name,
+        password=password,
+        organization_id=actor.organization_id,
+        role=role,
+    )
+    membership = session.scalar(select(AccountMembership).where(
+        (AccountMembership.account_id == account.id)
+        & (AccountMembership.organization_id == actor.organization_id)
+    ))
+    if membership is None:
+        raise ValueError("Benutzerzuordnung konnte nicht angelegt werden.")
+    membership.hospital_id = hospital_id
+    membership.department_id = department_id
+    membership.is_default = True
+    _log(session, actor, "account.created", account.id, {
+        "role": role,
+        "email": account.login_name,
+        "hospital_id": str(hospital_id) if hospital_id else None,
+        "department_id": str(department_id) if department_id else None,
+    })
+    return account, membership
+
+
 @router.post("")
 def add_user(request: Request, organization_slug: str, payload: UserCreateRequest):
     actor = _admin_actor(request, organization_slug)
     session = create_session()
     try:
         try:
-            hospital_id, department_id = _validate_create_scope(
-                session,
-                actor.organization_id,
-                role=payload.role,
-                hospital_id=payload.hospital_id,
-                department_id=payload.department_id,
+            account, membership = _create_member(
+                session, actor,
+                email=payload.email, display_name=payload.display_name, password=payload.password,
+                role=payload.role, hospital_id=payload.hospital_id, department_id=payload.department_id,
             )
-            account = create_account(
-                session,
-                login_name=payload.email,
-                display_name=payload.display_name,
-                password=payload.password,
-                organization_id=actor.organization_id,
-                role=payload.role,
-            )
-            membership = session.scalar(select(AccountMembership).where(
-                (AccountMembership.account_id == account.id)
-                & (AccountMembership.organization_id == actor.organization_id)
-            ))
-            if membership is None:
-                raise ValueError("Benutzerzuordnung konnte nicht angelegt werden.")
-            membership.hospital_id = hospital_id
-            membership.department_id = department_id
-            membership.is_default = True
-            _log(session, actor, "account.created", account.id, {
-                "role": payload.role,
-                "email": account.login_name,
-                "hospital_id": str(hospital_id) if hospital_id else None,
-                "department_id": str(department_id) if department_id else None,
-            })
             session.commit()
             return _serialize(account, membership)
         except ValueError as exc:
@@ -240,5 +247,24 @@ def update_user(request: Request, organization_slug: str, account_id: str, paylo
             _log(session, actor, "account.updated", account.id, changes)
         session.commit()
         return _serialize(account, membership)
+    finally:
+        session.close()
+
+
+class UserImportRequest(BaseModel):
+    rows: list[ImportRow]
+    dry_run: bool = True
+
+
+@router.post("/import")
+def bulk_import_users(request: Request, organization_slug: str, payload: UserImportRequest):
+    """Mehrere Benutzer auf einmal; Erstpasswoerter vergibt der Administrator.
+
+    Erst pruefen (dry_run), dann alles oder nichts anlegen.
+    """
+    actor = _admin_actor(request, organization_slug)
+    session = create_session()
+    try:
+        return import_users(session, actor, payload.rows, dry_run=payload.dry_run, create_member=_create_member, log=_log)
     finally:
         session.close()

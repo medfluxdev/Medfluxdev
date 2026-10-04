@@ -54,3 +54,33 @@ export function updateUserScope(
     payload,
   );
 }
+
+export interface UserImportRow {
+  email: string;
+  display_name: string;
+  role: string;
+  hospital: string | null;
+  department: string | null;
+  password: string;
+}
+
+export interface UserImportCheckedRow {
+  line: number;
+  email: string;
+  display_name: string;
+  role: AccountRole | null;
+  hospital: string | null;
+  department: string | null;
+  errors: string[];
+}
+
+export interface UserImportResult {
+  valid: boolean;
+  created: number;
+  errors: string[];
+  rows: UserImportCheckedRow[];
+}
+
+export function importUsers(organizationSlug: string, rows: UserImportRow[], dryRun: boolean) {
+  return apiPost<UserImportResult>(`/api/users/import?${orgQuery(organizationSlug)}`, { rows, dry_run: dryRun });
+}

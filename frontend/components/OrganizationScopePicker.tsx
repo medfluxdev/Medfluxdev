@@ -75,7 +75,7 @@ export default function OrganizationScopePicker() {
   const hospitals = structure.hospitals ?? [];
   const allDepartments = structure.departments ?? [];
 
-  return <div className="scope-picker" aria-label="Arbeitsbereich auswählen">
+  return <div className="scope-picker" role="group" aria-label="Arbeitsbereich auswählen">
     {isAdmin && availableMemberships.length > 1 ? <select value={organizationSlug ?? ""} onChange={(event) => changeOrganization(event.target.value)} aria-label="Organisation">{availableMemberships.filter((item) => item.role === "admin").map((item) => <option key={item.organization_id} value={item.organization_slug}>{item.organization_name}</option>)}</select> : null}
     {hospitals.length > 0 ? <select value={hospitalId} onChange={(event) => chooseHospital(event.target.value)} aria-label="Krankenhaus" disabled={!isAdmin}>
       {isAdmin ? <option value="">Alle Krankenhäuser</option> : null}

@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import UserImport from "@/components/users/UserImport";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS, type AccountRole, type ManagedUserDto } from "@/lib/auth-types";
 import {
@@ -176,7 +177,7 @@ export default function UsersPage() {
     return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Die Benutzerverwaltung ist Administratoren vorbehalten.</p><Link href="/">Zur Übersicht</Link></section>;
   }
 
-  return <div className="user-admin">
+  return <div className="page user-admin">
     <div className="user-admin-head"><div><h1>Benutzerverwaltung</h1><p className="cw-muted">Benutzer, Rollen sowie Krankenhaus- und Abteilungszugriffe verwalten.</p></div><Link href="/settings">Zurück zu Einstellungen</Link></div>
     {message ? <div className={`user-admin-message${message.error ? " error" : ""}`} role="status">{message.text}</div> : null}
     <form className="user-admin-form" onSubmit={createManagedUser}>
@@ -188,6 +189,7 @@ export default function UsersPage() {
       <label>Abteilung<select value={form.department_id} disabled={!form.hospital_id} onChange={(e) => setForm((v) => ({ ...v, department_id: e.target.value }))}><option value="">Alle Abteilungen</option>{createDepartments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <button type="submit" disabled={busy}>+ Benutzer hinzufügen</button>
     </form>
+    {organizationSlug ? <UserImport organizationSlug={organizationSlug} onImported={() => { setMessage({ error: false, text: "Benutzer wurden importiert." }); void load(); }} /> : null}
     <section className="user-list" aria-label="Benutzer">
       {loading ? <p className="cw-muted">Benutzer werden geladen…</p> : null}
       {!loading && items.length === 0 ? <p className="cw-muted">Keine Benutzer vorhanden.</p> : null}

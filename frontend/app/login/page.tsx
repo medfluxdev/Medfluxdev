@@ -80,7 +80,7 @@ function LoginContent() {
         <section className="auth-card" aria-labelledby="login-title" aria-busy={busy}>
           <h2 id="login-title">Willkommen</h2>
           <p className="auth-intro">Melden Sie sich bei Ihrem MedFlux-Konto an.</p>
-          <form className="auth-form" onSubmit={submit}>
+          <form className="auth-form" method="post" onSubmit={submit}>
             <label>
               E-Mail
               <input type="email" autoComplete="username" inputMode="email" placeholder="E-Mail-Adresse eingeben" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus disabled={busy} />

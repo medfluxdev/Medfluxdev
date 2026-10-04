@@ -495,3 +495,12 @@
   .cw-section-head > :not(:first-child), .section-head > :not(:first-child) { flex: 0 1 auto; max-width: 100%; }
   :where(.rg-table, .data-table) { display: block; max-width: 100%; overflow-x: auto; }
 }
+
+/* Benutzer-Massenimport */
+.user-admin { grid-template-columns: minmax(0, 1fr); }
+.user-import { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.user-import-file { display: grid; gap: var(--space-1); font-weight: var(--weight-medium); }
+.user-import-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--text-small); }
+.user-import-table input { min-width: 12rem; font-family: var(--font-mono); }
+.user-import-table tr.is-flagged td, .user-import-table tr.is-flagged th { background: var(--color-danger-bg); }
+.user-import-errors { margin: 0; padding-left: var(--space-4); color: var(--color-danger); font-size: var(--text-small); }
