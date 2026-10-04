@@ -6,13 +6,13 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database.models import Account, AccountMembership, ActivityLog, Contract
 from app.database.models.deadlines import AccountDeputy, ContractDeadline, Notification
 from app.database.models.register import ContractFieldProvenance
-from app.deadlines.notify import active_deputy, deputized_account_ids, notify, unread_count
+from app.deadlines.notify import active_deputy, deputized_account_ids, notify
 from app.deadlines.system import TERM_BASIS_FIELDS
 from app.register.service import RegisterActor, log_activity
 
@@ -297,8 +297,17 @@ def inbox(
         note for note in notes
         if allowed_contract_ids is None or note.contract_id is None or note.contract_id in allowed_contract_ids
     ]
+    unread_stmt = select(func.count(Notification.id)).where(
+        Notification.account_id == actor.account_id,
+        Notification.organization_id == actor.organization_id,
+        Notification.read_at.is_(None),
+    )
+    if allowed_contract_ids is not None:
+        unread_stmt = unread_stmt.where(
+            Notification.contract_id.is_(None) | Notification.contract_id.in_(allowed_contract_ids)
+        )
     return {
-        "unread_count": unread_count(session, actor.account_id, actor.organization_id),
+        "unread_count": session.scalar(unread_stmt) or 0,
         "notifications": [
             {
                 "id": str(note.id),

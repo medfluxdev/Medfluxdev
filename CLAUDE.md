@@ -105,6 +105,8 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - `terms.py`: deterministic deadlines for five term models (fixed, terminable, terminable with minimum term, auto renewal, perpetual), notice to month/quarter/half-year/year end. Pure, explicit `as_of`.
   - `status.py`: business status workflow (`in_arbeit` → `gueltig` → `gekuendigt`/`beendet` → `geloescht`), separate from the computed `contract.status` and from the review status.
   - `catalogs.py`/`defaults.py`: partners, contract types/categories, lookup lists. Numbers come from `number_range`, allocated under a row lock.
+- `deadlines/` + `jobs/daily.py` (H5): system deadlines derived from register terms (`system.py`, missed deadlines stay open until done), daily job (`notify.py`, advisory-locked, idempotent via `notification.dedupe_key`), SMTP/ICS (`mail.py`, stdlib only), inbox/deputies (`service.py`). Scheduler: `REMINDER_SCHEDULER_ENABLED` or `python -m app.jobs.daily`. Tests use a fake transport; never real SMTP.
+- `register/documents.py` (H3): typed documents per contract; `DocumentProcessingService.attach_to_contract` stores amendment/termination analysis only as `ai_proposed_value`; framework links are `contract_relation` rows with `relation_type='governs'` (`requires_review=True` = AI suggestion).
 - Other packages:
   - Domain layer: `contract_intelligence/`, `equipment/`, `work_queue/`, `dashboard/`, `organization_structure/`.
   - `integrations/` holds the connector interface only.
@@ -113,7 +115,7 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - UUID PKs come from server-side `uuidv7()`. `OrgOwnedMixin`/`organization_id` sit on tenant rows. A naming convention covers `pk_/fk_/ix_/uq_/ck_`.
   - Use `session_scope()` for short transactions and keep expensive work outside them.
 - **Alembic migrations:**
-  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `e6f8a0b21004` (contract register).
+  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `g8b0c2d41004` (contract documents/relations).
   - Add FKs onto populated tables as `NOT VALID` (precedent: step16 `app_user` provenance).
   - Tests don't exercise migrations, so a new migration needs `alembic upgrade head` against a disposable DB.
 - **Auth:** a cookie session (`medflux_session`), not JWT. Account roles are admin, contract_manager, reviewer and viewer, plus an `is_developer` flag, with per-org `account_membership`. Passwords use PBKDF2-SHA256. Cookie writes require an allowed `Origin`. Viewers are read-only.

@@ -307,16 +307,6 @@ def run_daily(
         lock_session.close()
 
 
-def unread_count(session: Session, account_id: uuid.UUID, organization_id: uuid.UUID) -> int:
-    return session.scalar(
-        select(func.count(Notification.id)).where(
-            Notification.account_id == account_id,
-            Notification.organization_id == organization_id,
-            Notification.read_at.is_(None),
-        )
-    ) or 0
-
-
 def deputized_account_ids(session: Session, deputy_id: uuid.UUID, organization_id: uuid.UUID, as_of: date) -> list[uuid.UUID]:
     return list(
         session.scalars(

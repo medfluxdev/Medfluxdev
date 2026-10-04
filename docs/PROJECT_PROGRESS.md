@@ -5123,3 +5123,26 @@ Hinweis: Die DB-Tests liefen gegen einen Wegwerf-Container (Port 55499) mit eine
 **Bekannte Punkte:** Schreibanfragen ohne `Origin`-Header werden von der bestehenden Middleware akzeptiert (unverändert, Sicherheitsreview). Warnungen/Arbeitsliste/E-Mail-Erinnerungen für reine Registerverträge folgen mit H5. KI-Werte, die Abteilungs-/Kostenstellen betreffen, werden noch nicht abgebildet.
 
 **Nächster Schritt:** M2 – H5 (Fristen-Entität, Scheduler, E-Mail/ICS, Vertretung, Postfach), danach H3 (Dokumente/Nachträge/Rahmenverträge).
+
+## 2026-10-04 – M2: Fristen & Erinnerungen (H5) und Dokumente/Rahmenverträge (H3)
+
+Branch `feature/deadlines-documents` (auf `feature/contract-register-core`). Entscheidungen D5/D6 mit sicheren Standards umgesetzt: Tageslauf im Backend per Opt-in (`REMINDER_SCHEDULER_ENABLED`) oder per Aufgabenplanung (`python -m app.jobs.daily`); E-Mail per SMTP, ohne SMTP nur Postfach + Warteschlange.
+
+**Umgesetzt:**
+- H5.1 `contract_deadline`: Systemtermine aus den Register-Fristen (Kündigungsfrist, Ende fester Laufzeit, „auf Beendet setzen“ nach Kündigung), automatisch nachgeführt. Verpasste Fristen bleiben offen/überfällig und eskalieren, bis sie erledigt werden; danach folgt die nächste Periode. Manuelle Termine mit Zuständigkeit, Eskalation, ToDo, E-Mail/ICS.
+- H5.2 Tageslauf (Advisory-Lock, idempotent über `dedupe_key`): Erinnerungen, Überfälligkeit, Eskalation; E-Mail-Warteschlange mit Wiederholung; ICS-Einladungen; minimale Mailinhalte (Datenschutz); `job_run`-Monitoring, manueller Lauf je Organisation.
+- H5.3 Vertretungen (Zeiträume, Standardvertretung) und E-Mail-Einstellungen je Konto; Vertretung erhält Kopie im Postfach.
+- H5.4 Postfach mit Gelesen-Status; Glocke zählt ungelesene Erinnerungen; Übersicht `/termine` (Wiedervorlage); Admin-Panel „Tageslauf“.
+- KI-Bezug: Termine, deren Grundlage ungeprüfte KI-Werte sind, werden gekennzeichnet.
+- H3.1 Mehrere typisierte Dokumente je Vertrag (Hauptdokument, gültig/ungültig, Dokumentart), Upload mehrerer Dateien; Analyse über `DocumentProcessingService.attach_to_contract` – Nachträge und Kündigungsschreiben erzeugen ausschließlich KI-Vorschläge an den Stammdaten (mit Dokumentname).
+- H3.2 Rahmenverträge über `contract_relation` (`governs`); KI erkennt Verweise auf bestehende Rahmenvertragsnummern und schlägt die Verknüpfung vor, Mensch bestätigt/verwirft.
+- H3.3 Import-Seite: Ziel „Neuer Vertrag“ oder „Zu bestehendem Vertrag hinzufügen“.
+- Middleware: Postfach-gelesen und eigene Benachrichtigungs-Einstellungen sind für jede Rolle erlaubt (nur eigenes Konto).
+
+**Migrationen:** `f7a9b1c31004` (Fristen/Benachrichtigungen/Vertretung/Joblauf), `g8b0c2d41004` (Dokument-Metadaten, eindeutige Relationen). Up/Down/Up und Modellabgleich geprüft; alle drei neuen Migrationen sowie der Tageslauf auf einer Kopie der lokalen Datenbank geprüft.
+
+**Verifikation (2026-10-04, isolierter PostgreSQL-18-Container):** Backend 1510 passed / 3 skipped / 1 failed (vorbestehend, OCR-Umgebung). Neue Tests: `test_deadlines_units.py` (20), `test_deadlines_api.py` (4), `test_contract_documents.py` (2). Frontend `npm run verify` grün (38 Dateien, 184 Tests, Build). End-to-End über die echte API/Middleware: Systemfrist, Tageslauf (Erinnerung an Zuständige und Vertretung, E-Mails in Warteschlange ohne SMTP, zweiter Lauf ohne Dubletten), Postfach, Vertretung, Upload, Erledigt. Dabei gefunden und behoben: Ungelesen-Zähler berücksichtigte die Sichtbarkeit nicht. Browser-Durchklick dieses Mal nicht möglich (Login-Formular im automatisierten Browser reagierte nicht); UI durch Komponententests abgedeckt.
+
+**Bekannte Punkte:** Kein echter SMTP-Versand getestet (Fake-Transport in Tests). Nutzer ohne Krankenhaus-Mitgliedschaft sehen organisationsweite Verträge nicht (bestehende Scope-Regel) – Erinnerungen an sie bleiben unsichtbar; Zuständige sollten passende Mitgliedschaften haben.
+
+**Nächster Schritt:** M3 – H4 Finanzen (Finanzeinträge, Leistungskatalog, Kostenstellen-Aufteilung, Preisanpassung), danach H8 Rechte/Vertraulichkeit, H7 Listen/Export/Berichte.

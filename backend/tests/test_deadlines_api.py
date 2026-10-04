@@ -233,3 +233,21 @@ def test_manual_deadlines_preferences_deputies_and_job_status(monkeypatch):
         assert session.scalars(select(ContractDeadline).where(ContractDeadline.contract_id == UUID(contract_id))).first() is not None
     finally:
         session.close()
+
+
+def test_inbox_count_matches_visible_scope(monkeypatch):
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    client = _client(monkeypatch, ids, "manager", "contract_manager")
+    _contract(client, slug, ids, reminder_lead_months=0, term_start_date="2026-01-01", notice_to="month_end", notice_period_value=1)
+    run_daily(as_of=date.today() + timedelta(days=40), trigger="test", transport_factory=FakeTransport, organization_id=ids["org"])
+    assert client.get("/api/inbox", params=query).json()["unread_count"] >= 1
+
+    hidden_scope = ScopeContext(hospital_id=uuid4())
+    actor = SimpleNamespace(organization_id=ids["org"], account_id=ids["manager"], role="contract_manager", is_developer=False, display_name="Manager")
+    monkeypatch.setattr(deadline_routes, "current_actor", lambda request, organization_slug: actor)
+    monkeypatch.setattr(deadline_routes, "current_scope_context", lambda: hidden_scope)
+    app = FastAPI()
+    app.include_router(deadline_routes.router)
+    scoped = TestClient(app).get("/api/inbox", params=query).json()
+    assert scoped["notifications"] == [] and scoped["unread_count"] == 0

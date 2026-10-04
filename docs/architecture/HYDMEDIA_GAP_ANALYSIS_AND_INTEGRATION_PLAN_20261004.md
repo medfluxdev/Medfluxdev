@@ -23,7 +23,9 @@
 | H1.1–H1.5 register core, term engine, status workflow, numbering, manual creation | done | 2026-10-04 | `cac5d0e`, `86958e9`, `1014c60`, `b587775` |
 | H2.1–H2.5 partners, types/categories, lookups, multi-hospital, admin UI | done | 2026-10-04 | as above |
 | H6.1 remarks journal | done; H6.2 global history page open | 2026-10-04 | as above |
-| H3, H4, H5, H7, H8, H9 | open | – | next: H5 (M2) |
+| H5.1–H5.4 deadlines, daily job, e-mail/ICS, deputies, inbox | done (D5: in-process opt-in or Task Scheduler; D6: SMTP optional) | 2026-10-04 | `2695467`, `68ed23f` |
+| H3.1–H3.3 documents, amendment proposals, framework links, import destination | done | 2026-10-04 | `db16dd7`, `6145003`, `50501e6` |
+| H4, H7, H8, H9 | open | – | next: H4 (M3) |
 | H10 | on hold (no replacement agreement yet) | – | – |
 
 ## 0. Executive summary
@@ -763,8 +765,8 @@ Each row is one or more PRs on `feature/<domain>-<change>`, merged to `main` onl
 | D2 | Business status set | HYDMedia set (In Arbeit, Gültig, Gekündigt, Beendet, Gelöscht) / extended | **HYDMedia set** (+ reactivation Beendet → Gültig) | 2026-10-04 |
 | D3 | One contract → several Gesellschaften | n:m / duplicate per hospital | **n:m** (`contract_hospital` with `is_primary`; visible to members of any linked hospital) | 2026-10-04 |
 | D4 | Contract scope | all contract types (as in the legacy system) / maintenance+service only | **all contract types** | 2026-10-04 |
-| D5 | Scheduler technology | in-process APScheduler / Windows Task Scheduler | | |
-| D6 | Mail server available on site (SMTP relay) | yes / no (then inbox only) | | |
+| D5 | Scheduler technology | in-process APScheduler / Windows Task Scheduler | **both**: in-process thread (opt-in, no new dependency) or `python -m app.jobs.daily` via Task Scheduler; DB lock prevents double runs | 2026-10-04 |
+| D6 | Mail server available on site (SMTP relay) | yes / no (then inbox only) | **optional**: SMTP when configured; otherwise inbox only, mails queue until SMTP exists | 2026-10-04 |
 | D7 | Default catalogues (types, categories, lookups) | approve the cleaned set | | |
 | D8 | Personnel-number ↔ account mapping source for the migration | manual / AD export | deferred (H10 on hold) | 2026-10-04 |
 | D9 | AI auto-accept policy | always confirm / auto-accept non-critical fields when the gates pass | | |
