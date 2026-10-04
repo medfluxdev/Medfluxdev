@@ -32,7 +32,7 @@ export default function ProcessingDiagnosticsPage() {
 
   useEffect(load, [load]);
 
-  if (!account?.is_developer) return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Dieser Bereich ist ausschließlich für den MedFlux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
+  if (!account?.is_developer) return <section className="cw-section"><h1>Keine Berechtigung</h1><p className="cw-muted">Dieser Bereich ist ausschließlich für den MedFlux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
 
   return <div className="page">
     <header className="entity-header"><h1>Dokumentverarbeitung</h1><p className="page-sub">Persistierte Processing Runs mit Provider-, OCR-, Laufzeit- und Fehlerdiagnose.</p><button type="button" className="btn btn-sm" onClick={() => void load()}>Aktualisieren</button></header>

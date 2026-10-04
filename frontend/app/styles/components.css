@@ -484,3 +484,4 @@
 .sg-swatches li { display: flex; align-items: center; gap: var(--space-2); }
 .sg-swatch { width: 2rem; height: 2rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 .sg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--space-4); }
+.catalog-tabs { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2); }

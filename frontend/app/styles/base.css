@@ -98,5 +98,10 @@ input, select, textarea, button { font: inherit; color: inherit; }
 /* Windows-Kontrastmodus: Rahmen statt Schatten sichtbar machen */
 @media (forced-colors: active) {
   :where(button, .btn, [role="tab"], .card, .cw-section) { border: 1px solid CanvasText; }
-  :where(a, button):focus-visible { outline: 2px solid Highlight; }
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid Highlight; }
+  :where(.badge, .kpi, .dialog, .drawer, .alert, .shell-palette, .shell-menu-panel, .toast) { border: 1px solid CanvasText; }
+  /* Auswahl und Status nicht nur ueber Farbe: aktiver Reiter/Navigationspunkt unterstrichen */
+  [role="tab"][aria-selected="true"], :is(a, span)[aria-current="page"] { text-decoration: underline; text-underline-offset: 4px; }
+  :where(.skeleton) { background: GrayText; }
+  :where(svg.shell-icon) { forced-color-adjust: auto; }
 }

@@ -109,7 +109,7 @@
 .viz-swatch{display: inline-block;width: 10px;height: 10px;border-radius: var(--radius-xs)}
 .viz-swatch.viz-series-1{background: var(--viz-series-1)}
 .viz-swatch.viz-series-2{background: var(--viz-series-2)}
-.viz-table summary{cursor: pointer;font-size: var(--text-small)}
+.viz-table summary{cursor: pointer;font-size: var(--text-small);min-height: 24px;padding: var(--space-1) 0}
 .viz-tiles{display: grid;grid-template-columns: repeat(auto-fit,minmax(180px,1fr));gap: 12px}
 .viz-tiles article{background: var(--surface,var(--color-surface));border: 1px solid var(--border,var(--color-border));border-radius: var(--radius-md);padding: 12px 14px;display: grid;gap: 2px}
 .viz-tiles span{font-size: var(--text-small);color: var(--viz-text,var(--color-text-muted))}

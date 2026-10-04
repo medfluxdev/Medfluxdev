@@ -49,7 +49,7 @@ export default function DeveloperDashboard() {
 
   function openOrganization(item: OrganizationItem, target: string) { selectOrganization(item.slug); window.location.href = target; }
 
-  if (!account?.is_developer) return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Dieser Bereich ist ausschließlich für den Medflux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
+  if (!account?.is_developer) return <section className="cw-section"><h1>Keine Berechtigung</h1><p className="cw-muted">Dieser Bereich ist ausschließlich für den Medflux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
 
   return <div className={styles.page}>
     <section className={styles.hero}><div><span>Systemverwaltung</span><h1>Developer Dashboard</h1><p>Technischer Zustand, lokale KI und alle Medflux-Organisationen.</p></div><button type="button" onClick={() => void load()} disabled={loading}>{loading ? "Prüfe…" : "Status aktualisieren"}</button></section>

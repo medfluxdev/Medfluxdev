@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import Badge from "@/components/ui/Badge";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
@@ -43,9 +45,12 @@ const COLUMNS: Column<Row>[] = [
 ];
 
 export default function ComponentReferencePage() {
+  const { account } = useAuth();
   const [tab, setTab] = useState<"one" | "two">("one");
   const [dialog, setDialog] = useState(false);
   const [drawer, setDrawer] = useState(false);
+
+  if (!account?.is_developer) return <section className="cw-section"><h1>Keine Berechtigung</h1><p className="cw-muted">Die Bausteinreferenz ist nur für Entwicklerkonten sichtbar.</p><Link href="/">Zur Übersicht</Link></section>;
 
   return (
     <div className="page">
@@ -128,7 +133,7 @@ export default function ComponentReferencePage() {
         <SectionCard title="Navigation">
           <div className="stack-3">
             <Breadcrumbs items={[{ label: "Start", href: "/" }, { label: "Bereich", href: "/developer" }, { label: "Aktuelle Seite" }]} />
-            <Tabs label="Beispiel-Reiter" idPrefix="sg-tab" items={[{ key: "one", label: "Erster" }, { key: "two", label: "Zweiter", badge: <Badge tone="warning">2</Badge> }]} active={tab} onChange={setTab} />
+            <Tabs label="Beispiel-Reiter" idPrefix="sg-tab" items={[{ key: "one", label: "Erster" }, { key: "two", label: "Zweiter", badge: 2 }]} active={tab} onChange={setTab} />
             <TabPanel idPrefix="sg-tab" active={tab}><p>Inhalt des Reiters „{tab === "one" ? "Erster" : "Zweiter"}“. Pfeiltasten wechseln den Reiter.</p></TabPanel>
           </div>
         </SectionCard>

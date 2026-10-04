@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Tabs, { TabPanel } from "@/components/ui/Tabs";
 import {
   LOOKUP_FIELD_LABEL,
   createContractCategory,
@@ -119,10 +120,11 @@ export default function CatalogManager({ organizationSlug }: { organizationSlug:
   const lookupRows = lookups.filter((item) => item.field_key === fieldKey);
 
   return <div className="rg-panel">
-    <div className="rg-tabs" role="tablist" aria-label="Kataloge">
-      {TABS.map((item) => <button key={item.key} type="button" role="tab" aria-selected={tab === item.key} className={tab === item.key ? "active" : ""} onClick={() => { setTab(item.key); setMessage(null); }}>{item.label}</button>)}
-      <button type="button" disabled={busy} onClick={() => void run(() => loadDefaultCatalogs(organizationSlug), "Fehlende Standardeinträge ergänzt.")}>Standardkatalog ergänzen</button>
+    <div className="catalog-tabs">
+      <Tabs label="Kataloge" idPrefix="catalog" items={TABS} active={tab} onChange={(key) => { setTab(key); setMessage(null); }} />
+      <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void run(() => loadDefaultCatalogs(organizationSlug), "Fehlende Standardeinträge ergänzt.")}>Standardkatalog ergänzen</button>
     </div>
+    <TabPanel idPrefix="catalog" active={tab}>
     {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}
 
     {tab !== "numbers" ? <form className="cw-section" aria-label="Eintrag hinzufügen" onSubmit={(event) => { event.preventDefault(); addEntry(); }}>
@@ -181,5 +183,6 @@ export default function CatalogManager({ organizationSlug }: { organizationSlug:
       </form>
       {range.reserved.length > 0 ? <p className="cw-muted">Reserviert: {range.reserved.map((item) => item.formatted).join(", ")}</p> : null}
     </section> : null}
+    </TabPanel>
   </div>;
 }
