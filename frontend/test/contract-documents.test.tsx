@@ -96,3 +96,23 @@ describe("Verknüpfungen", () => {
     expect(api.linkFramework).toHaveBeenLastCalledWith("test-klinik", "c-1", "f-2");
   });
 });
+
+describe("Import: zu bestehendem Vertrag hinzufügen", () => {
+  it("sucht den Vertrag und lädt die Kündigung als Anlage hoch", async () => {
+    vi.clearAllMocks();
+    const { default: AttachToExistingContract } = await import("@/components/contracts/AttachToExistingContract");
+    const contracts = await import("@/lib/domain-api/contracts");
+    vi.spyOn(contracts, "listContracts").mockResolvedValue({ items: [{ contract_id: "c-7", register_number: "000007", contract_title: "Wartung MRT", supplier: "MEDTEC" }] } as never);
+    api.uploadContractDocuments.mockResolvedValue({ results: [{ original_filename: "kuendigung.pdf", status: "analyzed", message: "Analyse abgeschlossen: 1 Änderungsvorschlag/-vorschläge in den Stammdaten.", requires_review: true, document_version_id: "v-9" }], items: [] });
+    const user = userEvent.setup();
+    render(<AttachToExistingContract organizationSlug="test-klinik" />);
+    await waitFor(() => expect(screen.getByRole("option", { name: "000007 · Wartung MRT" })).toBeInTheDocument());
+    await user.selectOptions(screen.getByLabelText("Vertrag"), "c-7");
+    await user.selectOptions(screen.getByLabelText("Dokumentart"), "vertrag");
+    const file = new File(["%PDF-1.4"], "kuendigung.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText("Dateien (PDF/DOCX)"), file);
+    await user.click(screen.getByRole("button", { name: "Hinzufügen (1)" }));
+    expect(api.uploadContractDocuments).toHaveBeenCalledWith("test-klinik", "c-7", { files: [file], attachmentType: "vertrag", analyze: true });
+    expect(await screen.findByRole("link", { name: "Vertrag öffnen" })).toHaveAttribute("href", "/contracts/c-7?tab=register");
+  });
+});

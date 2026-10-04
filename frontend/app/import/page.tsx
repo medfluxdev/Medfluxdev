@@ -12,6 +12,7 @@ import StatusBadge, { StatusTone } from "@/components/ui/StatusBadge";
 import { useToast } from "@/components/ui/Toast";
 import { getOrganizationStructure, listCostCenters, type CostCenterDto, type OrganizationStructureDto } from "@/lib/domain-api/organizations";
 import { departmentFullPath } from "@/lib/organization-tree";
+import AttachToExistingContract from "@/components/contracts/AttachToExistingContract";
 
 const statusLabel: Record<ImportStatus, string> = {
   imported: "Importiert",
@@ -60,6 +61,7 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [destination, setDestination] = useState<"new" | "existing">("new");
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const effectiveOrgSlug = organizationSlug ?? membership?.organization_slug ?? "krankenhaus";
@@ -217,6 +219,15 @@ export default function ImportPage() {
           </div>
 
           {canAssign && (
+            <fieldset className="import-assignment-card">
+              <legend>Ziel der Dateien</legend>
+              <label className="rg-check"><input type="radio" name="import-destination" checked={destination === "new"} onChange={() => setDestination("new")} />Neuen Vertrag anlegen (KI-Analyse)</label>
+              <label className="rg-check"><input type="radio" name="import-destination" checked={destination === "existing"} onChange={() => setDestination("existing")} />Zu bestehendem Vertrag hinzufügen (Nachtrag, Kündigung, Anlage)</label>
+            </fieldset>
+          )}
+
+          {destination === "existing" ? <AttachToExistingContract organizationSlug={effectiveOrgSlug} /> : <>
+          {canAssign && (
             <fieldset className="import-assignment-card" disabled={assignmentLoading || loading || organizationStructure.hospitals.filter((item) => item.is_active).length === 0}>
               <legend>Vertragszuordnung beim Import</legend>
               <p>Die Auswahl wird bei neuen Verträgen gespeichert. Duplikate werden nicht neu zugeordnet.</p>
@@ -338,6 +349,7 @@ export default function ImportPage() {
           {selected.length === 0 && !loading && !results && !error && (
             <p className="state-empty">Noch keine Dateien ausgewählt. Wählen Sie eine oder mehrere Wartungs- oder Serviceverträge aus.</p>
           )}
+          </>}
         </div>
 
         <aside className="card card-pad side-note">
