@@ -88,6 +88,17 @@ def _log(session, actor, event_name: str, object_type: str, object_id, context: 
     )
 
 
+_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "field_key")
+
+
+def _snapshot(row) -> dict:
+    return {key: getattr(row, key) for key in _SNAPSHOT_FIELDS if hasattr(row, key)}
+
+
+def _diff(before: dict, after: dict) -> dict:
+    return {key: {"before": before.get(key), "after": value} for key, value in after.items() if before.get(key) != value}
+
+
 def _own(session, model, row_id: UUID, organization_id: UUID):
     row = session.get(model, row_id)
     if row is None or row.organization_id != organization_id:
@@ -305,12 +316,13 @@ def patch_contract_type(type_id: UUID, payload: CatalogEntry, request: Request, 
     session = create_session()
     try:
         row = _own(session, CatalogContractType, type_id, actor.organization_id)
+        before = _snapshot(row)
         try:
             catalogs.upsert_type(session, actor.organization_id, payload.values, row)
         except CatalogError as exc:
             session.rollback()
             raise _http(exc)
-        _log(session, actor, "catalog.contract_type_updated", "catalog_contract_type", row.id, payload.values)
+        _log(session, actor, "catalog.contract_type_updated", "catalog_contract_type", row.id, {"fields": _diff(before, _snapshot(row))})
         session.commit()
         return catalogs.type_payload(row)
     finally:
@@ -342,12 +354,13 @@ def patch_contract_category(category_id: UUID, payload: CatalogEntry, request: R
     session = create_session()
     try:
         row = _own(session, CatalogContractCategory, category_id, actor.organization_id)
+        before = _snapshot(row)
         try:
             catalogs.upsert_category(session, actor.organization_id, payload.values, row)
         except CatalogError as exc:
             session.rollback()
             raise _http(exc)
-        _log(session, actor, "catalog.contract_category_updated", "catalog_contract_category", row.id, payload.values)
+        _log(session, actor, "catalog.contract_category_updated", "catalog_contract_category", row.id, {"fields": _diff(before, _snapshot(row))})
         session.commit()
         return catalogs.list_types_and_categories(session, actor.organization_id)
     finally:
@@ -404,12 +417,13 @@ def patch_lookup(lookup_id: UUID, payload: CatalogEntry, request: Request, organ
     session = create_session()
     try:
         row = _own(session, LookupValue, lookup_id, actor.organization_id)
+        before = _snapshot(row)
         try:
             catalogs.upsert_lookup(session, actor.organization_id, payload.values, row)
         except CatalogError as exc:
             session.rollback()
             raise _http(exc)
-        _log(session, actor, "catalog.lookup_updated", "lookup_value", row.id, payload.values)
+        _log(session, actor, "catalog.lookup_updated", "lookup_value", row.id, {"fields": _diff(before, _snapshot(row))})
         session.commit()
         return catalogs.lookup_payload(row)
     finally:

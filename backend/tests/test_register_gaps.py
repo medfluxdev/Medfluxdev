@@ -202,3 +202,62 @@ def test_grid_cache_rebuilds_after_any_change(monkeypatch):
     assert second["items"][0]["values"]["short_description"] == "Nachher"
     assert second["items"][0]["values"]["annual_cost"] == "1200.00"
     assert second["items"][0]["values"]["hospital"] == "Neu"
+
+
+def test_daily_job_and_deadline_sync_are_logged_as_system(monkeypatch):
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app.database.models.activity_log import ActivityLog
+    from app.deadlines.notify import run_daily
+
+    class Sink:
+        def send(self, message):
+            pass
+
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    client = _client(monkeypatch, ids)
+    start = (date.today() - timedelta(days=400)).isoformat()
+    cid = client.post("/api/contracts", params=query, json={"values": {
+        "short_description": "Reinigung", "term_model": "terminable", "term_start_date": start,
+        "notice_period_value": 1, "notice_period_unit": "months", "notice_to": "month_end", "reminder_lead_months": 2,
+    }}).json()["contract_id"]
+    run_daily(as_of=date.today(), trigger="manual", transport_factory=Sink, organization_id=ids["org"])
+
+    session = create_session()
+    try:
+        rows = session.scalars(select(ActivityLog).where(ActivityLog.object_id == UUID(cid), ActivityLog.role_snapshot == "system")).all()
+        events = {row.event_name: row for row in rows}
+        assert events["deadline.system_created"].display_name_snapshot == "System (Fristenabgleich)"
+        assert events["notification.deadline_reminder"].display_name_snapshot == "System (Tageslauf)"
+        assert events["notification.deadline_reminder"].context_data["recipient"] == "Admin"
+    finally:
+        session.close()
+
+
+def test_catalog_updates_log_before_and_after(monkeypatch):
+    from sqlalchemy import select
+
+    from app.api.routes import catalogs as catalog_routes
+    from app.database.models.activity_log import ActivityLog
+
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    actor = SimpleNamespace(organization_id=ids["org"], account_id=ids["admin"], role="admin", is_developer=False, display_name="Admin")
+    monkeypatch.setattr(catalog_routes, "current_actor", lambda request, organization_slug: actor)
+    monkeypatch.setattr(catalog_routes, "current_scope_context", lambda: ScopeContext())
+    app = FastAPI()
+    app.include_router(catalog_routes.router)
+    client = TestClient(app)
+    wartung = next(item for item in client.get("/api/catalogs/contract-types", params=query).json()["contract_types"] if item["code"] == "wartung")
+    client.patch(f"/api/catalogs/contract-types/{wartung['id']}", params=query, json={"values": {"retention_years": 6}})
+    session = create_session()
+    try:
+        logged = session.scalars(select(ActivityLog).where(
+            ActivityLog.object_id == UUID(wartung["id"]), ActivityLog.event_name == "catalog.contract_type_updated"
+        )).one()
+        assert logged.context_data == {"fields": {"retention_years": {"before": 10, "after": 6}}}
+    finally:
+        session.close()

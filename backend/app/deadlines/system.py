@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.contracts.calculation.calendar_ import month_add
 from app.database.models import Contract
 from app.database.models.deadlines import ContractDeadline
-from app.register.service import retention_info, term_inputs
+from app.register.service import log_system_activity, retention_info, term_inputs
 from app.register.terms import TermResult, compute_terms
 
 DEFAULT_LEAD_MONTHS = 3
@@ -120,6 +120,13 @@ def plan_system_deadlines(
     return specs
 
 
+SYSTEM_NAME = "System (Fristenabgleich)"
+
+
+def _plain(value):
+    return value.isoformat() if isinstance(value, date) else (str(value) if value is not None else None)
+
+
 def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> dict[str, int]:
     """Gleicht die offenen Systemtermine mit den aktuellen Fristen ab (idempotent)."""
     terms = compute_terms(term_inputs(contract), as_of)
@@ -142,6 +149,9 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
             row.status = "cancelled"
             row.note = "Automatisch entfernt: Die Grundlage der Frist hat sich geändert."
             counts["cancelled"] += 1
+            log_system_activity(session, contract, "deadline.system_cancelled", {
+                "deadline_id": str(row.id), "title": row.title, "due_date": row.due_date.isoformat(),
+            }, display_name=SYSTEM_NAME)
     for key, spec in specs.items():
         row = open_rows.get(key)
         if row is None:
@@ -163,18 +173,24 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
                 created_by_name="System",
             ))
             counts["created"] += 1
+            log_system_activity(session, contract, "deadline.system_created", {
+                "title": spec.title, "due_date": spec.due_date.isoformat(), "system_key": key,
+            }, display_name=SYSTEM_NAME)
             continue
         if row.due_date < as_of and spec.due_date != row.due_date:
             # Verpasste Frist bleibt offen (ueberfaellig/Eskalation), bis sie
             # erledigt wird; erst danach entsteht die naechste Periode.
             continue
-        changed = False
+        diffs = {}
         for attr in ("kind", "title", "due_date", "remind_on", "todo_text", "assignee_account_id", "escalation_account_id"):
             value = getattr(spec, attr)
             if getattr(row, attr) != value:
+                diffs[attr] = {"before": _plain(getattr(row, attr)), "after": _plain(value)}
                 setattr(row, attr, value)
-                changed = True
-        if changed:
+        if diffs:
             counts["updated"] += 1
+            log_system_activity(session, contract, "deadline.system_updated", {
+                "deadline_id": str(row.id), "title": row.title, "fields": diffs,
+            }, display_name=SYSTEM_NAME)
     session.flush()
     return counts

@@ -31,6 +31,7 @@ from app.database.models.deadlines import (
 from app.database.session import create_session
 from app.deadlines.mail import SmtpTransport, TransportFactory, build_ics, build_message, smtp_configured
 from app.deadlines.system import sync_system_deadlines
+from app.register.service import log_system_activity
 from app.finance.service import refresh_all_maintained_costs
 
 logger = logging.getLogger("medflux.deadlines")
@@ -152,6 +153,11 @@ def notify(
         if inserted is None:
             continue
         counts[kind] = counts.get(kind, 0) + 1
+        log_system_activity(session, contract, f"notification.{kind}", {
+            "deadline_id": str(deadline.id), "title": deadline.title, "due_date": deadline.due_date.isoformat(),
+            "recipient": account.display_name, "on_behalf_of": on_behalf_of,
+            "email": bool(deadline.send_email and _wants_mail(account, kind)),
+        }, display_name="System (Tageslauf)")
         if deadline.send_email and _wants_mail(account, kind):
             ics = None
             if deadline.send_ics:

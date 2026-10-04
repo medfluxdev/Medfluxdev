@@ -230,6 +230,15 @@ def test_document_metadata_main_valid_and_framework_links(tmp_path, monkeypatch)
     assert upload.status_code == 200, upload.text
     assert [item["status"] for item in upload.json()["results"]] == ["attached", "attached"]
     assert len(upload.json()["items"]) == 4
+    from app.database.models.activity_log import ActivityLog
+    check = create_session()
+    try:
+        logged = check.scalars(select(ActivityLog).where(
+            ActivityLog.object_id == uuid.UUID(str(member_id)), ActivityLog.event_name == "contract.document_attached"
+        )).one()
+        assert [item["name"] for item in logged.context_data["files"]] == ["laufzettel.pdf", "auskunft.pdf"]
+    finally:
+        check.close()
     rejected = client.post(
         f"/api/contracts/{member_id}/documents", params=query,
         files=[("files", ("x.txt", b"hello", "text/plain"))], data={"attachment_type": "laufzettel"},

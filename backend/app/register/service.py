@@ -112,6 +112,25 @@ def log_activity(session: Session, actor: RegisterActor, contract_id: uuid.UUID,
     )
 
 
+def log_system_activity(
+    session: Session, contract: Contract, event_name: str, context: Optional[dict], display_name: str = "System"
+) -> None:
+    """Protokolliert automatische Aenderungen (Tageslauf, Fristenabgleich, KI-Analyse)."""
+    session.add(
+        ActivityLog(
+            organization_id=contract.organization_id,
+            hospital_id=contract.hospital_id,
+            account_id=None,
+            display_name_snapshot=display_name,
+            role_snapshot="system",
+            event_name=event_name,
+            object_type="contract",
+            object_id=contract.id,
+            context_data=context,
+        )
+    )
+
+
 def review_pending(session: Session, contract: Contract) -> bool:
     if contract.accepted_extraction_id is None:
         return False
@@ -341,6 +360,15 @@ def sync_from_extraction(
             row.source_field = source
             row.ai_proposed_value = None
         actions[key] = "set"
+    changed = {key: action for key, action in actions.items() if action in ("set", "cleared", "proposed")}
+    if changed:
+        log_system_activity(session, contract, "contract.ai_values_applied", {
+            "fields": {
+                key: {"action": action, "value": to_json(getattr(contract, key)) if action == "set" else None}
+                for key, action in changed.items()
+            },
+            "extraction_id": str(extraction_id) if extraction_id else None,
+        }, display_name="KI-Analyse")
     session.flush()
     return actions
 

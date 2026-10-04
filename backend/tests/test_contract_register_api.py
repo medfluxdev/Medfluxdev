@@ -203,6 +203,12 @@ def test_ai_values_never_overwrite_human_values(monkeypatch):
         actions = sync_from_extraction(session, contract=contract, extracted=extraction("2026-01-01", 3), extraction_id=None)
         session.commit()
         assert actions["term_start_date"] == "set"
+        from app.database.models.activity_log import ActivityLog
+        logged = session.scalars(select(ActivityLog).where(
+            ActivityLog.object_id == contract_id, ActivityLog.event_name == "contract.ai_values_applied"
+        )).one()
+        assert logged.display_name_snapshot == "KI-Analyse" and logged.role_snapshot == "system"
+        assert logged.context_data["fields"]["term_start_date"] == {"action": "set", "value": "2026-01-01"}
     finally:
         session.close()
 

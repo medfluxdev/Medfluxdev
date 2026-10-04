@@ -27,7 +27,7 @@ from app.register.documents import (
     unlink_framework,
     update_document,
 )
-from app.register.service import RegisterError
+from app.register.service import RegisterError, log_activity
 
 router = APIRouter(prefix="/api/contracts", tags=["contract-documents"])
 
@@ -113,6 +113,12 @@ async def upload_documents(
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id)
+        log_activity(session, actor, contract.id, "contract.document_attached", {
+            "attachment_type": attachment_type,
+            "analyze": analyze,
+            "files": [{"name": item["original_filename"], "status": item["status"]} for item in results],
+        })
+        session.commit()
         return {"results": results, "items": list_documents(session, contract)}
     finally:
         session.close()
