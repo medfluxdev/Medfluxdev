@@ -21,7 +21,7 @@ def test_portfolio_list_rejects_other_organization(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         contracts.contract_list(
             request=request, organization_slug="other",
-            status=[], risk=[], warning_type=[], page_size=25,
+            status=[], business_status=[], risk=[], warning_type=[], page_size=25,
             sort="operational", direction="asc",
         )
     assert exc.value.status_code == 404

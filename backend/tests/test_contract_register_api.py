@@ -393,3 +393,33 @@ def test_concurrent_number_allocation_is_unique():
         ) == 6
     finally:
         session.close()
+
+
+def test_contract_list_shows_register_fields_and_filters_business_status(monkeypatch):
+    from app.api.routes import contracts as contract_routes
+
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    client = _client(monkeypatch, _actor(ids, "admin", "admin"))
+    partner = client.post(
+        "/api/catalogs/partners", params=query, json={"values": {"short_name": "MEDTEC", "name1": "Medtec GmbH"}}
+    ).json()
+    created = client.post(
+        "/api/contracts", params=query,
+        json={"values": {"short_description": "Wartung Röntgen", "partner_id": partner["id"]}},
+    ).json()
+
+    app = FastAPI()
+    app.include_router(contract_routes.router)
+    listing = TestClient(app)
+    items = listing.get("/api/contracts", params=query).json()["items"]
+    row = next(item for item in items if item["contract_id"] == created["contract_id"])
+    assert row["register_number"] == "000001"
+    assert row["business_status"] == "in_arbeit"
+    assert row["contract_title"] == "Wartung Röntgen"
+    assert row["supplier"] == "MEDTEC"
+
+    found = listing.get("/api/contracts", params={**query, "q": "Röntgen"}).json()["items"]
+    assert [item["contract_id"] for item in found] == [created["contract_id"]]
+    assert listing.get("/api/contracts", params={**query, "business_status": "gueltig"}).json()["items"] == []
+    assert listing.get("/api/contracts", params={**query, "business_status": "bogus"}).status_code == 422

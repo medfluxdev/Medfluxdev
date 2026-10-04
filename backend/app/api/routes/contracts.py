@@ -60,6 +60,7 @@ from app.contracts.review.service import (
 )
 from app.documents.status import build_import_state
 from app.database.models.activity_log import ActivityLog
+from app.database.models.contract import BUSINESS_STATUS_ALLOWED
 from app.database.models import (
     Contract,
     DocumentFile,
@@ -207,6 +208,7 @@ def contract_list(
     organization_slug: str,
     q: Optional[str] = Query(default=None, max_length=200),
     status: list[str] = Query(default=[]),
+    business_status: list[str] = Query(default=[]),
     risk: list[str] = Query(default=[]),
     warning_type: list[str] = Query(default=[]),
     requires_action: Optional[bool] = None,
@@ -239,6 +241,7 @@ def contract_list(
         _invalid("page_size muss 25, 50 oder 100 sein.")
 
     status = _validate_list(status, STATUS_ALLOWLIST, "status")
+    business_status = _validate_list(business_status, BUSINESS_STATUS_ALLOWED, "business_status")
     risk = _validate_list(risk, RISK_ALLOWLIST, "risk")
     warning_type = _validate_list(warning_type, WARNING_TYPE_ALLOWLIST, "warning_type")
 
@@ -253,6 +256,7 @@ def contract_list(
             organization_id=org.id,
             q=q,
             status=status,
+            business_status=business_status,
             risk=risk,
             warning_type=warning_type,
             requires_action=requires_action,

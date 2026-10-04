@@ -29,12 +29,14 @@ from sqlalchemy import Date, Numeric, and_, case, cast, exists, func, or_, selec
 from sqlalchemy.orm import Session
 
 from app.contracts.calculation.models import ContractCalculationResult
+from app.database.models.contract import BUSINESS_STATUS_ALLOWED
 from app.database.models import (
     CalculationRun,
     Contract,
     CostCenter,
     ContractEquipment,
     ContractExtraction,
+    ContractPartner,
     ContractWarning,
     WarningEvaluationRun,
 )
@@ -124,6 +126,7 @@ class SearchParams:
     organization_id: object
     q: Optional[str] = None
     status: list[str] = field(default_factory=list)
+    business_status: list[str] = field(default_factory=list)
     risk: list[str] = field(default_factory=list)
     warning_type: list[str] = field(default_factory=list)
     requires_action: Optional[bool] = None
@@ -315,6 +318,10 @@ def _build_filters(params: SearchParams, org_id, q: str):
         st = [s for s in params.status if s in STATUS_ALLOWLIST]
         if st:
             preds.append(Contract.status.in_(st))
+    if params.business_status:
+        bs = [s for s in params.business_status if s in BUSINESS_STATUS_ALLOWED]
+        if bs:
+            preds.append(Contract.business_status.in_(bs))
     if params.risk:
         rk = [r for r in params.risk if r in RISK_ALLOWLIST]
         if rk:
@@ -667,6 +674,13 @@ def build_contract_search(session: Session, params: SearchParams, *, organizatio
         )
     ).scalar()
 
+    partner_ids = {c.partner_id for c in contracts if c.partner_id is not None}
+    partner_names = dict(
+        session.execute(
+            select(ContractPartner.id, ContractPartner.short_name).where(ContractPartner.id.in_(partner_ids))
+        ).all()
+    ) if partner_ids else {}
+
     items = [
         _list_item(
             session, c,
@@ -674,6 +688,7 @@ def build_contract_search(session: Session, params: SearchParams, *, organizatio
             calc_by_id.get(c.accepted_calculation_run_id),
             ext_by_id.get(c.accepted_extraction_id),
             equipment_by_contract.get(c.id, []),
+            partner_names.get(c.partner_id),
         )
         for c in contracts
     ]
@@ -717,7 +732,7 @@ def _org_lookup(session: Session, organization_id) -> str:
 # DTO-Aufbau
 # ---------------------------------------------------------------------------
 
-def _list_item(session, contract, warnings, calc_run, ext, equipment) -> dict:
+def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_name=None) -> dict:
     calc = None
     if calc_run is not None and calc_run.result_snapshot:
         try:
@@ -747,8 +762,10 @@ def _list_item(session, contract, warnings, calc_run, ext, equipment) -> dict:
     row = {
         "contract_id": contract.id,
         "contract_number": contract.contract_number,
-        "contract_title": title,
-        "supplier": contract.supplier,
+        "contract_title": contract.short_description or title,
+        "supplier": partner_name or contract.supplier,
+        "register_number": contract.register_number,
+        "business_status": contract.business_status,
         "equipment_summary": _equipment_summary(equipment),
         "status": contract.status,
         "risk_level": contract.risk_level,
