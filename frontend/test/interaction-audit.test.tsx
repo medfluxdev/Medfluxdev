@@ -47,26 +47,24 @@ describe("Shell: Topbar-Eingaben", () => {
     expect(screen.queryByRole("link", { name: "Vertrag importieren" })).not.toBeInTheDocument();
   });
 
-  it("fuehrt die Topbar-Suche aus (router.push mit query)", async () => {
+  it("oeffnet die Suche ueber die Kopfzeile (Befehlspalette)", async () => {
     apiGetMock.mockResolvedValue({ status: "ok" });
     const user = userEvent.setup();
     render(<ClientNav>Inhalt</ClientNav>);
-    const field = await screen.findByRole("searchbox", { name: "Vertragsnummer suchen" });
-    await user.type(field, "ABIOMED{enter}");
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/contracts?q=ABIOMED"));
+    await user.click(screen.getByRole("button", { name: "Suchen und Befehle (Strg+K)" }));
+    expect(screen.getByRole("dialog", { name: "Befehle und Suche" })).toBeInTheDocument();
   });
 
-  it("fragt API- und KI-Status getrennt ab", async () => {
+  it("fragt API- und KI-Status getrennt ab und zeigt den KI-Status", async () => {
     apiGetMock.mockImplementation((path: string) => {
       if (path === "/health") return Promise.resolve({ status: "ok" });
       if (path === "/api/ai/status") return Promise.resolve({ provider: "ollama", available: true, model: "qwen", model_available: true, message: "Bereit" });
       return Promise.resolve({});
     });
     render(<ClientNav>Inhalt</ClientNav>);
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health", expect.any(AbortSignal)));
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status", expect.any(AbortSignal)));
-    await waitFor(() => expect(screen.getByText("API verfügbar")).toBeInTheDocument());
-    expect(screen.getByText(/KI: qwen bereit/)).toBeInTheDocument();
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health"));
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status"));
+    expect(await screen.findByText("Lokale KI bereit (qwen)")).toBeInTheDocument();
   });
 });
 

@@ -65,7 +65,7 @@ test("6 – Dokument ablegen (ohne KI-Analyse)", async ({ page }, info) => {
 test("7 – Inhaltssuche liefert eine Antwort", async ({ page }, info) => {
   await page.goto("/suche");
   await page.getByLabel("Suchbegriff").fill("Wartung");
-  await page.getByRole("button", { name: "Suchen" }).click();
+  await page.getByRole("button", { name: "Suchen", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Treffer|gefunden/ })).toBeVisible();
   await checkA11y(page, info, "suche");
 });

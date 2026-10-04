@@ -27,48 +27,6 @@ body {
   width: 48px;
 }
 
-/* Shell */
-.sidebar {
-  background: var(--color-surface);
-  border-right-color: var(--color-border);
-}
-
-.sidebar .brand {
-  text-decoration: none;
-}
-
-.sidebar .brand .medflux-logo {
-  width: 100%;
-  padding: 0.15rem 0;
-}
-
-.sidebar .brand .medflux-logo__image {
-  width: 154px;
-}
-
-.sidebar-collapsed .brand .medflux-logo__image {
-  width: 48px;
-}
-
-.nav-item {
-  color: var(--color-text-muted);
-}
-
-.nav-item:hover {
-  background: var(--brand-light);
-  color: var(--brand-blue);
-}
-
-.nav-item.active {
-  background: linear-gradient(135deg, var(--brand-teal) 0%, var(--brand-blue) 100%);
-  color: var(--color-text-inverse);
-  box-shadow: var(--shadow-md);
-}
-
-.topbar {
-  border-bottom-color: var(--color-border);
-}
-
 /* Core actions */
 .btn-primary,
 .auth-submit,

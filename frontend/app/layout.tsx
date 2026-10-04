@@ -8,7 +8,6 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import "./globals.css";
 import "./reference-theme.css";
-import "./desktop-shell-fix.css";
 import "./dashboard-reference.css";
 import "./contract-workspace.css";
 import "./contract-workspace-enhancements.css";
@@ -18,7 +17,6 @@ import "./profile.css";
 import "./organization.css";
 import "./ownership.css";
 import "./design-system.css";
-import "./shell.css";
 import "./contracts-list.css";
 import "./import-enhancements.css";
 import "./work-queue.css";
@@ -27,6 +25,7 @@ import "./release-gate.css";
 import "./brand-identity.css";
 import "./assistant.css";
 import "./styles/components.css";
+import "./styles/shell.css";
 
 export const metadata: Metadata = {
   title: {

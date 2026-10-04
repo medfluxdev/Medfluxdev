@@ -45,7 +45,9 @@ function toValues(form: FormState): PartnerValues {
 export default function PartnerManager({ organizationSlug }: { organizationSlug: string }) {
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("q") ?? ""; } catch { return ""; }
+  });
   const [items, setItems] = useState<PartnerDto[]>([]);
   const [total, setTotal] = useState(0);
   const [duplicates, setDuplicates] = useState<PartnerDto[][]>([]);

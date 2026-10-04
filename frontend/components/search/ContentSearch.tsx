@@ -14,6 +14,13 @@ export default function ContentSearch({ organizationSlug }: { organizationSlug: 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("q");
+    if (initial) void run(initial);
+    // Nur beim ersten Laden: Suchbegriff aus der Befehlspalette uebernehmen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     getContentSearchStatus(organizationSlug).then((value) => { if (!cancelled) setStatus(value); }).catch(() => undefined);
     return () => { cancelled = true; };

@@ -6,6 +6,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { listNotifications, type NotificationItem } from "@/lib/domain-api/notifications";
 import { getInbox, NOTIFICATION_KIND_LABEL, type InboxNotification } from "@/lib/domain-api/deadlines";
 
+const SEVERITY_LABEL: Record<string, string> = { critical: "Kritisch", high: "Hoch", medium: "Mittel", low: "Niedrig", info: "Hinweis", warning: "Warnung" };
+
 export default function NotificationCenter() {
   const { organizationSlug } = useAuth();
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -47,13 +49,13 @@ export default function NotificationCenter() {
   const total = items.length + unread;
 
   return (
-    <details className="account-menu notification-center">
-      <summary className="notification-trigger" aria-label={`${total} offene Hinweise`}>
-        <span aria-hidden="true">🔔</span>
-        {total > 0 ? <span className="notification-count">{total > 99 ? "99+" : total}</span> : null}
+    <details className="shell-menu">
+      <summary className="btn btn-ghost btn-icon shell-bell" aria-label={total > 0 ? `${total} offene Hinweise` : "Hinweise"}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="shell-icon"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>
+        {total > 0 ? <span className="shell-count" aria-hidden="true">{total > 99 ? "99+" : total}</span> : null}
       </summary>
-      <div className="account-menu-panel notification-panel">
-        <div className="account-menu-identity"><strong>Hinweise</strong><small>Erinnerungen, Aufgaben und Freigaben aus dem aktuellen Bereich</small></div>
+      <div className="shell-menu-panel shell-menu-panel--wide">
+        <div className="shell-menu-head"><strong>Hinweise</strong><small>Erinnerungen, Aufgaben und Freigaben aus dem aktuellen Bereich</small></div>
         {error ? <p className="muted">Hinweise konnten nicht geladen werden.</p> : null}
         {!error && total === 0 ? <p className="muted">Keine offenen Hinweise.</p> : null}
         {inbox.slice(0, 6).map((item) => (
@@ -67,11 +69,11 @@ export default function NotificationCenter() {
           <Link key={item.id} href={item.href} className="notification-item">
             <strong>{item.title}</strong>
             {item.message ? <small>{item.message}</small> : null}
-            <span>{item.severity}</span>
+            <span>{SEVERITY_LABEL[item.severity] ?? item.severity}</span>
           </Link>
         ))}
-        <Link href="/postfach">Postfach öffnen{unread > 0 ? ` (${unread} ungelesen)` : ""}</Link>
-        {items.some((item) => item.kind === "work_item") ? <Link href="/work-queue">Alle To-dos öffnen</Link> : null}
+        <Link href="/postfach" className="btn-link">Postfach öffnen{unread > 0 ? ` (${unread} ungelesen)` : ""}</Link>
+        {items.some((item) => item.kind === "work_item") ? <Link href="/work-queue" className="btn-link">Alle Aufgaben öffnen</Link> : null}
       </div>
     </details>
   );

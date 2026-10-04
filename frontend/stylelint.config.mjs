@@ -51,6 +51,6 @@ export default {
     "lightness-notation": off,
   },
   overrides: [
-    { files: ["app/styles/base.css", "app/desktop-shell-fix.css", "app/shell.css"], rules: { "declaration-no-important": off } },
+    { files: ["app/styles/base.css"], rules: { "declaration-no-important": off } },
   ],
 };
