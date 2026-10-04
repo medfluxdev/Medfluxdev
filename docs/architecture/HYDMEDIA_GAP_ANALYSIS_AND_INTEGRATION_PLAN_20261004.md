@@ -30,7 +30,8 @@
 | H9 retention per type/contract, „Löschen ab“, retention review deadline, AI data-protection flag | done | 2026-10-04 | `e948586`, `662771c` |
 | H7.1–H7.5 register grid (columns, filters, grouping, sums), saved views, tree, Excel export, portfolio report, analytics, cover-sheet PDF | done | 2026-10-04 | `da4e646` |
 | 13a renewal briefs (advice only) and renewals overview | done | 2026-10-04 | `ec29d83`, `c8d5582` |
-| Open from §4A | semantic search across contract contents; AI narrative for briefs; dark theme for charts (app has no dark theme) | – | – |
+| Gap closure: classic list sorts/filters by maintained cost and keeps its views on the server; cost-centre split; register cache; complete system/AI/catalog history; content search with page sources (+ optional local embeddings); local-AI brief text with number check; SMTP delivery test | done | 2026-10-04 | branch `feature/register-gaps` |
+| Still open | dark theme for charts (the app has no dark theme); semantic search needs a local embedding model (`ollama pull …`, then `SEARCH_EMBEDDING_MODEL`); H10 on hold | – | – |
 | H10 | on hold (no replacement agreement yet) | – | – |
 
 ## 0. Executive summary

@@ -109,7 +109,9 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
 - `register/documents.py` (H3): typed documents per contract; `DocumentProcessingService.attach_to_contract` stores amendment/termination analysis only as `ai_proposed_value`; framework links are `contract_relation` rows with `relation_type='governs'` (`requires_review=True` = AI suggestion).
 - `finance/` (H4): `calc.py` is the pure whole-month calculator (current year / to date / to end / term / annual run rate, per currency, None when the end is unknown); `ai.py` derives entry/service suggestions and price-adjustment kinds from the extraction (assumptions flagged); `service.py` handles entries, services, 100 % cost-centre allocations and accept/dismiss of suggestions.
 - `reports/` (H7, 13a): `grid.py` builds register rows in bulk (terms, finance, retention, people) and applies column filters, sort and group sums in Python on the scoped set; `views.py` holds saved views (personal or global, lazily seeded defaults); `exports.py` writes Excel (openpyxl, no formulas from data) and the cover-sheet PDF (PyMuPDF `Story`); `renewal.py` builds the advice-only decision brief before notice deadlines.
-- `history/` (H6.2): merged contract history and the organisation-wide log with filters and CSV export.
+- `history/` (H6.2): merged contract history and the organisation-wide log with filters and CSV export. Automatic changes (AI sync, system deadlines, daily-job reminders) are logged with `role_snapshot="system"` via `register.service.log_system_activity`.
+- `search/content.py` (§4A): page texts of contract documents in `contract_text_page` (German FTS on separator-normalised text, trigram index only in the migration), filled lazily from canonical artifacts (`ensure_index`, also in the daily job). Optional local embeddings via `SEARCH_EMBEDDING_MODEL` (Ollama, localhost only; empty = off).
+- Register grid rows are cached per organisation in `reports/grid.py` (`cached_rows`), validated by a data fingerprint; `contract.maintained_annual_cost` caches the finance run rate for list sorting (refreshed on change and daily).
 - Permissions: use `app/auth/permissions.py` (`require(actor, "<key>")`); confidential contracts are hidden centrally in `scoped_contract_ids`.
 - Other packages:
   - Domain layer: `contract_intelligence/`, `equipment/`, `work_queue/`, `dashboard/`, `organization_structure/`.
@@ -119,7 +121,7 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - UUID PKs come from server-side `uuidv7()`. `OrgOwnedMixin`/`organization_id` sit on tenant rows. A naming convention covers `pk_/fk_/ix_/uq_/ck_`.
   - Use `session_scope()` for short transactions and keep expensive work outside them.
 - **Alembic migrations:**
-  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `j1e3f5a71004` (saved views).
+  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `l3a5b7c91004` (contract text search).
   - Add FKs onto populated tables as `NOT VALID` (precedent: step16 `app_user` provenance).
   - Tests don't exercise migrations, so a new migration needs `alembic upgrade head` against a disposable DB.
 - **Auth:** a cookie session (`medflux_session`), not JWT. Account roles are admin, contract_manager, reviewer and viewer, plus an `is_developer` flag, with per-org `account_membership`. Passwords use PBKDF2-SHA256. Cookie writes require an allowed `Origin`. Viewers are read-only.

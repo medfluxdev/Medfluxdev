@@ -5192,3 +5192,25 @@ Branch `feature/permissions-reports` (auf `feature/finance`). Kein neuer Hauptsc
 **Bekannte Punkte:** Die ältere KI-Vertragsliste (`/contracts`) sortiert weiterhin nach KI-Kosten; das neue Register nutzt die gepflegten Finanzdaten. Semantische Suche über Vertragsinhalte und KI-Fließtext für Entscheidungsvorlagen sind offen (§4A). Diagramme nur im hellen Design (die App hat kein dunkles Design).
 
 **Nächster Schritt:** Abnahme mit Fachanwender:innen, danach Merge der Feature-Branches nach `main` (CI + Release-Gate). H10 erst nach Vereinbarung mit dem Krankenhaus.
+
+## 2026-10-04 – Restpunkte des HYDMedia-Plans geschlossen
+
+Branch `feature/register-gaps` (auf `feature/permissions-reports`). Kein neuer Hauptschritt (18/18 = 100 % bleibt).
+
+**Umgesetzt:**
+- Klassische Vertragsliste sortiert und filtert nach den gepflegten Jahreskosten (Zwischenspeicher `contract.maintained_annual_cost`, aktualisiert bei Finanz-/Stammdatenänderung und im Tageslauf), sonst wie bisher nach KI-Wert.
+- Gespeicherte Ansichten der klassischen Liste liegen auf dem Server; frühere Browser-Ansichten werden einmalig übernommen.
+- Register: Spalte „Kostenstellen-Aufteilung“; Portfolio-Kosten je Kostenstelle anteilig nach Aufteilung.
+- Leistung: Zeilen-Zwischenspeicher je Organisation mit Daten-Fingerabdruck, Baum in derselben Antwort. Messung mit 3.000 Verträgen: ~1 s beim ersten Aufbau, ~3 ms danach; Excel-Export 0,4 s.
+- Historie vollständig: KI-Übernahmen in Stammdaten, Systemtermine (angelegt/angepasst/entfernt), zugestellte Erinnerungen/Eskalationen (Akteur „System“), Dokument-Uploads, Katalogänderungen mit Vorher/Nachher.
+- Inhaltssuche `/suche` über alle Vertragsdokumente (lokal): deutscher Wortstamm, Teilwörter, Fachsynonyme, Phrasen; jeder Treffer mit Dokument, Seite und Sprung in den PDF-Viewer. Optional inhaltliche Ähnlichkeit über ein lokales Embedding-Modell (`SEARCH_EMBEDDING_MODEL`, nur localhost); derzeit ist kein Embedding-Modell installiert, daher aus.
+- Entscheidungsvorlage: Kurzfassung durch die lokale KI auf Knopfdruck; jede Zahl der Antwort muss in den berechneten Fakten stehen, sonst wird sie verworfen.
+- E-Mail: Versand über echtes SMTP-Protokoll (Anmeldung, Empfänger, ICS) gegen einen lokalen Testserver geprüft.
+
+**Migrationen:** `k2f4a6b81004` (Kosten-Zwischenspeicher, Indizes, Ansichtsart „contracts“), `l3a5b7c91004` (Seitentexte + Volltext-/Trigramm-Index). Up/Down/Up und Modellabgleich geprüft; alle acht Migrationen seit dem letzten Stand der lokalen Datenbank auf einer Kopie geprüft, dort 6 Dokumente indiziert und durchsucht (Kopie gelöscht).
+
+**Verifikation:** Backend 1569 passed / 3 skipped / 1 failed (vorbestehend, OCR-Umgebung). Frontend: Lint, 45 Dateien / 199 Tests, Build grün. Im Browser geprüft: Inhaltssuche, KI-Kurzfassung mit dem lokalen Modell qwen3:8b (Zahlenprüfung bestanden).
+
+**Bekannte Punkte:** Diagramme nur hell (die App hat kein dunkles Design). Semantische Suche erst nach Installation eines lokalen Embedding-Modells. H10 zurückgestellt.
+
+**Nächster Schritt:** Abnahme, Merge der Feature-Branches nach `main`, danach `alembic upgrade head` auf der Produktivdatenbank.
