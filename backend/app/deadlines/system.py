@@ -28,6 +28,7 @@ from app.register.terms import TermResult, compute_terms
 
 DEFAULT_LEAD_MONTHS = 3
 ACTIVE_STATUSES = frozenset({"in_arbeit", "gueltig"})
+ADJUSTING_KINDS = frozenset({"percent", "index", "negotiation"})
 TERM_BASIS_FIELDS = (
     "term_model", "term_start_date", "term_fixed_end_date", "initial_term_value", "minimum_term_value",
     "notice_period_value", "notice_period_unit", "notice_to", "renewal_period_value",
@@ -77,6 +78,18 @@ def plan_system_deadlines(contract: Contract, terms: TermResult) -> list[SystemD
                 due_date=terms.possible_end,
                 remind_on=_remind_on(terms.possible_end, contract.reminder_lead_months),
                 todo_text=contract.reminder_todo or "Folgevertrag oder Verlängerung klären.",
+                assignee_account_id=assignee,
+                escalation_account_id=escalation,
+            ))
+        adjustment_date = contract.price_adjustment_next_date
+        if contract.price_adjustment_kind in ADJUSTING_KINDS and adjustment_date is not None:
+            specs.append(SystemDeadlineSpec(
+                system_key="price_adjustment",
+                kind="preisanpassung",
+                title="Preisanpassung prüfen",
+                due_date=adjustment_date,
+                remind_on=_remind_on(adjustment_date, 1),
+                todo_text="Angekündigte Preisanpassung mit dem Vertrag abgleichen und Finanzdaten aktualisieren.",
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
             ))

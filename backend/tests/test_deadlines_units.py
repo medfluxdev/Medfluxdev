@@ -19,7 +19,7 @@ def _contract(**overrides):
     values = dict(
         lifecycle_state="active", is_archived=False, business_status="gueltig", term_model="terminable",
         reminder_recipient_account_id=None, responsible_account_id=uuid4(), escalation_recipient_account_id=uuid4(),
-        reminder_lead_months=None, reminder_todo=None,
+        reminder_lead_months=None, reminder_todo=None, price_adjustment_kind=None, price_adjustment_next_date=None,
     )
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -122,3 +122,12 @@ def test_scheduler_due(hour, ran, expected):
 )
 def test_self_service_paths(path, allowed):
     assert _self_service_mutation(path) is allowed
+
+
+def test_price_adjustment_creates_review_deadline():
+    specs = plan_system_deadlines(
+        _contract(price_adjustment_kind="percent", price_adjustment_next_date=date(2027, 1, 1)), TERMS
+    )
+    adjustment = next(spec for spec in specs if spec.system_key == "price_adjustment")
+    assert (adjustment.due_date, adjustment.remind_on) == (date(2027, 1, 1), date(2026, 12, 1))
+    assert plan_system_deadlines(_contract(price_adjustment_kind="fixed", price_adjustment_next_date=date(2027, 1, 1)), TERMS)[-1].system_key == "cancel_by"

@@ -210,7 +210,7 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
           <td>{costTypeLabel(item.cost_type_code)}</td>
           <td>{formatCurrency(item.amount, item.currency)} {item.amount_basis === "net" ? "netto" : "brutto"} · {Number(item.vat_rate).toLocaleString("de-DE")} %</td>
           <td>{INTERVAL_LABEL[item.interval]}</td>
-          <td>{formatDate(item.valid_from)} – {item.valid_to ? formatDate(item.valid_to) : "offen"}</td>
+          <td>{item.interval === "once" ? formatDate(item.valid_from) : `${formatDate(item.valid_from)} – ${item.valid_to ? formatDate(item.valid_to) : "offen"}`}</td>
           <td>{item.origin === "ai_confirmed" ? <span className="rg-origin rg-origin-ai_confirmed">KI · bestätigt</span> : <span className="rg-origin">Manuell</span>}</td>
           {editable ? <td><button type="button" className="rg-link" disabled={busy} onClick={() => void run(() => deleteFinanceEntry(orgSlug, contractId, item.id), "Eintrag gelöscht.")}>Löschen</button></td> : null}
         </tr>)}</tbody>
@@ -236,7 +236,7 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
         <tbody>{data.services.map((item) => <tr key={item.id}>
           <th scope="row">{item.label}</th>
           <td>{item.amount ? `${formatCurrency(item.amount, item.currency)}${item.unit ? ` ${item.unit}` : ""}${item.plus_vat ? " zzgl. USt." : ""}` : "–"}</td>
-          <td>{item.valid_from ? formatDate(item.valid_from) : "–"} – {item.valid_to ? formatDate(item.valid_to) : "offen"}</td>
+          <td>{item.valid_from || item.valid_to ? `${item.valid_from ? formatDate(item.valid_from) : "–"} – ${item.valid_to ? formatDate(item.valid_to) : "offen"}` : "unbefristet"}</td>
           <td>{item.origin === "ai_confirmed" ? "KI · bestätigt" : "Manuell"}</td>
           {editable ? <td><button type="button" className="rg-link" disabled={busy} onClick={() => void run(() => deleteServiceItem(orgSlug, contractId, item.id), "Leistung gelöscht.")}>Löschen</button></td> : null}
         </tr>)}</tbody>
