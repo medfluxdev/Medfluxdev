@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createContractLifecycleDecision, type ContractLifecycleDecisionKind } from "@/lib/domain-api/lifecycle";
-import { getRenewalBrief, type RenewalBrief, type RenewalUrgency } from "@/lib/domain-api/registerGrid";
+import { getRenewalBrief, getRenewalSummary, type RenewalBrief, type RenewalUrgency } from "@/lib/domain-api/registerGrid";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 export const URGENCY: Record<RenewalUrgency, { label: string; tone: string }> = {
@@ -32,6 +32,7 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<{ decision: ContractLifecycleDecisionKind; note: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{ loading: boolean; text: string | null; note: string | null }>({ loading: false, text: null, note: null });
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +43,20 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
   }, [contractId, orgSlug]);
 
   useEffect(() => { void load(); }, [load]);
+
+  async function summarize() {
+    setSummary({ loading: true, text: null, note: null });
+    try {
+      const result = await getRenewalSummary(orgSlug, contractId);
+      setSummary({
+        loading: false,
+        text: result.available ? result.text : null,
+        note: result.available ? `Lokale KI${result.model ? ` (${result.model})` : ""} – formuliert nur die obigen Fakten um; jede Zahl wurde gegen die Fakten geprüft.` : result.message,
+      });
+    } catch (err) {
+      setSummary({ loading: false, text: null, note: err instanceof Error && err.message ? err.message : "Die Kurzfassung konnte nicht erstellt werden." });
+    }
+  }
 
   async function record() {
     if (!form) return;
@@ -73,6 +88,12 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
       <div><span>Kosten bei Verlängerung</span><strong>{brief.renewal_cost ? formatCurrency(brief.renewal_cost, "EUR") : "–"}</strong>{brief.next_end_if_no_action ? <small className="cw-muted">bis {formatDate(brief.next_end_if_no_action)}</small> : null}</div>
     </div>
     <p><strong>Ohne Handeln:</strong> {brief.if_no_action}</p>
+
+    <div className="renewal-summary">
+      <button type="button" className="btn" disabled={summary.loading} onClick={() => void summarize()}>{summary.loading ? "Kurzfassung wird erstellt…" : "Kurzfassung mit lokaler KI"}</button>
+      {summary.text ? <blockquote>{summary.text}</blockquote> : null}
+      {summary.note ? <p className="cw-muted" role="status">{summary.note}</p> : null}
+    </div>
 
     {brief.hints.length > 0 ? <ul className="renewal-hints">
       {brief.hints.map((hint) => <li key={hint.text} className={`renewal-hint renewal-${hint.kind}`}>

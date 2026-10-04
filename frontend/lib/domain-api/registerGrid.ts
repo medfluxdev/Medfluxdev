@@ -237,6 +237,12 @@ export function getContentSearchStatus(organizationSlug: string) {
   return apiGet<{ documents: number; indexed: number; without_text: number; semantic_model: string | null }>(`/api/register/content-search/status?${org(organizationSlug)}`);
 }
 
+export function getRenewalSummary(organizationSlug: string, contractId: string) {
+  return apiGet<{ available: boolean; text: string | null; message: string | null; model?: string }>(
+    `/api/contracts/${encodeURIComponent(contractId)}/renewal-brief/summary?${org(organizationSlug)}`, undefined, 180000,
+  );
+}
+
 export function getRenewalBrief(organizationSlug: string, contractId: string) {
   return apiGet<RenewalBrief>(`/api/contracts/${encodeURIComponent(contractId)}/renewal-brief?${org(organizationSlug)}`);
 }

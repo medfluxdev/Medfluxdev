@@ -142,3 +142,47 @@ def test_fixed_term_needs_no_notice(monkeypatch):
         session.close()
     assert brief["urgency"] == "none"
     assert brief["if_no_action"].startswith("Der Vertrag endet am 31.12.2028 ohne Kündigung")
+
+
+def test_ai_summary_only_restates_computed_facts(monkeypatch):
+    from app.reports.renewal_ai import facts_text, verify_against_facts
+
+    slug, ids, client = _setup(monkeypatch)
+    admin = client("admin", "admin")
+    start = (date.today() - timedelta(days=400)).isoformat()
+    cid = admin.post("/api/contracts", params={"organization_slug": slug}, json={"values": {
+        "short_description": "Reinigung", "term_model": "terminable", "term_start_date": start,
+        "notice_period_value": 1, "notice_period_unit": "months", "notice_to": "month_end",
+    }}).json()["contract_id"]
+    brief = admin.get(f"/api/contracts/{cid}/renewal-brief", params={"organization_slug": slug}).json()
+    facts = facts_text(brief)
+    cancel_by = date.fromisoformat(brief["cancel_by"]).strftime("%d.%m.%Y")
+    assert cancel_by in facts
+    assert verify_against_facts(f"Kündbar bis {cancel_by}.", facts)
+    assert not verify_against_facts("Die Kosten steigen um 17 %.", facts)
+
+    class FakeAI:
+        configured = True
+        answer = ""
+        prompts: list = []
+
+        async def generate_text(self, text, system_prompt, max_tokens=None):
+            FakeAI.prompts.append((text, system_prompt))
+            return FakeAI.answer
+
+        def active_model_id(self):
+            return "qwen3:8b"
+
+    monkeypatch.setattr(register_grid, "_ai_service", FakeAI())
+    url = f"/api/contracts/{cid}/renewal-brief/summary"
+    FakeAI.answer = f"<think>intern</think>Der Vertrag ist bis {cancel_by} kündbar. Ohne Kündigung läuft er weiter."
+    good = admin.get(url, params={"organization_slug": slug}).json()
+    assert good == {"available": True, "text": f"Der Vertrag ist bis {cancel_by} kündbar. Ohne Kündigung läuft er weiter.", "message": None, "model": "qwen3:8b"}
+    assert FakeAI.prompts[0][0].startswith("FAKTEN:") and "Reinigung" in FakeAI.prompts[0][0]
+
+    FakeAI.answer = "Eine Verlängerung kostet 99.999,00 €."
+    rejected = admin.get(url, params={"organization_slug": slug}).json()
+    assert rejected["available"] is False and "verworfen" in rejected["message"]
+
+    FakeAI.configured = False
+    assert admin.get(url, params={"organization_slug": slug}).json()["message"] == "Kein lokales KI-Modell ausgewählt."

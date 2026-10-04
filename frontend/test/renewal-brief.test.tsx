@@ -8,6 +8,7 @@ import type { RenewalBrief } from "@/lib/domain-api/registerGrid";
 
 const api = vi.hoisted(() => ({
   getRenewalBrief: vi.fn(),
+  getRenewalSummary: vi.fn(),
   listRenewals: vi.fn(),
   createContractLifecycleDecision: vi.fn(),
 }));
@@ -15,6 +16,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/lib/domain-api/registerGrid", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/domain-api/registerGrid")>()),
   getRenewalBrief: api.getRenewalBrief,
+  getRenewalSummary: api.getRenewalSummary,
   listRenewals: api.listRenewals,
 }));
 vi.mock("@/lib/domain-api/lifecycle", () => ({ createContractLifecycleDecision: api.createContractLifecycleDecision }));
@@ -54,6 +56,10 @@ describe("Entscheidungsvorlage", () => {
     expect(screen.getByText("noch 46 Tage")).toBeInTheDocument();
     expect(screen.getByText(/verlängert sich der Vertrag um 1 Jahr/)).toBeInTheDocument();
     expect(screen.getByText("Grundlage: Hochrechnung.")).toBeInTheDocument();
+    api.getRenewalSummary.mockResolvedValue({ available: true, text: "Der Vertrag ist bis 30.09.2026 kündbar.", message: null, model: "qwen3:8b" });
+    await user.click(screen.getByRole("button", { name: "Kurzfassung mit lokaler KI" }));
+    expect(await screen.findByText("Der Vertrag ist bis 30.09.2026 kündbar.")).toBeInTheDocument();
+    expect(screen.getByText(/Lokale KI \(qwen3:8b\)/)).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
     expect(api.createContractLifecycleDecision).not.toHaveBeenCalled();
 

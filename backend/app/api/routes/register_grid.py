@@ -10,11 +10,14 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.ai.service import AIService
 from app.auth.dependencies import current_actor
 from app.auth.permissions import can, is_admin, require
+from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import Contract
 from app.database.models.activity_log import ActivityLog
@@ -41,10 +44,12 @@ from app.reports.grid import (
     visible_rows,
 )
 from app.reports.renewal import decision_summary, renewal_brief, upcoming_renewals, urgency
+from app.reports.renewal_ai import summarize_brief
 from app.reports.views import ViewError, create_view, delete_view, list_views, update_view, view_payload
 from app.search.content import ensure_index, index_status, search_contents
 
 router = APIRouter(tags=["register-grid"])
+_ai_service = AIService(settings)
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -404,3 +409,26 @@ def content_search_status(request: Request, organization_slug: str):
         return index_status(session, actor.organization_id)
     finally:
         session.close()
+
+
+def _brief_for(request: Request, organization_slug: str, contract_id: UUID) -> dict:
+    actor = current_actor(request, organization_slug)
+    session = create_session()
+    try:
+        contract = session.scalars(
+            select(Contract).where(Contract.id == contract_id, Contract.organization_id == actor.organization_id)
+        ).first()
+        visible = _visible(session, actor)
+        if contract is not None and not is_admin(actor) and visible is not None and contract.id not in visible:
+            contract = None
+        if contract is None:
+            raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
+        return renewal_brief(session, contract, date.today(), visible)
+    finally:
+        session.close()
+
+
+@router.get("/api/contracts/{contract_id}/renewal-brief/summary")
+async def get_renewal_summary(contract_id: UUID, request: Request, organization_slug: str):
+    brief = await run_in_threadpool(_brief_for, request, organization_slug, contract_id)
+    return await summarize_brief(_ai_service, brief)
