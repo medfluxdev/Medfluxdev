@@ -136,7 +136,7 @@ export default function NewContractPage() {
     />
     <form className="cw-section" aria-label="Neuer Vertrag" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <div className="rg-form-grid">
-        <label style={{ gridColumn: "1 / -1" }}>Kurzbeschreibung *<input required maxLength={500} value={form.short_description} onChange={(event) => set("short_description", event.target.value)} /></label>
+        <label className="span-full">Kurzbeschreibung *<input required maxLength={500} value={form.short_description} onChange={(event) => set("short_description", event.target.value)} /></label>
         {hospitals.length > 0 ? <label>Krankenhaus / Gesellschaft<select value={hospitalId} onChange={(event) => setHospitalId(event.target.value)}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
         <label>Vertragspartner<select value={form.partner_id} onChange={(event) => set("partner_id", event.target.value)}><option value="">Später auswählen</option>{partners.map((item) => <option key={item.id} value={item.id}>{item.short_name}{item.city ? ` · ${item.city}` : ""}</option>)}</select></label>
         <label>Vertragstyp<select value={form.contract_type_id} onChange={(event) => set("contract_type_id", event.target.value)}><option value="">Bitte auswählen</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
@@ -150,7 +150,7 @@ export default function NewContractPage() {
         {model === "auto_renewal" ? <label>Verlängerung um<span className="rg-period"><input type="number" min={0} aria-label="Verlängerung (Anzahl)" value={form.renewal_period_value} onChange={(event) => set("renewal_period_value", event.target.value)} /><select aria-label="Verlängerung (Einheit)" value={form.renewal_period_unit} onChange={(event) => set("renewal_period_unit", event.target.value)}>{units.map((unit) => <option key={unit} value={unit}>{DURATION_UNIT_LABEL[unit]}</option>)}</select></span></label> : null}
       </div>
       {error ? <p role="alert" className="rg-error">{error}</p> : null}
-      <div className="rg-actions" style={{ marginTop: 16 }}>
+      <div className="rg-actions mt-4">
         <Link href="/contracts" className="btn">Abbrechen</Link>
         <button type="submit" className="btn btn-primary" disabled={busy || !form.short_description.trim()}>{busy ? "Wird angelegt…" : "Vertrag anlegen"}</button>
       </div>

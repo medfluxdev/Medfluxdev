@@ -59,7 +59,7 @@ export default function JobMonitorPanel({ organizationSlug }: { organizationSlug
         <div className="rg-field"><dt>E-Mail-Versand</dt><dd>{status.smtp_configured ? "SMTP eingerichtet" : "Kein SMTP – Erinnerungen nur im Postfach"}</dd></div>
         <div className="rg-field"><dt>E-Mail-Warteschlange</dt><dd>{status.emails_pending} wartend · {status.emails_failed} fehlgeschlagen</dd></div>
       </dl>
-      {status.runs.length > 0 ? <table className="rg-table" style={{ marginTop: 12 }}>
+      {status.runs.length > 0 ? <table className="rg-table mt-3">
         <thead><tr><th scope="col">Start</th><th scope="col">Auslöser</th><th scope="col">Status</th><th scope="col">Ergebnis</th></tr></thead>
         <tbody>{status.runs.map((run) => <tr key={run.id}>
           <td>{run.started_at ? timestamp.format(new Date(run.started_at)) : "–"}</td>

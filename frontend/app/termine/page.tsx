@@ -58,7 +58,7 @@ export default function DeadlinesPage() {
     </section>
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
     <section className="cw-section">
-      {items === null ? <p role="status">Termine werden geladen…</p> : items.length === 0 ? <p className="cw-muted">Keine Termine im gewählten Zeitraum.</p> : <div style={{ overflowX: "auto" }}><table className="rg-table">
+      {items === null ? <p role="status">Termine werden geladen…</p> : items.length === 0 ? <p className="cw-muted">Keine Termine im gewählten Zeitraum.</p> : <div className="table-scroll"><table className="rg-table">
         <thead><tr><th scope="col">Fällig</th><th scope="col">Termin</th><th scope="col">Vertrag</th><th scope="col">Zuständig</th><th scope="col">Erinnerung</th><th scope="col">Hinweis</th></tr></thead>
         <tbody>{items.map((item) => <tr key={item.id} className={item.overdue ? "rg-row-overdue" : undefined}>
           <td>{formatDate(item.due_date)}{item.overdue ? <span className="contract-business-status">überfällig</span> : null}</td>

@@ -154,7 +154,7 @@ export default function NachweisePage() {
         <section className="panel" aria-labelledby="nachweise-heading">
           <div className="panel-head">
             <div><h2 id="nachweise-heading">Nachweise durchsuchen</h2><p>Auswahl eines Vertrags – echte Quellen aus der lokalen Analyse</p></div>
-            <label className="field" style={{ minWidth: 280 }}><span className="visually-hidden">Vertrag</span><select value={contractId ?? ""} onChange={(e) => setContractId(e.target.value)}>{contracts.map((c) => <option key={c.contract_id} value={c.contract_id}>{c.contract_number ?? "–"} · {c.contract_title ?? c.supplier}</option>)}</select></label>
+            <label className="field min-w-field"><span className="visually-hidden">Vertrag</span><select value={contractId ?? ""} onChange={(e) => setContractId(e.target.value)}>{contracts.map((c) => <option key={c.contract_id} value={c.contract_id}>{c.contract_number ?? "–"} · {c.contract_title ?? c.supplier}</option>)}</select></label>
           </div>
           <nav aria-label="Vertragsseiten" className="row-actions"><button type="button" className="btn btn-sm" disabled={page === 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>Vorherige 100</button><span aria-live="polite">Seite {page} · {totalCount} Verträge</span><button type="button" className="btn btn-sm" disabled={!hasMore || loading} onClick={() => setPage((p) => p + 1)}>Nächste 100</button></nav>
           {contracts.length === 0 && <p>Auf dieser Seite sind keine Verträge verfügbar.</p>}

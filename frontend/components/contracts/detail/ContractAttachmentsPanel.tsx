@@ -89,7 +89,7 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
     </form> : null}
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
     {results.length > 0 ? <ul className="rg-explanation" aria-label="Ergebnis des Uploads">{results.map((item) => <li key={`${item.original_filename}-${item.document_version_id}`}><strong>{item.original_filename}</strong>: {item.message ?? item.status}</li>)}</ul> : null}
-    {items === null ? <p role="status">Dokumente werden geladen…</p> : items.length === 0 ? <p className="cw-muted">Noch keine Dokumente.</p> : <div style={{ overflowX: "auto" }}><table className="rg-table">
+    {items === null ? <p role="status">Dokumente werden geladen…</p> : items.length === 0 ? <p className="cw-muted">Noch keine Dokumente.</p> : <div className="table-scroll"><table className="rg-table">
       <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Art</th><th scope="col">Hinzugefügt</th><th scope="col">Status</th>{editable ? <th scope="col"><span className="sr-only">Aktionen</span></th> : null}</tr></thead>
       <tbody>{items.map((item) => <tr key={item.link_id} className={item.is_valid ? undefined : "rg-inactive"}>
         <th scope="row">{item.title}{item.title !== item.original_filename ? <span className="contract-business-status">{item.original_filename}</span> : null}</th>

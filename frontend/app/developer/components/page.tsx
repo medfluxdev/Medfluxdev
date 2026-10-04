@@ -16,7 +16,7 @@ export default function ComponentReferencePage() {
         description="Lokale Referenz für gemeinsame Medflux-Komponenten und Zustände."
       />
 
-      <div style={{ display: "grid", gap: "1rem" }}>
+      <div className="stack-4">
         <SectionCard title="Buttons">
           <div className="page-actions">
             <Button variant="primary">Primäraktion</Button>
@@ -29,7 +29,7 @@ export default function ComponentReferencePage() {
         </SectionCard>
 
         <SectionCard title="Formularfelder">
-          <div style={{ display: "grid", gap: "1rem", maxWidth: 520 }}>
+          <div className="stack-4 max-w-form">
             <Field label="Vertragsnummer" htmlFor="ref-contract" hint="Beispiel für einen Hilfetext.">
               <input id="ref-contract" defaultValue="MF-2026-001" />
             </Field>
@@ -55,7 +55,7 @@ export default function ComponentReferencePage() {
         </SectionCard>
 
         <SectionCard title="Meldungen und Ladezustand">
-          <div style={{ display: "grid", gap: "0.75rem" }}>
+          <div className="stack-3">
             <InlineAlert>Neutraler Hinweis</InlineAlert>
             <InlineAlert tone="info" role="status">Zusätzliche Information</InlineAlert>
             <InlineAlert tone="success" role="status">Änderung gespeichert</InlineAlert>
@@ -66,7 +66,7 @@ export default function ComponentReferencePage() {
         </SectionCard>
 
         <SectionCard title="Tabellendichte">
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="contract-table table-density-comfortable">
               <thead><tr><th>Vertrag</th><th>Status</th><th>Verantwortlich</th></tr></thead>
               <tbody><tr><td>MF-2026-001</td><td>Aktiv</td><td>Max Mustermann</td></tr></tbody>

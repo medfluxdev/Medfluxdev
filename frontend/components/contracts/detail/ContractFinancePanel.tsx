@@ -44,7 +44,7 @@ function money(value: { net: string; gross: string } | null, currency: string) {
 }
 
 function SummaryTable({ summary }: { summary: FinanceSummaryDto }) {
-  return <div style={{ overflowX: "auto" }}><table className="rg-table" aria-label={`Finanzübersicht ${summary.currency}`}>
+  return <div className="table-scroll"><table className="rg-table" aria-label={`Finanzübersicht ${summary.currency}`}>
     <thead><tr><th scope="col">{summary.currency}</th>{PERIODS.map((period) => <th scope="col" key={period.key}>{period.label}</th>)}</tr></thead>
     <tbody>
       {(["expense", "income"] as const).map((direction) => <tr key={direction}>
@@ -202,7 +202,7 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
         </div>
         <div className="rg-actions"><button type="button" className="btn" onClick={() => { setShowEntryForm(false); setEntryForm(EMPTY_ENTRY); }}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button></div>
       </form> : null}
-      {data.entries.length === 0 ? <p className="cw-muted">Keine Einträge.</p> : <div style={{ overflowX: "auto" }}><table className="rg-table">
+      {data.entries.length === 0 ? <p className="cw-muted">Keine Einträge.</p> : <div className="table-scroll"><table className="rg-table">
         <thead><tr><th scope="col">Typ</th><th scope="col">Bezeichnung</th><th scope="col">Kostenart</th><th scope="col">Betrag</th><th scope="col">Intervall</th><th scope="col">Gültig</th><th scope="col">Herkunft</th>{editable ? <th scope="col"><span className="sr-only">Aktionen</span></th> : null}</tr></thead>
         <tbody>{data.entries.map((item) => <tr key={item.id}>
           <td>{item.direction === "expense" ? "Ausgaben" : "Einnahmen"}</td>
@@ -249,7 +249,7 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
       {editable ? <form onSubmit={(event) => { event.preventDefault(); void run(() => setCostAllocations(orgSlug, contractId, allocations.filter((item) => item.cost_center_id).map((item) => ({ ...item, recharge_mode: item.recharge_mode || null }))), "Aufteilung gespeichert."); }}>
         {allocations.map((item, index) => {
           const current = data.allocations.find((row) => row.cost_center_id === item.cost_center_id);
-          return <div className="rg-form-grid" key={index} style={{ marginBottom: 8 }}>
+          return <div className="rg-form-grid mb-2" key={index}>
             <label>Kostenstelle<select value={item.cost_center_id} onChange={(event) => setAllocations((rows) => rows.map((row, i) => i === index ? { ...row, cost_center_id: event.target.value } : row))}><option value="">Bitte auswählen</option>{centers.map((center) => <option key={center.id} value={center.id}>{center.code} – {center.name}</option>)}</select></label>
             <label>Anteil %<input inputMode="decimal" value={item.share_percent} onChange={(event) => setAllocations((rows) => rows.map((row, i) => i === index ? { ...row, share_percent: event.target.value } : row))} /></label>
             <label>Weiterbelastung<select value={item.recharge_mode} onChange={(event) => setAllocations((rows) => rows.map((row, i) => i === index ? { ...row, recharge_mode: event.target.value } : row))}><option value="">–</option>{rechargeModes.map((mode) => <option key={mode.id} value={mode.code}>{mode.label}</option>)}</select></label>

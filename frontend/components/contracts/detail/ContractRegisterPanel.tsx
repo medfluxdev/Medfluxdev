@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useToast } from "@/components/ui/Toast";
 import { formatDate } from "@/lib/format";
 import { listOwnershipAssignees, type AssigneeDto } from "@/lib/domain-api/ownership";
 import {
@@ -163,6 +164,7 @@ function errorText(error: unknown, fallback: string) {
 export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }: { contractId: string; orgSlug: string; onChanged?: () => void }) {
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
+  const toast = useToast();
   const isAdmin = Boolean(account?.is_developer || role === "admin");
   const [register, setRegister] = useState<ContractRegister | null>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -234,6 +236,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       setRegister(data);
       setDraft(draftFrom(data));
       setMessage({ tone: "ok", text: success });
+      // Die Seite laedt nach dem Speichern neu; die Bestaetigung bleibt als Toast sichtbar.
+      toast(success, "success");
       onChanged?.();
       return true;
     } catch (error) {

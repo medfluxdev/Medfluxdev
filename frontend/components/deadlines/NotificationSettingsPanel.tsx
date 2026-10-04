@@ -59,12 +59,12 @@ export default function NotificationSettingsPanel() {
     <h2 className="card-title" id="notification-settings-heading">Benachrichtigungen & Vertretung</h2>
     <p className="muted">E-Mails gehen an {settings.email}. Im Postfach erscheinen Erinnerungen immer.</p>
     {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}
-    <div className="rg-period" style={{ margin: "12px 0" }}>
+    <div className="rg-period my-3">
       <label className="rg-check"><input type="checkbox" checked={settings.receives_reminders} disabled={busy} onChange={(event) => void run(() => updateNotificationSettings(organizationSlug, { receives_reminders: event.target.checked }), setSettings, "Gespeichert.")} />Erinnerungen per E-Mail</label>
       <label className="rg-check"><input type="checkbox" checked={settings.receives_notifications} disabled={busy} onChange={(event) => void run(() => updateNotificationSettings(organizationSlug, { receives_notifications: event.target.checked }), setSettings, "Gespeichert.")} />Überfälligkeiten und Eskalationen per E-Mail</label>
     </div>
     {canManageDeputies ? <>
-      <label className="rg-form-grid" style={{ gridTemplateColumns: "1fr" }}>Standardvertretung
+      <label className="rg-form-grid form-grid-single">Standardvertretung
         <select value={settings.default_deputy_account_id ?? ""} disabled={busy} onChange={(event) => void run(() => updateNotificationSettings(organizationSlug, { default_deputy_account_id: event.target.value || null }), setSettings, "Gespeichert.")}>
           <option value="">Keine</option>{people.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}
         </select>
@@ -77,7 +77,7 @@ export default function NotificationSettingsPanel() {
         <button type="submit" className="btn btn-primary" disabled={busy}>Eintragen</button>
       </form>
     </> : null}
-    {deputies.length > 0 ? <table className="rg-table" style={{ marginTop: 12 }}>
+    {deputies.length > 0 ? <table className="rg-table mt-3">
       <thead><tr><th scope="col">Abwesend</th><th scope="col">Vertretung</th><th scope="col">Zeitraum</th><th scope="col"><span className="sr-only">Aktion</span></th></tr></thead>
       <tbody>{deputies.map((item) => <tr key={item.id} className={item.is_active ? undefined : "rg-inactive"}>
         <td>{item.account_name}</td><td>{item.deputy_name}{item.current ? " (aktiv)" : ""}</td>

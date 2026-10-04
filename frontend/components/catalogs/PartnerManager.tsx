@@ -112,7 +112,7 @@ export default function PartnerManager({ organizationSlug }: { organizationSlug:
   return <div className="rg-panel">
     <section className="cw-section">
       <div className="rg-toolbar">
-        <label className="rg-form-grid" style={{ gridTemplateColumns: "1fr" }}>Suchen<input type="search" value={query} placeholder="Kurzname, Name oder Ort" onChange={(event) => setQuery(event.target.value)} /></label>
+        <label className="rg-form-grid form-grid-single">Suchen<input type="search" value={query} placeholder="Kurzname, Name oder Ort" onChange={(event) => setQuery(event.target.value)} /></label>
         <label className="rg-check"><input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} />Deaktivierte anzeigen</label>
         {editable ? <button type="button" className="btn btn-primary" onClick={() => { setEditing({ id: null, form: toForm() }); setSimilar([]); setMessage(null); }}>Vertragspartner anlegen</button> : null}
       </div>
@@ -128,7 +128,7 @@ export default function PartnerManager({ organizationSlug }: { organizationSlug:
         <strong>Ähnliche Vertragspartner gefunden:</strong> {similar.map((item) => item.short_name).join(", ")}. Bitte prüfen, ob der Partner bereits existiert.
         <div className="rg-actions"><button type="button" className="btn" disabled={busy} onClick={() => void save(true)}>Trotzdem anlegen</button></div>
       </div> : null}
-      <div className="rg-actions" style={{ marginTop: 12 }}>
+      <div className="rg-actions mt-3">
         <button type="button" className="btn" onClick={() => { setEditing(null); setSimilar([]); }}>Abbrechen</button>
         <button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button>
       </div>
@@ -141,7 +141,7 @@ export default function PartnerManager({ organizationSlug }: { organizationSlug:
 
     <section className="cw-section" aria-labelledby="rg-partners-heading">
       <div className="cw-section-head"><div><h2 id="rg-partners-heading">Vertragspartner</h2><p>{total} Einträge</p></div></div>
-      {items.length === 0 ? <p className="cw-muted">Keine Vertragspartner gefunden.</p> : <div style={{ overflowX: "auto" }}><table className="rg-table">
+      {items.length === 0 ? <p className="cw-muted">Keine Vertragspartner gefunden.</p> : <div className="table-scroll"><table className="rg-table">
         <thead><tr><th scope="col">Kurzname</th><th scope="col">Name</th><th scope="col">Ort</th><th scope="col">Kontakt</th><th scope="col">Verträge</th>{editable ? <th scope="col"><span className="sr-only">Aktionen</span></th> : null}</tr></thead>
         <tbody>{items.map((item) => <tr key={item.id} className={item.is_active ? undefined : "rg-inactive"}>
           <th scope="row">{item.short_name}</th>

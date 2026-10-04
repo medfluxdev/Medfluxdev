@@ -272,7 +272,7 @@ export default function ImportPage() {
             <p className="dz-primary">Dateien hierher ziehen oder klicken</p>
             <p>Unterstützte Dateitypen: <strong>PDF</strong> und <strong>DOCX</strong></p>
             <p className="import-validation-note">Eine feste maximale Dateigröße wird von der aktuellen Import-API nicht als Frontend-Limit bereitgestellt.</p>
-            <input ref={inputRef} type="file" multiple accept=".pdf,.docx" style={{ display: "none" }} onChange={(e) => addFiles(e.target.files)} />
+            <input ref={inputRef} type="file" multiple accept=".pdf,.docx" hidden onChange={(e) => addFiles(e.target.files)} />
           </div>
 
           {rejectedSelection.length > 0 && (

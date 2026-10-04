@@ -326,10 +326,7 @@ body {
   box-shadow: var(--shadow-md);
 }
 
-.panel {
-  padding: 18px 20px;
-  margin-bottom: 18px;
-}
+
 
 .panel h2,
 .panel-head h2 {
@@ -388,28 +385,13 @@ body {
   border-radius: var(--radius-sm);
 }
 
-.btn {
-  min-height: 38px;
-  padding-inline: 14px;
-  font-weight: 600;
-}
 
-.btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-}
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-}
 
-.btn-ghost {
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border-color: var(--color-border);
-}
+
+
+
+
 
 /* Forms and tables */
 input,

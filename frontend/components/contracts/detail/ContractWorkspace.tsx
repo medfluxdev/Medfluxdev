@@ -24,6 +24,7 @@ import OverridePanel from "./OverridePanel";
 import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
+import Dialog from "@/components/ui/Dialog";
 import ContractHistoryPanel from "./ContractHistoryPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
 import ContractRenewalBrief from "./ContractRenewalBrief";
@@ -368,25 +369,31 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         <div><div className="cw-breadcrumb">Verträge / {data.register_number ?? data.contract_number ?? data.contract_id}</div><h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1><p>{[data.register_number ? `Vertragsnr. ${data.register_number}` : null, data.contract_number ? `Nr. lt. Dokument ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p></div>
         <div className="cw-header-badges">{canRequestDeletion && <button type="button" className="cw-badge cw-badge-button" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button>}<button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button>{data.business_status ? <button type="button" className="cw-badge cw-badge-button" onClick={() => setRoute("register")}>{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}<span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
       </header>
-      {deleteDialogOpen && <div role="dialog" aria-modal="true" aria-labelledby="cw-delete-title" className="cw-section" style={{ margin: "1rem 0", padding: "1rem", border: "1px solid currentColor" }}>
-        <h2 id="cw-delete-title">Vertragslöschung beantragen?</h2>
-        <p>Dieser Schritt markiert den Vertrag als zur Löschung vorgemerkt. Er löscht keine Daten endgültig. Eine separate Bestätigung ist erforderlich.</p>
-        <label><input type="checkbox" checked={deleteAcknowledged} disabled={deletePending} onChange={(event) => setDeleteAcknowledged(event.target.checked)} /> Ich verstehe, dass der Vertrag danach aus aktiven Ansichten verschwindet.</label>
-        {deleteError && <p role="alert">{deleteError}</p>}
-        <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
-          <button type="button" disabled={deletePending} onClick={() => setDeleteDialogOpen(false)}>Abbrechen</button>
-          <button type="button" disabled={deletePending || !deleteAcknowledged} onClick={submitDeletionRequest}>{deletePending ? "Wird gesendet…" : "Löschung beantragen"}</button>
-        </div>
-      </div>}
-      {archiveDialogOpen && <div role="dialog" aria-modal="true" aria-labelledby="cw-archive-title" className="cw-section" style={{ margin: "1rem 0", padding: "1rem", border: "1px solid currentColor" }}>
-        <h2 id="cw-archive-title">Vertrag archivieren?</h2>
-        <p>Der Vertrag bleibt erhalten und kann über das Archiv wiederhergestellt werden.</p>
-        {archiveError && <p role="alert">{archiveError}</p>}
-        <div style={{ display: "flex", gap: "1rem" }}>
-          <button type="button" disabled={archivePending} onClick={() => setArchiveDialogOpen(false)}>Abbrechen</button>
-          <button type="button" disabled={archivePending} onClick={confirmArchive}>{archivePending ? "Wird archiviert…" : "Archivierung bestätigen"}</button>
-        </div>
-      </div>}
+      <Dialog
+        open={deleteDialogOpen}
+        title="Vertragslöschung beantragen?"
+        description="Dieser Schritt markiert den Vertrag als zur Löschung vorgemerkt. Er löscht keine Daten endgültig. Eine separate Bestätigung ist erforderlich."
+        onClose={() => { if (!deletePending) setDeleteDialogOpen(false); }}
+        actions={<>
+          <button type="button" className="btn" disabled={deletePending} onClick={() => setDeleteDialogOpen(false)}>Abbrechen</button>
+          <button type="button" className="btn btn-danger" disabled={deletePending || !deleteAcknowledged} onClick={submitDeletionRequest}>{deletePending ? "Wird gesendet…" : "Löschung beantragen"}</button>
+        </>}
+      >
+        <label className="rg-check"><input type="checkbox" checked={deleteAcknowledged} disabled={deletePending} onChange={(event) => setDeleteAcknowledged(event.target.checked)} /> Ich verstehe, dass der Vertrag danach aus aktiven Ansichten verschwindet.</label>
+        {deleteError && <p role="alert" className="field-error">{deleteError}</p>}
+      </Dialog>
+      <Dialog
+        open={archiveDialogOpen}
+        title="Vertrag archivieren?"
+        description="Der Vertrag bleibt erhalten und kann über das Archiv wiederhergestellt werden."
+        onClose={() => { if (!archivePending) setArchiveDialogOpen(false); }}
+        actions={<>
+          <button type="button" className="btn" disabled={archivePending} onClick={() => setArchiveDialogOpen(false)}>Abbrechen</button>
+          <button type="button" className="btn btn-primary" disabled={archivePending} onClick={confirmArchive}>{archivePending ? "Wird archiviert…" : "Archivierung bestätigen"}</button>
+        </>}
+      >
+        {archiveError && <p role="alert" className="field-error">{archiveError}</p>}
+      </Dialog>
 
       <nav className="cw-tabs" aria-label="Vertragsbereiche">{TABS.map((tab) => <button key={tab.key} type="button" className={activeTab === tab.key ? "active" : ""} onClick={() => setRoute(tab.key)}>{tab.label}</button>)}</nav>
 

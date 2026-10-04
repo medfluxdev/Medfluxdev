@@ -175,8 +175,8 @@ export default function CatalogManager({ organizationSlug }: { organizationSlug:
         <label>Nächste Nummer<input type="number" min={1} value={rangeForm.next_value} onChange={(event) => setRangeForm((form) => ({ ...form, next_value: event.target.value }))} /></label>
         <button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button>
       </form>
-      <form className="rg-form-grid" style={{ marginTop: 16 }} onSubmit={(event) => { event.preventDefault(); reserve(); }}>
-        <label style={{ gridColumn: "span 2" }}>Nummern reservieren (z. B. „1, 21, 100“)<input value={reserveText} onChange={(event) => setReserveText(event.target.value)} /></label>
+      <form className="rg-form-grid mt-4" onSubmit={(event) => { event.preventDefault(); reserve(); }}>
+        <label className="span-2">Nummern reservieren (z. B. „1, 21, 100“)<input value={reserveText} onChange={(event) => setReserveText(event.target.value)} /></label>
         <button type="submit" className="btn" disabled={busy || !reserveText.trim()}>Reservieren</button>
       </form>
       {range.reserved.length > 0 ? <p className="cw-muted">Reserviert: {range.reserved.map((item) => item.formatted).join(", ")}</p> : null}

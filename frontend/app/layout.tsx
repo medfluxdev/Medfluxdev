@@ -26,6 +26,7 @@ import "./operational-workflows.css";
 import "./release-gate.css";
 import "./brand-identity.css";
 import "./assistant.css";
+import "./styles/components.css";
 
 export const metadata: Metadata = {
   title: {

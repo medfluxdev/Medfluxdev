@@ -102,11 +102,11 @@ export default function DeletionQueuePage() {
     {allowed && queue && <>
       {queue.items.length === 0 && <p>Keine vorgemerkten oder gelöschten Verträge.</p>}
       {queue.items.length > 0 && <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>}
-      <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+      <div className="btn-group mb-4">
         <button type="button" disabled={checking || pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
         <button type="button" disabled={checking || pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
       </div>
-      {queue.items.map((item) => <section className="panel" key={item.contract_id} style={{ padding: "1rem", marginBottom: "1rem" }}>
+      {queue.items.map((item) => <section className="panel mb-4" key={item.contract_id}>
         <h2>{item.contract_number || item.contract_id}</h2>
         <p>Status: {item.lifecycle_state === "pending_deletion" ? "Zur Löschung vorgemerkt" : "Gelöscht (wiederherstellbar)"}</p>
         {item.lifecycle_state === "pending_deletion" ? <>

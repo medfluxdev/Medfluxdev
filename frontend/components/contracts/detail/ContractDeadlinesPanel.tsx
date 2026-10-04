@@ -137,7 +137,7 @@ export default function ContractDeadlinesPanel({ contractId, orgSlug }: { contra
         <label>Erinnern am<input type="date" value={form.remind_on} max={form.due_date || undefined} onChange={(event) => setForm((current) => ({ ...current, remind_on: event.target.value }))} /></label>
         <label>Zuständig<select value={form.assignee_account_id} onChange={(event) => setForm((current) => ({ ...current, assignee_account_id: event.target.value }))}><option value="">Ich selbst</option>{assignees.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}</select></label>
         <label>Eskalation an<select value={form.escalation_account_id} onChange={(event) => setForm((current) => ({ ...current, escalation_account_id: event.target.value }))}><option value="">Niemand</option>{assignees.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}</select></label>
-        <label style={{ gridColumn: "1 / -1" }}>ToDo<input maxLength={500} value={form.todo_text} onChange={(event) => setForm((current) => ({ ...current, todo_text: event.target.value }))} /></label>
+        <label className="span-full">ToDo<input maxLength={500} value={form.todo_text} onChange={(event) => setForm((current) => ({ ...current, todo_text: event.target.value }))} /></label>
         <label className="rg-check"><input type="checkbox" checked={form.send_email} onChange={(event) => setForm((current) => ({ ...current, send_email: event.target.checked }))} />Erinnerungs-E-Mail</label>
         <label className="rg-check"><input type="checkbox" checked={form.send_ics} onChange={(event) => setForm((current) => ({ ...current, send_ics: event.target.checked }))} />Kalendereinladung (ICS)</label>
       </div>

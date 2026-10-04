@@ -67,8 +67,8 @@ export default function ContractRelationsPanel({ contractId, orgSlug }: { contra
     <section className="cw-section" aria-labelledby="relations-framework-heading">
       <div className="cw-section-head"><div><h2 id="relations-framework-heading">Gehört zu Rahmenvertrag</h2><p>Einzelverträge werden ihrem Rahmenvertrag zugeordnet. Erkennt die KI eine Referenz im Dokument, erscheint sie als Vorschlag.</p></div></div>
       {data.frameworks.length === 0 ? <p className="cw-muted">Keinem Rahmenvertrag zugeordnet.</p> : <ul className="rg-deadlines">{data.frameworks.map(row)}</ul>}
-      {editable ? <form className="rg-form-grid" style={{ marginTop: 12 }} onSubmit={(event) => { event.preventDefault(); if (selected) void run(() => linkFramework(orgSlug, contractId, selected)); }}>
-        <label style={{ gridColumn: "span 2" }}>Rahmenvertrag auswählen<select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">{options.length ? "Bitte auswählen" : "Keine Rahmenverträge verfügbar"}</option>{options.map((item) => <option key={item.contract_id} value={item.contract_id}>{item.register_number ?? "–"} · {item.short_description ?? "Vertrag"}</option>)}</select></label>
+      {editable ? <form className="rg-form-grid mt-3" onSubmit={(event) => { event.preventDefault(); if (selected) void run(() => linkFramework(orgSlug, contractId, selected)); }}>
+        <label className="span-2">Rahmenvertrag auswählen<select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">{options.length ? "Bitte auswählen" : "Keine Rahmenverträge verfügbar"}</option>{options.map((item) => <option key={item.contract_id} value={item.contract_id}>{item.register_number ?? "–"} · {item.short_description ?? "Vertrag"}</option>)}</select></label>
         <button type="submit" className="btn btn-primary" disabled={busy || !selected}>Verknüpfen</button>
       </form> : null}
     </section>
