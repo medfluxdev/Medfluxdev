@@ -85,3 +85,5 @@
 | 2 | كان `SYNC_UNIFIED_MAIN.ps1` يشغّل `git fetch --prune --tags`، وهذا الأمر يحذف محلياً كل tag غير موجود على GitHub، أي كل tags الأرشيف الـ 39 قبل رفعها | أُزيل `--tags` من الجلب، فتُرفع الـ tags صراحة في المرحلة B |
 | 3 | `push_branch.bat` غير محفوظ في git | نُسخ إلى `Medflux-backups\push_branch-uncommitted-20261004.bat` قبل تبديل الفرع |
 | 4 | فرق الواجهة بين الفرعين | الفرق في `package.json` و`package-lock.json` نهايات أسطر فقط، فلا حاجة إلى `npm install` |
+| 5 | اختبارات Windows | نُفذت عبر `RUN_VERIFY_UNIFIED_20261004.bat`: تبديل الفرع نجح (exit 0)، PyMuPDF 1.24.14 متوفرة، اختبارات PDF/OCR الـ 31 نجحت كلها (31/31)، backend كامل 1419 نجاحاً / 0 فشل / 3 تخطٍّ، `tsc` بلا أخطاء، vitest 170/170 في 35 ملفاً. النتائج في `Desktop\Medflux-backups\verify-20261004\` |
+| 6 | تسليم الجلسة | `HANDOFF_20261004.md` في جذر المستودع وفي `Desktop\Medflux-backups\` |
