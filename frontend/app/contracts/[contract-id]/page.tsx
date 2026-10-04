@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
-import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
-import ContractIntelligencePanel from "@/components/contracts/detail/ContractIntelligencePanel";
-import ContractBackendAnalysisPanel from "@/components/contracts/detail/ContractBackendAnalysisPanel";
-import ContractBillingPanel from "@/components/contracts/detail/ContractBillingPanel";
-import ContractLifecyclePanel from "@/components/contracts/detail/ContractLifecyclePanel";
-import PdfViewer from "@/components/contracts/detail/PdfViewer";
+import { ContractBackendAnalysisPanel, ContractBillingPanel, ContractIntelligencePanel, ContractLifecyclePanel, ContractOwnershipPanel, PdfViewer } from "@/components/contracts/detail/lazy";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getContract } from "@/lib/domain-api/contracts";
 import type { ContractDetailResponse, EvidenceRef, SourceNavigationTarget } from "@/lib/contract-detail-types";

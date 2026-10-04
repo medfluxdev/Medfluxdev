@@ -17,7 +17,7 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format";
 import { removeWarningsRepresentedByTasks } from "@/lib/action-dedup";
 import { archiveContract, getContractDeletionCapabilities, requestContractDeletion } from "@/lib/domain-api/contracts";
-import PdfViewer from "./PdfViewer";
+import { PdfViewer } from "./lazy";
 import EvidencePane from "./EvidencePane";
 import FactReviewPanel from "./FactReviewPanel";
 import OverridePanel from "./OverridePanel";

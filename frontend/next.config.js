@@ -10,6 +10,8 @@ function apiOrigin() {
 }
 
 const nextConfig = {
+  // Eigener Build-Ordner moeglich (z. B. Pruef-Build neben laufendem `next dev`).
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   webpack(config) {
     // pdfjs-dist's build statically imports a Node-only display module whose

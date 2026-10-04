@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import EvidencePane from "@/components/contracts/detail/EvidencePane";
-import PdfViewer from "@/components/contracts/detail/PdfViewer";
+import { PdfViewer } from "@/components/contracts/detail/lazy";
 import SourceLink from "@/components/contracts/detail/SourceLink";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
