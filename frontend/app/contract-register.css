@@ -63,3 +63,12 @@
 .rg-own{margin-left:8px;font-size:11px}
 .rg-grants{border:1px solid var(--border,#d9dee5);border-radius:8px;padding:8px 12px;display:grid;gap:6px}
 .rg-grants legend{font-weight:600;padding:0 4px}
+.hist-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:0}
+.hist-list>li{display:grid;grid-template-columns:150px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--border,#e3e7ed)}
+.hist-list time{font-variant-numeric:tabular-nums;color:var(--muted,#5b6573);font-size:13px}
+.hist-details{list-style:none;margin:4px 0 0;padding:0;font-size:13px;color:var(--muted,#5b6573)}
+.hist-details span{font-weight:600}
+.hist-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end}
+.hist-filters label{display:grid;gap:4px;font-size:13px;font-weight:600}
+.hist-table td,.hist-table th{vertical-align:top}
+@media (max-width:640px){.hist-list>li{grid-template-columns:1fr;gap:2px}}

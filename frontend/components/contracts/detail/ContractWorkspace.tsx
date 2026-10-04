@@ -24,6 +24,7 @@ import OverridePanel from "./OverridePanel";
 import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
+import ContractHistoryPanel from "./ContractHistoryPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
 import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
@@ -36,7 +37,7 @@ interface Props {
   onReload?: () => void;
 }
 
-type TabKey = "overview" | "register" | "deadlines" | "term" | "finance" | "services" | "equipment" | "documents" | "relations" | "remarks";
+type TabKey = "overview" | "register" | "deadlines" | "term" | "finance" | "services" | "equipment" | "documents" | "relations" | "remarks" | "history";
 type DocumentTab = "document" | "attachments" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
@@ -51,6 +52,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "documents", label: "Dokumente & Prüfung" },
   { key: "relations", label: "Verknüpfungen" },
   { key: "remarks", label: "Bemerkungen" },
+  { key: "history", label: "Historie" },
 ];
 
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
@@ -370,6 +372,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "register" && <ContractRegisterPanel contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload} />}
 
         {activeTab === "remarks" && <ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} />}
+        {activeTab === "history" && <ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
         {activeTab === "deadlines" && <ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 

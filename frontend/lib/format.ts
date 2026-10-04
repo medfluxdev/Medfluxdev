@@ -25,6 +25,21 @@ export function formatDate(value: string | null | undefined): string {
   return dateFmt.format(d);
 }
 
+const dateTimeFmt = new Intl.DateTimeFormat("de-DE", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "–";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "–";
+  return dateTimeFmt.format(d);
+}
+
 export function formatCurrency(amount: string, currency: string): string {
   const number = Number(amount);
   if (!Number.isFinite(number)) return "–";

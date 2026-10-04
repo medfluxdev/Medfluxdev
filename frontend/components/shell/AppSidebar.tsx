@@ -52,7 +52,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
   ]},
   { label: "Administration", items: [
-    { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
+    { label: "Historie", href: "/audit", icon: "audit", roles: EDITORS },
     { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
     { label: "Kataloge", href: "/settings/catalogs", icon: "catalogs", roles: ["admin"] },
     { label: "Rollen & Rechte", href: "/settings/roles", icon: "admin" },

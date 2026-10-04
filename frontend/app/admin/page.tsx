@@ -130,7 +130,7 @@ export default function AdminPage() {
         <Link href="/settings/roles"><div><strong>Rollen & Rechte</strong><small>Was jede Rolle darf</small></div><span>→</span></Link>
         <Link href="/settings/catalogs"><div><strong>Kataloge & Nummernkreis</strong><small>Vertragstypen, Auswahllisten, Vertragsnummern</small></div><span>→</span></Link>
         {deletionAllowed && <Link href="/admin/deletion"><div><strong>Vertragslöschung</strong><small>Vorgemerkte Verträge prüfen und wiederherstellen</small></div><span>→</span></Link>}
-        <Link href="/audit"><div><strong>Audit öffnen</strong><small>Änderungen nachvollziehen</small></div><span>→</span></Link>
+        <Link href="/audit"><div><strong>Historie öffnen</strong><small>Änderungen organisationsweit nachvollziehen</small></div><span>→</span></Link>
         <button type="button" onClick={() => void exportContracts()} disabled={exporting}><div><strong>Verträge exportieren</strong><small>Scope-gefilterte CSV mit aktuellem Vertragsbestand</small></div><span>{exporting ? "…" : "↓"}</span></button>
       </section>
 

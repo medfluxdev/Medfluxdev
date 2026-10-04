@@ -22,6 +22,7 @@ from app.api.routes import (
     documents,
     equipment,
     health,
+    history,
     intelligence,
     intelligence_actions,
     intelligence_analytics,
@@ -119,6 +120,7 @@ app.include_router(contract_finance.router)
 app.include_router(catalogs.router)
 app.include_router(deadlines.router)
 app.include_router(access.router)
+app.include_router(history.router)
 app.include_router(equipment.router)
 app.include_router(lifecycle.router)
 app.include_router(work_queue.router)
