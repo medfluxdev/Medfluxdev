@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import ContractListViewTools from "@/components/contracts/ContractListViewTools";
 import type { ContractListItem } from "@/lib/contract-types";
 import {
   RISK_LABEL,
@@ -123,7 +122,6 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
 
   return (
     <div className={`contract-table-shell density-${density}`}>
-      <ContractListViewTools />
 
       <div className="contract-table-preferences" aria-label="Tabellendarstellung">
         <div className="contract-density" role="group" aria-label="Tabellendichte">

@@ -424,3 +424,9 @@
 /* Kopfbereiche von Abschnitten: Schaltflaechen und Kennzeichen nicht strecken */
 .cw-section-head > :not(:first-child),
 .section-head > :not(:first-child) { align-self: flex-start; flex: none; }
+.quick-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-4); margin: 0; }
+.quick-facts div { display: grid; gap: 2px; }
+.quick-facts dt { color: var(--color-text-muted); font-size: var(--text-small); }
+.quick-facts dd { margin: 0; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.reg-preview { text-align: left; color: var(--color-text); text-decoration: none; font-weight: var(--weight-medium); }
+.reg-preview:hover { color: var(--color-link); text-decoration: underline; }

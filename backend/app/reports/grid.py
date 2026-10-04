@@ -21,7 +21,10 @@ from sqlalchemy.orm import Session
 
 from app.database.models import Account, Contract
 from app.database.models.contract import ContractDocument
+from app.contracts.search.service import _primary_warning
 from app.database.models.deadlines import ContractDeadline
+from app.database.models.fact_review import ContractReview
+from app.database.models.warning import ContractWarning
 from app.database.models.finance import ContractCostAllocation, ContractFinanceEntry
 from app.database.models.organization_structure import ContractDepartment, CostCenter, Department, Hospital
 from app.database.models.register import (
@@ -77,6 +80,9 @@ COLUMNS: tuple[Column, ...] = (
     Column("is_framework", "Rahmenvertrag", "bool", groupable=True),
     Column("data_protection_relevant", "Datenschutzrelevant", "bool", groupable=True),
     Column("is_confidential", "Vertraulich", "bool", groupable=True),
+    Column("risk", "Risiko (KI)", "enum", groupable=True),
+    Column("review_pending", "KI-Prüfung offen", "bool", groupable=True),
+    Column("warning", "Warnung", "text"),
     Column("attachments", "Anhänge", "number"),
     Column("storage_location", "Lagerort", "enum", groupable=True),
     Column("deletion_from", "Löschen ab", "date"),
@@ -86,6 +92,7 @@ MONEY_KEYS = tuple(column.key for column in COLUMNS if column.type == "money")
 DEFAULT_COLUMNS = [column.key for column in COLUMNS if column.default]
 FILTER_OPS = {"empty", "not_empty", "in", "contains", "range", "within_days", "due_within_days", "overdue", "me", "is"}
 MAX_GROUP_LEVELS = 2
+RISK_LABELS = {"high": "Hoch", "medium": "Mittel", "low": "Niedrig"}
 
 
 class GridError(ValueError):
@@ -230,6 +237,15 @@ def build_rows(
     ).all():
         allocations[contract_id].append((cost_centers.get(cost_center_id, "?"), Decimal(share)))
 
+    warnings_by_contract: dict[uuid.UUID, list] = defaultdict(list)
+    for warning in session.scalars(
+        select(ContractWarning).where(ContractWarning.contract_id.in_(ids), ContractWarning.active.is_(True))
+    ).all():
+        warnings_by_contract[warning.contract_id].append(warning)
+    review_status = dict(session.execute(
+        select(ContractReview.contract_id, ContractReview.status).where(ContractReview.contract_id.in_(ids))
+    ).all())
+
     attachments = dict(session.execute(
         select(ContractDocument.contract_id, func.count()).where(ContractDocument.contract_id.in_(ids)).group_by(ContractDocument.contract_id)
     ).all())
@@ -306,6 +322,9 @@ def build_rows(
             "is_framework": bool(contract.is_framework),
             "data_protection_relevant": contract.data_protection_relevant,
             "is_confidential": bool(contract.is_confidential or (contract_type.is_confidential if contract_type else False)),
+            "risk": RISK_LABELS.get(contract.risk_level or "", None),
+            "review_pending": contract.accepted_extraction_id is not None and review_status.get(contract.id) != "reviewed",
+            "warning": (_primary_warning(warnings_by_contract[contract.id]) or {}).get("title_de") if warnings_by_contract.get(contract.id) else None,
             "attachments": int(attachments.get(contract.id, 0)),
             "storage_location": storage.get(contract.storage_location_code, contract.storage_location_code) if contract.storage_location_code else None,
             "deletion_from": deletion_from,
@@ -351,6 +370,10 @@ SELECT concat_ws('|',
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM catalog_contract_type WHERE organization_id = :org),
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM catalog_contract_category WHERE organization_id = :org),
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM lookup_value WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') || ':' || coalesce(max(last_seen_at)::text, '')
+     FROM contract_warning WHERE organization_id = :org AND active),
+  (SELECT count(*) || ':' || coalesce(max(r.updated_at)::text, '')
+     FROM contract_review r JOIN contract c ON c.id = r.contract_id WHERE c.organization_id = :org),
   (SELECT md5(coalesce(string_agg(contract_id::text || department_id::text || coalesce(relation_role, ''), ',' ORDER BY id), ''))
      FROM contract_department WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM hospital WHERE organization_id = :org),

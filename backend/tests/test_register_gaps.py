@@ -266,3 +266,30 @@ def test_catalog_updates_log_before_and_after(monkeypatch):
         assert logged.context_data == {"fields": {"retention_years": {"before": 10, "after": 6}}}
     finally:
         session.close()
+
+
+def test_grid_shows_ai_risk_and_review_columns(monkeypatch):
+    import json as _json
+
+    from app.api.routes import register_grid
+
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    client = _client(monkeypatch, ids)
+    actor = SimpleNamespace(organization_id=ids["org"], account_id=ids["admin"], role="admin", is_developer=False, display_name="Admin")
+    monkeypatch.setattr(register_grid, "current_actor", lambda request, organization_slug: actor)
+    monkeypatch.setattr(register_grid, "current_scope_context", lambda: ScopeContext())
+    client.app.include_router(register_grid.router)
+    cid = client.post("/api/contracts", params=query, json={"values": {"short_description": "Risiko"}}).json()["contract_id"]
+    session = create_session()
+    try:
+        session.get(Contract, UUID(cid)).risk_level = "high"
+        session.commit()
+    finally:
+        session.close()
+    grid = client.get("/api/register/grid", params={**query, "spec": _json.dumps({
+        "columns": ["register_number", "risk", "review_pending", "warning"],
+        "filters": [{"column": "risk", "op": "in", "value": ["Hoch"]}],
+    })}).json()
+    assert grid["total"] == 1
+    assert grid["items"][0]["values"]["risk"] == "Hoch" and grid["items"][0]["values"]["review_pending"] is False

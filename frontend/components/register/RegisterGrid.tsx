@@ -9,6 +9,7 @@ import {
   downloadGridXlsx,
   getGrid,
   getGridColumns,
+  listContractListViews,
   listSavedViews,
   saveBlob,
   updateSavedView,
@@ -16,10 +17,12 @@ import {
   type GridFilter,
   type GridResponse,
   type GridSpec,
+  type ListViewDto,
   type SavedViewDto,
   type TreeHospital,
 } from "@/lib/domain-api/registerGrid";
 import { formatCurrency, formatDate } from "@/lib/format";
+import ContractQuickView from "./ContractQuickView";
 import FilterEditor from "./FilterEditor";
 import { describeFilter } from "./filters";
 
@@ -41,6 +44,31 @@ function writeLastView(id: string | null) {
     if (id) window.localStorage.setItem(LAST_VIEW_KEY, id);
     else window.localStorage.removeItem(LAST_VIEW_KEY);
   } catch { /* nur Komfort */ }
+}
+
+function linkedQuery(): string | null {
+  try {
+    const q = new URLSearchParams(window.location.search).get("q");
+    return q && q.trim() ? q.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+const RISK_LABEL: Record<string, string> = { high: "Hoch", medium: "Mittel", low: "Niedrig" };
+
+// Ansichten der frueheren Vertragsliste in Register-Filter uebersetzen.
+export function legacyQueryToSpec(query: string): Partial<GridSpec> {
+  const params = new URLSearchParams(query);
+  const filters: GridFilter[] = [];
+  const risks = params.getAll("risk").map((value) => RISK_LABEL[value]).filter(Boolean);
+  if (risks.length) filters.push({ column: "risk", op: "in", value: risks });
+  if (params.get("requires_review") === "true") filters.push({ column: "review_pending", op: "is", value: true });
+  if (params.get("automatic_renewal") === "true") filters.push({ column: "term_model", op: "in", value: ["Automatische Verlängerung"] });
+  if (params.get("critical_cancellation") === "true") filters.push({ column: "cancel_by", op: "within_days", value: 90 });
+  if (params.get("supplier")) filters.push({ column: "partner", op: "contains", value: params.get("supplier") });
+  const q = params.get("q") ?? params.get("contract_number");
+  return { filters, q: q || null };
 }
 
 function linkedFilters(): GridFilter[] | null {
@@ -80,6 +108,8 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
   const [addingFilter, setAddingFilter] = useState(false);
   const [search, setSearch] = useState("");
   const [saveForm, setSaveForm] = useState<{ name: string; is_global: boolean } | null>(null);
+  const [legacyViews, setLegacyViews] = useState<ListViewDto[]>([]);
+  const [preview, setPreview] = useState<string | null>(null);
 
   const columnByKey = useMemo(() => new Map(columns.map((item) => [item.key, item])), [columns]);
   const view = views.find((item) => item.id === viewId) ?? null;
@@ -96,6 +126,9 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
 
   useEffect(() => {
     let cancelled = false;
+    listContractListViews(organizationSlug)
+      .then((result) => { if (!cancelled) setLegacyViews(result.items); })
+      .catch(() => undefined);
     Promise.all([getGridColumns(organizationSlug), listSavedViews(organizationSlug)])
       .then(([columnResult, viewResult]) => {
         if (cancelled) return;
@@ -103,9 +136,11 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
         setViews(viewResult.items);
         setCanManageGlobal(viewResult.can_manage_global);
         const linked = linkedFilters();
-        if (linked) {
+        const linkedQ = linkedQuery();
+        if (linked || linkedQ) {
           applyView(null, columnResult.columns);
-          setSpec((current) => current && ({ ...current, filters: linked }));
+          setSpec((current) => current && ({ ...current, filters: linked ?? [], q: linkedQ }));
+          setSearch(linkedQ ?? "");
           return;
         }
         const remembered = readLastView();
@@ -240,10 +275,21 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
 
     <div className="reg-main">
       <div className="cw-section reg-toolbar">
-        <label>Ansicht<select value={viewId ?? ""} onChange={(event) => applyView(views.find((item) => item.id === event.target.value) ?? null, columns)}>
+        <label>Ansicht<select value={viewId ?? ""} onChange={(event) => {
+          const legacy = legacyViews.find((item) => `legacy:${item.id}` === event.target.value);
+          if (legacy) {
+            applyView(null, columns);
+            const mapped = legacyQueryToSpec(legacy.config.query);
+            setSpec((current) => current && ({ ...current, ...mapped }));
+            setSearch(mapped.q ?? "");
+            return;
+          }
+          applyView(views.find((item) => item.id === event.target.value) ?? null, columns);
+        }}>
           <option value="">Alle Verträge</option>
           <optgroup label="Standard und global">{views.filter((item) => item.is_global).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>
           <optgroup label="Meine Ansichten">{views.filter((item) => !item.is_global).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>
+          {legacyViews.length > 0 ? <optgroup label="Aus der früheren Vertragsliste">{legacyViews.map((item) => <option key={item.id} value={`legacy:${item.id}`}>{item.name}</option>)}</optgroup> : null}
         </select></label>
         <label>Suche<input type="search" value={search} placeholder="Nummer, Beschreibung, Partner" onChange={(event) => setSearch(event.target.value)} /></label>
         <div className="rg-actions">
@@ -322,6 +368,9 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
                 if (index === 0 || column.key === "register_number") {
                   return <td key={column.key}><Link href={`/contracts/${row.contract_id}?tab=register`}>{text}</Link></td>;
                 }
+                if (column.key === "short_description") {
+                  return <td key={column.key}><button type="button" className="btn-link reg-preview" onClick={() => setPreview(row.contract_id)} aria-label={`${text} in der Schnellansicht öffnen`}>{text}</button></td>;
+                }
                 return <td key={column.key} className={column.type === "money" || column.type === "number" ? "num" : undefined}>{text}</td>;
               })}</tr>
             </Fragment>;
@@ -332,6 +381,7 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
           <button type="button" className="btn" disabled={offset + PAGE_SIZE >= total || loading} onClick={() => setOffset(offset + PAGE_SIZE)}>Weiter</button>
         </div> : null}
       </section>
+      <ContractQuickView organizationSlug={organizationSlug} contractId={preview} onClose={() => setPreview(null)} />
     </div>
   </div>;
 }

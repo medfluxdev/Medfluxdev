@@ -122,3 +122,18 @@ describe("Vertragsregister – Raster", () => {
     expect(api.saveBlob).toHaveBeenCalled();
   });
 });
+
+describe("Vertragsliste – Übernahme der früheren Liste", () => {
+  it("übersetzt alte Listenansichten in Registerfilter", async () => {
+    const { legacyQueryToSpec } = await import("@/components/register/RegisterGrid");
+    expect(legacyQueryToSpec("q=CT&risk=high&requires_review=true&automatic_renewal=true&critical_cancellation=true")).toEqual({
+      q: "CT",
+      filters: [
+        { column: "risk", op: "in", value: ["Hoch"] },
+        { column: "review_pending", op: "is", value: true },
+        { column: "term_model", op: "in", value: ["Automatische Verlängerung"] },
+        { column: "cancel_by", op: "within_days", value: 90 },
+      ],
+    });
+  });
+});

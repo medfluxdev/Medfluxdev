@@ -8,14 +8,6 @@ const replaceMock = vi.fn();
 const pushMock = vi.fn();
 let search = "status=active&requires_review=true";
 
-const views = vi.hoisted(() => ({
-  listContractListViews: vi.fn(),
-  createContractListView: vi.fn(),
-  deleteSavedView: vi.fn(),
-}));
-
-vi.mock("@/lib/domain-api/registerGrid", () => views);
-
 vi.mock("next/navigation", () => ({
   usePathname: () => "/contracts",
   useRouter: () => ({ replace: replaceMock, push: pushMock }),
@@ -43,24 +35,9 @@ beforeEach(() => {
   search = "status=active&requires_review=true";
   localStorage.clear();
   sessionStorage.clear();
-  views.listContractListViews.mockReset().mockResolvedValue({ items: [], can_manage_global: true });
-  views.createContractListView.mockReset().mockImplementation(async (_slug: string, name: string, query: string) => ({ id: `v-${name}`, name, config: { query }, is_global: false, is_own: true }));
-  views.deleteSavedView.mockReset().mockResolvedValue({ deleted: true });
 });
 
 describe("Vertragsliste – Arbeitsansicht", () => {
-  it("zeigt aktive Filter als einzeln entfernbare Chips", async () => {
-    const user = userEvent.setup();
-    render(<ContractTable items={[contract]} />);
-
-    const chip = screen.getByRole("button", { name: /Status active entfernen/ });
-    expect(chip).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Manuelle Prüfung Ja entfernen/ })).toBeInTheDocument();
-
-    await user.click(chip);
-    expect(replaceMock).toHaveBeenCalledWith("/contracts?requires_review=true", { scroll: false });
-  });
-
   it("speichert Dichte und Spaltenpräferenz lokal", async () => {
     const user = userEvent.setup();
     render(<ContractTable items={[contract]} />);
@@ -84,25 +61,4 @@ describe("Vertragsliste – Arbeitsansicht", () => {
     expect(pushMock).not.toHaveBeenCalled();
   });
 
-  it("speichert eine Ansicht mit der aktuellen Query auf dem Server", async () => {
-    const user = userEvent.setup();
-    render(<ContractTable items={[contract]} />);
-
-    const nameField = screen.getByRole("textbox", { name: "Name der Ansicht" });
-    await user.type(nameField, "Prüfung offen");
-    await user.click(screen.getByRole("button", { name: "Ansicht speichern" }));
-
-    expect(views.createContractListView).toHaveBeenCalledWith("test-klinik", "Prüfung offen", "status=active&requires_review=true");
-    expect(await screen.findByRole("button", { name: "Prüfung offen" })).toBeInTheDocument();
-    expect(localStorage.getItem("medflux.contracts.savedViews")).toBeNull();
-  });
-
-  it("übernimmt früher im Browser gespeicherte Ansichten einmalig auf den Server", async () => {
-    localStorage.setItem("medflux.contracts.savedViews", JSON.stringify([{ id: "x", name: "Alt", query: "risk=high" }]));
-    views.listContractListViews.mockResolvedValue({ items: [{ id: "v-Alt", name: "Alt", config: { query: "risk=high" }, is_global: false, is_own: true }], can_manage_global: true });
-    render(<ContractTable items={[contract]} />);
-    expect(await screen.findByRole("button", { name: "Alt" })).toBeInTheDocument();
-    expect(views.createContractListView).toHaveBeenCalledWith("test-klinik", "Alt", "risk=high");
-    expect(localStorage.getItem("medflux.contracts.savedViews")).toBeNull();
-  });
 });
