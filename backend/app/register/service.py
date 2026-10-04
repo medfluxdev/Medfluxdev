@@ -429,13 +429,18 @@ def effective_retention_years(session: Session, contract: Contract) -> tuple[Opt
     return None, None
 
 
+def retention_dates(contract: Contract, terms, years: Optional[int]) -> tuple[Optional[date], Optional[date]]:
+    ended = contract.business_status in ("beendet", "gekuendigt") or contract.term_model == "fixed_term"
+    end = terms.actual_end or (terms.possible_end if ended else None)
+    deletion_from = date(end.year + years + 1, 1, 1) if end is not None and years is not None else None
+    return end, deletion_from
+
+
 def retention_info(session: Session, contract: Contract, terms) -> dict:
     """H9: Aufbewahrung beginnt mit Schluss des Kalenderjahres des Vertragsendes
     (§ 257 Abs. 5 HGB / § 147 Abs. 4 AO); geloescht werden darf ab dem 1.1. danach."""
     years, source = effective_retention_years(session, contract)
-    ended = contract.business_status in ("beendet", "gekuendigt") or contract.term_model == "fixed_term"
-    end = terms.actual_end or (terms.possible_end if ended else None)
-    deletion_from = date(end.year + years + 1, 1, 1) if end is not None and years is not None else None
+    end, deletion_from = retention_dates(contract, terms, years)
     return {
         "years": years,
         "source": source,

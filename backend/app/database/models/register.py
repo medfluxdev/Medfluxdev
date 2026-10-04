@@ -288,3 +288,32 @@ class ContractHospital(OrgOwnedMixin, Base):
         UniqueConstraint("contract_id", "hospital_id", name="uq_contract_hospital_pair"),
         Index("ix_contract_hospital_hospital_id", "hospital_id"),
     )
+
+
+SAVED_VIEW_KINDS = ("register",)
+
+
+class SavedView(OrgOwnedMixin, Base):
+    """H7.2: gespeicherte Ansicht des Vertragsregisters (persoenlich oder global)."""
+
+    __tablename__ = "saved_view"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    owner_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="CASCADE"), nullable=True
+    )
+    view_kind: Mapped[str] = mapped_column(String(24), nullable=False, default="register", server_default="register")
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    system_key: Mapped[Optional[str]] = mapped_column(String(48), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("view_kind IN ('register')", name="view_kind"),
+        Index("ix_saved_view_org_owner", "organization_id", "owner_account_id"),
+        Index(
+            "uq_saved_view_org_system_key", "organization_id", "system_key",
+            unique=True, postgresql_where=text("system_key IS NOT NULL"),
+        ),
+    )

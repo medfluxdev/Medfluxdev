@@ -43,12 +43,15 @@ def _reviewer_mutation_allowed(path: str) -> bool:
     )
 
 
-_SELF_SERVICE_PATH = re.compile(r"^/api/(inbox/read-all|inbox/[0-9a-fA-F-]{36}/read|me/notification-settings)$")
+_SELF_SERVICE_PATH = re.compile(
+    r"^/api/(inbox/read-all|inbox/[0-9a-fA-F-]{36}/read|me/notification-settings|register/views(/[0-9a-fA-F-]{36})?)$"
+)
 
 
 def _self_service_mutation(path: str) -> bool:
-    """Eigenes Postfach als gelesen markieren und eigene Benachrichtigungs-
-    einstellungen sind fuer jede Rolle erlaubt; sie betreffen nur das eigene Konto."""
+    """Eigenes Postfach als gelesen markieren, eigene Benachrichtigungs-
+    einstellungen und eigene gespeicherte Ansichten sind fuer jede Rolle erlaubt;
+    sie betreffen nur das eigene Konto (globale Ansichten prueft die Route)."""
     return bool(_SELF_SERVICE_PATH.match(path))
 
 

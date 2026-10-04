@@ -19,6 +19,7 @@ function titleForPath(pathname: string) {
   if (pathname === "/review") return "Prüfungen";
   if (pathname === "/nachweise") return "Nachweise";
   if (pathname === "/audit") return "Historie";
+  if (pathname === "/register") return "Vertragsregister";
   if (pathname === "/archiv") return "Archiv";
   if (pathname === "/admin") return "Admin Dashboard";
   if (pathname === "/developer/components") return "UI-Komponenten";

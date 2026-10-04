@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import PortfolioQueryPanel from "@/components/analytics/PortfolioQueryPanel";
+import RegisterPortfolio from "@/components/analytics/RegisterPortfolio";
 import { getPortfolioReport, type PortfolioReport } from "@/lib/domain-api/reports";
 import { getSupplierPerformance, type SupplierPerformanceItem } from "@/lib/domain-api/intelligenceAnalytics";
 
@@ -24,7 +25,8 @@ export default function AnalyticsPage() {
 
   return (
     <div className="page">
-      <header className="entity-header"><h1>Analysen</h1><p className="page-sub">Kennzahlen direkt aus dem Backend.</p></header>
+      <header className="entity-header"><h1>Analysen</h1><p className="page-sub">Kosten, Fristen und Handlungsbedarf im Vertragsportfolio.</p></header>
+      {organizationSlug ? <RegisterPortfolio organizationSlug={organizationSlug} /> : null}
       {organizationSlug ? <PortfolioQueryPanel organizationSlug={organizationSlug} /> : null}
       {error ? <div className="alert alert--critical">{error}</div> : null}
       {!report && !error ? <p className="state-loading">Analysen werden geladen…</p> : null}

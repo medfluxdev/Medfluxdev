@@ -35,6 +35,7 @@ import {
   type TermModel,
 } from "@/lib/domain-api/register";
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
+import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 
 type Draft = Record<string, RegisterValue>;
 type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo";
@@ -502,6 +503,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     <div className="rg-toolbar">
       {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Stammdaten bearbeiten</button> : null}
       {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>{busy ? "Wird gespeichert…" : "Speichern"}</button></> : null}
+      <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
       <Link href="/partners" className="rg-link">Vertragspartner verwalten</Link>
     </div>
 

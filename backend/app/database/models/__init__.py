@@ -42,6 +42,7 @@ from app.database.models.register import (
     LookupValue,
     NumberAllocation,
     NumberRange,
+    SavedView,
 )
 from app.database.models.equipment import Equipment
 from app.database.models.work_item import WorkItem
@@ -106,6 +107,7 @@ __all__ = [
     "LookupValue",
     "NumberAllocation",
     "NumberRange",
+    "SavedView",
     "Equipment",
     "WorkItem",
     "WorkItemCollaboration",

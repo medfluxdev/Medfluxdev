@@ -178,6 +178,15 @@ def _anytime_end(*, floor: date, lower_bound: date, notice: Period) -> tuple[dat
     return candidate, subtract_duration(candidate, notice.as_calc())
 
 
+TERM_MODEL_LABELS = {
+    "fixed_term": "Feste Laufzeit",
+    "terminable": "Kündbarer Vertrag",
+    "terminable_min_term": "Kündbarer Vertrag mit Mindestlaufzeit",
+    "auto_renewal": "Automatische Verlängerung",
+    "perpetual": "Unbefristet (ohne Ende)",
+}
+
+
 def compute_terms(inputs: TermInputs, as_of: date) -> TermResult:
     if inputs.terminated_effective is not None:
         return TermResult(

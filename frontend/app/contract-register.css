@@ -72,3 +72,53 @@
 .hist-filters label{display:grid;gap:4px;font-size:13px;font-weight:600}
 .hist-table td,.hist-table th{vertical-align:top}
 @media (max-width:640px){.hist-list>li{grid-template-columns:1fr;gap:2px}}
+.reg-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;align-items:start}
+.reg-main{display:grid;gap:12px;min-width:0}
+.reg-tree h2{font-size:14px;margin:0 0 8px}
+.reg-tree ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.reg-tree ul ul{padding-left:14px;margin-top:4px}
+.reg-tree .rg-link{text-align:left}
+.reg-toolbar,.reg-controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end}
+.reg-toolbar label,.reg-controls>label:not(.rg-check){display:grid;gap:4px;font-size:13px;font-weight:600}
+.reg-columns summary{cursor:pointer;font-weight:600;padding:6px 0}
+.reg-columns fieldset{border:0;padding:8px 0 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px;max-width:760px}
+.reg-chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.reg-chips li{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2,#eef2f6);border-radius:999px;padding:4px 6px 4px 12px;font-size:13px}
+.reg-chips button{border:0;background:transparent;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px}
+.reg-scroll{overflow-x:auto}
+.reg-table th,.reg-table td{white-space:nowrap}
+.reg-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+.reg-sort{border:0;background:transparent;font:inherit;font-weight:600;cursor:pointer;padding:0;color:inherit}
+.reg-group th{background:var(--surface-2,#eef2f6);text-align:left}
+.reg-group-1 th{padding-left:24px;background:transparent}
+.rg-values{max-height:240px;overflow:auto}
+@media (max-width:900px){.reg-layout{grid-template-columns:1fr}}
+/* Diagramme (Dataviz-Referenzpalette, Slots 1–2, validiert: CVD ΔE 24,7 / normal 33,6). Die App hat kein Dark-Theme. */
+.viz{margin:0;display:grid;gap:6px;--viz-series-1:#2a78d6;--viz-series-2:#eb6834;--viz-grid:#e6e5e0;--viz-axis:#c9c8c2;--viz-text:#52514e;--viz-ink:#0b0b0b}
+.viz svg{width:100%;height:auto;max-width:720px;font-family:inherit}
+.viz-series-1{fill:var(--viz-series-1)}
+.viz-series-2{fill:var(--viz-series-2)}
+.viz-grid{stroke:var(--viz-grid);stroke-width:1}
+.viz-axis{stroke:var(--viz-axis);stroke-width:1}
+.viz-label,.viz-tick{fill:var(--viz-text);font-size:12px}
+.viz-value{fill:var(--viz-ink);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.viz a:focus-visible{outline:2px solid var(--viz-series-1)}
+.viz-tooltip{margin:0;min-height:1.4em;font-size:13px;color:var(--viz-text)}
+.viz-legend{list-style:none;margin:0;padding:0;display:flex;gap:14px;font-size:13px;color:var(--viz-text)}
+.viz-legend li{display:inline-flex;align-items:center;gap:6px}
+.viz-swatch{display:inline-block;width:10px;height:10px;border-radius:3px}
+.viz-swatch.viz-series-1{background:var(--viz-series-1)}
+.viz-swatch.viz-series-2{background:var(--viz-series-2)}
+.viz-table summary{cursor:pointer;font-size:13px}
+.viz-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.viz-tiles article{background:var(--surface,#fff);border:1px solid var(--border,#e3e7ed);border-radius:12px;padding:12px 14px;display:grid;gap:2px}
+.viz-tiles span{font-size:13px;color:var(--viz-text,#52514e)}
+.viz-tiles strong{font-size:1.4rem;font-variant-numeric:tabular-nums}
+.viz-tiles small{color:var(--viz-text,#52514e)}
+
+.viz-layout{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:12px}
+.viz-head{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap}
+.viz-head label{display:grid;gap:4px;font-size:13px;font-weight:600}
+.viz-insights{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.viz-insights li{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:baseline}
+.viz-insights strong{font-variant-numeric:tabular-nums;text-align:right}

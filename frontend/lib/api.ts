@@ -147,6 +147,10 @@ export async function apiDownload(
   return { blob: await res.blob(), filename };
 }
 
+export function scopedApiUrl(path: string): string {
+  return `${API_BASE}${scopedPath(path)}`;
+}
+
 export function contentUrl(contractId: string, documentVersionId: string, orgSlug: string): string {
   const selected = typeof window !== "undefined" ? window.localStorage.getItem("medflux.organization_slug") : null;
   const q = new URLSearchParams({ organization_slug: selected || orgSlug });

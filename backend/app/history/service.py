@@ -61,6 +61,8 @@ EVENT_LABELS: dict[str, str] = {
     "override.confirm": "Fakt manuell bestätigt",
     "notification.mail_sent": "Erinnerung per E-Mail versendet",
     "history.exported": "Historie exportiert",
+    "register.exported": "Vertragsregister exportiert",
+    "register.report_exported": "Bericht exportiert",
     "account.created": "Benutzer angelegt",
     "account.updated": "Benutzer geändert",
     "account.scope_updated": "Benutzerbereich geändert",
@@ -86,7 +88,7 @@ CATEGORIES: dict[str, str] = {
 }
 
 _CATEGORY_PREFIXES: dict[str, tuple[str, ...]] = {
-    "contract": ("contract.", "contracts.", "contract_review."),
+    "contract": ("contract.", "contracts.", "contract_review.", "register."),
     "deadline": ("deadline.", "notification."),
     "finance": ("finance.",),
     "fact_review": ("fact_review.",),

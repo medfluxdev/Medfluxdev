@@ -29,6 +29,7 @@ from app.api.routes import (
     lifecycle,
     notifications,
     operations,
+    register_grid,
     organization_structure,
     ownership,
     processing_jobs,
@@ -121,6 +122,7 @@ app.include_router(catalogs.router)
 app.include_router(deadlines.router)
 app.include_router(access.router)
 app.include_router(history.router)
+app.include_router(register_grid.router)
 app.include_router(equipment.router)
 app.include_router(lifecycle.router)
 app.include_router(work_queue.router)
