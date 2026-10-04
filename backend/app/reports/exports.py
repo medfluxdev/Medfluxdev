@@ -144,11 +144,17 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
     for key, _label in _DIMENSIONS:
         buckets: dict[Optional[str], dict] = defaultdict(lambda: {"annual_cost": Decimal("0"), "cost_current_year": Decimal("0"), "count": 0})
         for row in running:
-            bucket = buckets[row.values[key]]
-            bucket["count"] += 1
-            for money_key in ("annual_cost", "cost_current_year"):
-                if row.values[money_key] is not None:
-                    bucket[money_key] += row.values[money_key]
+            # Kostenstellen: Betraege anteilig nach der gepflegten Aufteilung.
+            shares = (
+                [(name, share / Decimal("100")) for name, share in row.allocations]
+                if key == "cost_center" and row.allocations else [(row.values[key], Decimal("1"))]
+            )
+            for name, share in shares:
+                bucket = buckets[name]
+                bucket["count"] += 1
+                for money_key in ("annual_cost", "cost_current_year"):
+                    if row.values[money_key] is not None:
+                        bucket[money_key] += row.values[money_key] * share
         ordered = sorted(buckets.items(), key=lambda item: item[1]["cost_current_year"], reverse=True)
         head, tail = ordered[:TOP_N], ordered[TOP_N:]
         items = [

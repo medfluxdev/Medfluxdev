@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.database.models import Account, Contract
 from app.database.models.contract import ContractDocument
 from app.database.models.deadlines import ContractDeadline
-from app.database.models.finance import ContractFinanceEntry
+from app.database.models.finance import ContractCostAllocation, ContractFinanceEntry
 from app.database.models.organization_structure import ContractDepartment, CostCenter, Department, Hospital
 from app.database.models.register import (
     CatalogContractCategory,
@@ -67,6 +67,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("hospital", "Gesellschaft", "enum", groupable=True),
     Column("department", "Abteilung", "enum", groupable=True),
     Column("cost_center", "Kostenstelle", "enum", groupable=True),
+    Column("cost_allocation", "Kostenstellen-Aufteilung", "text"),
     Column("annual_cost", "Jährliche Kosten (netto)", "money", default=True),
     Column("cost_current_year", "Kosten lfd. Jahr (netto)", "money"),
     Column("cost_total_term", "Kosten Laufzeit (netto)", "money"),
@@ -136,6 +137,7 @@ class GridRow:
     values: dict[str, Any]
     ids: dict[str, Optional[uuid.UUID]]
     yearly: dict[int, dict[str, Decimal]] = field(default_factory=dict)
+    allocations: list[tuple[str, Decimal]] = field(default_factory=list)
     upcoming: list[tuple[date, str]] = field(default_factory=list)
 
 
@@ -218,6 +220,14 @@ def build_rows(
     ).all():
         department_links[contract_id].append((role, department_id))
 
+    allocations: dict[uuid.UUID, list[tuple[str, Decimal]]] = defaultdict(list)
+    for contract_id, cost_center_id, share in session.execute(
+        select(ContractCostAllocation.contract_id, ContractCostAllocation.cost_center_id, ContractCostAllocation.share_percent)
+        .where(ContractCostAllocation.contract_id.in_(ids))
+        .order_by(ContractCostAllocation.share_percent.desc())
+    ).all():
+        allocations[contract_id].append((cost_centers.get(cost_center_id, "?"), Decimal(share)))
+
     attachments = dict(session.execute(
         select(ContractDocument.contract_id, func.count()).where(ContractDocument.contract_id.in_(ids)).group_by(ContractDocument.contract_id)
     ).all())
@@ -284,6 +294,9 @@ def build_rows(
             "hospital": hospitals.get(contract.hospital_id) if contract.hospital_id else None,
             "department": departments.get(department_id) if department_id else None,
             "cost_center": cost_centers.get(contract.cost_center_id) if contract.cost_center_id else None,
+            "cost_allocation": ", ".join(
+                f"{name} {format(share.normalize(), 'f').replace('.', ',')} %" for name, share in allocations.get(contract.id, [])
+            ) or None,
             "annual_cost": money(summary.expense.annual_run_rate) if summary else None,
             "cost_current_year": money(summary.expense.current_year) if summary else None,
             "cost_total_term": money(summary.expense.total_term) if summary else None,
@@ -303,6 +316,7 @@ def build_rows(
                 "reminder_recipient": contract.reminder_recipient_account_id,
                 "escalation_recipient": contract.escalation_recipient_account_id,
             },
+            allocations=allocations.get(contract.id, []),
         )
         if years is not None:
             row.yearly = _yearly(inputs, adjustment, end, years)

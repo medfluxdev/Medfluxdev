@@ -115,3 +115,47 @@ def test_classic_list_views_are_stored_on_the_server(monkeypatch):
     assert client.post("/api/register/views", params=query, json={"name": "x", "view_kind": "contracts", "config": {"query": 5}}).status_code == 422
     assert client.post("/api/register/views", params=query, json={"name": "x", "view_kind": "other"}).status_code == 422
     assert client.get("/api/register/views", params={**query, "kind": "other"}).status_code == 422
+
+
+def test_cost_centre_split_in_grid_and_portfolio(monkeypatch):
+    from app.api.routes import register_grid
+    from app.database.models.organization_structure import CostCenter, Hospital
+
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    hospital, cc1, cc2 = uuid4(), uuid4(), uuid4()
+    session = create_session()
+    try:
+        session.add(Hospital(id=hospital, organization_id=ids["org"], name="Klinikum", code="K"))
+        session.flush()
+        session.add_all([
+            CostCenter(id=cc1, organization_id=ids["org"], hospital_id=hospital, code="4711", name="Radiologie"),
+            CostCenter(id=cc2, organization_id=ids["org"], hospital_id=hospital, code="4712", name="IT"),
+        ])
+        session.commit()
+    finally:
+        session.close()
+    client = _client(monkeypatch, ids)
+    actor = SimpleNamespace(organization_id=ids["org"], account_id=ids["admin"], role="admin", is_developer=False, display_name="Admin")
+    monkeypatch.setattr(register_grid, "current_actor", lambda request, organization_slug: actor)
+    monkeypatch.setattr(register_grid, "current_scope_context", lambda: ScopeContext())
+    client.app.include_router(register_grid.router)
+
+    cid = client.post("/api/contracts", params=query, json={"hospital_id": str(hospital), "values": {
+        "short_description": "Server", "term_model": "terminable", "term_start_date": "2026-01-01",
+        "notice_period_value": 3, "notice_period_unit": "months", "notice_to": "month_end",
+    }}).json()["contract_id"]
+    client.post(f"/api/contracts/{cid}/finance/entries", params=query, json={"values": {
+        "label": "Pauschale", "amount": "1000", "vat_rate": "19", "interval": "monthly", "valid_from": "2026-01-01",
+    }})
+    split = client.put(f"/api/contracts/{cid}/finance/allocations", params=query, json={"items": [
+        {"cost_center_id": str(cc1), "share_percent": 60}, {"cost_center_id": str(cc2), "share_percent": 40},
+    ]})
+    assert split.status_code == 200, split.text
+
+    import json as _json
+    grid = client.get("/api/register/grid", params={**query, "spec": _json.dumps({"columns": ["register_number", "cost_center", "cost_allocation"]})}).json()
+    assert grid["items"][0]["values"]["cost_allocation"] == "Radiologie 60 %, IT 40 %"
+    report = client.get("/api/register/reports/portfolio", params=query).json()
+    by_cc = {item["label"]: item["annual_cost"] for item in report["cost_by"]["cost_center"]}
+    assert by_cc == {"Radiologie": "7200.00", "IT": "4800.00"}
