@@ -1,0 +1,106 @@
+name: Integration Check
+
+on:
+  push:
+    branches:
+      - main
+      - JAMAL
+      - step3/integration-20260926
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: integration-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: medflux
+          POSTGRES_PASSWORD: medflux
+          POSTGRES_DB: medflux
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medflux -d medflux"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      AUTH_ENABLED: "false"
+      DATABASE_URL: postgresql+psycopg://medflux:medflux@127.0.0.1:5432/medflux
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Compile backend and tests
+        run: python -m compileall -q app tests
+      - name: Run backend test suite
+        run: set -o pipefail; pytest -q 2>&1 | tee pytest.log
+      - name: Upload backend test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-log
+          path: backend/pytest.log
+          if-no-files-found: ignore
+
+  frontend-verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify frontend
+        run: set -o pipefail; npm run verify 2>&1 | tee verify.log
+      - name: Upload frontend verify log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-verify-log
+          path: frontend/verify.log
+          if-no-files-found: ignore
+
+
+  windows-startup-regression:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows PostgreSQL launcher regression checks
+        shell: powershell
+        run: .\scripts\test_start_local_postgres.ps1
+      - name: Verify top-level launcher wiring
+        shell: powershell
+        run: |
+          $launcher = Get-Content -LiteralPath ".\Start Software.bat" -Raw
+          if ($launcher -notmatch "start_local_postgres\.ps1") {
+            throw "Start Software.bat bypasses the PostgreSQL helper."
+          }
+          if ($launcher -notmatch "/ready") {
+            throw "Start Software.bat does not wait for backend readiness."
+          }
+          if ($launcher -notmatch "status -eq 'ready'") {
+            throw "Start Software.bat does not honor the /ready status contract."
+          }

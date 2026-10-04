@@ -1,0 +1,211 @@
+/* Reference-inspired visual layer.
+   Intentionally presentation-only: no API, route or business-logic changes. */
+
+
+
+html,
+body {
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+/* Main content */
+.content,
+.page {
+  max-width: 1500px;
+  padding: 24px 28px 40px;
+}
+
+.page-header {
+  margin-bottom: 18px;
+}
+
+.page-header h1 {
+  margin: 0 0 4px;
+  font-size: var(--text-title-l);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.page-sub {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+}
+
+.page-actions {
+  margin-top: 12px;
+}
+
+/* Dashboard reference hero */
+
+/* KPI cards */
+.intel-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.intel,
+.kpi {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.intel {
+  min-height: 108px;
+  padding: 0;
+}
+
+.intel:before {
+  display: none;
+}
+
+.kpi-label {
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.kpi-value {
+  color: var(--color-text);
+  font-size: var(--text-title-l);
+  font-weight: 750;
+  margin-top: 10px;
+}
+
+/* Cards and panels across the app */
+.panel,
+.card,
+.detail-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+
+
+.panel h2,
+.panel-head h2 {
+  color: var(--color-text);
+  font-size: var(--text-body);
+  font-weight: 700;
+}
+
+.panel-head {
+  margin-bottom: 14px;
+}
+
+.panel-head p {
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+}
+
+.card-title,
+.detail-card h2 {
+  color: var(--color-text);
+}
+
+/* Empty states */
+.state-box {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  min-height: 210px;
+  padding: 30px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.state-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-subtle);
+}
+
+.state-box h3 {
+  color: var(--color-text-subtle);
+  font-weight: 600;
+}
+
+/* Buttons */
+.btn,
+.settings-nav-item,
+.settings-nav a {
+  border-radius: var(--radius-sm);
+}
+
+
+
+
+
+
+
+
+
+/* Forms and tables */
+input,
+select,
+textarea,
+.field input,
+.field select,
+.field textarea,
+.select {
+  border-radius: var(--radius-sm);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+thead th {
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+  font-weight: 650;
+  background: var(--color-surface-subtle);
+}
+
+tbody tr:hover {
+  background: var(--color-surface);
+}
+
+/* Status styling stays semantic, but visually matches the reference. */
+.status-badge {
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+}
+
+/* Responsive behavior */
+@media (max-width: 960px) {
+  .intel-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+
+  .content,
+  .page {
+    padding: 20px 16px 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .intel-strip {
+    grid-template-columns: 1fr;
+  }
+}

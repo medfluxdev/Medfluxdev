@@ -1,0 +1,223 @@
+"""Narrowest trustworthy source geometry for fact snippets (PR-5 UAT D).
+
+Deterministic, non-AI resolution of a fact snippet to the smallest region of
+the ORIGINAL PDF in which the text provably exists:
+
+- Primary: PyMuPDF text-layer search (exact, PDF-point coordinates that the
+  frontend PdfViewer already transforms). Honest: a hit proves the characters
+  are at exactly that place.
+- Fallback: canonical atomic units (validated OCR word / table cell / line)
+  projected back into the mediabox via page_view_to_mediabox.
+- Oversize guard: any region covering > 50% of the page is reported
+  `coarse`, never `exact`.
+
+Never invents a region: `none` is the honest result when nothing resolveable.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Optional
+
+import fitz
+
+from app.documents.intelligence.canonical import BoundingRegion, DocumentIntelligenceResult
+from app.documents.intelligence.highlight import page_view_to_mediabox, resolve_target_atomic
+
+_WORD_TOKEN = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+_NUMERIC_TOKEN = re.compile(r"\d{2,}")
+
+_OVERSIZE_RATIO = 0.5
+
+
+def _robust_token(snippet: str) -> Optional[str]:
+    words = _WORD_TOKEN.findall(snippet)
+    if not words:
+        numbers = _NUMERIC_TOKEN.findall(snippet)
+        return max(numbers, key=len) if numbers else None
+    return max(words, key=len)
+
+
+def _union_rects(rects) -> Optional["fitz.Rect"]:
+    union = None
+    for r in rects:
+        union = fitz.Rect(r) if union is None else union | r
+    return union
+
+
+def _search_region(page: "fitz.Page", snippet: str) -> tuple[Optional["fitz.Rect"], str]:
+    """Return geometry and confidence, never calling a token-only hit exact.
+
+    A repeated phrase or token has no unique source location. Its union may
+    provide a coarse page-level hint, but must not be presented as a precise
+    word or number highlight.
+    """
+    rects = page.search_for(snippet)
+    if rects:
+        # PyMuPDF can return several rectangles for ONE phrase split across
+        # adjacent lines. Verify that there is exactly one textual occurrence
+        # before treating the union as a precise location.
+        text = page.get_text("text")
+        # PDF extraction may insert line breaks inside a single phrase.
+        # Count both contiguous and whitespace-normalized occurrences, but
+        # never mark a phrase exact when its text is absent or ambiguous.
+        normalized_text = " ".join(text.casefold().split())
+        normalized_snippet = " ".join(snippet.casefold().split())
+        occurrences = normalized_text.count(normalized_snippet) if normalized_snippet else 0
+        if occurrences == 1:
+            # Multiple rectangles can be fragments of one line-wrapped phrase.
+            # Only join nearby fragments; otherwise the union is a coarse hint.
+            if len(rects) == 1:
+                return _union_rects(rects), "exact"
+            ordered = sorted(rects, key=lambda box: (box.y0, box.x0))
+            adjacent = all(
+                (right.y0 - left.y1 <= max(left.height, right.height) * 1.5)
+                for left, right in zip(ordered, ordered[1:])
+            )
+            if adjacent:
+                return _union_rects(rects), "exact"
+        return _union_rects(rects), "coarse"
+    token = _robust_token(snippet)
+    if token and len(token) >= 3:
+        hits = page.search_for(token)
+        if len(hits) == 1:
+            return _union_rects(hits), "coarse"
+    return None, "none"
+
+
+def _to_pdf_bbox(r: BoundingRegion) -> list[float]:
+    return [round(r.x0, 2), round(r.y0, 2), round(r.x1, 2), round(r.y1, 2)]
+
+
+def _union_regions(boxes: list[BoundingRegion]) -> BoundingRegion:
+    return BoundingRegion(
+        page=boxes[0].page,
+        x0=min(b.x0 for b in boxes),
+        y0=min(b.y0 for b in boxes),
+        x1=max(b.x1 for b in boxes),
+        y1=max(b.y1 for b in boxes),
+    )
+
+
+def _resolve_canonical(
+    snippet: str, canonical: DocumentIntelligenceResult, doc: "fitz.Document", page_hint
+) -> Optional[dict]:
+    """Atomic canonical fallback (OCR word / table cell / line)."""
+    for page in canonical.pages:
+        if page_hint is not None and page.page_number != page_hint:
+            continue
+        text = page.text or ""
+        offset = text.find(snippet)
+        length = len(snippet)
+        if offset < 0:
+            folded = snippet.casefold()
+            if len(folded) == length:
+                offset = text.casefold().find(folded)
+        token_fallback = False
+        if offset < 0:
+            token = _robust_token(snippet)
+            if token:
+                if text.casefold().count(token.casefold()) == 1:
+                    offset = text.casefold().find(token.casefold())
+                    length = len(token)
+                    token_fallback = offset >= 0
+        if offset < 0:
+            continue
+        resolution = resolve_target_atomic(page, offset, length)
+        status = None
+        if resolution.status in ("EXACT_WORD", "VALIDATED_TABLE_CELL", "EXACT_LINE"):
+            status = "exact"
+        elif resolution.status == "COARSE_FALLBACK":
+            status = "coarse"
+        else:
+            continue
+        if not resolution.boxes:
+            continue
+        if token_fallback:
+            status = "coarse"
+        try:
+            pdf_page = doc.load_page(page.page_number - 1)
+            rotation = pdf_page.rotation or 0
+            med_w, med_h = pdf_page.rect.width, pdf_page.rect.height
+            mapped = [
+                page_view_to_mediabox(b, rotation, med_w=med_w, med_h=med_h)
+                for b in resolution.boxes
+                if b is not None
+            ]
+        except Exception:
+            continue
+        if not mapped:
+            continue
+        return {
+            "status": status,
+            "page": page.page_number,
+            "bbox": _to_pdf_bbox(_union_regions(mapped)),
+            "bbox_space": "pdf_points",
+            "method": "canonical_atomic",
+        }
+    return None
+
+
+def resolve_narrowest_region(
+    snippet: str,
+    *,
+    pdf_bytes: bytes,
+    canonical: Optional[DocumentIntelligenceResult] = None,
+    page_hint: Optional[int] = None,
+) -> dict:
+    """Resolve a fact snippet to its narrowest trustworthy PDF region."""
+    if not snippet or not pdf_bytes:
+        return _none()
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:
+        return _none()
+
+    if page_hint is not None:
+        if not 1 <= page_hint <= doc.page_count:
+            doc.close()
+            return _none()
+        candidates = [page_hint - 1]
+    else:
+        candidates = list(range(doc.page_count))
+
+    for idx in candidates:
+        page = doc.load_page(idx)
+        union, match_status = _search_region(page, snippet)
+        if union is None:
+            continue
+        page_area = page.rect.width * page.rect.height
+        status = match_status
+        if page_area > 0 and (union.width * union.height) > _OVERSIZE_RATIO * page_area:
+            status = "coarse"
+        doc.close()
+        return {
+            "status": status,
+            "page": idx + 1,
+            "bbox": [
+                round(union.x0, 2),
+                round(union.y0, 2),
+                round(union.x1, 2),
+                round(union.y1, 2),
+            ],
+            "bbox_space": "pdf_points",
+            "method": "pdf_text_layer",
+        }
+
+    if canonical is not None:
+        region = _resolve_canonical(snippet, canonical, doc, page_hint)
+        if region is not None:
+            doc.close()
+            return region
+    doc.close()
+    return _none()
+
+
+def _none() -> dict:
+    return {
+        "status": "none",
+        "page": None,
+        "bbox": None,
+        "bbox_space": "pdf_points",
+        "method": None,
+    }

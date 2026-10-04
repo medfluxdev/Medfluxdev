@@ -1,0 +1,80 @@
+# Abhängigkeiten
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/.venv/
+backend/venv/
+
+# Umgebungsvariablen (nie einchecken, Vorlage bleibt)
+.env
+.env.*
+!.env.example
+
+# Build-Artefakte
+.next/
+out/
+dist/
+build/
+
+# Daten (nie einchecken)
+data/contracts/*
+data/database/*
+data/backups/*
+!data/contracts/.gitkeep
+!data/database/.gitkeep
+!data/backups/.gitkeep
+
+# Nested/Backend-Testdaten – Vertrags-Storage je Backend (nie einchecken)
+backend/data/
+**/data/contracts/*
+**/data/database/*
+**/data/backups/*
+!**/data/contracts/.gitkeep
+!**/data/database/.gitkeep
+!**/data/backups/.gitkeep
+
+# Benchmark – echte Vertrags-PDFs, Berichte & Artefakte (nie einchecken)
+data/benchmark/
+data/benchmark_v2/
+
+# PostgreSQL-Datenverzeichnisse
+pgdata/
+data/pgdata/
+*.pgdata
+postgres-data/
+
+# Modell-Dateien / Gewichte (db.models sind Quellcode, nur Datei-Extensions meiden)
+*.gguf
+*.onnx
+*.pt
+*.pth
+/models/
+
+# OCR-/Canonical-Caches & generierte Quell-Navigations-Render
+data/ocr_cache/
+data/canonical_cache/
+*.canonical.json
+
+# Test-/Coverage-Artefakte
+.coverage
+htmlcov/
+.pytest_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs (können Vertragsinhalt enthalten)
+*.log
+logs/
+npm-debug.log*
+
+
+*.tsbuildinfo
+
+# Echte Vertragsdokumente nie einchecken (Datenschutz)
+/عقود حقيقية لتدريب النموذج/

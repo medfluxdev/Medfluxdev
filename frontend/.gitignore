@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.next-*/
+out/
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+
+# Playwright
+/test-results/
+/playwright-report/
+/e2e/.auth/
+/e2e/.env

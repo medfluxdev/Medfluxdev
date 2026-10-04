@@ -1,0 +1,289 @@
+.fr-edit-stack {
+  display: grid;
+  gap: 0.75rem;
+  align-items: stretch;
+  grid-template-columns: 1fr;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.fr-edit-stack label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: var(--text-small);
+  color: var(--color-text-subtle);
+}
+
+.fr-edit-stack input {
+  width: 100%;
+}
+
+.fr-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.cw-origin-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  font-size: var(--text-caption);
+  line-height: 1.35;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.cw-origin-extracted {
+  background: var(--color-bg);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-subtle);
+}
+
+.cw-origin-reviewed {
+  background: var(--color-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+
+.cw-origin-corrected {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+
+.cw-origin-calculated,
+.cw-origin-system {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border);
+  color: var(--color-text-subtle);
+}
+
+.cw-origin-missing {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.cw-value-origin {
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.cw-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.cw-calc-basis {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.cw-calc-basis-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cw-calc-basis p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.cw-calc-basis dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.cw-calc-basis dl > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.cw-calc-basis dt {
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
+  text-transform: capitalize;
+}
+
+.cw-calc-basis dd {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.cw-calc-basis small {
+  color: var(--color-text-subtle);
+}
+
+.fr-value-grid label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.fr-value-with-origin {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pdf-status.pdf-error {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
+  padding: 1rem;
+  margin: 16px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface-subtle);
+  color: var(--color-danger);
+}
+
+.pdf-status.pdf-error strong {
+  font-size: var(--text-body);
+}
+
+.pdf-status.pdf-error span {
+  max-width: 60ch;
+}
+
+/* FE-06: desktop source review behaves like an adjustable split workspace.
+   The evidence pane is the resize handle itself, so no JavaScript or fake
+   persistence is needed. The PDF pane always consumes the remaining width. */
+@media (min-width: 1280px) {
+  .cw-evidence-layout {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .cw-evidence-pane {
+    width: clamp(340px, 38vw, 620px);
+    min-width: 320px;
+    max-width: min(70vw, 760px);
+    resize: horizontal;
+    overflow: auto;
+    border-right: 3px solid var(--color-border);
+    padding-right: 8px;
+  }
+
+  .cw-evidence-pane:focus-within,
+  .cw-evidence-pane:hover {
+    border-right-color: var(--color-focus);
+  }
+
+  .cw-evidence-preview {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 960px) {
+  .cw-document-layout,
+  .cw-evidence-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cw-document-sidebar {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    position: static;
+    padding: 12px;
+  }
+
+  .cw-document-sidebar h2 {
+    min-width: 100%;
+    margin: 0 0 4px;
+  }
+
+  .cw-document-sidebar > button {
+    flex: 0 0 min(240px, 72vw);
+  }
+
+  .cw-evidence-pane {
+    width: auto;
+    max-width: none;
+    max-height: 360px;
+    resize: vertical;
+    border-right: 0;
+    border-bottom: 3px solid var(--color-border);
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+
+  .cw-evidence-preview,
+  .cw-pdf-shell {
+    min-height: 460px;
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .fr-edit-actions {
+    align-items: stretch;
+  }
+
+  .fr-edit-actions .btn,
+  .fr-edit-actions .btn-link {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .cw-pdf-shell,
+  .cw-evidence-preview {
+    min-height: 380px;
+    border-radius: var(--radius-sm);
+  }
+
+  .cw-calc-grid,
+  .cw-calc-basis dl > div {
+    grid-template-columns: 1fr;
+  }
+
+  .cw-value-origin {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .fr-value-with-origin {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fr-detail-actions,
+  .fr-edit-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fr-detail-actions > *,
+  .fr-edit-actions > * {
+    width: 100%;
+  }
+}

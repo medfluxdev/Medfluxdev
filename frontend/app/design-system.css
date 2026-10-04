@@ -1,0 +1,179 @@
+
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[tabindex]:not([tabindex="-1"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+
+
+
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: var(--control-height-md);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  padding: 0.5rem 0.625rem;
+}
+
+.field textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.field input:hover:not(:disabled),
+.field select:hover:not(:disabled),
+.field textarea:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+
+
+
+
+
+
+.page-header {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: var(--space-xl);
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: var(--text-title-l);
+  line-height: var(--line-height-tight);
+  letter-spacing: -0.015em;
+}
+
+.page-header .page-sub {
+  margin: 0;
+  color: var(--text-secondary);
+  max-width: 72ch;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+
+
+
+
+
+
+
+
+.status-badge .sb-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@keyframes medflux-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .page-header h1 {
+    font-size: var(--text-title-m);
+  }
+
+  .page-actions {
+    align-items: stretch;
+  }
+
+  .page-actions > * {
+    max-width: 100%;
+  }
+}
+
+

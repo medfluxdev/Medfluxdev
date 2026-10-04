@@ -1,0 +1,112 @@
+
+:is(a, li, div).notification-item { display: grid; gap: .2rem; padding: .75rem; text-decoration: none; }
+.notification-item strong { color: inherit; }
+.notification-item small { white-space: normal; line-height: 1.35; }
+.notification-item span { font-size: var(--text-caption); text-transform: uppercase; opacity: .65; }
+.button-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .65rem; }
+.work-collaboration-panel { margin-bottom: 1rem; }
+.work-collaboration-panel .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.work-collaboration-panel .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1rem; }
+.work-collaboration-panel label { display: grid; gap: .35rem; font-weight: 600; }
+.work-collaboration-panel input,
+.work-collaboration-panel select,
+.work-collaboration-panel textarea { width: 100%; }
+.form-field-wide { grid-column: 1 / -1; }
+.work-comments { margin-top: 1.25rem; border-top: 1px solid var(--border, var(--color-border)); padding-top: 1rem; }
+.work-comments ul { display: grid; gap: .75rem; padding: 0; list-style: none; }
+.work-comments li { padding: .75rem; border: 1px solid var(--border, var(--color-border)); border-radius: .65rem; }
+.work-comments li p { margin: .3rem 0; }
+@media (max-width: 960px) { .work-collaboration-panel .form-grid { grid-template-columns: 1fr; } .form-field-wide { grid-column: auto; } }
+
+
+/* Contract lifecycle form: match the MedFlux visual system, including native date controls. */
+.cw-lifecycle-form {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, .85fr);
+  gap: 16px;
+  align-items: end;
+  max-width: 860px;
+}
+.cw-lifecycle-form > label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--text-small);
+  font-weight: 650;
+  color: var(--text-muted, var(--color-text-subtle));
+}
+.cw-lifecycle-form select,
+.cw-lifecycle-form input,
+.cw-lifecycle-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong, var(--color-border-strong));
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface, var(--color-surface));
+  color: var(--text, var(--color-text));
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.35;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, .04));
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+.cw-lifecycle-form select:hover,
+.cw-lifecycle-form input:hover,
+.cw-lifecycle-form textarea:hover {
+  border-color: var(--color-border-strong);
+}
+.cw-lifecycle-form select:focus,
+.cw-lifecycle-form input:focus,
+.cw-lifecycle-form textarea:focus {
+  outline: none;
+  border-color: var(--accent, var(--color-focus));
+  box-shadow: var(--shadow-focus);
+}
+.cw-lifecycle-form select {
+  cursor: pointer;
+}
+.cw-lifecycle-form input[type="date"] {
+  min-width: 0;
+  color-scheme: light;
+  accent-color: var(--accent, var(--color-text-subtle));
+}
+.cw-lifecycle-form input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: .72;
+}
+.cw-lifecycle-form textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+.cw-lifecycle-form .form-field-wide {
+  grid-column: 1 / -1;
+}
+.cw-lifecycle-form > div:last-child {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+.cw-lifecycle-form .btn-primary {
+  min-height: 44px;
+  padding-inline: 18px;
+  border-radius: var(--radius-md, 10px);
+  background: linear-gradient(135deg, var(--accent, var(--color-info-fill)) 0%, var(--color-brand-strong) 100%);
+  border-color: var(--accent, var(--color-focus));
+  box-shadow: var(--shadow-md);
+}
+.cw-lifecycle-form .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--accent-strong, var(--color-accent)) 0%, var(--accent, var(--color-info-fill)) 100%);
+}
+@media (max-width: 640px) {
+  .cw-lifecycle-form {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+  .cw-lifecycle-form .form-field-wide,
+  .cw-lifecycle-form > div:last-child {
+    grid-column: auto;
+  }
+}

@@ -1,0 +1,174 @@
+/* MedFlux visual identity v1.0
+   Governing reference: docs/VISUAL_IDENTITY.md */
+
+
+
+body {
+  font-family: var(--font-sans);
+  color: var(--brand-text);
+}
+
+/* Canonical logo: approved board item 01 — Main Logo. */
+.medflux-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.medflux-logo__image {
+  display: block;
+  width: 168px;
+  height: auto;
+  object-fit: contain;
+}
+
+.medflux-logo--compact .medflux-logo__image {
+  width: 48px;
+}
+
+/* Dunkles Design: aufgehellte Logo-Fassung (gleiche Regeln wie tokens.css) */
+.medflux-logo__image--dark { display: none; }
+:root[data-theme="dark"] .medflux-logo__image--light { display: none; }
+:root[data-theme="dark"] .medflux-logo__image--dark { display: block; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .medflux-logo__image--light { display: none; }
+  :root:not([data-theme="light"]) .medflux-logo__image--dark { display: block; }
+}
+
+/* Core actions */
+.btn-primary,
+.auth-submit,
+.user-admin-form button,
+.user-edit-row button {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: var(--color-text-inverse);
+}
+
+.btn-primary:hover:not(:disabled),
+.auth-submit:hover:not(:disabled),
+.user-admin-form button:hover:not(:disabled),
+.user-edit-row button:hover:not(:disabled) {
+  background: var(--brand-blue-hover);
+  border-color: var(--brand-blue-hover);
+}
+
+a {
+  text-decoration-color: color-mix(in srgb, var(--brand-teal), transparent 42%);
+}
+
+/* Identity-led dashboard area */
+
+/* Login */
+.auth-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: radial-gradient(circle at 12% 10%, rgba(20, 184, 166, 0.22), transparent 30%),
+    radial-gradient(circle at 88% 86%, rgba(15, 76, 129, 0.14), transparent 34%),
+    linear-gradient(135deg, var(--color-surface-subtle) 0%, var(--color-surface-muted) 52%, var(--color-bg) 100%);
+}
+
+.auth-page::before,
+.auth-page::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  width: 34rem;
+  height: 34rem;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(2px);
+}
+
+.auth-page::before {
+  top: -22rem;
+  left: -12rem;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.auth-page::after {
+  right: -18rem;
+  bottom: -24rem;
+  background: rgba(15, 76, 129, 0.1);
+}
+
+.auth-login-brand {
+  display: grid;
+  justify-items: center;
+  margin-bottom: 28px;
+}
+
+.auth-login-brand .medflux-logo {
+  width: min(300px, 82vw);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.auth-login-brand .medflux-logo__image {
+  width: 250px;
+  max-width: 100%;
+}
+
+
+.auth-card {
+  border-color: rgba(15, 76, 129, 0.12);
+  box-shadow: var(--shadow-lg);
+}
+
+.auth-card h2,
+.auth-form label {
+  color: var(--brand-text);
+}
+
+.auth-intro,
+.auth-benefits {
+  color: var(--brand-muted);
+}
+
+.auth-form input:focus,
+.user-admin-form input:focus,
+.user-admin-form select:focus,
+.user-edit-row input:focus,
+.user-edit-row select:focus {
+  border-color: var(--brand-teal);
+  outline-color: rgba(20, 184, 166, 0.34);
+}
+
+.auth-password-toggle:focus-visible {
+  outline-color: var(--focus-color);
+}
+
+.auth-benefits svg {
+  stroke: var(--brand-blue);
+}
+
+/* Cards and selected low-emphasis regions */
+.panel,
+.card,
+.detail-card,
+.intel,
+.kpi {
+  border-color: var(--color-border);
+}
+
+.state-icon {
+  background: var(--color-surface-subtle);
+}
+
+
+
+@media (max-width: 640px) {
+  .auth-login-brand .medflux-logo {
+    width: min(260px, 82vw);
+    padding: 0;
+  }
+
+  .auth-login-brand .medflux-logo__image {
+    width: 220px;
+  }
+}
