@@ -31,6 +31,7 @@ from app.database.models.deadlines import (
 from app.database.session import create_session
 from app.deadlines.mail import SmtpTransport, TransportFactory, build_ics, build_message, smtp_configured
 from app.deadlines.system import sync_system_deadlines
+from app.finance.service import refresh_all_maintained_costs
 
 logger = logging.getLogger("medflux.deadlines")
 
@@ -279,6 +280,8 @@ def run_daily(
         counts: dict[str, int] = {}
         try:
             process_deadlines(session, as_of, counts, organization_id)
+            session.commit()
+            counts["maintained_costs_refreshed"] = refresh_all_maintained_costs(session, as_of, organization_id)
             session.commit()
             factory = transport_factory or (SmtpTransport if smtp_configured() else None)
             if factory is not None:

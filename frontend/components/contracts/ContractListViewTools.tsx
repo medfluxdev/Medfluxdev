@@ -2,10 +2,29 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { createContractListView, deleteSavedView, listContractListViews, type ListViewDto } from "@/lib/domain-api/registerGrid";
 
-type SavedView = { id: string; name: string; query: string };
+type SavedView = { id: string; name: string; query: string; deletable: boolean };
 
-const SAVED_VIEWS_KEY = "medflux.contracts.savedViews";
+// Frueher nur im Browser gespeichert; wird einmalig auf den Server uebernommen.
+const LEGACY_VIEWS_KEY = "medflux.contracts.savedViews";
+
+function fromDto(item: ListViewDto): SavedView {
+  return { id: item.id, name: item.name, query: item.config.query, deletable: item.is_own };
+}
+
+function readLegacy(): { name: string; query: string }[] {
+  try {
+    const stored = localStorage.getItem(LEGACY_VIEWS_KEY);
+    const parsed = stored ? (JSON.parse(stored) as unknown) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is { name: string; query: string } => typeof item?.name === "string" && typeof item?.query === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 const LABELS: Record<string, string> = {
   q: "Suche",
@@ -41,17 +60,34 @@ export default function ContractListViewTools() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { organizationSlug } = useAuth();
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [viewName, setViewName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SAVED_VIEWS_KEY);
-      if (stored) setSavedViews(JSON.parse(stored) as SavedView[]);
-    } catch {
-      setSavedViews([]);
-    }
-  }, []);
+    if (!organizationSlug) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const legacy = readLegacy();
+        if (legacy.length > 0) {
+          try { localStorage.removeItem(LEGACY_VIEWS_KEY); } catch { /* nur Komfort */ }
+          try {
+            for (const item of legacy) await createContractListView(organizationSlug, item.name, item.query);
+          } catch (uploadError) {
+            try { localStorage.setItem(LEGACY_VIEWS_KEY, JSON.stringify(legacy)); } catch { /* nur Komfort */ }
+            throw uploadError;
+          }
+        }
+        const result = await listContractListViews(organizationSlug);
+        if (!cancelled) setSavedViews(result.items.map(fromDto));
+      } catch {
+        if (!cancelled) setError("Gespeicherte Ansichten konnten nicht geladen werden.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [organizationSlug]);
 
   const filterEntries = useMemo(() => {
     const entries: Array<{ key: string; value: string; index: number; label: string }> = [];
@@ -88,31 +124,33 @@ export default function ContractListViewTools() {
     navigate(params);
   }
 
-  function persist(next: SavedView[]) {
-    setSavedViews(next);
-    localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
-  }
-
-  function saveCurrentView() {
+  async function saveCurrentView() {
     const name = viewName.trim();
-    if (!name) return;
+    if (!name || !organizationSlug) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page");
-    const next: SavedView = {
-      id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`,
-      name,
-      query: params.toString(),
-    };
-    persist([...savedViews, next]);
-    setViewName("");
+    try {
+      const created = await createContractListView(organizationSlug, name, params.toString());
+      setSavedViews((current) => [...current, fromDto(created)]);
+      setViewName("");
+      setError(null);
+    } catch {
+      setError("Die Ansicht konnte nicht gespeichert werden.");
+    }
   }
 
   function applyView(view: SavedView) {
     router.replace(`${pathname}${view.query ? `?${view.query}` : ""}`, { scroll: false });
   }
 
-  function deleteView(id: string) {
-    persist(savedViews.filter((view) => view.id !== id));
+  async function deleteView(id: string) {
+    if (!organizationSlug) return;
+    try {
+      await deleteSavedView(organizationSlug, id);
+      setSavedViews((current) => current.filter((view) => view.id !== id));
+    } catch {
+      setError("Die Ansicht konnte nicht gelöscht werden.");
+    }
   }
 
   return (
@@ -148,18 +186,19 @@ export default function ContractListViewTools() {
         <div className="saved-view-create">
           <label className="sr-text" htmlFor="saved-view-name">Name der Ansicht</label>
           <input id="saved-view-name" value={viewName} onChange={(event) => setViewName(event.target.value)} placeholder="z. B. Kritische Verträge" />
-          <button type="button" className="btn-ghost btn-sm" disabled={!viewName.trim()} onClick={saveCurrentView}>Ansicht speichern</button>
+          <button type="button" className="btn-ghost btn-sm" disabled={!viewName.trim()} onClick={() => void saveCurrentView()}>Ansicht speichern</button>
         </div>
         {savedViews.length > 0 ? (
           <div className="saved-view-list">
             {savedViews.map((view) => (
               <span key={view.id} className="saved-view-item">
                 <button type="button" className="saved-view-apply" onClick={() => applyView(view)}>{view.name}</button>
-                <button type="button" className="saved-view-delete" onClick={() => deleteView(view.id)} aria-label={`Gespeicherte Ansicht ${view.name} löschen`}>×</button>
+                {view.deletable ? <button type="button" className="saved-view-delete" onClick={() => void deleteView(view.id)} aria-label={`Gespeicherte Ansicht ${view.name} löschen`}>×</button> : null}
               </span>
             ))}
           </div>
-        ) : <span className="contract-tool-muted">Noch keine lokalen Ansichten gespeichert.</span>}
+        ) : <span className="contract-tool-muted">Noch keine Ansichten gespeichert.</span>}
+        {error ? <span role="alert" className="contract-tool-muted">{error}</span> : null}
       </div>
     </div>
   );

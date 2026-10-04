@@ -50,6 +50,7 @@ class ViewBody(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     config: dict[str, Any] = Field(default_factory=dict)
     is_global: bool = False
+    view_kind: str = "register"
 
 
 def _spec(raw: Optional[str]) -> GridSpec:
@@ -237,11 +238,13 @@ def _view_http(exc: ViewError) -> HTTPException:
 
 
 @router.get("/api/register/views")
-def get_views(request: Request, organization_slug: str):
+def get_views(request: Request, organization_slug: str, kind: str = "register"):
     actor = current_actor(request, organization_slug)
+    if kind not in ("register", "contracts"):
+        raise HTTPException(status_code=422, detail="Unbekannte Ansichtsart.")
     session = create_session()
     try:
-        items = list_views(session, actor.organization_id, actor.account_id)
+        items = list_views(session, actor.organization_id, actor.account_id, kind)
         session.commit()
         return {"items": items, "can_manage_global": can(actor, "views.global")}
     finally:
@@ -259,6 +262,7 @@ def post_view(payload: ViewBody, request: Request, organization_slug: str):
             row = create_view(
                 session, organization_id=actor.organization_id, account_id=actor.account_id,
                 display_name=actor.display_name, name=payload.name, config=payload.config, is_global=payload.is_global,
+                kind=payload.view_kind,
             )
         except ViewError as exc:
             session.rollback()

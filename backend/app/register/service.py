@@ -658,6 +658,10 @@ def update_register(
         ensure_register_number(session, contract, actor.account_id)
         log_activity(session, actor, contract.id, "contract.register_updated", {"fields": diffs})
     session.flush()
+    if diffs:
+        from app.finance.service import refresh_maintained_cost
+
+        refresh_maintained_cost(session, contract)
     return diffs
 
 

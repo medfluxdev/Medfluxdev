@@ -116,6 +116,7 @@ class Notification(OrgOwnedMixin, Base):
         CheckConstraint(f"kind IN ({', '.join(repr(v) for v in NOTIFICATION_KIND_ALLOWED)})", name="kind"),
         UniqueConstraint("account_id", "dedupe_key", name="uq_notification_account_dedupe"),
         Index("ix_notification_account_read", "account_id", "read_at"),
+        Index("ix_notification_contract_id", "contract_id"),
     )
 
 

@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.contracts.calculation.calendar_ import month_add
@@ -261,6 +261,32 @@ def annual_run_rate(session: Session, contract: Contract, as_of: date) -> Option
     return {"currency": main.currency, "net": rate["net"], "gross": rate["gross"]}
 
 
+def refresh_maintained_cost(session: Session, contract: Contract, as_of: Optional[date] = None) -> None:
+    """Aktualisiert den Zwischenspeicher der gepflegten Jahreskosten am Vertrag."""
+    as_of = as_of or date.today()
+    rate = annual_run_rate(session, contract, as_of)
+    contract.maintained_annual_cost = Decimal(rate["net"]) if rate else None
+    contract.maintained_annual_currency = rate["currency"] if rate else None
+    contract.maintained_cost_as_of = as_of if rate else None
+    session.flush()
+
+
+def refresh_all_maintained_costs(session: Session, as_of: date, organization_id: Optional[uuid.UUID] = None) -> int:
+    stmt = select(Contract).where(
+        or_(
+            Contract.id.in_(select(ContractFinanceEntry.contract_id)),
+            Contract.maintained_annual_cost.is_not(None),
+        )
+    )
+    if organization_id is not None:
+        stmt = stmt.where(Contract.organization_id == organization_id)
+    count = 0
+    for contract in session.scalars(stmt).all():
+        refresh_maintained_cost(session, contract, as_of)
+        count += 1
+    return count
+
+
 def _allocations(session: Session, contract: Contract, summaries: list[dict]) -> list[dict]:
     rows = session.execute(
         select(ContractCostAllocation, CostCenter)
@@ -361,6 +387,7 @@ def create_entry(session: Session, *, contract: Contract, actor: RegisterActor, 
     )
     session.add(row)
     session.flush()
+    refresh_maintained_cost(session, contract)
     log_activity(session, actor, contract.id, "finance.entry_created", {
         "entry_id": str(row.id), "label": row.label, "amount": str(row.amount), "direction": row.direction, "origin": origin,
     })
@@ -386,6 +413,7 @@ def update_entry(session: Session, *, contract: Contract, actor: RegisterActor, 
     if diffs:
         log_activity(session, actor, contract.id, "finance.entry_updated", {"entry_id": str(row.id), "fields": diffs})
     session.flush()
+    refresh_maintained_cost(session, contract)
 
 
 def delete_entry(session: Session, *, contract: Contract, actor: RegisterActor, entry_id: uuid.UUID) -> None:
@@ -424,6 +452,7 @@ def delete_service(session: Session, *, contract: Contract, actor: RegisterActor
     log_activity(session, actor, contract.id, "finance.service_deleted", {"service_id": str(row.id), "label": row.label})
     session.delete(row)
     session.flush()
+    refresh_maintained_cost(session, contract)
 
 
 def accept_suggestion(session: Session, *, contract: Contract, actor: RegisterActor, scope: str, key: str,

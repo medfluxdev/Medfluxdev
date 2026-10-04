@@ -210,6 +210,11 @@ def _annual_value() -> "object":
     return cast(_accepted_calc_value(("costs", "normalized_recurring", "annual", "value")), Numeric)
 
 
+def _effective_annual_value():
+    """Gepflegte Jahreskosten (Finanzdaten) vor dem KI-Berechnungswert."""
+    return func.coalesce(Contract.maintained_annual_cost, _annual_value())
+
+
 def _annual_currency():
     return _accepted_calc_value(("costs", "normalized_recurring", "annual", "currency"))
 
@@ -382,20 +387,24 @@ def _build_filters(params: SearchParams, org_id, q: str):
             _currency_conflict() != "true",
         ),
     )
+    maintained = Contract.maintained_annual_cost.is_not(None)
     if params.currency:
         preds.append(
-            and_(
-                annual_reliable,
-                func.upper(_annual_currency()) == params.currency.upper(),
+            or_(
+                and_(maintained, func.upper(Contract.maintained_annual_currency) == params.currency.upper()),
+                and_(~maintained, annual_reliable, func.upper(_annual_currency()) == params.currency.upper()),
             )
         )
     if params.annual_cost_min is not None or params.annual_cost_max is not None:
-        range_cond = and_(annual_reliable)
+        maintained_cond = maintained
+        calc_cond = and_(~maintained, annual_reliable)
         if params.annual_cost_min is not None:
-            range_cond = and_(range_cond, _annual_value() >= params.annual_cost_min)
+            maintained_cond = and_(maintained_cond, Contract.maintained_annual_cost >= params.annual_cost_min)
+            calc_cond = and_(calc_cond, _annual_value() >= params.annual_cost_min)
         if params.annual_cost_max is not None:
-            range_cond = and_(range_cond, _annual_value() <= params.annual_cost_max)
-        preds.append(range_cond)
+            maintained_cond = and_(maintained_cond, Contract.maintained_annual_cost <= params.annual_cost_max)
+            calc_cond = and_(calc_cond, _annual_value() <= params.annual_cost_max)
+        preds.append(or_(maintained_cond, calc_cond))
 
     # Datumsbereiche (autoritativ: akzeptierte STEP-9-/STEP-7-Werte).
     if params.start_date_from is not None:
@@ -551,7 +560,7 @@ def _apply_order(stmt, params: SearchParams, org_id, q: str, urgency_expr):
     elif sort == "cancellation_date":
         col = _cancellation_date()
     elif sort == "annual_cost":
-        col = _annual_value()
+        col = _effective_annual_value()
     elif sort == "risk":
         col = case(
             (Contract.risk_level == "low", 0),

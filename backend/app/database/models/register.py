@@ -290,7 +290,7 @@ class ContractHospital(OrgOwnedMixin, Base):
     )
 
 
-SAVED_VIEW_KINDS = ("register",)
+SAVED_VIEW_KINDS = ("register", "contracts")
 
 
 class SavedView(OrgOwnedMixin, Base):
@@ -310,7 +310,7 @@ class SavedView(OrgOwnedMixin, Base):
     created_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
-        CheckConstraint("view_kind IN ('register')", name="view_kind"),
+        CheckConstraint("view_kind IN ('register', 'contracts')", name="view_kind"),
         Index("ix_saved_view_org_owner", "organization_id", "owner_account_id"),
         Index(
             "uq_saved_view_org_system_key", "organization_id", "system_key",

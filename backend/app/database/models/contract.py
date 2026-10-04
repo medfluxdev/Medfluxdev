@@ -208,6 +208,11 @@ class Contract(OrgOwnedMixin, Base):
     price_adjustment_index_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     price_adjustment_next_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     price_adjustment_interval_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Zwischenspeicher der gepflegten Jahreskosten (netto) fuer Sortierung/Filter
+    # der Vertragsliste; Quelle bleibt die Finanz-Engine.
+    maintained_annual_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    maintained_annual_currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    maintained_cost_as_of: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     document_links: Mapped[list["ContractDocument"]] = relationship(
         back_populates="contract",
@@ -228,6 +233,7 @@ class Contract(OrgOwnedMixin, Base):
             f"business_status IN ({', '.join(repr(v) for v in BUSINESS_STATUS_ALLOWED)})",
             name="business_status",
         ),
+        Index("ix_contract_org_maintained_cost", "organization_id", "maintained_annual_cost"),
         CheckConstraint(
             f"term_model IS NULL OR term_model IN ({', '.join(repr(v) for v in TERM_MODEL_ALLOWED)})",
             name="term_model",

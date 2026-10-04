@@ -51,6 +51,15 @@ export interface SavedViewDto {
   is_system: boolean;
   is_own: boolean;
   created_by_name: string | null;
+  view_kind?: "register" | "contracts";
+}
+
+export interface ListViewDto {
+  id: string;
+  name: string;
+  config: { query: string };
+  is_global: boolean;
+  is_own: boolean;
 }
 
 export interface TreeHospital {
@@ -119,6 +128,14 @@ export function listSavedViews(organizationSlug: string) {
 
 export function createSavedView(organizationSlug: string, payload: { name: string; config: Partial<GridSpec>; is_global: boolean }) {
   return apiPost<SavedViewDto>(`/api/register/views?${org(organizationSlug)}`, payload);
+}
+
+export function listContractListViews(organizationSlug: string) {
+  return apiGet<{ items: ListViewDto[]; can_manage_global: boolean }>(`/api/register/views?${org(organizationSlug)}&kind=contracts`);
+}
+
+export function createContractListView(organizationSlug: string, name: string, query: string) {
+  return apiPost<ListViewDto>(`/api/register/views?${org(organizationSlug)}`, { name, config: { query }, is_global: false, view_kind: "contracts" });
 }
 
 export function updateSavedView(organizationSlug: string, viewId: string, payload: { name: string; config: Partial<GridSpec> }) {
