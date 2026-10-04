@@ -450,3 +450,18 @@
 .my-day-list li:has(.my-day-count) { grid-template-columns: 2.5rem minmax(0, 1fr); }
 .empty-state h3,
 .empty-state p { font-style: normal; }
+
+/* ---------- Assistent in Schritten (Import) ---------- */
+.wizard-steps { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); margin: 0; padding: 0; list-style: none; counter-reset: none; }
+.wizard-steps li { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-medium); }
+.wizard-step-number { display: inline-grid; place-items: center; width: 1.75rem; height: 1.75rem; border: 2px solid var(--color-border-strong); border-radius: 50%; font-weight: var(--weight-bold); }
+.wizard-steps li.is-current { color: var(--color-text-accent); font-weight: var(--weight-semibold); }
+.wizard-steps li.is-current .wizard-step-number { border-color: var(--color-accent); background: var(--color-accent); color: var(--color-accent-contrast); }
+.wizard-steps li.is-done .wizard-step-number { border-color: var(--color-success); color: var(--color-success); }
+.wizard-choices { display: grid; gap: var(--space-2); margin: 0; padding: 0; border: 0; }
+.wizard-choice { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); text-decoration: none; cursor: pointer; }
+.wizard-choice:hover { border-color: var(--color-text-subtle); }
+.wizard-choice:has(input:checked) { border-color: var(--color-accent); background: var(--color-surface-accent); }
+.wizard-choice span { display: grid; gap: 2px; }
+.wizard-choice small { color: var(--color-text-muted); font-size: var(--text-small); }
+.wizard-choice-link { padding-left: calc(var(--space-4) + 1.125rem + var(--space-3)); }

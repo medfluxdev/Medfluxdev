@@ -27,20 +27,35 @@ beforeEach(() => {
     : Promise.resolve({ items: [{ id: "center-1", hospital_id: "hospital-1", department_id: "dept-resp", code: "RAD-1", name: "Radiologie", is_active: true }] }));
 });
 
+async function toFiles() {
+  await userEvent.click(await screen.findByRole("button", { name: "Weiter zu den Dateien" }));
+  await waitFor(() => expect(screen.getByRole("heading", { name: "Dateien auswählen" })).toBeInTheDocument());
+}
+
+async function toConfirmAndStart() {
+  await userEvent.click(screen.getByRole("button", { name: /Weiter zur Prüfung/ }));
+  await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+}
+
 async function selectedFile(name = "wartung.pdf", type = "application/pdf"): Promise<File> {
   return new File(["%PDF-1.7 test"], name, { type });
 }
 
 describe("Import (FE-08)", () => {
-  it("zeigt Ausgangszustand und Zielbereich klar an", () => {
+  it("führt in Schritten: Ziel, Dateien, Prüfen & starten, Ergebnis", async () => {
     render(<ImportPage />);
     expect(screen.getByRole("heading", { name: "Verträge importieren" })).toBeInTheDocument();
     expect(screen.getByText("Zielbereich")).toBeInTheDocument();
+    expect(screen.getByText("Ziel").closest("li")).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("link", { name: /Ohne Dokument manuell erfassen/ })).toHaveAttribute("href", "/contracts/new");
+    await toFiles();
     expect(screen.getByText(/Noch keine Dateien ausgewählt/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Weiter zur Prüfung/ })).toBeDisabled();
   });
 
   it("erlaubt PDF/DOCX und weist nicht unterstützte Dateien vor dem Upload ab", async () => {
     const utils = render(<ImportPage />);
+    await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, [await selectedFile(), await selectedFile("notiz.txt", "text/plain")], { applyAccept: false });
     expect(screen.getByText("wartung.pdf")).toBeInTheDocument();
@@ -61,9 +76,10 @@ describe("Import (FE-08)", () => {
     };
     apiUploadMock.mockResolvedValue(res);
     const utils = render(<ImportPage />);
+    await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, [await selectedFile("wartung.pdf"), await selectedFile("alt.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]);
-    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await toConfirmAndStart();
     await waitFor(() => expect(screen.getByText("Import-Ergebnis")).toBeInTheDocument());
 
     const importedSummary = screen.getByText("importiert").closest("div");
@@ -86,10 +102,11 @@ describe("Import (FE-08)", () => {
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Verantwortlicher Bereich für Import" }), "dept-resp");
     await userEvent.selectOptions(screen.getByRole("listbox", { name: "Nutzende Bereiche für Import" }), "dept-use");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Kostenstelle für Import" }), "center-1");
+    await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = await selectedFile();
     await userEvent.upload(input, file);
-    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await toConfirmAndStart();
     await waitFor(() => expect(apiUploadMock).toHaveBeenCalled());
     expect(apiUploadMock).toHaveBeenCalledWith("/api/documents/import", [file], "test-klinik", undefined, {
       assignment_hospital_id: "hospital-1",
@@ -118,9 +135,10 @@ describe("Import (FE-08)", () => {
     };
     apiUploadMock.mockResolvedValue(res);
     const utils = render(<ImportPage />);
+    await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, await selectedFile("teilweise.pdf"));
-    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await toConfirmAndStart();
     await waitFor(() => expect(screen.getByText("Teilanalyse – Prüfung erforderlich")).toBeInTheDocument());
     expect(screen.getByRole("link", { name: "Zur manuellen Prüfung" })).toHaveAttribute("href", "/contracts/contract-123?tab=documents&subtab=review");
   });
@@ -135,9 +153,10 @@ describe("Import (FE-08)", () => {
     };
     apiUploadMock.mockResolvedValue(res);
     const utils = render(<ImportPage />);
+    await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, await selectedFile("doppelt.pdf"));
-    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await toConfirmAndStart();
     await waitFor(() => expect(screen.getByText("Duplikat")).toBeInTheDocument());
     expect(screen.getByText("Nicht erneut analysiert")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Analyse erneut starten" })).not.toBeInTheDocument();
@@ -155,9 +174,10 @@ describe("Import (FE-08)", () => {
     apiPostMock.mockResolvedValue({ status: "imported", analysis_status: "success", message: "Analyse erfolgreich.", contract_id: null });
 
     const utils = render(<ImportPage />);
+    await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, await selectedFile("kaputt.pdf"));
-    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await toConfirmAndStart();
     await waitFor(() => expect(screen.getByText("Import-Ergebnis")).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole("button", { name: "Analyse erneut starten" }));
@@ -172,12 +192,13 @@ describe("Import (FE-08)", () => {
 
   it("täuscht während synchroner Serververarbeitung keine Prozentwerte oder Live-Stufen vor", async () => {
     render(<ImportPage />);
+    await toFiles();
     const dropzone = screen.getByRole("button", { name: "Dateien hinzufügen. Klicken oder Dateien hierher ziehen." });
     const fileInput = dropzone.querySelector('input[type="file"]') as HTMLInputElement;
     apiUploadMock.mockImplementation(() => new Promise(() => {}));
     await userEvent.upload(fileInput, await selectedFile("hängt.pdf"));
-    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
-    await waitFor(() => expect(screen.getByText(/Die aktuelle API meldet keine einzelnen Live-Stufen/)).toBeInTheDocument());
+    await toConfirmAndStart();
+    await waitFor(() => expect(screen.getByText("Dateien werden übertragen und lokal verarbeitet.")).toBeInTheDocument());
     expect(screen.queryByText(/%\s*$/)).not.toBeInTheDocument();
   });
 
