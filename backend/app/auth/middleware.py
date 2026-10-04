@@ -9,6 +9,8 @@ Organization authorization remains server-side and fail-closed.
 
 from __future__ import annotations
 
+import re
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -39,6 +41,15 @@ def _reviewer_mutation_allowed(path: str) -> bool:
         )
         or path.startswith("/api/work-queue/")
     )
+
+
+_SELF_SERVICE_PATH = re.compile(r"^/api/(inbox/read-all|inbox/[0-9a-fA-F-]{36}/read|me/notification-settings)$")
+
+
+def _self_service_mutation(path: str) -> bool:
+    """Eigenes Postfach als gelesen markieren und eigene Benachrichtigungs-
+    einstellungen sind fuer jede Rolle erlaubt; sie betreffen nur das eigene Konto."""
+    return bool(_SELF_SERVICE_PATH.match(path))
 
 
 class LocalAuthMiddleware(BaseHTTPMiddleware):
@@ -111,7 +122,11 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
                     # Logout is a self-service security action and must remain
                     # available to every authenticated role. RBAC restrictions
                     # apply only to product mutations, never to ending a session.
-                    if path not in {"/api/auth/logout", "/api/ai/assistant"} and identity.role == "viewer":
+                    if (
+                        path not in {"/api/auth/logout", "/api/ai/assistant"}
+                        and not _self_service_mutation(path)
+                        and identity.role == "viewer"
+                    ):
                         return JSONResponse(
                             status_code=403,
                             content={"detail": "Keine Berechtigung fuer diese Aktion."},
@@ -121,6 +136,7 @@ class LocalAuthMiddleware(BaseHTTPMiddleware):
                         and identity.role == "reviewer"
                         and path != "/api/ai/assistant"
                         and not _reviewer_mutation_allowed(path)
+                        and not _self_service_mutation(path)
                     ):
                         return JSONResponse(
                             status_code=403,

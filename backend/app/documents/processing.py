@@ -90,6 +90,7 @@ from app.documents.intelligence.provider import (
 )
 from app.documents.persistence import DocumentPersistenceService
 from app.documents.storage import DocumentStorage, StorageError
+from app.deadlines.system import sync_system_deadlines
 from app.models.enums import ExtractionStatus, ValidationStatus
 from app.register.service import ensure_register_number, sync_from_extraction
 from app.work_queue.derive import derive_work_items
@@ -1566,6 +1567,7 @@ class DocumentProcessingService:
                 extraction_id=extraction.id,
             )
             ensure_register_number(session, contract)
+            sync_system_deadlines(session, contract, as_of)
             run_warning_evaluation(
                 session,
                 organization_id=organization_id,

@@ -94,7 +94,7 @@ def _provenance(session: Session, contract_id: uuid.UUID) -> dict[str, ContractF
     return {row.field_key: row for row in rows}
 
 
-def _log(session: Session, actor: RegisterActor, contract_id: uuid.UUID, event_name: str, context: Optional[dict]) -> None:
+def log_activity(session: Session, actor: RegisterActor, contract_id: uuid.UUID, event_name: str, context: Optional[dict]) -> None:
     session.add(
         ActivityLog(
             organization_id=actor.organization_id,
@@ -566,7 +566,7 @@ def update_register(
 
     if diffs:
         ensure_register_number(session, contract, actor.account_id)
-        _log(session, actor, contract.id, "contract.register_updated", {"fields": diffs})
+        log_activity(session, actor, contract.id, "contract.register_updated", {"fields": diffs})
     session.flush()
     return diffs
 
@@ -622,7 +622,7 @@ def create_manual_contract(
     ensure_register_number(session, contract, actor.account_id)
     if values:
         update_register(session, contract=contract, actor=actor, changes=values, confirm=[])
-    _log(session, actor, contract.id, "contract.created_manual", {"register_number": contract.register_number})
+    log_activity(session, actor, contract.id, "contract.created_manual", {"register_number": contract.register_number})
     session.flush()
     return contract
 
@@ -658,7 +658,7 @@ def transition_status(
     for key, value in plan.updates.items():
         setattr(contract, key, value)
     contract.business_status = plan.target
-    _log(
+    log_activity(
         session,
         actor,
         contract.id,
@@ -689,7 +689,7 @@ def add_remark(session: Session, *, contract: Contract, actor: RegisterActor, bo
     )
     session.add(remark)
     session.flush()
-    _log(session, actor, contract.id, "contract.remark_added", {"remark_id": str(remark.id)})
+    log_activity(session, actor, contract.id, "contract.remark_added", {"remark_id": str(remark.id)})
     return remark
 
 
@@ -767,7 +767,7 @@ def set_contract_hospitals(
             session.add(row)
         row.is_primary = hospital_id == primary
     contract.hospital_id = primary
-    _log(
+    log_activity(
         session,
         actor,
         contract.id,

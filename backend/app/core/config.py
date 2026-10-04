@@ -137,6 +137,21 @@ class Settings(BaseSettings):
     auth_enabled: bool = True
     # Explicit opt-in. No role automatically receives contract deletion rights.
     contracts_allow_delete: bool = False
+    # H5: Tageslauf fuer Fristen/Erinnerungen. Im Prozess nur per Opt-in;
+    # alternativ per Aufgabenplanung `python -m app.jobs.daily`.
+    reminder_scheduler_enabled: bool = False
+    reminder_run_hour: int = 5
+    # E-Mail (SMTP). Ohne smtp_host bleiben Erinnerungen im Postfach und
+    # E-Mails in der Warteschlange.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    smtp_use_ssl: bool = False
+    smtp_from: str = ""
+    smtp_timeout_seconds: int = 20
+    app_public_url: str = ""
     auth_cookie_name: str = "medflux_session"
     auth_session_ttl_seconds: int = 8 * 60 * 60
     auth_session_days: int = 14

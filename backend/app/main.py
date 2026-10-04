@@ -1,5 +1,7 @@
 """MedFlux Backend – integrated JAMAL + Ahmad entrypoint."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +14,7 @@ from app.api.routes import (
     contract_register,
     contracts,
     cost_center_routes,
+    deadlines,
     dashboard,
     documents,
     equipment,
@@ -39,11 +42,21 @@ from app.auth.provenance import register_auth_provenance_hooks
 from app.core.config import settings
 from app.core.scope_context import ScopeContextMiddleware
 from app.documents.storage_check import log_document_store_findings
+from app.jobs.daily import start_scheduler, stop_scheduler
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.request_context import LoginRateLimitMiddleware, RequestIdMiddleware
 
 register_auth_provenance_hooks()
 log_document_store_findings(settings.contracts_dir)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -52,6 +65,7 @@ app = FastAPI(
         "Lokales KI-System zur Analyse und Überwachung "
         "von Wartungs- und Serviceverträgen."
     ),
+    lifespan=lifespan,
 )
 
 # Scope runs after auth (Starlette executes middleware in reverse registration
@@ -98,6 +112,7 @@ app.include_router(dashboard.router)
 app.include_router(contracts.router)
 app.include_router(contract_register.router)
 app.include_router(catalogs.router)
+app.include_router(deadlines.router)
 app.include_router(equipment.router)
 app.include_router(lifecycle.router)
 app.include_router(work_queue.router)

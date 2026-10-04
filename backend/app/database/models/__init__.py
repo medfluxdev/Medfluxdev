@@ -17,6 +17,13 @@ from app.database.models.calculation import (
     CalculationReviewFlag,
 )
 from app.database.models.contract import Contract, ContractDocument, ContractEquipment
+from app.database.models.deadlines import (
+    AccountDeputy,
+    ContractDeadline,
+    JobRun,
+    Notification,
+    NotificationOutbox,
+)
 from app.database.models.register import (
     CatalogContractCategory,
     CatalogContractType,
@@ -72,6 +79,11 @@ __all__ = [
     "Contract",
     "ContractDocument",
     "ContractEquipment",
+    "AccountDeputy",
+    "ContractDeadline",
+    "JobRun",
+    "Notification",
+    "NotificationOutbox",
     "CatalogContractCategory",
     "CatalogContractType",
     "CatalogContractTypeCategory",

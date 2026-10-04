@@ -16,6 +16,7 @@ from app.core.scope_context import current_scope_context
 from app.database.models import Contract, Department, Hospital
 from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
+from app.deadlines.system import sync_system_deadlines
 from app.register import catalogs
 from app.register.service import (
     RegisterActor,
@@ -153,6 +154,7 @@ def create_contract(payload: ContractCreate, request: Request, organization_slug
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
+        sync_system_deadlines(session, contract, date.today())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -166,6 +168,7 @@ def get_register(contract_id: UUID, request: Request, organization_slug: str):
     try:
         contract = _contract(session, actor, contract_id)
         if ensure_synced(session, contract):
+            sync_system_deadlines(session, contract, date.today())
             session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -184,6 +187,7 @@ def patch_register(contract_id: UUID, payload: RegisterUpdate, request: Request,
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
+        sync_system_deadlines(session, contract, date.today())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -202,6 +206,7 @@ def accept_proposal(contract_id: UUID, field_key: str, request: Request, organiz
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
+        sync_system_deadlines(session, contract, date.today())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -229,6 +234,7 @@ def change_status(contract_id: UUID, payload: StatusTransition, request: Request
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
+        sync_system_deadlines(session, contract, date.today())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:

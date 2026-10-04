@@ -31,6 +31,12 @@ class Account(Base):
     job_title: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     department: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # H5: Benachrichtigungs-Einstellungen und Standardvertretung.
+    receives_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    receives_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    default_deputy_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

@@ -1,0 +1,124 @@
+"""H5 pure logic: system deadline planning, ICS, mail message, scheduler timing, self-service paths."""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+from app.auth.middleware import _self_service_mutation
+from app.deadlines.mail import build_ics, build_message
+from app.deadlines.system import plan_system_deadlines
+from app.jobs.daily import due_now
+from app.register.terms import TermResult
+
+
+def _contract(**overrides):
+    values = dict(
+        lifecycle_state="active", is_archived=False, business_status="gueltig", term_model="terminable",
+        reminder_recipient_account_id=None, responsible_account_id=uuid4(), escalation_recipient_account_id=uuid4(),
+        reminder_lead_months=None, reminder_todo=None,
+    )
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+TERMS = TermResult(status="complete", cancel_by=date(2027, 6, 30), possible_end=date(2027, 9, 30))
+
+
+def test_cancel_by_deadline_with_default_lead():
+    contract = _contract()
+    [spec] = plan_system_deadlines(contract, TERMS)
+    assert spec.system_key == "cancel_by"
+    assert spec.due_date == date(2027, 6, 30)
+    assert spec.remind_on == date(2027, 3, 30)
+    assert spec.assignee_account_id == contract.responsible_account_id
+    assert spec.escalation_account_id == contract.escalation_recipient_account_id
+
+
+def test_reminder_recipient_and_lead_override():
+    recipient = uuid4()
+    [spec] = plan_system_deadlines(
+        _contract(reminder_recipient_account_id=recipient, reminder_lead_months=0, reminder_todo="Angebot einholen"), TERMS
+    )
+    assert spec.assignee_account_id == recipient
+    assert spec.remind_on == spec.due_date
+    assert spec.todo_text == "Angebot einholen"
+
+
+def test_fixed_term_creates_contract_end_deadline():
+    [spec] = plan_system_deadlines(
+        _contract(term_model="fixed_term"), TermResult(status="complete", possible_end=date(2027, 7, 28))
+    )
+    assert spec.system_key == "contract_end"
+    assert spec.due_date == date(2027, 7, 28)
+
+
+def test_terminated_contract_gets_set_ended_task():
+    [spec] = plan_system_deadlines(
+        _contract(business_status="gekuendigt"),
+        TermResult(status="complete", possible_end=date(2026, 12, 31), actual_end=date(2026, 12, 31)),
+    )
+    assert spec.system_key == "set_ended"
+    assert spec.remind_on == spec.due_date == date(2026, 12, 31)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"business_status": "beendet"},
+        {"business_status": "geloescht"},
+        {"is_archived": True},
+        {"lifecycle_state": "pending_deletion"},
+    ],
+)
+def test_no_deadlines_for_closed_contracts(overrides):
+    assert plan_system_deadlines(_contract(**overrides), TERMS) == []
+
+
+def test_ics_is_valid_and_escaped():
+    ics = build_ics(
+        uid="abc@medflux", due=date(2027, 6, 30), summary="Kündigungsfrist; Vertrag 000001",
+        description="Zeile 1\nZeile 2, mit Komma " + "x" * 80, now=datetime(2026, 10, 4, tzinfo=timezone.utc),
+    )
+    assert ics.startswith("BEGIN:VCALENDAR\r\n") and ics.endswith("END:VCALENDAR\r\n")
+    assert "DTSTART;VALUE=DATE:20270630" in ics and "DTEND;VALUE=DATE:20270701" in ics
+    assert "SUMMARY:Kündigungsfrist\\; Vertrag 000001" in ics
+    assert "Zeile 1\\nZeile 2\\, mit Komma" in ics
+    assert all(len(line.encode("utf-8")) <= 75 for line in ics.split("\r\n"))
+    assert "TRIGGER:-P1D" in ics
+
+
+def test_mail_message_with_calendar_attachment(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "smtp_from", "medflux@klinik.invalid")
+    message = build_message(recipient="a@klinik.invalid", subject="Erinnerung", body="Text", ics="BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")
+    assert message["To"] == "a@klinik.invalid" and message["From"] == "medflux@klinik.invalid"
+    attachments = list(message.iter_attachments())
+    assert len(attachments) == 1 and attachments[0].get_content_type() == "text/calendar"
+
+
+@pytest.mark.parametrize(
+    "hour,ran,expected",
+    [(4, False, False), (5, False, True), (23, False, True), (6, True, False)],
+)
+def test_scheduler_due(hour, ran, expected):
+    assert due_now(datetime(2026, 10, 4, hour, 0), 5, ran) is expected
+
+
+@pytest.mark.parametrize(
+    "path,allowed",
+    [
+        ("/api/inbox/read-all", True),
+        ("/api/inbox/01a106c2-c280-7c98-9f84-bc9bb3b50afc/read", True),
+        ("/api/me/notification-settings", True),
+        ("/api/inbox/../contracts/read", False),
+        ("/api/deadlines/01a106c2-c280-7c98-9f84-bc9bb3b50afc/done", False),
+        ("/api/me/notification-settings/extra", False),
+    ],
+)
+def test_self_service_paths(path, allowed):
+    assert _self_service_mutation(path) is allowed
