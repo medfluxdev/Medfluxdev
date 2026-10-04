@@ -52,6 +52,15 @@ ls -la data/backups/contracts_backup_20261003/ | head -10
 
 ### Step 2: Generate Index Manifest
 
+> **Update 2026-10-04 (branch unification):** the script embedded below wrote
+> `{"version", "documents": {...}}`, which `DocumentStorage` cannot read
+> (`find_by_document_id` crashed, SHA-256 duplicate detection stayed off) and it
+> skipped `.docx` originals. The script in `scripts/rebuild_document_index.py`
+> now writes the flat `{sha256: record}` format used by `DocumentStorage.save`,
+> keeps existing metadata, backs up the old index and is a **dry run unless
+> `--write` is given**. It is covered by `backend/tests/test_rebuild_document_index.py`.
+> Use the script file, not the code listed below.
+
 Run the index rebuild script to scan all documents and generate `.index.json`:
 
 **File: `scripts/rebuild_document_index.py`**
@@ -209,9 +218,10 @@ if __name__ == "__main__":
 **Usage:**
 ```bash
 # From repository root
-python scripts/rebuild_document_index.py --contracts-dir backend/data/contracts
+python scripts/rebuild_document_index.py --contracts-dir backend/data/contracts          # dry run
+python scripts/rebuild_document_index.py --contracts-dir backend/data/contracts --write  # replace index
 
-# Expected output:
+# Expected output (historical listing):
 # Scanning backend/data/contracts for documents...
 #   ✓ Processed 5 documents...
 #   ✓ Processed 10 documents...
