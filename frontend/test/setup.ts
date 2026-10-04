@@ -39,6 +39,8 @@ vi.mock("@/components/auth/AuthProvider", () => ({
     organizationSlug: defaultMembership.organization_slug,
     loading: false,
     role: defaultMembership.role,
+    previewOf: null,
+    setPreviewRole: vi.fn(),
     refresh: vi.fn().mockResolvedValue(defaultAccount),
     selectOrganization: vi.fn(),
     logout: vi.fn().mockResolvedValue(undefined),

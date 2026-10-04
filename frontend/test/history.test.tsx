@@ -72,5 +72,14 @@ describe("Organisationsweite Historie", () => {
 
     await user.click(screen.getByRole("button", { name: "CSV exportieren" }));
     expect(api.downloadHistoryCsv).toHaveBeenCalledWith("test-klinik", { account_id: "u-1", category: "finance" });
+    expect(window.location.search).toBe("?account_id=u-1&category=finance");
+  });
+
+  it("übernimmt Filter aus der Adresse", async () => {
+    window.history.replaceState(null, "", "/audit?category=deadline&offset=50");
+    render(<OrganizationHistory organizationSlug="test-klinik" />);
+    await waitFor(() => expect(api.listHistory).toHaveBeenCalledWith("test-klinik", { category: "deadline" }, { limit: 50, offset: 50 }));
+    expect(api.listHistory).toHaveBeenCalledTimes(1);
+    window.history.replaceState(null, "", "/");
   });
 });

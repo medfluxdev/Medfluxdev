@@ -475,3 +475,12 @@
 .setup-mark { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid var(--color-border-subtle); font-weight: 700; }
 .setup-item.is-ok .setup-mark { color: var(--color-success); border-color: currentcolor; }
 .setup-item.is-todo .setup-mark { color: var(--color-warning); border-color: currentcolor; }
+
+/* Entwickler-Styleguide (/developer/components) */
+.sg-type { margin: 0; line-height: var(--leading-title); }
+.sg-type code, .sg-swatches code { font-size: var(--text-caption); color: var(--color-text-muted); }
+.sg-mono { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--space-2); margin: 0 0 var(--space-3); padding: 0; list-style: none; }
+.sg-swatches li { display: flex; align-items: center; gap: var(--space-2); }
+.sg-swatch { width: 2rem; height: 2rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+.sg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--space-4); }

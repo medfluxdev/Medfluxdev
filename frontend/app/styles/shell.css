@@ -276,3 +276,17 @@ kbd {
   .shell-topbar-title .breadcrumbs li:not(:last-child) { display: none; }
 }
 @media (max-width: 1280px) { .shell-assistant-button span { display: none; } }
+
+/* U5 Rollenvorschau */
+.shell-preview-role { display: grid; gap: 2px; margin-top: var(--space-2); font-size: var(--text-small); font-weight: var(--weight-medium); }
+.shell-preview-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-4); background: var(--color-warning-bg); color: var(--color-text); border-bottom: 1px solid var(--color-warning-border); font-size: var(--text-small); }
+
+/* U5 Entwicklermodus */
+.dev-context { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-3); margin: 0 0 var(--space-4); font-size: var(--text-small); }
+.dev-context dt { color: var(--color-text-muted); }
+.dev-context dd { margin: 0; overflow-wrap: anywhere; }
+.dev-heading { margin: 0 0 var(--space-1); font-size: var(--text-title-s); }
+.dev-log { font-size: var(--text-caption); }
+.dev-log code { overflow-wrap: anywhere; }
+.dev-log tr.is-flagged td { background: var(--color-warning-bg); }
+.shell-check { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; font-size: var(--text-small); }

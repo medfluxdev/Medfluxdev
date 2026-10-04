@@ -6,6 +6,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import type { AccountRole, CurrentAccountDto, OrganizationMembershipDto } from "@/lib/auth-types";
 
 const STORAGE_KEY = "medflux.organization_slug";
+const PREVIEW_KEY = "medflux.role_preview";
 type ScopedMembership = OrganizationMembershipDto;
 
 interface AuthContextValue {
@@ -15,6 +16,10 @@ interface AuthContextValue {
   organizationSlug: string | null;
   loading: boolean;
   role: AccountRole | null;
+  /** Echte Rolle, wenn eine Rollenvorschau aktiv ist; sonst null. */
+  previewOf: AccountRole | null;
+  /** Nur Darstellung: die Rechte prueft weiterhin das Backend mit der echten Rolle. */
+  setPreviewRole: (role: AccountRole | null) => void;
   refresh: () => Promise<CurrentAccountDto | null>;
   selectOrganization: (slug: string) => void;
   logout: () => Promise<void>;
@@ -158,17 +163,36 @@ export function AuthProvider({ children, organizationSlug: defaultOrganizationSl
     }
   }, [router]);
 
+  const realRole: AccountRole | null = membership?.role ?? (isDeveloper ? "admin" : null);
+  const [previewRole, setPreviewState] = useState<AccountRole | null>(null);
+  useEffect(() => {
+    try {
+      const stored = window.sessionStorage.getItem(PREVIEW_KEY);
+      if (stored === "contract_manager" || stored === "reviewer" || stored === "viewer") setPreviewState(stored);
+    } catch { /* ohne Speicher keine Vorschau */ }
+  }, []);
+  const setPreviewRole = useCallback((next: AccountRole | null) => {
+    setPreviewState(next);
+    try {
+      if (next) window.sessionStorage.setItem(PREVIEW_KEY, next);
+      else window.sessionStorage.removeItem(PREVIEW_KEY);
+    } catch { /* nur fuer diese Sitzung */ }
+  }, []);
+  const previewActive = Boolean(previewRole && realRole === "admin");
+
   const value = useMemo<AuthContextValue>(() => ({
-    account,
-    membership,
+    account: previewActive && account ? { ...account, is_developer: false } : account,
+    membership: previewActive && membership ? { ...membership, role: previewRole as AccountRole } : membership,
     memberships,
     organizationSlug: membership?.organization_slug ?? null,
     loading,
-    role: membership?.role ?? (isDeveloper ? "admin" : null),
+    role: previewActive ? previewRole : realRole,
+    previewOf: previewActive ? realRole : null,
+    setPreviewRole,
     refresh,
     selectOrganization,
     logout,
-  }), [account, membership, memberships, loading, refresh, selectOrganization, logout, isDeveloper]);
+  }), [account, membership, memberships, loading, refresh, selectOrganization, logout, realRole, previewActive, previewRole, setPreviewRole]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

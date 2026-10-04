@@ -10,6 +10,30 @@ import type { ContractListItem } from "@/lib/contract-types";
 import { formatDateTime } from "@/lib/format";
 
 const PAGE_SIZE = 50;
+const FILTER_KEYS: (keyof HistoryFilters)[] = ["account_id", "category", "contract_id", "date_from", "date_to"];
+
+// Filter stehen in der Adresse, damit gefilterte Ansichten teilbar und per Zurueck erreichbar sind.
+function filtersFromUrl(): { filters: HistoryFilters; offset: number } {
+  const params = new URLSearchParams(window.location.search);
+  const filters: HistoryFilters = {};
+  for (const key of FILTER_KEYS) {
+    const value = params.get(key);
+    if (value) filters[key] = value;
+  }
+  return { filters, offset: Math.max(0, Number(params.get("offset")) || 0) };
+}
+
+function writeUrl(filters: HistoryFilters, offset: number) {
+  const params = new URLSearchParams(window.location.search);
+  for (const key of FILTER_KEYS) {
+    if (filters[key]) params.set(key, filters[key] as string);
+    else params.delete(key);
+  }
+  if (offset) params.set("offset", String(offset));
+  else params.delete("offset");
+  const query = params.toString();
+  window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+}
 
 export default function OrganizationHistory({ organizationSlug }: { organizationSlug: string }) {
   const { role, account } = useAuth();
@@ -20,8 +44,19 @@ export default function OrganizationHistory({ organizationSlug }: { organization
   const [contracts, setContracts] = useState<ContractListItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const initial = filtersFromUrl();
+    setFilters(initial.filters);
+    setOffset(initial.offset);
+    setReady(true);
+  }, []);
+
+  useEffect(() => { if (ready) writeUrl(filters, offset); }, [filters, offset, ready]);
 
   const load = useCallback(async () => {
+    if (!ready) return;
     setLoading(true);
     setError(null);
     try {
@@ -31,7 +66,7 @@ export default function OrganizationHistory({ organizationSlug }: { organization
     } finally {
       setLoading(false);
     }
-  }, [filters, offset, organizationSlug]);
+  }, [filters, offset, organizationSlug, ready]);
 
   useEffect(() => { void load(); }, [load]);
 

@@ -12,9 +12,11 @@ export interface Preferences {
   textSize: TextSize;
   density: Density;
   sidebarCollapsed: boolean;
+  /** Nur fuer Entwicklerkonten: Kontext und API-Zeiten in einer Seitenleiste. */
+  developerMode: boolean;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = { theme: "system", textSize: "normal", density: "comfortable", sidebarCollapsed: false };
+export const DEFAULT_PREFERENCES: Preferences = { theme: "system", textSize: "normal", density: "comfortable", sidebarCollapsed: false, developerMode: false };
 const STORAGE_KEY = "medflux.preferences";
 const EVENT = "medflux:preferences";
 

@@ -1,3 +1,5 @@
+import { recordRequest } from "@/lib/request-log";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 20000;
 const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
@@ -44,6 +46,19 @@ function scopedPath(path: string): string {
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const started = performance.now();
+  const method = (init.method ?? "GET").toUpperCase();
+  try {
+    const response = await fetchRaw(url, init, timeoutMs);
+    recordRequest(method, url, response.status, performance.now() - started);
+    return response;
+  } catch (error) {
+    recordRequest(method, url, "Fehler", performance.now() - started);
+    throw error;
+  }
+}
+
+async function fetchRaw(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const withCredentials: RequestInit = { credentials: "include", ...init };
   if (!timeoutMs || timeoutMs <= 0) {
     try {

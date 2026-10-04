@@ -8,18 +8,19 @@ import OrganizationScopePicker from "@/components/OrganizationScopePicker";
 import { useAuth } from "@/components/auth/AuthProvider";
 import NotificationCenter from "@/components/shell/NotificationCenter";
 import Breadcrumbs, { type Crumb } from "@/components/ui/Breadcrumbs";
-import { ROLE_LABELS } from "@/lib/auth-types";
+import { ROLE_LABELS, type AccountRole } from "@/lib/auth-types";
 import { Icon, pageFor } from "./navigation";
 import { usePreferences, type Density, type TextSize, type ThemePreference } from "./preferences";
 
 interface Props {
   onOpenMenu: () => void;
   onOpenPalette: () => void;
+  onOpenDeveloper?: () => void;
 }
 
-export default function AppTopbar({ onOpenMenu, onOpenPalette }: Props) {
+export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }: Props) {
   const pathname = usePathname();
-  const { account, membership, role, logout } = useAuth();
+  const { account, membership, role, logout, previewOf, setPreviewRole } = useAuth();
   const [prefs, updatePrefs] = usePreferences();
   const menuRef = useRef<HTMLDetailsElement>(null);
   const page = pageFor(pathname);
@@ -64,6 +65,9 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette }: Props) {
             <span>KI-Assistent</span>
           </button>
         ) : null}
+        {account?.is_developer && prefs.developerMode && onOpenDeveloper ? (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenDeveloper} aria-label="Entwicklerdetails öffnen">DEV</button>
+        ) : null}
         {account && membership ? <NotificationCenter /> : null}
         {account && role ? (
           <details ref={menuRef} className="shell-menu">
@@ -77,6 +81,16 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette }: Props) {
               <div className="shell-menu-head"><strong>{account.display_name}</strong><small>{account.email}</small></div>
               <Link href="/profile">Mein Profil</Link>
               {role === "admin" || account.is_developer ? <Link href="/admin">Verwaltung</Link> : null}
+              {previewOf || role === "admin" ? (
+                <label className="shell-preview-role">Ansicht als Rolle
+                  <select value={previewOf ? role ?? "" : ""} onChange={(event) => setPreviewRole((event.target.value || null) as AccountRole | null)}>
+                    <option value="">Eigene Rolle</option>
+                    <option value="contract_manager">{ROLE_LABELS.contract_manager}</option>
+                    <option value="reviewer">{ROLE_LABELS.reviewer}</option>
+                    <option value="viewer">{ROLE_LABELS.viewer}</option>
+                  </select>
+                </label>
+              ) : null}
               <fieldset className="shell-prefs">
                 <legend>Darstellung</legend>
                 <label>Design
@@ -100,6 +114,12 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette }: Props) {
                   </select>
                 </label>
               </fieldset>
+              {account.is_developer ? (
+                <label className="shell-check">
+                  <input type="checkbox" checked={prefs.developerMode} onChange={(event) => updatePrefs({ developerMode: event.target.checked })} />
+                  Entwicklermodus (Kontext und API-Zeiten)
+                </label>
+              ) : null}
               <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button>
             </div>
           </details>
