@@ -29,6 +29,8 @@ function titleForPath(pathname: string) {
   if (pathname.startsWith("/settings/organization")) return "Organisation";
   if (pathname.startsWith("/settings/catalogs")) return "Kataloge";
   if (pathname.startsWith("/partners")) return "Vertragspartner";
+  if (pathname === "/postfach") return "Postfach";
+  if (pathname === "/termine") return "Termine";
 
   if (pathname === "/settings") return "Einstellungen";
   return "MedFlux";

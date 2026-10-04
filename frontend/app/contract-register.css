@@ -52,3 +52,9 @@
 .rg-inactive{opacity:.55}
 @media (max-width:900px){.rg-terms,.rg-fields,.rg-form-grid{grid-template-columns:1fr}}
 .contract-business-status{display:block;margin-top:4px;font-size:11px;font-weight:700;color:#5f718a}
+.rg-deadlines{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.rg-deadline{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid #e5ebf1;border-radius:10px;background:#fff}
+.rg-deadline-overdue{border-color:#efb4b4;background:#fff5f5}
+.rg-deadline-main{display:grid;gap:4px;min-width:0}
+.rg-row-overdue td,.rg-row-overdue th{background:#fff5f5}
+.rg-origin-manual{border-color:#cbd8e4}

@@ -6,6 +6,7 @@ import { apiGet, apiPatch } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS, type UserProfileDto } from "@/lib/auth-types";
 import { logoutAllSessions } from "@/lib/domain-api/security";
+import NotificationSettingsPanel from "@/components/deadlines/NotificationSettingsPanel";
 
 const EMPTY: UserProfileDto = {
   id: "",
@@ -154,6 +155,7 @@ export default function ProfilePage() {
           </section>
         </section>
       </form>
+      <NotificationSettingsPanel />
     </div>
   );
 }

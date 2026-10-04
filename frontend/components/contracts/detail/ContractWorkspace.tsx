@@ -24,6 +24,7 @@ import OverridePanel from "./OverridePanel";
 import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
+import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
 
 interface Props {
@@ -32,13 +33,14 @@ interface Props {
   onReload?: () => void;
 }
 
-type TabKey = "overview" | "register" | "term" | "finance" | "services" | "equipment" | "documents" | "remarks";
+type TabKey = "overview" | "register" | "deadlines" | "term" | "finance" | "services" | "equipment" | "documents" | "remarks";
 type DocumentTab = "document" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
   { key: "register", label: "Stammdaten" },
+  { key: "deadlines", label: "Termine" },
   { key: "term", label: "Laufzeit & Kündigung" },
   { key: "finance", label: "Finanzen" },
   { key: "services", label: "Leistungen & SLA" },
@@ -363,6 +365,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {activeTab === "register" && <ContractRegisterPanel contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload} />}
 
         {activeTab === "remarks" && <ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} />}
+
+        {activeTab === "deadlines" && <ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
         {activeTab === "term" && <>
           <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} origin={data.dates.start_date ? (startEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={startEvidence} />} /><InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} origin={data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={endEvidence} />} /><InfoCard label="Berechnetes Ende" value={data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} origin={calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis)} /><InfoCard label="Restlaufzeit" value={data.dates.days_until_end != null ? `${data.dates.days_until_end} Tage` : "Nicht verfügbar"} origin={data.dates.days_until_end != null ? "calculated" : "missing"} /></div>

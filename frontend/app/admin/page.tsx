@@ -13,6 +13,7 @@ import { listActivity, type ActivityDto } from "@/lib/domain-api/activity";
 import { downloadContractsCsv } from "@/lib/domain-api/operations";
 import { getContractDeletionCapabilities } from "@/lib/domain-api/contracts";
 import { listIntelligenceEvents, type IntelligenceEventItem } from "@/lib/domain-api/intelligence";
+import JobMonitorPanel from "@/components/deadlines/JobMonitorPanel";
 import styles from "./admin.module.css";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -146,6 +147,7 @@ export default function AdminPage() {
           <div className={styles.userList}>{users.length === 0 ? <p className={styles.empty}>Noch keine Benutzer vorhanden.</p> : users.slice(0, 6).map((user) => <div className={styles.userRow} key={user.id}><span className={styles.userAvatar}>{user.display_name.slice(0, 1).toUpperCase()}</span><div><strong>{user.display_name}</strong><small>{user.email}</small></div><span className={styles.roleChip}>{ROLE_LABELS[user.role]}</span><span className={`${styles.userState}${user.is_active ? "" : ` ${styles.off}`}`}>{user.is_active ? "Aktiv" : "Inaktiv"}</span></div>)}</div>
         </section>
       </div>
+      {membership?.organization_slug ? <JobMonitorPanel organizationSlug={membership.organization_slug} /> : null}
     </> : null}
   </div>;
 }
