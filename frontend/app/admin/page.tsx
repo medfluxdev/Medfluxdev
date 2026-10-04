@@ -14,6 +14,7 @@ import { downloadContractsCsv } from "@/lib/domain-api/operations";
 import { getContractDeletionCapabilities } from "@/lib/domain-api/contracts";
 import { listIntelligenceEvents, type IntelligenceEventItem } from "@/lib/domain-api/intelligence";
 import JobMonitorPanel from "@/components/deadlines/JobMonitorPanel";
+import SetupChecklist from "@/components/admin/SetupChecklist";
 import styles from "./admin.module.css";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -120,11 +121,13 @@ export default function AdminPage() {
         <article><span>Offene Aufgaben</span><strong>{overview?.total_action_items ?? 0}</strong><small>priorisierte Handlungspunkte</small></article>
         <article><span>Manuelle Prüfungen</span><strong>{reviews}</strong><small>Angaben mit Prüfbedarf</small></article>
         <article><span>Benutzer</span><strong>{activeUsers}</strong><small>{users.length} Konten insgesamt</small></article>
-        <article><span>Intelligence Events</span><strong>{intelligenceEvents.length}</strong><small>zuletzt sichtbare Ereignisse</small></article>
+        <article><span>Analyse-Ereignisse</span><strong>{intelligenceEvents.length}</strong><small>zuletzt sichtbare Ereignisse</small></article>
       </section>
 
+      <SetupChecklist organizationSlug={membership.organization_slug} />
+
       <section className={styles.actions} aria-label="Schnellzugriffe">
-        <Link href="/contracts"><div><strong>Verträge verwalten</strong><small>Bestand, Zuordnung und Verantwortliche</small></div><span>→</span></Link>
+        <Link href="/register"><div><strong>Verträge verwalten</strong><small>Bestand, Zuordnung und Verantwortliche</small></div><span>→</span></Link>
         <Link href="/work-queue"><div><strong>Aufgaben bearbeiten</strong><small>Fristen, Risiken und offene Entscheidungen</small></div><span>→</span></Link>
         <Link href="/settings/users"><div><strong>Benutzer & Rollen</strong><small>Konten und Zugriffsbereiche verwalten</small></div><span>→</span></Link>
         <Link href="/settings/roles"><div><strong>Rollen & Rechte</strong><small>Was jede Rolle darf</small></div><span>→</span></Link>
@@ -140,8 +143,8 @@ export default function AdminPage() {
           <div className={styles.activityList}>{activity.length === 0 ? <p className={styles.empty}>Noch keine Aktivitäten vorhanden.</p> : activity.map((item) => <div className={styles.activityRow} key={item.id}><span className={styles.activityDot}/><div><strong>{EVENT_LABELS[item.event_name] ?? item.event_name}</strong><small>{item.display_name ?? "System"} · {item.object_type}</small></div><time>{item.created_at ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at)) : "–"}</time></div>)}</div>
         </section>
         <section className={styles.panel}>
-          <div className={styles.panelHead}><div><h2>Intelligence Events</h2><p>Backend-Ereignisse im aktuell sichtbaren Vertragsbereich</p></div></div>
-          <div className={styles.activityList}>{intelligenceEvents.length === 0 ? <p className={styles.empty}>Keine Intelligence Events vorhanden.</p> : intelligenceEvents.map((item) => <div className={styles.activityRow} key={item.id}><span className={styles.activityDot}/><div><strong>{item.event_type}</strong><small>{item.contract_id ? `Vertrag ${item.contract_id.slice(0, 8)}…` : "Organisationsereignis"}</small></div><time>{item.occurred_at ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.occurred_at)) : "–"}</time></div>)}</div>
+          <div className={styles.panelHead}><div><h2>Analyse-Ereignisse</h2><p>Ereignisse aus der Vertragsanalyse im sichtbaren Bereich</p></div></div>
+          <div className={styles.activityList}>{intelligenceEvents.length === 0 ? <p className={styles.empty}>Keine Analyse-Ereignisse vorhanden.</p> : intelligenceEvents.map((item) => <div className={styles.activityRow} key={item.id}><span className={styles.activityDot}/><div><strong>{item.event_type}</strong><small>{item.contract_id ? `Vertrag ${item.contract_id.slice(0, 8)}…` : "Organisationsereignis"}</small></div><time>{item.occurred_at ? new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.occurred_at)) : "–"}</time></div>)}</div>
         </section>
         <section className={styles.panel}>
           <div className={styles.panelHead}><div><h2>Benutzerübersicht</h2><p>Konten im aktuellen Arbeitsbereich</p></div><Link href="/settings/users">Verwalten</Link></div>

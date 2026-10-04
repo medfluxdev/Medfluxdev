@@ -121,6 +121,18 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
   },
 ];
 
+// Kurze Erklaerungen fuer schwierige Felder (nur im Bearbeitungsmodus sichtbar).
+const FIELD_HELP: Record<string, string> = {
+  term_model: "Bestimmt, wie Fristen berechnet werden: Eine feste Laufzeit endet von selbst, kündbare Verträge laufen bis zur Kündigung, bei automatischer Verlängerung verlängert sich der Vertrag ohne Kündigung.",
+  notice_period: "Wie lange vor dem Kündigungstermin die Kündigung beim Vertragspartner eingegangen sein muss.",
+  notice_to: "Zu welchem Termin gekündigt werden kann – z. B. „zum Quartalsende“ = 31.03., 30.06., 30.09. oder 31.12.",
+  minimum_term: "Frühestens nach dieser Zeit ist eine Kündigung wirksam.",
+  renewal_period: "Um wie viel sich der Vertrag ohne Kündigung jeweils verlängert.",
+  reminder_lead_months: "Wie viele Monate vor der Kündigungsfrist die Erinnerung kommt.",
+  retention_years_after_end: "Leer lassen, um die Aufbewahrungsfrist des Vertragstyps zu verwenden.",
+  data_protection_relevant: "Ja, wenn der Vertragspartner personenbezogene Daten verarbeitet (Auftragsverarbeitung nach Art. 28 DSGVO).",
+};
+
 const TERM_FIELDS: Record<TermModel, string[]> = {
   fixed_term: ["term_model", "term_start_date", "term_fixed_end_date", "initial_term"],
   terminable: ["term_model", "term_start_date", "notice_period", "notice_to"],
@@ -530,6 +542,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
             <dt>{editing && def.kind !== "period" ? <label htmlFor={`rg-${def.key}`}>{label}</label> : label}</dt>
             <dd>
               {editing ? input(def) : <span className="rg-value">{display(def)}</span>}
+              {editing && FIELD_HELP[def.key] ? <span className="field-hint rg-help">{FIELD_HELP[def.key]}</span> : null}
               {!editing && provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null}
               {!editing && editable && provenance?.origin === "ai" ? <button type="button" className="rg-link" disabled={busy} onClick={() => confirm(fieldKeys(def))}>Bestätigen</button> : null}
             </dd>

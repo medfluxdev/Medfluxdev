@@ -24,7 +24,7 @@ export default function PortfolioQueryPanel({ organizationSlug }: { organization
   }
 
   return <section className="card card-pad">
-    <h2>Portfolio Intelligence</h2>
+    <h2>Fragen an das Portfolio</h2>
     <p className="muted">Aus dem akzeptierten Vertragsbestand, ohne Frontend-Neuberechnung.</p>
     <label>Frage<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Welche Verträge enden?" /></label>
     <button type="button" className="btn" onClick={() => void run()} disabled={!query.trim() || busy}>{busy ? "Analysiert…" : "Analysieren"}</button>

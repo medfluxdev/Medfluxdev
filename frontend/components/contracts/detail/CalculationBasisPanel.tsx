@@ -30,7 +30,7 @@ export default function CalculationBasisPanel({ title, basis }: Props) {
           ))}
         </dl>
       ) : null}
-      <small>Deterministisch aus den vom Backend gelieferten Vertragsdaten berechnet; keine KI-Berechnung im Frontend.</small>
+      <small>Vom System aus den Vertragsdaten berechnet – nicht von der KI geschätzt.</small>
     </article>
   );
 }

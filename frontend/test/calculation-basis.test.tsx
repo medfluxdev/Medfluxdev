@@ -22,7 +22,7 @@ describe("Berechnungsgrundlage", () => {
     expect(screen.getByText("Vertragsende minus Kündigungsfrist.")).toBeInTheDocument();
     expect(screen.getByText("31.12.2026")).toBeInTheDocument();
     expect(screen.getByText("3 Monate")).toBeInTheDocument();
-    expect(screen.getByText(/keine KI-Berechnung im Frontend/)).toBeInTheDocument();
+    expect(screen.getByText(/nicht von der KI geschätzt/)).toBeInTheDocument();
   });
 
   it("rendert ohne echte Grundlage nichts", () => {

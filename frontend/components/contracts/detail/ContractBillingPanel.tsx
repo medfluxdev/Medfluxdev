@@ -67,7 +67,7 @@ export default function ContractBillingPanel({ contractId, organizationSlug }: P
   }
 
   return <section className="cw-section" aria-labelledby="billing-intelligence-heading">
-    <div className="cw-section-head"><div><h2 id="billing-intelligence-heading">Rechnungsprüfung</h2><p>Vergleich mit der akzeptierten, vom Backend berechneten Vertragsbasis.</p></div></div>
+    <div className="cw-section-head"><div><h2 id="billing-intelligence-heading">Rechnungsprüfung</h2><p>Vergleich mit der bestätigten, vom System berechneten Vertragsbasis.</p></div></div>
     {error ? <InlineAlert tone="warning" role="status">{error}</InlineAlert> : null}
     {basis && !basis.available ? <p className="cw-muted">Keine eindeutig akzeptierte Abrechnungsbasis vorhanden. Es wird kein Betrag erfunden.</p> : null}
     {basis?.available ? <>

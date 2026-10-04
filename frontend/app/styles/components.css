@@ -465,3 +465,13 @@
 .wizard-choice span { display: grid; gap: 2px; }
 .wizard-choice small { color: var(--color-text-muted); font-size: var(--text-small); }
 .wizard-choice-link { padding-left: calc(var(--space-4) + 1.125rem + var(--space-3)); }
+.rg-help { display: block; flex-basis: 100%; max-width: 60ch; margin-top: var(--space-1); }
+
+/* U5 Einrichtungs-Checkliste */
+.setup-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.setup-item { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--color-border-subtle); }
+.setup-item:first-child { border-top: 0; }
+.setup-item small { display: block; color: var(--color-text-muted); }
+.setup-mark { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1px solid var(--color-border-subtle); font-weight: 700; }
+.setup-item.is-ok .setup-mark { color: var(--color-success); border-color: currentcolor; }
+.setup-item.is-todo .setup-mark { color: var(--color-warning); border-color: currentcolor; }

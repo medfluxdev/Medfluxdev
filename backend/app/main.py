@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     access,
     activity,
+    admin_setup,
     ai,
     auth,
     catalogs,
@@ -121,6 +122,7 @@ app.include_router(contract_finance.router)
 app.include_router(catalogs.router)
 app.include_router(deadlines.router)
 app.include_router(access.router)
+app.include_router(admin_setup.router)
 app.include_router(history.router)
 app.include_router(register_grid.router)
 app.include_router(equipment.router)

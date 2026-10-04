@@ -215,9 +215,9 @@ export default function OverridePanel({ data, orgSlug, onReload }: Props) {
       </div>
 
       <div className="override-group">
-        <h3>Aktuell wirksame Overrides</h3>
+        <h3>Aktuell wirksame manuelle Werte</h3>
         {(data.overrides ?? []).length === 0 && (
-          <p className="muted">Keine manuellen Overrides gesetzt.</p>
+          <p className="muted">Keine manuellen Werte gesetzt.</p>
         )}
         <ul className="override-now-list">
           {(data.overrides ?? []).map((o) => (

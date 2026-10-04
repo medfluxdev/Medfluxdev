@@ -81,7 +81,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
         });
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "Vertragsintelligenz konnte nicht geladen werden.");
+        setError(err instanceof Error ? err.message : "Die Vertragsanalyse konnte nicht geladen werden.");
       })
       .finally(() => setLoading(false));
   }
@@ -102,7 +102,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
       })
       .catch((err) => {
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Vertragsintelligenz konnte nicht geladen werden.");
+        setError(err instanceof Error ? err.message : "Die Vertragsanalyse konnte nicht geladen werden.");
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -133,15 +133,15 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
     <section className="cw-section" aria-labelledby="contract-intelligence-heading">
       <div className="cw-section-head">
         <div>
-          <h2 id="contract-intelligence-heading">Vertragsintelligenz</h2>
-          <p>Beziehungen, Pflichten, Regelprüfungen und kontrollierte Handlungsvorschläge aus dem autoritativen Backend.</p>
+          <h2 id="contract-intelligence-heading">Vertragsanalyse</h2>
+          <p>Beziehungen, Pflichten, Regelprüfungen und Handlungsvorschläge aus der Vertragsanalyse.</p>
         </div>
         <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>Aktualisieren</button>
       </div>
 
-      {loading && <LoadingState>Vertragsintelligenz wird geladen…</LoadingState>}
+      {loading && <LoadingState>Vertragsanalyse wird geladen…</LoadingState>}
       {error && <InlineAlert tone="warning" role="status">{error}</InlineAlert>}
-      {!loading && total === 0 && !error && <p className="cw-muted">Für diesen Vertrag liegen noch keine zusätzlichen Intelligence-Datensätze vor.</p>}
+      {!loading && total === 0 && !error && <p className="cw-muted">Für diesen Vertrag liegen noch keine zusätzlichen Analyseergebnisse vor.</p>}
 
       {!loading && total > 0 && (
         <div className={styles.grid}>

@@ -72,7 +72,7 @@ export default function ArchivPage() {
         <section className="panel" aria-labelledby="archiv-heading">
           <div className="panel-head"><div><h2 id="archiv-heading">Archivierte Verträge</h2><p>Archivierung ist reversibel – es wird nichts gelöscht.</p></div></div>
           {data.items.length === 0 ? (
-            <div className="state-box"><div className="state-icon">∅</div><h3>Keine archivierten Verträge</h3><p>Verträge erscheinen hier, sobald sie im Contract 360 ins Archiv verschoben wurden.</p></div>
+            <div className="state-box"><div className="state-icon">∅</div><h3>Keine archivierten Verträge</h3><p>Verträge erscheinen hier, sobald sie in der Vertragsansicht ins Archiv verschoben wurden.</p></div>
           ) : (
             <div className="table-wrap"><ContractTable items={data.items} extraHeader="Archiviert" extra={(item) => <><span className="muted">{item.archived_at ? formatDate(item.archived_at) : "–"}</span>{" "}<button type="button" className="btn btn-sm" onClick={() => void unarchive(item.contract_id)} disabled={busyId === item.contract_id}>{busyId === item.contract_id ? "Wird…" : "Wiederherstellen"}</button></>} /></div>
           )}

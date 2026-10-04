@@ -176,9 +176,9 @@ export default function ContractDetailPage() {
             </div>
           ) : null}
           {intelligenceTarget ? (
-            <section id="intelligence-source-viewer" className="cw-section" aria-label="Intelligence-Quelle">
+            <section id="intelligence-source-viewer" className="cw-section" aria-label="Quelle aus der Vertragsanalyse">
               <div className="cw-section-head">
-                <div><h2>Intelligence-Quelle</h2><p>{intelligenceTarget.label}</p></div>
+                <div><h2>Quelle aus der Vertragsanalyse</h2><p>{intelligenceTarget.label}</p></div>
                 <button type="button" className="btn-ghost" onClick={() => setIntelligenceTarget(null)}>Schließen</button>
               </div>
               <PdfViewer
