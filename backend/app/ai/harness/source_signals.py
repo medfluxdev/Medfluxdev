@@ -14,6 +14,7 @@ _MONEY_RE = re.compile(
     r"|(?<!\w)(?:€|EUR)\s*(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?(?!\w)",
     re.IGNORECASE,
 )
+_MONEY_NUMBER_RE = re.compile(r"(?:\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,\d{2})?")
 _DURATION_RE = re.compile(
     r"\b\d+\s*(?:Jahr(?:e|en)?|Monat(?:e|en)?|Woche(?:n)?|Tag(?:e|en)?)\b",
     re.IGNORECASE,
@@ -36,15 +37,19 @@ class SourceSignal:
     block_id: str
     page: int | None
     quote: str
+    source_context: dict | None = None
 
     def as_dict(self) -> dict:
-        return {
+        result = {
             "kind": self.kind,
             "value": self.value,
             "block_id": self.block_id,
             "page": self.page,
             "quote": self.quote,
         }
+        if self.source_context:
+            result["source_context"] = self.source_context
+        return result
 
 
 def _snippet(text: str, start: int, end: int, radius: int = 72) -> str:
@@ -98,6 +103,57 @@ def _matches(block: Block) -> list[SourceSignal]:
     return rows
 
 
+def _table_money_signals(document: DocumentModel) -> list[SourceSignal]:
+    """Bind numeric table cells to an explicit currency/period column header.
+
+    The exact row stays the evidence quote. Header context is carried separately
+    so downstream validation can require the same table and column.
+    """
+    rows: list[SourceSignal] = []
+    for block in document.blocks:
+        table = getattr(getattr(block, "element", None), "table", None)
+        if table is None:
+            continue
+        headers: dict[int, str] = {}
+        for cell in table.cells:
+            if cell.row_index == 0 and cell.text.strip():
+                headers[cell.column_index] = cell.text.strip()
+        for cell in table.cells:
+            if cell.row_index == 0 or not cell.text.strip():
+                continue
+            header = headers.get(cell.column_index, "")
+            currency = re.search(r"\b(EUR|USD|GBP)\b|€|\$|£", header, re.IGNORECASE)
+            if not currency or not _MONEY_NUMBER_RE.fullmatch(cell.text.strip()):
+                continue
+            currency_text = currency.group(0).upper()
+            currency_text = {"€": "EUR", "$": "USD", "£": "GBP"}.get(currency_text, currency_text)
+            period = header
+            row_cells = sorted(
+                (candidate for candidate in table.cells if candidate.row_index == cell.row_index),
+                key=lambda candidate: candidate.column_index,
+            )
+            quote = " | ".join(candidate.text.strip() for candidate in row_cells if candidate.text.strip())
+            if not quote:
+                continue
+            rows.append(
+                SourceSignal(
+                    kind="money",
+                    value=f"{cell.text.strip()} {currency_text}",
+                    block_id=block.id,
+                    page=block.page,
+                    quote=quote,
+                    source_context={
+                        "type": "table_column",
+                        "table_id": table.table_id,
+                        "row_index": cell.row_index,
+                        "column_index": cell.column_index,
+                        "header": period,
+                    },
+                )
+            )
+    return rows
+
+
 def collect_source_signals(document: DocumentModel, *, limit: int = 160) -> list[dict]:
     """Collect literal OCR/native signals without deciding contract semantics.
 
@@ -105,14 +161,19 @@ def collect_source_signals(document: DocumentModel, *, limit: int = 160) -> list
     exact source block and Qwen still decides their contractual role.
     """
     rows: list[SourceSignal] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str, str, str]] = set()
+    table_signals = _table_money_signals(document)
+    for item in table_signals:
+        key = (item.kind, item.value, item.block_id, item.quote)
+        seen.add(key)
+        rows.append(item)
     for block in document.blocks:
         for item in _matches(block):
-            key = (item.kind, item.value, item.block_id)
+            key = (item.kind, item.value, item.block_id, item.quote)
             if key in seen:
                 continue
             seen.add(key)
             rows.append(item)
-            if len(rows) >= limit:
-                return [row.as_dict() for row in rows]
-    return [row.as_dict() for row in rows]
+    money_signals = [row for row in rows if row.kind == "money"]
+    rows = money_signals + [row for row in rows if row.kind != "money"]
+    return [row.as_dict() for row in rows[:limit]]

@@ -1027,6 +1027,35 @@ def _financial_source_rejection(field: str, value: Any, quote: str) -> str | Non
     return None
 
 
+def _financial_table_context_rejection(field: str, value: Any, signal: dict) -> str | None:
+    """Validate period and currency from a linked table column header."""
+    context = signal.get("source_context") or {}
+    if context.get("type") != "table_column" or not context.get("table_id"):
+        return "financial_table_context_missing"
+    header = str(context.get("header") or "")
+    quote = str(signal.get("quote") or "")
+    if field in _PERIOD_ANCHORS:
+        header_confirms_period = (
+            field == "costs.annual_cost"
+            and re.search(r"(?:^|[/\s])jahr(?:$|[/\s])", header, re.IGNORECASE)
+        )
+        if not _PERIOD_ANCHORS[field].search(header) and not header_confirms_period:
+            return "financial_period_not_explicit_in_evidence"
+    elif field == "costs.total_contract_value":
+        if not _TOTAL_VALUE_ANCHOR.search(quote):
+            return "financial_total_not_explicit_in_evidence"
+    else:
+        return None
+    expected = _money_amount_from_value(value)
+    quoted = _money_literals_in_source_quote(str(signal.get("value") or ""))
+    expected_currency = _money_currency_from_value(value)
+    if expected is None or len(quoted) != 1 or abs(quoted[0][0] - expected) >= 0.005:
+        return "financial_amount_not_bound_to_classification_evidence"
+    if expected_currency and quoted[0][1] != expected_currency:
+        return "financial_amount_not_bound_to_classification_evidence"
+    return None
+
+
 # Zulaessige Felder eines Equipment-Objekts (vgl. app.models.contract.Equipment).
 # Alles andere (v. a. 'evidence') wird verworfen – die Evidenz bindet der Harness
 # deterministisch aus der gefundenen Quelle.
@@ -3820,9 +3849,32 @@ class DirectContractHarness:
                     )
                     continue
 
+                table_source_context = None
                 financial_rejection = _financial_source_rejection(
                     fact.field, value, resolved_quote
                 )
+                if block is not None and page is not None:
+                    table_signals = [
+                        signal for signal in source_signals
+                        if signal.get("block_id") == block.id
+                        and signal.get("page") == page
+                        and _signal_matches(fact.field, value, signal)
+                        and (signal.get("source_context") or {}).get("type") == "table_column"
+                        and signal.get("quote") == resolved_quote
+                    ]
+                    if len(table_signals) == 1:
+                        context = table_signals[0]["source_context"]
+                        table_source_context = {
+                            "type": context["type"],
+                            "table_id": context["table_id"],
+                            "row_index": context["row_index"],
+                            "column_index": context["column_index"],
+                            "header": context["header"],
+                        }
+                    if financial_rejection and len(table_signals) == 1:
+                        financial_rejection = _financial_table_context_rejection(
+                            fact.field, value, table_signals[0]
+                        )
                 if financial_rejection:
                     rejected.append(
                         {
@@ -3840,6 +3892,7 @@ class DirectContractHarness:
                     source_text=resolved_quote,
                     confidence=fact.confidence,
                     requires_review=bool(visual_only),
+                    source_context=table_source_context,
                 )
                 if block is not None:
                     box = _bbox(block)

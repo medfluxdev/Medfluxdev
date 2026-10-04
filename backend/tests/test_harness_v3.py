@@ -34,6 +34,8 @@ from app.documents.intelligence.canonical import (
     Element,
     Page,
     ProcessingProvenance,
+    TableStructure,
+    Cell,
 )
 from app.models.contract import Contract
 from app.models.values import Duration, FlexibleDate
@@ -703,6 +705,109 @@ def test_source_signals_recognize_labelled_frame_contract_number():
     assert [(row["value"], row["page"]) for row in matches] == [
         ("RAV-00074", 1)
     ]
+
+
+def test_source_signals_bind_table_money_to_currency_and_period_column():
+    canonical = DocumentIntelligenceResult(
+        document_id="table-money",
+        pages=[Page(
+            page_number=1,
+            width_pt=600,
+            height_pt=800,
+            text="",
+            tables=[TableStructure(
+                table_id="prices",
+                page=1,
+                num_rows=3,
+                num_cols=2,
+                cells=[
+                    Cell(row_index=0, column_index=0, text="Position"),
+                    Cell(row_index=0, column_index=1, text="EUR/Jahr"),
+                    Cell(row_index=1, column_index=0, text="Jahr 1: Gesamtpreis Netto"),
+                    Cell(row_index=1, column_index=1, text="52.500,00"),
+                    Cell(row_index=2, column_index=0, text="Jahr 2: Gesamtpreis Netto"),
+                    Cell(row_index=2, column_index=1, text="52.500,00"),
+                ],
+            )],
+        )],
+        source_sha256="a" * 64,
+        provenance=ProcessingProvenance(provider="unit-test"),
+    )
+    signals = [signal for signal in collect_source_signals(DocumentModel.build(canonical)) if signal["kind"] == "money"]
+    assert len(signals) == 2
+    assert signals[0]["value"] == "52.500,00 EUR"
+    assert signals[0]["quote"] == "Jahr 1: Gesamtpreis Netto | 52.500,00"
+    assert signals[0]["source_context"] == {
+        "type": "table_column",
+        "table_id": "prices",
+        "row_index": 1,
+        "column_index": 1,
+        "header": "EUR/Jahr",
+    }
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        signals[0]["quote"],
+    ) == "financial_period_not_explicit_in_evidence"
+    from app.ai.harness.v3 import _financial_table_context_rejection
+    assert _financial_table_context_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        signals[0],
+    ) is None
+    from app.models.evidence import SourceEvidence
+    evidence = SourceEvidence(
+        page=1,
+        source_type="table",
+        source_text=signals[0]["quote"],
+        source_context=signals[0]["source_context"],
+    )
+    assert evidence.model_dump(mode="json")["source_context"]["header"] == "EUR/Jahr"
+
+
+def test_table_money_signals_survive_the_source_signal_limit():
+    pages = [
+        Page(
+            page_number=number,
+            width_pt=600,
+            height_pt=800,
+            text="Vertragsbeginn am 01.04.2025.",
+            elements=[Element(
+                element_id=f"p{number}",
+                page=number,
+                reading_order=0,
+                text="Vertragsbeginn am 01.04.2025.",
+                type="paragraph",
+            )],
+        )
+        for number in range(1, 171)
+    ]
+    pages.append(Page(
+        page_number=171,
+        width_pt=600,
+        height_pt=800,
+        tables=[TableStructure(
+            table_id="late-prices",
+            page=171,
+            num_rows=2,
+            num_cols=2,
+            cells=[
+                Cell(row_index=0, column_index=0, text="Position"),
+                Cell(row_index=0, column_index=1, text="EUR/Jahr"),
+                Cell(row_index=1, column_index=0, text="Jahr 1: Jahrespreis"),
+                Cell(row_index=1, column_index=1, text="52.500,00"),
+            ],
+        )],
+    ))
+    canonical = DocumentIntelligenceResult(
+        pages=pages,
+        source_sha256="b" * 64,
+        provenance=ProcessingProvenance(provider="unit-test"),
+    )
+    signals = collect_source_signals(DocumentModel.build(canonical), limit=160)
+    assert any(signal["kind"] == "money" and signal["page"] == 171 for signal in signals)
+
+
 def test_financial_period_and_amount_must_share_the_same_source_quote():
     assert _financial_source_rejection(
         "costs.annual_cost",

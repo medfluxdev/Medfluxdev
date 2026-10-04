@@ -6,7 +6,7 @@ damit Herkunft (Seite/Text), Confidence und Prüfbedarf nachvollziehbar sind.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -79,6 +79,10 @@ class SourceEvidence(BaseModel):
     ocr_confidence: Optional[float] = Field(
         default=None, ge=0.0, le=1.0,
         description="Durchschnittliche OCR-Konfidenz des Nachweistextes (0..1)",
+    )
+    source_context: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Strukturierter Quellkontext, z. B. Tabellenkopf und Zellenadresse",
     )
 
     @field_validator("confidence")
