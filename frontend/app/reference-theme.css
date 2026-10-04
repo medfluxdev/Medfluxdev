@@ -1,34 +1,7 @@
 /* Reference-inspired visual layer.
    Intentionally presentation-only: no API, route or business-logic changes. */
 
-:root {
-  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-  --bg: #f7f9fc;
-  --surface: #ffffff;
-  --surface-2: #f8fafc;
-  --surface-3: #f1f5f9;
-  --surface-muted: #f8fafc;
-  --border: #e2e8f0;
-  --border-soft: #edf2f7;
-  --border-strong: #cbd5e1;
-  --text: #0f172a;
-  --text-muted: #5f718d;
-  --muted: #64748b;
-  --muted2: #8a99ad;
-  --accent: #0878a5;
-  --accent-strong: #05658c;
-  --accent-soft: #e8f4f8;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #dc2626;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius: 12px;
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.06);
-  --shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
-}
+
 
 html,
 body {
@@ -50,7 +23,7 @@ body {
 .sidebar {
   width: 232px;
   padding: 18px 14px 16px;
-  background: #ffffff;
+  background: var(--color-surface);
   border-right: 1px solid var(--border);
   box-shadow: none;
 }
@@ -63,8 +36,8 @@ body {
 .brand .logo {
   width: 38px;
   height: 38px;
-  border-radius: 9px;
-  background: #ffffff;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
   border: 2px solid var(--accent);
   box-shadow: none;
 }
@@ -89,25 +62,25 @@ body {
 }
 
 .brand strong {
-  font-size: 16px;
-  color: #111827;
+  font-size: var(--text-body);
+  color: var(--color-text);
   letter-spacing: -0.02em;
 }
 
 .brand small {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: var(--text-caption);
   letter-spacing: 0;
   text-transform: none;
-  color: #718096;
+  color: var(--color-text-subtle);
 }
 
 .nav-label {
   padding: 12px 10px 7px;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 12px;
-  color: #667892;
+  font-size: var(--text-caption);
+  color: var(--color-text-subtle);
   font-weight: 600;
 }
 
@@ -117,24 +90,24 @@ body {
 
 .nav-item {
   min-height: 42px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0 11px;
   gap: 10px;
-  color: #526782;
-  font-size: 13px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
   font-weight: 500;
   transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .nav-item:hover {
-  background: #f3f7fa;
-  color: #15324b;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .nav-item.active {
-  color: #ffffff;
-  background: linear-gradient(135deg, #0878a5 0%, #0d8ca7 100%);
-  box-shadow: 0 3px 10px rgba(8, 120, 165, 0.18);
+  color: var(--color-text-inverse);
+  background: linear-gradient(135deg, var(--color-info-fill) 0%, var(--color-brand-strong) 100%);
+  box-shadow: var(--shadow-md);
 }
 
 .nav-item.active:before {
@@ -143,9 +116,9 @@ body {
 
 .side-ai,
 .org-card {
-  border-radius: 10px;
-  background: #f8fafc;
-  border-color: #e6ebf1;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border-subtle);
   box-shadow: none;
 }
 
@@ -158,28 +131,28 @@ body {
 .topbar {
   height: 68px;
   padding: 0 28px;
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--color-surface);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(10px);
 }
 
 .topbar-route-title {
-  font-size: 18px;
+  font-size: var(--text-title-s);
   font-weight: 650;
 }
 
 .search {
   height: 40px;
-  border-radius: 8px;
-  background: #ffffff;
-  border-color: #dfe6ee;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border-color: var(--color-border);
 }
 
 .topbar .import-btn {
   height: 40px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--accent);
-  box-shadow: 0 2px 5px rgba(8, 120, 165, 0.14);
+  box-shadow: var(--shadow-md);
 }
 
 .topbar .import-btn:hover {
@@ -199,15 +172,15 @@ body {
 
 .page-header h1 {
   margin: 0 0 4px;
-  font-size: 24px;
+  font-size: var(--text-title-l);
   font-weight: 700;
   letter-spacing: -0.025em;
 }
 
 .page-sub {
   margin: 0;
-  color: #657792;
-  font-size: 14px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
 }
 
 .page-actions {
@@ -222,12 +195,12 @@ body {
 .welcome-hero {
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 26px 28px;
   margin-bottom: 26px;
-  color: #ffffff;
-  background: linear-gradient(110deg, #0874a2 0%, #11989b 52%, #12ba7f 100%);
-  box-shadow: 0 4px 14px rgba(8, 116, 162, 0.12);
+  color: var(--color-text-inverse);
+  background: linear-gradient(110deg, var(--color-info-fill) 0%, var(--color-success-fill) 52%, var(--color-brand) 100%);
+  box-shadow: var(--shadow-md);
 }
 
 .welcome-hero:after {
@@ -240,22 +213,22 @@ body {
 
 .welcome-hero > div {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-raised);
 }
 
 .welcome-hero h2 {
   margin: 0;
-  font-size: clamp(22px, 2vw, 30px);
+  font-size: var(--text-title-l);
   line-height: 1.2;
   font-weight: 750;
   letter-spacing: -0.03em;
-  color: #ffffff;
+  color: var(--color-text-inverse);
 }
 
 .welcome-hero p {
   margin: 9px 0 17px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.92);
+  font-size: var(--text-small);
+  color: var(--color-text-inverse);
 }
 
 .hero-action {
@@ -264,21 +237,21 @@ body {
   gap: 10px;
   min-height: 42px;
   padding: 0 17px;
-  border-radius: 7px;
-  background: #ffffff;
-  color: #066b92;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
   text-decoration: none;
-  font-size: 13px;
+  font-size: var(--text-small);
   font-weight: 700;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .hero-action:hover {
-  background: #f8fbfd;
+  background: var(--color-surface-subtle);
 }
 
 .hero-action span {
-  font-size: 22px;
+  font-size: var(--text-title-m);
   font-weight: 400;
   line-height: 1;
 }
@@ -293,10 +266,10 @@ body {
 .intel,
 .kpi-card,
 .kpi {
-  border: 1px solid #dfe7ef;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.045);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
 }
 
 .intel {
@@ -320,8 +293,8 @@ body {
 
 .intel-label,
 .kpi-label {
-  color: #60728d;
-  font-size: 13px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-small);
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
@@ -329,8 +302,8 @@ body {
 
 .intel-value,
 .kpi-value {
-  color: #0f172a;
-  font-size: 26px;
+  color: var(--color-text);
+  font-size: var(--text-title-l);
   font-weight: 750;
   margin-top: 10px;
 }
@@ -339,18 +312,18 @@ body {
   margin-bottom: 14px;
   text-transform: none;
   letter-spacing: 0;
-  color: #7b8ca3;
-  font-size: 12px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
 }
 
 /* Cards and panels across the app */
 .panel,
 .card,
 .detail-card {
-  border: 1px solid #e0e7ef;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 2px 7px rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
 }
 
 .panel {
@@ -360,8 +333,8 @@ body {
 
 .panel h2,
 .panel-head h2 {
-  color: #14213a;
-  font-size: 16px;
+  color: var(--color-text);
+  font-size: var(--text-body);
   font-weight: 700;
 }
 
@@ -370,13 +343,13 @@ body {
 }
 
 .panel-head p {
-  color: #718096;
-  font-size: 12px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
 }
 
 .card-title,
 .detail-card h2 {
-  color: #14213a;
+  color: var(--color-text);
 }
 
 .dash-grid,
@@ -386,24 +359,24 @@ body {
 
 /* Empty states */
 .state-box {
-  border: 1px solid #e0e7ef;
-  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   min-height: 210px;
   padding: 30px;
-  background: #ffffff;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.035);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .state-icon {
   width: 46px;
   height: 46px;
-  border-radius: 9px;
-  background: #f4f7fa;
-  color: #64748b;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-subtle);
 }
 
 .state-box h3 {
-  color: #526782;
+  color: var(--color-text-subtle);
   font-weight: 600;
 }
 
@@ -412,7 +385,7 @@ body {
 .icon-btn,
 .settings-nav-item,
 .settings-nav a {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .btn {
@@ -424,7 +397,7 @@ body {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  box-shadow: 0 2px 5px rgba(8, 120, 165, 0.12);
+  box-shadow: var(--shadow-md);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -433,9 +406,9 @@ body {
 }
 
 .btn-ghost {
-  color: #49627e;
-  background: #ffffff;
-  border-color: #dfe6ee;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-color: var(--color-border);
 }
 
 /* Forms and tables */
@@ -446,9 +419,9 @@ textarea,
 .field select,
 .field textarea,
 .select {
-  border-radius: 8px;
-  border-color: #dbe4ed;
-  background: #ffffff;
+  border-radius: var(--radius-sm);
+  border-color: var(--color-border);
+  background: var(--color-surface);
 }
 
 table {
@@ -457,31 +430,31 @@ table {
 }
 
 thead th {
-  color: #60728d;
-  font-size: 12px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
   font-weight: 650;
-  background: #f8fafc;
+  background: var(--color-surface-subtle);
 }
 
 tbody tr:hover {
-  background: #fbfdff;
+  background: var(--color-surface);
 }
 
 /* Status styling stays semantic, but visually matches the reference. */
 .status-badge,
 .freshness-pill {
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: none;
 }
 
 /* Responsive behavior */
-@media (max-width: 1100px) {
+@media (max-width: 960px) {
   .intel-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 960px) {
   .app {
     display: block;
   }
@@ -509,7 +482,7 @@ tbody tr:hover {
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 640px) {
   .intel-strip {
     grid-template-columns: 1fr;
   }

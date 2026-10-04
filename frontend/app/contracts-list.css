@@ -23,12 +23,12 @@
 
 .contract-tool-label {
   font-weight: 700;
-  color: var(--text, #0f172a);
+  color: var(--text, var(--color-text));
 }
 
 .contract-tool-muted {
-  color: var(--text-muted, #64748b);
-  font-size: 0.9rem;
+  color: var(--text-muted, var(--color-text-subtle));
+  font-size: var(--text-small);
 }
 
 .active-filter-chips,
@@ -45,8 +45,8 @@
   gap: 0.35rem;
   min-height: 2rem;
   border: 1px solid var(--border, rgba(148, 163, 184, 0.42));
-  border-radius: 999px;
-  background: var(--surface, #fff);
+  border-radius: var(--radius-pill);
+  background: var(--surface, var(--color-surface));
 }
 
 .active-filter-chip {
@@ -92,7 +92,7 @@
   align-self: stretch;
   padding: 0 0.55rem;
   border-left: 1px solid var(--border, rgba(148, 163, 184, 0.35));
-  font-size: 1rem;
+  font-size: var(--text-body);
 }
 
 .contract-table-preferences {
@@ -119,15 +119,15 @@
 
 .contract-column-popover {
   position: absolute;
-  z-index: 40;
+  z-index: var(--z-header);
   top: calc(100% + 0.4rem);
   right: 0;
   min-width: 220px;
   padding: 0.75rem;
   border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
   border-radius: 0.75rem;
-  background: var(--surface, #fff);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+  background: var(--surface, var(--color-surface));
+  box-shadow: var(--shadow-lg);
 }
 
 .contract-column-popover label {
@@ -149,15 +149,15 @@
 }
 
 .contract-table-scroll:focus-visible {
-  outline: 3px solid var(--focus-ring, #2563eb);
+  outline: 3px solid var(--focus-ring, var(--color-focus));
   outline-offset: 2px;
 }
 
 .contract-table-shell .contract-table thead th {
   position: sticky;
   top: 0;
-  z-index: 2;
-  background: var(--surface, #fff);
+  z-index: var(--z-raised);
+  background: var(--surface, var(--color-surface));
 }
 
 .contract-table-shell.density-compact .contract-table th,
@@ -182,8 +182,8 @@
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: var(--link, #2563eb);
-  font-size: 0.82rem;
+  color: var(--link, var(--color-info));
+  font-size: var(--text-small);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -191,7 +191,7 @@
 
 .contract-quick-preview {
   position: fixed;
-  z-index: 70;
+  z-index: var(--z-floating);
   right: 1rem;
   top: 5.5rem;
   width: min(420px, calc(100vw - 2rem));
@@ -200,8 +200,8 @@
   padding: 1rem;
   border: 1px solid var(--border, rgba(148, 163, 184, 0.35));
   border-radius: 1rem;
-  background: var(--surface, #fff);
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.2);
+  background: var(--surface, var(--color-surface));
+  box-shadow: var(--shadow-lg);
 }
 
 .contract-preview-head {
@@ -213,20 +213,20 @@
 
 .contract-preview-head h2 {
   margin: 0.15rem 0 0.2rem;
-  font-size: 1.15rem;
+  font-size: var(--text-title-s);
 }
 
 .contract-preview-head p {
   margin: 0;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted, var(--color-text-subtle));
 }
 
 .contract-preview-eyebrow {
-  font-size: 0.75rem;
+  font-size: var(--text-caption);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted, var(--color-text-subtle));
 }
 
 .contract-preview-grid {
@@ -243,8 +243,8 @@
 }
 
 .contract-preview-grid dt {
-  color: var(--text-muted, #64748b);
-  font-size: 0.78rem;
+  color: var(--text-muted, var(--color-text-subtle));
+  font-size: var(--text-caption);
 }
 
 .contract-preview-grid dd {
@@ -267,13 +267,13 @@
   margin-top: 1rem;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 960px) {
   .contract-view-tools {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   .contract-table-preferences,
   .active-filter-area,
   .saved-view-area {

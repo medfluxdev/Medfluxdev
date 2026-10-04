@@ -25,7 +25,7 @@
   height: 2rem;
   flex: 0 0 auto;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text-secondary);
   cursor: pointer;
@@ -68,7 +68,7 @@
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: var(--z-sidebar);
 }
 
 .account-menu {
@@ -93,10 +93,10 @@
   gap: 0.25rem;
   padding: 0.5rem;
   border: 1px solid var(--border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface-raised);
   box-shadow: var(--shadow-popover);
-  z-index: 50;
+  z-index: var(--z-dropdown);
 }
 
 .account-menu-identity {
@@ -120,7 +120,7 @@
   align-items: center;
   padding: 0.45rem 0.625rem;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
   text-align: left;
@@ -141,7 +141,7 @@
   min-height: 2.25rem;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 960px) {
   .sidebar {
     width: 220px;
   }
@@ -155,7 +155,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 640px) {
   .app {
     display: block;
   }

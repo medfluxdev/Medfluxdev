@@ -27,7 +27,7 @@ canvas {
   max-width: 100%;
 }
 
-@media (max-width: 390px) {
+@media (max-width: 640px) {
   .page {
     min-width: 0;
   }
@@ -53,7 +53,7 @@ canvas {
   }
 }
 
-@media (max-width: 320px) {
+@media (max-width: 640px) {
   .page {
     padding-inline: 10px;
   }
@@ -71,13 +71,3 @@ canvas {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}

@@ -1,12 +1,12 @@
 .notification-center { position: relative; }
 .notification-trigger { position: relative; display: inline-flex; min-width: 2.5rem; min-height: 2.5rem; align-items: center; justify-content: center; cursor: pointer; border-radius: .7rem; }
 .notification-trigger::-webkit-details-marker { display: none; }
-.notification-count { position: absolute; top: -.25rem; right: -.25rem; min-width: 1.25rem; height: 1.25rem; padding: 0 .25rem; border-radius: 999px; background: var(--danger, #b42318); color: white; font-size: .7rem; line-height: 1.25rem; text-align: center; }
+.notification-count { position: absolute; top: -.25rem; right: -.25rem; min-width: 1.25rem; height: 1.25rem; padding: 0 .25rem; border-radius: var(--radius-pill); background: var(--danger, var(--color-danger)); color: var(--color-text-inverse); font-size: var(--text-caption); line-height: 1.25rem; text-align: center; }
 .notification-panel { width: min(25rem, 90vw); max-height: 32rem; overflow: auto; }
-.notification-item { display: grid !important; gap: .2rem; padding: .75rem !important; text-decoration: none; }
+:is(a, li, div).notification-item { display: grid; gap: .2rem; padding: .75rem; text-decoration: none; }
 .notification-item strong { color: inherit; }
 .notification-item small { white-space: normal; line-height: 1.35; }
-.notification-item span { font-size: .75rem; text-transform: uppercase; opacity: .65; }
+.notification-item span { font-size: var(--text-caption); text-transform: uppercase; opacity: .65; }
 .button-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .65rem; }
 .work-collaboration-panel { margin-bottom: 1rem; }
 .work-collaboration-panel .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
@@ -16,11 +16,11 @@
 .work-collaboration-panel select,
 .work-collaboration-panel textarea { width: 100%; }
 .form-field-wide { grid-column: 1 / -1; }
-.work-comments { margin-top: 1.25rem; border-top: 1px solid var(--border, #d8dee8); padding-top: 1rem; }
+.work-comments { margin-top: 1.25rem; border-top: 1px solid var(--border, var(--color-border)); padding-top: 1rem; }
 .work-comments ul { display: grid; gap: .75rem; padding: 0; list-style: none; }
-.work-comments li { padding: .75rem; border: 1px solid var(--border, #d8dee8); border-radius: .65rem; }
+.work-comments li { padding: .75rem; border: 1px solid var(--border, var(--color-border)); border-radius: .65rem; }
 .work-comments li p { margin: .3rem 0; }
-@media (max-width: 900px) { .work-collaboration-panel .form-grid { grid-template-columns: 1fr; } .form-field-wide { grid-column: auto; } }
+@media (max-width: 960px) { .work-collaboration-panel .form-grid { grid-template-columns: 1fr; } .form-field-wide { grid-column: auto; } }
 
 
 /* Contract lifecycle form: match the MedFlux visual system, including native date controls. */
@@ -35,9 +35,9 @@
   display: grid;
   gap: 7px;
   min-width: 0;
-  font-size: 0.86rem;
+  font-size: var(--text-small);
   font-weight: 650;
-  color: var(--text-muted, #5f718d);
+  color: var(--text-muted, var(--color-text-subtle));
 }
 .cw-lifecycle-form select,
 .cw-lifecycle-form input,
@@ -46,10 +46,10 @@
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
-  border: 1px solid var(--border-strong, #cbd5e1);
+  border: 1px solid var(--border-strong, var(--color-border-strong));
   border-radius: var(--radius-md, 10px);
-  background: var(--surface, #fff);
-  color: var(--text, #0f172a);
+  background: var(--surface, var(--color-surface));
+  color: var(--text, var(--color-text));
   font: inherit;
   font-weight: 500;
   line-height: 1.35;
@@ -59,14 +59,14 @@
 .cw-lifecycle-form select:hover,
 .cw-lifecycle-form input:hover,
 .cw-lifecycle-form textarea:hover {
-  border-color: #aebdca;
+  border-color: var(--color-border-strong);
 }
 .cw-lifecycle-form select:focus,
 .cw-lifecycle-form input:focus,
 .cw-lifecycle-form textarea:focus {
   outline: none;
-  border-color: var(--accent, #0878a5);
-  box-shadow: 0 0 0 3px var(--accent-soft, #e8f4f8);
+  border-color: var(--accent, var(--color-focus));
+  box-shadow: var(--shadow-focus);
 }
 .cw-lifecycle-form select {
   cursor: pointer;
@@ -74,7 +74,7 @@
 .cw-lifecycle-form input[type="date"] {
   min-width: 0;
   color-scheme: light;
-  accent-color: var(--accent, #0878a5);
+  accent-color: var(--accent, var(--color-text-subtle));
 }
 .cw-lifecycle-form input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
@@ -97,14 +97,14 @@
   min-height: 44px;
   padding-inline: 18px;
   border-radius: var(--radius-md, 10px);
-  background: linear-gradient(135deg, var(--accent, #0878a5) 0%, #0d8ca7 100%);
-  border-color: var(--accent, #0878a5);
-  box-shadow: 0 3px 10px rgba(8, 120, 165, .16);
+  background: linear-gradient(135deg, var(--accent, var(--color-info-fill)) 0%, var(--color-brand-strong) 100%);
+  border-color: var(--accent, var(--color-focus));
+  box-shadow: var(--shadow-md);
 }
 .cw-lifecycle-form .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--accent-strong, #05658c) 0%, var(--accent, #0878a5) 100%);
+  background: linear-gradient(135deg, var(--accent-strong, var(--color-accent)) 0%, var(--accent, var(--color-info-fill)) 100%);
 }
-@media (max-width: 760px) {
+@media (max-width: 640px) {
   .cw-lifecycle-form {
     grid-template-columns: 1fr;
     max-width: none;

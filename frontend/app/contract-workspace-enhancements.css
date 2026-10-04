@@ -4,17 +4,17 @@
   align-items: stretch;
   grid-template-columns: 1fr;
   padding: 14px;
-  border: 1px solid #dfe7ef;
-  border-radius: 10px;
-  background: #fbfdff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .fr-edit-stack label {
   display: grid;
   gap: 0.35rem;
   font-weight: 600;
-  font-size: 13px;
-  color: #526782;
+  font-size: var(--text-small);
+  color: var(--color-text-subtle);
 }
 
 .fr-edit-stack input {
@@ -32,44 +32,44 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
-  border: 1px solid var(--border, #dfe7ef);
-  border-radius: 999px;
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: var(--radius-pill);
   padding: 2px 7px;
-  font-size: 11px;
+  font-size: var(--text-caption);
   line-height: 1.35;
   font-weight: 800;
   white-space: nowrap;
 }
 
 .cw-origin-extracted {
-  background: #eef8fc;
-  border-color: #b9dce6;
-  color: #087a99;
+  background: var(--color-bg);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-subtle);
 }
 
 .cw-origin-reviewed {
-  background: #effbf6;
-  border-color: #9edcc6;
-  color: #07845b;
+  background: var(--color-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
 }
 
 .cw-origin-corrected {
-  background: #fff8eb;
-  border-color: #e7c58c;
-  color: #8b5600;
+  background: var(--color-surface-subtle);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
 }
 
 .cw-origin-calculated,
 .cw-origin-system {
-  background: #f7fafc;
-  border-color: #d6e1eb;
-  color: #526782;
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border);
+  color: var(--color-text-subtle);
 }
 
 .cw-origin-missing {
-  background: #fff5f5;
-  border-color: #efb4b4;
-  color: #b42318;
+  background: var(--color-surface-subtle);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
 }
 
 .cw-value-origin {
@@ -90,9 +90,9 @@
   display: grid;
   gap: 10px;
   padding: 14px;
-  border: 1px solid #dfe7ef;
-  border-radius: 10px;
-  background: #fbfdff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .cw-calc-basis-head {
@@ -104,7 +104,7 @@
 
 .cw-calc-basis p {
   margin: 0;
-  color: #40536f;
+  color: var(--color-text-muted);
 }
 
 .cw-calc-basis dl {
@@ -118,12 +118,12 @@
   grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
   gap: 12px;
   padding-top: 6px;
-  border-top: 1px solid #e7edf3;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .cw-calc-basis dt {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--color-text-subtle);
+  font-size: var(--text-caption);
   text-transform: capitalize;
 }
 
@@ -134,7 +134,7 @@
 }
 
 .cw-calc-basis small {
-  color: #64748b;
+  color: var(--color-text-subtle);
 }
 
 .fr-value-grid label {
@@ -157,14 +157,14 @@
   justify-items: start;
   padding: 1rem;
   margin: 16px;
-  border: 1px solid #efb4b4;
+  border: 1px solid var(--color-danger-border);
   border-radius: 0.75rem;
-  background: #fff5f5;
-  color: #8f1d1d;
+  background: var(--color-surface-subtle);
+  color: var(--color-danger);
 }
 
 .pdf-status.pdf-error strong {
-  font-size: 0.95rem;
+  font-size: var(--text-body);
 }
 
 .pdf-status.pdf-error span {
@@ -174,7 +174,7 @@
 /* FE-06: desktop source review behaves like an adjustable split workspace.
    The evidence pane is the resize handle itself, so no JavaScript or fake
    persistence is needed. The PDF pane always consumes the remaining width. */
-@media (min-width: 1201px) {
+@media (min-width: 1280px) {
   .cw-evidence-layout {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
@@ -186,13 +186,13 @@
     max-width: min(70vw, 760px);
     resize: horizontal;
     overflow: auto;
-    border-right: 3px solid #d7e3eb;
+    border-right: 3px solid var(--color-border);
     padding-right: 8px;
   }
 
   .cw-evidence-pane:focus-within,
   .cw-evidence-pane:hover {
-    border-right-color: #0b86a8;
+    border-right-color: var(--color-focus);
   }
 
   .cw-evidence-preview {
@@ -200,7 +200,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .cw-document-layout,
   .cw-evidence-layout {
     display: flex;
@@ -230,7 +230,7 @@
     max-height: 360px;
     resize: vertical;
     border-right: 0;
-    border-bottom: 3px solid #d7e3eb;
+    border-bottom: 3px solid var(--color-border);
     padding-right: 0;
     padding-bottom: 8px;
   }
@@ -242,7 +242,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   .fr-edit-actions {
     align-items: stretch;
   }
@@ -254,11 +254,11 @@
   }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 640px) {
   .cw-pdf-shell,
   .cw-evidence-preview {
     min-height: 380px;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
   }
 
   .cw-calc-grid,

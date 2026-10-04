@@ -1,7 +1,7 @@
 /* Desktop shell hardening for Medflux.
    Loaded after all theme files so older responsive rules cannot collapse the desktop layout. */
 
-@media (min-width: 700px) {
+@media (min-width: 640px) {
   html,
   body {
     min-width: 100%;
@@ -28,7 +28,7 @@
     border-right: 1px solid var(--border) !important;
     border-bottom: 0 !important;
     overflow-y: auto;
-    z-index: 60;
+    z-index: var(--z-drawer);
   }
 
   .side-nav-root,
@@ -78,7 +78,7 @@
     left: auto !important;
     width: 100% !important;
     margin: 0 !important;
-    z-index: 50;
+    z-index: var(--z-dropdown);
   }
 
   .content,
@@ -107,7 +107,7 @@
 }
 
 /* Keep the phone layout genuinely mobile instead of activating on desktop zoom. */
-@media (max-width: 699px) {
+@media (max-width: 640px) {
   .app {
     display: block;
   }

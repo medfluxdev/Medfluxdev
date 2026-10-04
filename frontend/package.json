@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "verify": "npm run lint && npm run test && npm run build",
+    "verify": "npm run lint && npm run lint:css && npm run test && npm run build",
     "e2e": "playwright test",
     "lint:css": "stylelint \"app/**/*.css\" \"components/**/*.css\""
   },
