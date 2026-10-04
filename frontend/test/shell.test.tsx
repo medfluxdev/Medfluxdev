@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn().mockResolvedValue({ status: "ok" }),
+  apiPut: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock("@/lib/domain-api/registerGrid", () => ({

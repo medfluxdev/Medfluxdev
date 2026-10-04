@@ -9,7 +9,7 @@ import AppTopbar from "@/components/shell/AppTopbar";
 import CommandPalette from "@/components/shell/CommandPalette";
 import ShortcutHelp from "@/components/shell/ShortcutHelp";
 import DeveloperPanel from "@/components/shell/DeveloperPanel";
-import { usePreferences } from "@/components/shell/preferences";
+import { usePreferences, useServerPreferenceSync } from "@/components/shell/preferences";
 import { useShortcuts } from "@/components/shell/useShortcuts";
 import FloatingAssistant from "@/components/assistant/FloatingAssistant";
 import { ROLE_LABELS } from "@/lib/auth-types";
@@ -27,6 +27,7 @@ export default function ClientNav({ children }: { children: React.ReactNode }) {
   const openHelp = useCallback(() => setHelpOpen(true), []);
   const closeMobile = useCallback(() => setMobileOpen(false), []);
   useShortcuts(openPalette, openHelp);
+  useServerPreferenceSync(account?.id ?? null);
 
   if (pathname === "/login" || pathname === "/select-organization") {
     return <>{children}</>;

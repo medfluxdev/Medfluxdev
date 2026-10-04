@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/register",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
-vi.mock("@/lib/api", () => ({ apiGet: vi.fn().mockResolvedValue({ status: "ok" }) }));
+vi.mock("@/lib/api", () => ({ apiGet: vi.fn().mockResolvedValue({ status: "ok" }), apiPut: vi.fn().mockResolvedValue({}) }));
 vi.mock("@/components/assistant/FloatingAssistant", () => ({ default: () => null }));
 vi.mock("@/components/OrganizationScopePicker", () => ({ default: () => <div>Test Klinik</div> }));
 vi.mock("@/components/auth/AuthProvider", () => ({

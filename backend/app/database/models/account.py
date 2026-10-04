@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -31,6 +31,7 @@ class Account(Base):
     job_title: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     department: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ui_preferences: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     # H5: Benachrichtigungs-Einstellungen und Standardvertretung.
     receives_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     receives_reminders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")

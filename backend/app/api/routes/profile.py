@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from app.auth.service import account_from_selector
 from app.core.config import settings
@@ -18,6 +20,18 @@ class ProfileUpdateRequest(BaseModel):
     department: str | None = None
     bio: str | None = None
     profile_photo_data_url: str | None = None
+
+
+class UiPreferences(BaseModel):
+    """U8: Darstellung je Benutzer; unbekannte Schluessel werden abgelehnt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    theme: Literal["system", "light", "dark"] = "system"
+    text_size: Literal["normal", "large", "xlarge"] = "normal"
+    density: Literal["comfortable", "compact"] = "comfortable"
+    sidebar_collapsed: bool = False
+    developer_mode: bool = False
 
 
 def serialize(account: Account) -> dict:
@@ -73,5 +87,31 @@ def update_profile(request: Request, payload: ProfileUpdateRequest):
         session.commit()
         session.refresh(account)
         return serialize(account)
+    finally:
+        session.close()
+
+
+@router.get("/preferences")
+def get_preferences(request: Request):
+    session = create_session()
+    try:
+        account = current_account(request, session)
+        stored = account.ui_preferences
+        return {"preferences": UiPreferences.model_validate(stored).model_dump() if stored else None}
+    finally:
+        session.close()
+
+
+@router.put("/preferences")
+def put_preferences(request: Request, payload: UiPreferences):
+    session = create_session()
+    try:
+        account = current_account(request, session)
+        values = payload.model_dump()
+        if not account.is_developer:
+            values["developer_mode"] = False
+        account.ui_preferences = values
+        session.commit()
+        return {"preferences": values}
     finally:
         session.close()

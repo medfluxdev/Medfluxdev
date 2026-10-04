@@ -1652,7 +1652,7 @@ button.scope-status:hover {
 }
 @media (max-width: 640px) {
   .settings-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .settings-nav {

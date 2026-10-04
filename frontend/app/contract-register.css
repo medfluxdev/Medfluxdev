@@ -73,7 +73,7 @@
 .hist-table td,.hist-table th{vertical-align: top}
 @media (max-width:640px){.hist-list>li{grid-template-columns: 1fr;gap: 2px}}
 .reg-layout{display: grid;grid-template-columns: 240px minmax(0,1fr);gap: 16px;align-items: start}
-.reg-main{display: grid;gap: 12px;min-width: 0}
+.reg-main{display: grid;grid-template-columns: minmax(0,1fr);gap: 12px;min-width: 0}
 .reg-tree h2{font-size: var(--text-small);margin: 0 0 8px}
 .reg-tree ul{list-style: none;margin: 0;padding: 0;display: grid;gap: 4px}
 .reg-tree ul ul{padding-left: 14px;margin-top: 4px}

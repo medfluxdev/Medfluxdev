@@ -485,3 +485,13 @@
 .sg-swatch { width: 2rem; height: 2rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 .sg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--space-4); }
 .catalog-tabs { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-2); }
+
+/* U9 Telefon: nichts verschiebt die Seite waagerecht */
+:where(input, select, textarea) { max-width: 100%; }
+@media (max-width: 640px) {
+  .btn { white-space: normal; }
+  .rg-form-grid, .reg-layout, .settings-layout, .org-settings-forms, .org-settings-page { grid-template-columns: minmax(0, 1fr); }
+  .cw-section-head, .panel-head, .section-head, .org-settings-head { flex-wrap: wrap; }
+  .cw-section-head > :not(:first-child), .section-head > :not(:first-child) { flex: 0 1 auto; max-width: 100%; }
+  :where(.rg-table, .data-table) { display: block; max-width: 100%; overflow-x: auto; }
+}

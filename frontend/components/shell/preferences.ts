@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiGet, apiPut } from "@/lib/api";
 
 // Darstellung je Benutzer: Design, Textgroesse, Dichte, eingeklappte Seitenleiste.
 export type ThemePreference = "system" | "light" | "dark";
@@ -61,6 +62,56 @@ export function usePreferences(): [Preferences, (patch: Partial<Preferences>) =>
     writePreferences(next);
   }, []);
   return [prefs, update];
+}
+
+// U8: Serverkopie, damit die Darstellung dem Benutzer auf andere Geraete folgt.
+// localStorage bleibt der schnelle Weg (kein Aufblitzen); der Server gewinnt beim Anmelden.
+interface ServerPreferences {
+  theme: ThemePreference;
+  text_size: TextSize;
+  density: Density;
+  sidebar_collapsed: boolean;
+  developer_mode: boolean;
+}
+
+function toServer(prefs: Preferences): ServerPreferences {
+  return { theme: prefs.theme, text_size: prefs.textSize, density: prefs.density, sidebar_collapsed: prefs.sidebarCollapsed, developer_mode: prefs.developerMode };
+}
+
+function fromServer(value: ServerPreferences): Preferences {
+  return { theme: value.theme, textSize: value.text_size, density: value.density, sidebarCollapsed: value.sidebar_collapsed, developerMode: value.developer_mode };
+}
+
+const SYNC_DELAY_MS = 600;
+
+export function useServerPreferenceSync(accountId: string | null) {
+  useEffect(() => {
+    if (!accountId) return;
+    let cancelled = false;
+    let ready = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const save = (prefs: Preferences) => { void apiPut("/api/profile/preferences", toServer(prefs)).catch(() => undefined); };
+    apiGet<{ preferences: ServerPreferences | null }>("/api/profile/preferences")
+      .then((result) => {
+        if (cancelled) return;
+        if (result.preferences) writePreferences(fromServer(result.preferences));
+        else save(readPreferences());
+      })
+      .catch(() => undefined)
+      .finally(() => { ready = true; });
+    const onChange = (event: Event) => {
+      if (!ready) return;
+      const prefs = (event as CustomEvent<Preferences>).detail;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => save(prefs), SYNC_DELAY_MS);
+    };
+    window.addEventListener(EVENT, onChange);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener(EVENT, onChange);
+    };
+  }, [accountId]);
 }
 
 // Vor dem ersten Zeichnen ausfuehren, damit das dunkle Design nicht aufblitzt.
