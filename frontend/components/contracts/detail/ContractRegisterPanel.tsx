@@ -33,9 +33,10 @@ import {
   type RegisterValue,
   type TermModel,
 } from "@/lib/domain-api/register";
+import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
 
 type Draft = Record<string, RegisterValue>;
-type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "period" | "term_model" | "notice_to" | "partner" | "type" | "category" | "account" | "storage" | "todo";
+type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo";
 type FieldDef = { key: string; kind: FieldKind };
 
 const PERIODS = ["initial_term", "minimum_term", "notice_period", "renewal_period"] as const;
@@ -89,6 +90,18 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
       { key: "storage_location_code", kind: "storage" },
       { key: "account_number", kind: "text" },
       { key: "manual_billing", kind: "bool" },
+    ],
+  },
+  {
+    id: "price",
+    title: "Preisanpassung",
+    description: "Grundlage für die Hochrechnung künftiger Kosten in den Finanzdaten",
+    fields: [
+      { key: "price_adjustment_kind", kind: "price_adjustment" },
+      { key: "price_adjustment_percent", kind: "decimal" },
+      { key: "price_adjustment_index_name", kind: "text" },
+      { key: "price_adjustment_next_date", kind: "date" },
+      { key: "price_adjustment_interval_months", kind: "int" },
     ],
   },
   {
@@ -296,8 +309,10 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       case "date": return formatDate(String(value));
       case "term_model": return TERM_MODEL_LABEL[value as TermModel] ?? String(value);
       case "notice_to": return NOTICE_TO_LABEL[value as NoticeTo] ?? String(value);
+      case "price_adjustment": return PRICE_ADJUSTMENT_LABEL[String(value)] ?? String(value);
+      case "decimal": return `${Number(value).toLocaleString("de-DE")} %`;
       case "storage": return register.storage_location_label ?? storage.find((item) => item.code === value)?.label ?? String(value);
-      case "int": return def.key === "reminder_lead_months" ? `${value} Monat(e) vor der Frist` : def.key === "retention_years_after_end" ? `${value} Jahr(e) nach Vertragsende` : String(value);
+      case "int": return def.key === "reminder_lead_months" ? `${value} Monat(e) vor der Frist` : def.key === "retention_years_after_end" ? `${value} Jahr(e) nach Vertragsende` : def.key === "price_adjustment_interval_months" ? `alle ${value} Monat(e)` : String(value);
       case "partner":
       case "type":
       case "category":
@@ -324,6 +339,13 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
         return <input id={id} type="date" value={text(key)} onChange={(event) => set(key, event.target.value || null)} />;
       case "int":
         return <input id={id} type="number" min={0} value={text(key)} onChange={(event) => set(key, event.target.value === "" ? null : Number(event.target.value))} />;
+      case "decimal":
+        return <input id={id} inputMode="decimal" value={text(key)} onChange={(event) => set(key, event.target.value.trim() === "" ? null : event.target.value)} />;
+      case "price_adjustment":
+        return <select id={id} value={text(key)} onChange={(event) => set(key, event.target.value || null)}>
+          <option value="">Keine Angabe</option>
+          {Object.entries(PRICE_ADJUSTMENT_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>;
       case "period":
         return <span className="rg-period">
           <input id={id} type="number" min={0} aria-label={`${PERIOD_LABEL[key as (typeof PERIODS)[number]]} (Anzahl)`} value={text(`${key}_value`)} onChange={(event) => set(`${key}_value`, event.target.value === "" ? null : Number(event.target.value))} />
