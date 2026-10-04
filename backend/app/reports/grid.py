@@ -7,14 +7,16 @@ gebuendelt geladen (keine N+1-Abfragen); die Sichtbarkeit bestimmt der Aufrufer.
 
 from __future__ import annotations
 
+import threading
+import time
 import uuid
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Callable, Iterable, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.database.models import Account, Contract
@@ -325,6 +327,73 @@ def build_rows(
                 row.upcoming.append((terms.cancel_by, "Kündigungsfrist"))
         rows.append(row)
     return rows
+
+
+# --------------------------------------------------------------------------- row cache
+
+# Zwischenspeicher je Organisation/Stichtag. Gueltig nur, solange der
+# Daten-Fingerabdruck gleich bleibt (jede Aenderung an Vertraegen, Finanzen,
+# Terminen, Dokumenten, Katalogen, Organisation oder Kontonamen baut neu).
+_CACHE_TTL_SECONDS = 300
+_CACHE_MAX = 16
+_cache: "OrderedDict[tuple, tuple[str, float, list[GridRow]]]" = OrderedDict()
+_cache_lock = threading.Lock()
+
+_FINGERPRINT_SQL = text("""
+SELECT concat_ws('|',
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') || ':' || coalesce(max(created_at)::text, '')
+     FROM contract WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM contract_finance_entry WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM contract_cost_allocation WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM contract_document WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM contract_deadline WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM contract_partner WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM catalog_contract_type WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM catalog_contract_category WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM lookup_value WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(contract_id::text || department_id::text || coalesce(relation_role, ''), ',' ORDER BY id), ''))
+     FROM contract_department WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM hospital WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM department WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM cost_center WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(a.id::text || a.display_name, ',' ORDER BY a.id), ''))
+     FROM account a JOIN account_membership m ON m.account_id = a.id WHERE m.organization_id = :org)
+)
+""")
+
+
+def data_fingerprint(session: Session, organization_id: uuid.UUID) -> str:
+    return str(session.execute(_FINGERPRINT_SQL, {"org": organization_id}).scalar())
+
+
+def cached_rows(
+    session: Session, organization_id: uuid.UUID, as_of: date, *, years: Optional[range] = None
+) -> list[GridRow]:
+    """Alle Registerzeilen der Organisation (inkl. geloeschter); Sichtbarkeit filtert der Aufrufer."""
+    key = (organization_id, as_of, (years.start, years.stop) if years else None)
+    fingerprint = data_fingerprint(session, organization_id)
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and hit[0] == fingerprint and now - hit[1] < _CACHE_TTL_SECONDS:
+            _cache.move_to_end(key)
+            return hit[2]
+    rows = build_rows(session, organization_id, None, as_of, years=years)
+    with _cache_lock:
+        _cache[key] = (fingerprint, now, rows)
+        _cache.move_to_end(key)
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
+    return rows
+
+
+def clear_cache() -> None:
+    with _cache_lock:
+        _cache.clear()
+
+
+def visible_rows(rows: list[GridRow], visible: Optional[set[uuid.UUID]]) -> list[GridRow]:
+    return rows if visible is None else [row for row in rows if row.contract_id in visible]
 
 
 # --------------------------------------------------------------------------- filtering / sorting / grouping

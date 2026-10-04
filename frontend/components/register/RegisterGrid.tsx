@@ -9,7 +9,6 @@ import {
   downloadGridXlsx,
   getGrid,
   getGridColumns,
-  getGridTree,
   listSavedViews,
   saveBlob,
   updateSavedView,
@@ -120,11 +119,11 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
     if (!spec) return;
     let cancelled = false;
     setLoading(true);
-    Promise.all([getGrid(organizationSlug, spec, { offset, limit: PAGE_SIZE }), getGridTree(organizationSlug, spec)])
-      .then(([grid, treeResult]) => {
+    getGrid(organizationSlug, spec, { offset, limit: PAGE_SIZE, includeTree: true })
+      .then((grid) => {
         if (cancelled) return;
         setData(grid);
-        setTree(treeResult.hospitals);
+        setTree(grid.tree ?? []);
       })
       .catch((error) => { if (!cancelled) setMessage({ tone: "error", text: errorText(error, "Die Liste konnte nicht geladen werden.") }); })
       .finally(() => { if (!cancelled) setLoading(false); });

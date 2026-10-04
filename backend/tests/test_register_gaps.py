@@ -159,3 +159,46 @@ def test_cost_centre_split_in_grid_and_portfolio(monkeypatch):
     report = client.get("/api/register/reports/portfolio", params=query).json()
     by_cc = {item["label"]: item["annual_cost"] for item in report["cost_by"]["cost_center"]}
     assert by_cc == {"Radiologie": "7200.00", "IT": "4800.00"}
+
+
+def test_grid_cache_rebuilds_after_any_change(monkeypatch):
+    import json as _json
+
+    from app.api.routes import register_grid
+    from app.database.models.organization_structure import Hospital
+
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    hospital = uuid4()
+    session = create_session()
+    try:
+        session.add(Hospital(id=hospital, organization_id=ids["org"], name="Alt", code="A"))
+        session.commit()
+    finally:
+        session.close()
+    client = _client(monkeypatch, ids)
+    actor = SimpleNamespace(organization_id=ids["org"], account_id=ids["admin"], role="admin", is_developer=False, display_name="Admin")
+    monkeypatch.setattr(register_grid, "current_actor", lambda request, organization_slug: actor)
+    monkeypatch.setattr(register_grid, "current_scope_context", lambda: ScopeContext())
+    client.app.include_router(register_grid.router)
+    cid = client.post("/api/contracts", params=query, json={"hospital_id": str(hospital), "values": {"short_description": "Vorher"}}).json()["contract_id"]
+
+    spec = {"organization_slug": slug, "spec": _json.dumps({"columns": ["short_description", "hospital", "annual_cost"]}), "include_tree": "true"}
+    first = client.get("/api/register/grid", params=spec).json()
+    assert first["items"][0]["values"]["short_description"] == "Vorher"
+    assert first["tree"][0]["label"] == "Alt"
+
+    client.patch(f"/api/contracts/{cid}/register", params=query, json={"changes": {"short_description": "Nachher"}})
+    client.post(f"/api/contracts/{cid}/finance/entries", params=query, json={"values": {
+        "label": "Pauschale", "amount": "100", "vat_rate": "19", "interval": "monthly", "valid_from": "2026-01-01",
+    }})
+    session = create_session()
+    try:
+        session.get(Hospital, hospital).name = "Neu"
+        session.commit()
+    finally:
+        session.close()
+    second = client.get("/api/register/grid", params=spec).json()
+    assert second["items"][0]["values"]["short_description"] == "Nachher"
+    assert second["items"][0]["values"]["annual_cost"] == "1200.00"
+    assert second["items"][0]["values"]["hospital"] == "Neu"

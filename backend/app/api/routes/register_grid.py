@@ -29,6 +29,7 @@ from app.reports.grid import (
     GridSpec,
     apply_filters,
     build_rows,
+    cached_rows,
     columns_payload,
     display,
     distinct_values,
@@ -37,6 +38,7 @@ from app.reports.grid import (
     sort_rows,
     totals,
     tree,
+    visible_rows,
 )
 from app.reports.renewal import decision_summary, renewal_brief, upcoming_renewals, urgency
 from app.reports.views import ViewError, create_view, delete_view, list_views, update_view, view_payload
@@ -69,7 +71,7 @@ def _visible(session, actor):
 
 
 def _rows(session, actor, spec: GridSpec, as_of: date, *, years: Optional[range] = None):
-    rows = build_rows(session, actor.organization_id, _visible(session, actor), as_of, years=years)
+    rows = visible_rows(cached_rows(session, actor.organization_id, as_of, years=years), _visible(session, actor))
     try:
         return rows, apply_filters(rows, spec, as_of, actor.account_id)
     except GridError as exc:
@@ -100,15 +102,27 @@ def get_columns(request: Request, organization_slug: str):
 
 
 @router.get("/api/register/grid")
-def get_grid(request: Request, organization_slug: str, spec: Optional[str] = None, offset: int = 0, limit: int = 100):
+def get_grid(
+    request: Request, organization_slug: str, spec: Optional[str] = None, offset: int = 0, limit: int = 100,
+    include_tree: bool = False,
+):
     actor = current_actor(request, organization_slug)
     parsed = _spec(spec)
     as_of = date.today()
     session = create_session()
     try:
-        _, rows = _rows(session, actor, parsed, as_of)
+        all_rows, rows = _rows(session, actor, parsed, as_of)
         ordered = sort_rows(rows, parsed)
         limit = min(max(limit, 1), 500)
+        tree_payload = None
+        if include_tree:
+            tree_spec = GridSpec(**{**parsed.__dict__, "filters": [
+                item for item in parsed.filters if item["column"] not in ("hospital", "department")
+            ]})
+            try:
+                tree_payload = tree(apply_filters(all_rows, tree_spec, as_of, actor.account_id))
+            except GridError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
         page = ordered[max(offset, 0):max(offset, 0) + limit]
         return {
             "as_of": as_of.isoformat(),
@@ -117,6 +131,7 @@ def get_grid(request: Request, organization_slug: str, spec: Optional[str] = Non
             "totals": totals(ordered),
             "groups": groups(ordered, parsed),
             "items": [{**row_payload(row, parsed.columns), "group": [display(COLUMN_BY_KEY[key], row.values[key]) for key in parsed.group_by]} for row in page],
+            **({"tree": tree_payload} if include_tree else {}),
         }
     finally:
         session.close()

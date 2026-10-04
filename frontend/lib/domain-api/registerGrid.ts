@@ -41,6 +41,7 @@ export interface GridResponse {
   totals: { count: number; sums: Record<string, string> };
   groups: GridGroup[];
   items: { contract_id: string; values: Record<string, string | number | boolean | null>; group: (string | number | boolean | null)[] }[];
+  tree?: TreeHospital[];
 }
 
 export interface SavedViewDto {
@@ -104,8 +105,9 @@ export function getGridColumns(organizationSlug: string) {
   return apiGet<{ columns: GridColumn[] }>(`/api/register/columns?${org(organizationSlug)}`);
 }
 
-export function getGrid(organizationSlug: string, spec: Partial<GridSpec>, page: { offset: number; limit: number }) {
-  return apiGet<GridResponse>(`/api/register/grid?${org(organizationSlug)}&${specParam(spec)}&offset=${page.offset}&limit=${page.limit}`);
+export function getGrid(organizationSlug: string, spec: Partial<GridSpec>, page: { offset: number; limit: number; includeTree?: boolean }) {
+  const tree = page.includeTree ? "&include_tree=true" : "";
+  return apiGet<GridResponse>(`/api/register/grid?${org(organizationSlug)}&${specParam(spec)}&offset=${page.offset}&limit=${page.limit}${tree}`);
 }
 
 export function getGridValues(organizationSlug: string, column: string, spec: Partial<GridSpec>) {

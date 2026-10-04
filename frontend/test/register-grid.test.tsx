@@ -35,6 +35,7 @@ const COLUMNS: GridColumn[] = [
 function grid(spec: Partial<GridSpec>): GridResponse {
   const grouped = (spec.group_by ?? []).length > 0;
   return {
+    tree: [{ hospital: "Klinikum A", label: "Klinikum A", count: 1, departments: [{ department: "Radiologie", label: "Radiologie", count: 1 }] }],
     as_of: "2026-10-04",
     spec: spec as GridSpec,
     total: 2,
@@ -61,7 +62,6 @@ describe("Vertragsregister – Raster", () => {
         config: { columns: ["register_number", "short_description", "cancel_by"], filters: [{ column: "cancel_by", op: "within_days", value: 90 }], sort: { column: "cancel_by", dir: "asc" }, group_by: [], q: null, include_deleted: false } }],
     });
     api.getGrid.mockImplementation(async (_slug: string, spec: Partial<GridSpec>) => grid(spec));
-    api.getGridTree.mockResolvedValue({ total: 2, hospitals: [{ hospital: "Klinikum A", label: "Klinikum A", count: 1, departments: [{ department: "Radiologie", label: "Radiologie", count: 1 }] }] });
     api.getGridValues.mockResolvedValue({ column: "hospital", values: [{ value: "Klinikum A", label: "Klinikum A", count: 1 }, { value: "Klinikum B", label: "Klinikum B", count: 1 }] });
     api.createSavedView.mockImplementation(async (_slug: string, payload: { name: string }) => ({ id: "v-2", name: payload.name, config: {}, is_global: false, is_system: false, is_own: true, created_by_name: "Admin" }));
     api.downloadGridXlsx.mockResolvedValue({ blob: new Blob(["x"]), filename: "register.xlsx" });
@@ -83,7 +83,7 @@ describe("Vertragsregister – Raster", () => {
     await screen.findByRole("table");
 
     await user.selectOptions(screen.getByLabelText("Ansicht"), "v-1");
-    await waitFor(() => expect(api.getGrid).toHaveBeenLastCalledWith("test-klinik", expect.objectContaining({ filters: [{ column: "cancel_by", op: "within_days", value: 90 }] }), { offset: 0, limit: 100 }));
+    await waitFor(() => expect(api.getGrid).toHaveBeenLastCalledWith("test-klinik", expect.objectContaining({ filters: [{ column: "cancel_by", op: "within_days", value: 90 }] }), { offset: 0, limit: 100, includeTree: true }));
     expect(screen.getByText("Kündbar bis in den nächsten 90 Tagen")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Gruppieren nach"), "hospital");
