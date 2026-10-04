@@ -11,6 +11,7 @@ from app.api.routes import (
     auth,
     catalogs,
     contract_billing,
+    contract_documents,
     contract_register,
     contracts,
     cost_center_routes,
@@ -111,6 +112,7 @@ app.include_router(processing_jobs.router)
 app.include_router(dashboard.router)
 app.include_router(contracts.router)
 app.include_router(contract_register.router)
+app.include_router(contract_documents.router)
 app.include_router(catalogs.router)
 app.include_router(deadlines.router)
 app.include_router(equipment.router)

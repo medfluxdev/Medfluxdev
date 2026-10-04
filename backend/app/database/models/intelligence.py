@@ -42,6 +42,9 @@ class ContractRelationRecord(OrgOwnedMixin, Base):
         CheckConstraint(f"authority IN ({', '.join(repr(v) for v in sorted(AUTHORITY_ALLOWED))})", name="authority"),
         Index("ix_contract_relation_source", "source_contract_id"),
         Index("ix_contract_relation_target", "target_contract_id"),
+        UniqueConstraint(
+            "source_contract_id", "target_contract_id", "relation_type", name="uq_contract_relation_pair_type"
+        ),
     )
 
 

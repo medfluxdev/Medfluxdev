@@ -259,6 +259,13 @@ class ContractDocument(OrgOwnedMixin, Base):
         nullable=False,
     )
     role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # H3: fachliche Dokumentart (Auswahlliste `attachment_type`), Bezeichnung,
+    # Hauptdokument- und Gueltigkeitskennzeichen.
+    attachment_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_main: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    is_valid: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    added_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     contract: Mapped["Contract"] = relationship(back_populates="document_links")
 
@@ -269,6 +276,12 @@ class ContractDocument(OrgOwnedMixin, Base):
         ),
         UniqueConstraint(
             "contract_id", "document_version_id", name="uq_contract_document_pair"
+        ),
+        Index(
+            "uq_contract_document_one_main",
+            "contract_id",
+            unique=True,
+            postgresql_where=text("is_main"),
         ),
         Index("ix_contract_document_contract_id", "contract_id"),
         Index("ix_contract_document_version_id", "document_version_id"),

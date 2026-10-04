@@ -92,6 +92,7 @@ from app.documents.persistence import DocumentPersistenceService
 from app.documents.storage import DocumentStorage, StorageError
 from app.deadlines.system import sync_system_deadlines
 from app.models.enums import ExtractionStatus, ValidationStatus
+from app.register.documents import ANALYZABLE_TYPES, detect_framework_references, link_attachment, propose_from_document
 from app.register.service import ensure_register_number, sync_from_extraction
 from app.work_queue.derive import derive_work_items
 from app.work_queue.service import reconcile_work_items
@@ -178,6 +179,15 @@ def _sanitized_error(error: str) -> Optional[str]:
 
 
 
+@dataclass(frozen=True)
+class AttachmentTarget:
+    """H3: Anlage zu einem bestehenden Vertrag; Ergebnisse nur als Vorschlag."""
+
+    contract_id: uuid.UUID
+    attachment_type: str
+    label: str
+
+
 @dataclass
 class ProcessedDocument:
     """Internal result of one full production processing request.
@@ -190,7 +200,7 @@ class ProcessedDocument:
     document_version_id: str
     sha256: str
     original_filename: str
-    status: str  # imported | reanalyzed | duplicate | rejected | failed | analysis_failed
+    status: str  # imported | reanalyzed | duplicate | rejected | failed | analysis_failed | attached | analyzed
     analysis_status: Optional[str] = None
     requires_review: bool = False
     contract_id: Optional[str] = None
@@ -248,6 +258,65 @@ class DocumentProcessingService:
                 as_of=as_of_date or date.today(),
             ),
             organization_id,
+        )
+
+    def attach_to_contract(
+        self,
+        *,
+        organization_slug: str,
+        contract_id: uuid.UUID,
+        original_filename: str,
+        content_type: str,
+        content: bytes,
+        attachment_type: str,
+        title: Optional[str],
+        added_by_name: Optional[str],
+        analyze: bool,
+        as_of_date: Optional[date] = None,
+    ) -> ProcessedDocument:
+        """H3: Dokument einem bestehenden Vertrag zuordnen und optional analysieren.
+
+        Gleicher Ablage-/Analysepfad wie der Import; das Ergebnis aendert den
+        Vertrag nicht, sondern legt abweichende Werte als KI-Vorschlag ab.
+        """
+        stored, organization_id, storage_key = self._persist_document(
+            organization_slug, original_filename, content_type, content
+        )
+        if stored.status in {"rejected", "failed"}:
+            return stored
+        label = (title or stored.original_filename or "Dokument").strip()[:120]
+        with create_session() as session:
+            contract = session.scalars(
+                select(Contract)
+                .where(
+                    (Contract.id == contract_id)
+                    & (Contract.organization_id == organization_id)
+                    & (Contract.lifecycle_state == "active")
+                )
+                .with_for_update()
+            ).first()
+            if contract is None:
+                return self._copy_result(stored, status="rejected", message="Vertrag nicht gefunden.")
+            link_attachment(
+                session,
+                contract=contract,
+                document_version_id=uuid.UUID(stored.document_version_id),
+                attachment_type=attachment_type,
+                title=title,
+                added_by_name=added_by_name,
+            )
+            session.commit()
+        attached = self._copy_result(
+            stored, status="attached", contract_id=str(contract_id), message="Dokument dem Vertrag zugeordnet."
+        )
+        if not analyze or attachment_type not in ANALYZABLE_TYPES:
+            return attached
+        return self._process_stored(
+            stored=stored,
+            organization_id=organization_id,
+            storage_key=storage_key,
+            as_of=as_of_date or date.today(),
+            attachment=AttachmentTarget(contract_id=contract_id, attachment_type=attachment_type, label=label),
         )
 
     def _finalize_visibility(self, result, organization_id) -> ProcessedDocument:
@@ -572,10 +641,16 @@ class DocumentProcessingService:
         storage_key: str,
         as_of: date,
         reanalysis_contract_id=None,
+        attachment: Optional[AttachmentTarget] = None,
     ) -> ProcessedDocument:
         completed, run_id, expected_accepted_extraction_id = self._claim_processing(
-            stored, organization_id, reanalysis_contract_id=reanalysis_contract_id
+            stored,
+            organization_id,
+            reanalysis_contract_id=reanalysis_contract_id,
+            attachment=attachment is not None,
         )
+        # Fehlerpfade einer Anlage haengen am Zielvertrag, nie an einem Platzhalter.
+        owner_contract_id = reanalysis_contract_id or (attachment.contract_id if attachment else None)
         if completed is not None:
             return completed
         assert run_id is not None
@@ -622,7 +697,7 @@ class DocumentProcessingService:
                     analysis=None,
                     message=_SAFE_NO_TEXT,
                     error=extraction.error,
-                    reanalysis_contract_id=reanalysis_contract_id,
+                    reanalysis_contract_id=owner_contract_id,
                 )
                 return self._copy_result(
                     stored,
@@ -675,7 +750,7 @@ class DocumentProcessingService:
                     analysis=analysis,
                     message=_map_failure_message(analysis),
                     error=analysis.error,
-                    reanalysis_contract_id=reanalysis_contract_id,
+                    reanalysis_contract_id=owner_contract_id,
                 )
                 return self._copy_result(
                     stored,
@@ -688,6 +763,19 @@ class DocumentProcessingService:
                 )
 
             contract_model = analysis.contract
+            document_text = "\n".join(unit.text for unit in extraction.units if unit.text)
+            if attachment is not None:
+                return self._persist_attachment_analysis(
+                    stored=stored,
+                    organization_id=organization_id,
+                    run_id=run_id,
+                    canonical=canonical,
+                    canonical_artifact_id=canonical_artifact_id,
+                    contract_model=contract_model,
+                    analysis=analysis,
+                    attachment=attachment,
+                    document_text=document_text,
+                )
             # Deterministic code remains authoritative for dates, money, status,
             # review state, and warnings. AI only supplied source-grounded facts.
             calc_result = calculate_contract(contract_model, as_of_date=as_of)
@@ -707,6 +795,7 @@ class DocumentProcessingService:
                 as_of=as_of,
                 reanalysis_contract_id=reanalysis_contract_id,
                 expected_accepted_extraction_id=expected_accepted_extraction_id,
+                document_text=document_text,
             )
             return self._copy_result(
                 stored,
@@ -752,8 +841,8 @@ class DocumentProcessingService:
                     message=_SAFE_PROCESSING_FAILURE,
                     error=_sanitized_error(str(exc)),
                 )
-                if reanalysis_contract_id is not None:
-                    placeholder_id = reanalysis_contract_id
+                if owner_contract_id is not None:
+                    placeholder_id = owner_contract_id
                 else:
                     try:
                         with create_session() as session:
@@ -775,7 +864,7 @@ class DocumentProcessingService:
                 error=str(exc),
             )
 
-    def _claim_processing(self, stored, organization_id, *, reanalysis_contract_id=None):
+    def _claim_processing(self, stored, organization_id, *, reanalysis_contract_id=None, attachment=False):
         version_id = uuid.UUID(stored.document_version_id)
         with create_session() as session:
             version = session.scalars(
@@ -793,7 +882,7 @@ class DocumentProcessingService:
                 session, organization_id, version.id
             )
             expected_accepted_extraction_id = None
-            if reanalysis_contract_id is None and existing_contract is not None:
+            if reanalysis_contract_id is None and not attachment and existing_contract is not None:
                 session.commit()
                 return (
                     self._copy_result(
@@ -1369,6 +1458,7 @@ class DocumentProcessingService:
         as_of,
         reanalysis_contract_id=None,
         expected_accepted_extraction_id=None,
+        document_text: str = "",
     ):
         with create_session() as session:
             version_id = uuid.UUID(stored.document_version_id)
@@ -1568,6 +1658,7 @@ class DocumentProcessingService:
             )
             ensure_register_number(session, contract)
             sync_system_deadlines(session, contract, as_of)
+            detect_framework_references(session, contract, document_text)
             run_warning_evaluation(
                 session,
                 organization_id=organization_id,
@@ -1628,6 +1719,79 @@ class DocumentProcessingService:
             )
             session.commit()
             return contract, created
+
+    def _persist_attachment_analysis(
+        self,
+        *,
+        stored,
+        organization_id,
+        run_id,
+        canonical,
+        canonical_artifact_id,
+        contract_model,
+        analysis,
+        attachment: AttachmentTarget,
+        document_text: str,
+    ) -> ProcessedDocument:
+        """Speichert die Extraktion der Anlage (Nachweise) und legt nur
+        Vorschlaege am Vertrag ab; kein Berechnungs-/Akzeptanzwechsel."""
+        with create_session() as session:
+            contract = session.scalars(
+                select(Contract)
+                .where((Contract.id == attachment.contract_id) & (Contract.organization_id == organization_id))
+                .with_for_update()
+            ).first()
+            if contract is None:
+                raise RuntimeError("attachment contract not found")
+            snapshot, evidence = self._build_extraction(contract_model)
+            extraction = save_extraction(
+                session,
+                organization_id=organization_id,
+                document_version_id=uuid.UUID(stored.document_version_id),
+                snapshot=snapshot,
+                evidence=evidence,
+                status=analysis.status.value,
+                validation_status=analysis.validation_status.value,
+                requires_review=True,
+                model=analysis.model,
+                prompt_version=analysis.prompt_version,
+                message=analysis.message or None,
+                error=analysis.error or None,
+                **self._analysis_diagnostics(analysis),
+            )
+            proposed = propose_from_document(
+                session,
+                contract=contract,
+                extracted=contract_model,
+                extraction_id=extraction.id,
+                attachment_type=attachment.attachment_type,
+                document_label=attachment.label,
+            )
+            frameworks = detect_framework_references(session, contract, document_text)
+            self._finish_run_in_session(
+                session=session,
+                stored=stored,
+                organization_id=organization_id,
+                run_id=run_id,
+                status="succeeded",
+                canonical=canonical,
+                canonical_artifact_id=canonical_artifact_id,
+                success=True,
+            )
+            session.commit()
+        parts = []
+        if proposed:
+            parts.append(f"{len(proposed)} Änderungsvorschlag/-vorschläge in den Stammdaten")
+        if frameworks:
+            parts.append("Rahmenvertrag erkannt")
+        return self._copy_result(
+            stored,
+            status="analyzed",
+            analysis_status="success" if not analysis.requires_review else "partial",
+            requires_review=bool(proposed or frameworks),
+            contract_id=str(attachment.contract_id),
+            message=("Analyse abgeschlossen: " + ", ".join(parts) + ".") if parts else "Analyse abgeschlossen: keine Abweichungen gefunden.",
+        )
 
     def _orphan_placeholders(self, *, session, organization_id, version_id) -> None:
         """Erfolgreicher Lauf: frühere Platzhalter dieses Versions werden verwaist.
