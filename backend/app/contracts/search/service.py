@@ -30,6 +30,8 @@ from sqlalchemy.orm import Session
 
 from app.contracts.calculation.models import ContractCalculationResult
 from app.database.models.contract import BUSINESS_STATUS_ALLOWED
+from app.register.service import term_inputs
+from app.register.terms import compute_terms
 from app.database.models import (
     CalculationRun,
     Contract,
@@ -755,6 +757,13 @@ def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_na
         elif auto_raw in ("false", False):
             auto_renewal = False
 
+    # Registerwerte (manuell gepflegt oder bestaetigt) liefern die Fristen,
+    # wenn kein KI-Berechnungslauf vorliegt.
+    register_terms: dict = {}
+    if calc is None and contract.term_model is not None:
+        result = compute_terms(term_inputs(contract), date.today())
+        register_terms = {"possible_end": result.actual_end or result.possible_end, "cancel_by": result.cancel_by}
+
     primary = _primary_warning(warnings)
     has_action = any(w.requires_action for w in warnings)
     has_review = any(w.requires_review for w in warnings)
@@ -770,8 +779,8 @@ def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_na
         "status": contract.status,
         "risk_level": contract.risk_level,
         "automatic_renewal": auto_renewal,
-        "contract_end_date": _calc_date(calc, "calculated_end_date"),
-        "latest_cancellation_date": _calc_date(calc, "latest_cancellation_date"),
+        "contract_end_date": _calc_date(calc, "calculated_end_date") or register_terms.get("possible_end"),
+        "latest_cancellation_date": _calc_date(calc, "latest_cancellation_date") or register_terms.get("cancel_by"),
         "annual_cost": annual,
         "primary_warning": primary,
         "requires_action": has_action,

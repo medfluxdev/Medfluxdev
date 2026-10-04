@@ -406,7 +406,9 @@ def test_contract_list_shows_register_fields_and_filters_business_status(monkeyp
     ).json()
     created = client.post(
         "/api/contracts", params=query,
-        json={"values": {"short_description": "Wartung Röntgen", "partner_id": partner["id"]}},
+        json={"values": {"short_description": "Wartung Röntgen", "partner_id": partner["id"], **{
+            key: value for key, value in HYDMEDIA_EXAMPLE.items() if key != "short_description"
+        }}},
     ).json()
 
     app = FastAPI()
@@ -418,6 +420,8 @@ def test_contract_list_shows_register_fields_and_filters_business_status(monkeyp
     assert row["business_status"] == "in_arbeit"
     assert row["contract_title"] == "Wartung Röntgen"
     assert row["supplier"] == "MEDTEC"
+    assert row["latest_cancellation_date"] == created["terms"]["cancel_by"]
+    assert row["contract_end_date"] == created["terms"]["possible_end"]
 
     found = listing.get("/api/contracts", params={**query, "q": "Röntgen"}).json()["items"]
     assert [item["contract_id"] for item in found] == [created["contract_id"]]
