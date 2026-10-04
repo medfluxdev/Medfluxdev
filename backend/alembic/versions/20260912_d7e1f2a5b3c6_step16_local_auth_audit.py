@@ -52,30 +52,20 @@ def upgrade() -> None:
     # Bestehende Review-/Override-Provenienz wird nun auf lokale Benutzer
     # referenziert. SET NULL erhaelt die historische Aktion, falls ein Benutzer
     # spaeter administrativ entfernt werden sollte.
-    op.create_foreign_key(
-        "fk_fact_review_authenticated_actor_id_app_user",
-        "fact_review",
-        "app_user",
-        ["authenticated_actor_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_foreign_key(
-        "fk_contract_review_authenticated_actor_id_app_user",
-        "contract_review",
-        "app_user",
-        ["authenticated_actor_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_foreign_key(
-        "fk_contract_override_actor_id_app_user",
-        "contract_override",
-        "app_user",
-        ["actor_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
+    # NOT VALID: existing rows are not checked. A database coming from the
+    # Ahmad multi-org lineage (h7c8d9e0f1a2) already stores *account* ids in
+    # these provenance columns; validating them against app_user would abort
+    # the upgrade. The merge revision i8d9e0f1a2b3 drops these three
+    # constraints again, and new rows are still checked while they exist.
+    for name, table, column in (
+        ("fk_fact_review_authenticated_actor_id_app_user", "fact_review", "authenticated_actor_id"),
+        ("fk_contract_review_authenticated_actor_id_app_user", "contract_review", "authenticated_actor_id"),
+        ("fk_contract_override_actor_id_app_user", "contract_override", "actor_id"),
+    ):
+        op.execute(
+            f"ALTER TABLE {table} ADD CONSTRAINT {name} FOREIGN KEY ({column}) "
+            "REFERENCES app_user (id) ON DELETE SET NULL NOT VALID"
+        )
 
     op.create_table(
         "audit_event",
