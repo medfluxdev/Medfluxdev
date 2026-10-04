@@ -9,7 +9,9 @@ from app.ai.harness.source_signals import collect_source_signals
 from app.ai.harness.v3 import (
     DirectContractHarness,
     HarnessV3,
+    _financial_source_rejection,
     _normalize_money_payload,
+    _pack_pages,
     _per_call_rows,
     _retry_output_plan,
     _complete_scheduled_total,
@@ -448,6 +450,16 @@ def document():
     )
 
 
+def document_with_page_8_text(text):
+    source = document()
+    page = next(page for page in source.pages if page.page_number == 8)
+    page.text = text
+    for element in page.elements:
+        element.text = text
+    source.canonical_text = "\n".join(page.text for page in source.pages)
+    return source
+
+
 class FakeProvider:
     supports_structured_output = True
     last_done_reason = None
@@ -691,6 +703,84 @@ def test_source_signals_recognize_labelled_frame_contract_number():
     assert [(row["value"], row["page"]) for row in matches] == [
         ("RAV-00074", 1)
     ]
+def test_financial_period_and_amount_must_share_the_same_source_quote():
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        "Jährliche Vergütung: 52.500,00 EUR",
+    ) is None
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        "Vergütung 52.500,00 EUR p.a.",
+    ) is None
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        "Einmalige Vergütung: 52.500,00 EUR",
+    ) == "financial_period_not_explicit_in_evidence"
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        "Die Vergütung ist nicht jährlich: 52.500,00 EUR",
+    ) == "financial_period_not_explicit_in_evidence"
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "EUR", "period": "annual"},
+        "Jährlich 31.000 EUR; einmalig 52.500 EUR",
+    ) == "financial_amount_not_bound_to_classification_evidence"
+    assert _financial_source_rejection(
+        "costs.annual_cost",
+        {"amount": 52500, "currency": "USD", "period": "annual"},
+        "Jährliche Vergütung: 52.500 EUR",
+    ) == "financial_amount_not_bound_to_classification_evidence"
+
+
+def test_total_contract_value_requires_explicit_total_label_and_matching_amount():
+    assert _financial_source_rejection(
+        "costs.total_contract_value",
+        {"amount": 210000, "currency": "EUR"},
+        "Gesamtvertragswert: 210.000 EUR",
+    ) is None
+    assert _financial_source_rejection(
+        "costs.total_contract_value",
+        {"amount": 210000, "currency": "EUR"},
+        "Jährliche Vergütung: 52.500 EUR",
+    ) == "financial_total_not_explicit_in_evidence"
+
+
+def test_payment_pack_uses_bounded_keyword_pages_without_falling_back_to_entire_document():
+    pages = [
+        Page(
+            page_number=number,
+            width_pt=600,
+            height_pt=800,
+            text=("Zahlbar nach Rechnung in EUR pro Jahr" if number <= 3 else "Leistungsbeschreibung"),
+            elements=[],
+        )
+        for number in range(1, 7)
+    ]
+    canonical = SimpleNamespace(pages=pages)
+    signals = [{"kind": "money", "page": number} for number in range(1, 7)]
+
+    selected = _pack_pages(
+        ("payment",),
+        canonical,
+        signals,
+        expand_keywords=True,
+        page_limit=2,
+        fallback_all=False,
+    )
+
+    assert selected == [1, 2]
+    assert _pack_pages(
+        ("payment",),
+        SimpleNamespace(pages=pages[3:]),
+        [],
+        expand_keywords=True,
+        page_limit=2,
+        fallback_all=False,
+    ) == []
 
 
 @pytest.mark.asyncio
@@ -705,7 +795,12 @@ async def test_direct_harness_delivers_grounded_contract_without_block_ids():
     assert str(contract.dates.end_date.date) == "2029-03-31"
     assert contract.dates.duration.value == 4
     assert contract.termination.automatic_renewal is False
-    assert contract.costs.annual_cost.amount == 8000
+    assert contract.costs.annual_cost is None
+    assert any(
+        row["field"] == "costs.annual_cost"
+        and row["reason"] == "financial_period_not_explicit_in_evidence"
+        for row in result.diagnostics["rejected_facts"]
+    )
     assert contract.costs.variable_charges[0].amount.amount == 2226
     assert result.diagnostics["supported_count"] >= 8
     assert result.diagnostics["evidence_count"] >= 8
@@ -761,7 +856,10 @@ async def test_malformed_semantic_pack_preserves_other_fact_groups():
     assert result.contract is not None, result.error
     assert result.status.value == "partial"
     assert result.requires_review is True
-    assert result.contract.costs.annual_cost.amount == 8000
+    # Commercial pack still ran: its per-call price is kept, while the bare
+    # "8.000,00 EUR" quote is held back by the financial evidence gate.
+    assert result.contract.costs.variable_charges[0].amount.amount == 2226.0
+    assert result.contract.costs.annual_cost is None
     assert result.contract.equipment[0].device_name == "Impella\u00ae AIC System"
     core_call = next(
         call for call in result.diagnostics["calls"]
@@ -793,7 +891,10 @@ async def test_harness_accepts_fully_fenced_vision_and_semantic_json(monkeypatch
     assert not [call for call in result.diagnostics["calls"] if call.get("failed")]
     assert any(call.get("purpose") == "vision:1" for call in result.diagnostics["calls"])
     assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
-    assert result.contract.costs.annual_cost.amount == 8000
+    # Commercial pack still ran: its per-call price is kept, while the bare
+    # "8.000,00 EUR" quote is held back by the financial evidence gate.
+    assert result.contract.costs.variable_charges[0].amount.amount == 2226.0
+    assert result.contract.costs.annual_cost is None
 
 
 @pytest.mark.asyncio
@@ -834,10 +935,10 @@ async def test_truncated_semantic_chunk_is_split_and_retried(monkeypatch):
 
     original_pack_pages = harness_module._pack_pages
 
-    def force_two_operations_pages(topics, canonical, source_signals, expand_keywords):
+    def force_two_operations_pages(topics, canonical, source_signals, expand_keywords, **kwargs):
         if "equipment" in topics:
             return [1, 2]
-        return original_pack_pages(topics, canonical, source_signals, expand_keywords)
+        return original_pack_pages(topics, canonical, source_signals, expand_keywords, **kwargs)
 
     monkeypatch.setattr(harness_module, "_pack_pages", force_two_operations_pages)
 
@@ -1176,7 +1277,7 @@ async def test_missing_page_and_quote_are_auto_anchored_and_dates_normalized():
     assert str(result.contract.dates.start_date.date) == "2025-04-01"
     assert str(result.contract.dates.end_date.date) == "2029-03-31"
     assert result.contract.dates.duration.value == 4
-    assert result.contract.costs.annual_cost.amount == 8000
+    assert result.contract.costs.annual_cost is None
     normalized_fields = {
         row["field"] for row in result.diagnostics["normalizations"]
     }
@@ -1190,7 +1291,7 @@ async def test_missing_page_and_quote_are_auto_anchored_and_dates_normalized():
     assert accepted["identity.supplier"]["page"] == 1
     assert accepted["dates.start_date"]["page"] == 5
     assert accepted["dates.end_date"]["page"] == 5
-    assert accepted["costs.annual_cost"]["page"] == 8
+    assert "costs.annual_cost" not in accepted
 
 
 @pytest.mark.asyncio
@@ -1361,9 +1462,12 @@ async def test_money_fact_binds_by_literal_source_signal_when_model_quote_is_bad
         settings(), ai(BadMoneyQuoteProvider())
     ).analyze(document())
     assert result.contract is not None
-    assert result.contract.costs.monthly_cost.amount == 8000
-    assert result.contract.costs.evidence is not None
-    assert result.contract.costs.evidence.page == 8
+    assert result.contract.costs.monthly_cost is None
+    assert any(
+        row["field"] == "costs.monthly_cost"
+        and row["reason"] == "financial_period_not_explicit_in_evidence"
+        for row in result.diagnostics["rejected_facts"]
+    )
 
 
 @pytest.mark.asyncio
@@ -1434,6 +1538,43 @@ async def test_truncated_output_is_retried_with_reduced_output_budget():
     assert result.diagnostics["stage_call_counts"]["semantic"] == 4
     assert any(
         row.get("retried_with_output_tokens") for row in result.diagnostics["calls"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_truncated_semantic_pack_keeps_other_grounded_pack_results_for_review():
+    class PaymentTruncatingProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            if schema["title"] == "ProposedFactBatch" and text.startswith(
+                "Extract the payment"
+            ):
+                self.last_done_reason = "length"
+                self.last_usage = {
+                    "prompt_tokens": 3000,
+                    "completion_tokens": max_tokens,
+                }
+                return '{"facts":['
+            self.last_done_reason = None
+            self.last_usage = {}
+            return await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+
+    result = await DirectContractHarness(
+        settings(), ai(PaymentTruncatingProvider())
+    ).analyze(document())
+
+    assert result.contract is not None, result.error
+    assert result.contract.identity.supplier == "ABIOMED Europe GmbH"
+    assert result.contract.equipment[0].device_name == "Impella® AIC System"
+    assert result.status.value == "partial"
+    assert result.requires_review is True
+    assert result.diagnostics["stage_call_counts"]["semantic"] == 4
+    assert any(
+        "Semantic payment output remained truncated" in issue
+        for issue in result.diagnostics["issues"]
     )
 
 
@@ -1548,5 +1689,81 @@ def test_retry_output_plan_uses_measured_budget():
     assert plan[0] is not None
     assert plan[1] == "output_budget_stage_retry"
 
+    long_contract_plan = _retry_output_plan("semantic:payment", 21641, 32768, 1800)
+    assert long_contract_plan[0] == 3200
+
     plan = _retry_output_plan("semantic:core", 7600, 8192, 1800)
     assert plan[0] is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_annual_amount_is_accepted_with_matching_source_evidence():
+    class AnnualQuoteProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "costs.annual_cost" in text:
+                payload = json.loads(raw)
+                for fact in payload["facts"]:
+                    if fact["field"] == "costs.annual_cost":
+                        fact["quote"] = "Jährliche Vergütung: 8.000,00 EUR"
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(
+        settings(), ai(AnnualQuoteProvider())
+    ).analyze(
+        document_with_page_8_text(
+            "Jährliche Vergütung: 8.000,00 EUR. "
+            "Fixed per call: 2.226,00 EUR. 2.Jahr 8.000,00 EUR."
+        )
+    )
+
+    assert result.contract is not None, result.error
+    assert result.contract.costs.annual_cost.amount == 8000
+    assert result.contract.costs.evidence.source_text == "Jährliche Vergütung: 8.000,00 EUR"
+
+
+@pytest.mark.asyncio
+async def test_annual_claim_does_not_borrow_period_from_another_amount_on_page():
+    class CrossBoundAmountProvider(FakeProvider):
+        async def generate_request(
+            self, text, system, schema, max_tokens, context_tokens, images=None
+        ):
+            raw = await super().generate_request(
+                text, system, schema, max_tokens, context_tokens, images
+            )
+            if schema["title"] == "ProposedFactBatch" and "costs.annual_cost" in text:
+                payload = json.loads(raw)
+                for fact in payload["facts"]:
+                    if fact["field"] == "costs.annual_cost":
+                        fact["value"] = {
+                            "amount": 12000,
+                            "currency": "EUR",
+                            "period": "annual",
+                        }
+                        fact["quote"] = (
+                            "Jährliche Vergütung: 5.000 EUR; "
+                            "einmalige Zahlung: 12.000 EUR"
+                        )
+                return json.dumps(payload)
+            return raw
+
+    result = await DirectContractHarness(
+        settings(), ai(CrossBoundAmountProvider())
+    ).analyze(
+        document_with_page_8_text(
+            "Jährliche Vergütung: 5.000 EUR; einmalige Zahlung: 12.000 EUR"
+        )
+    )
+
+    assert result.contract is not None, result.error
+    assert result.contract.costs.annual_cost is None
+    assert any(
+        row["field"] == "costs.annual_cost"
+        and row["reason"] == "financial_amount_not_bound_to_classification_evidence"
+        for row in result.diagnostics["rejected_facts"]
+    )

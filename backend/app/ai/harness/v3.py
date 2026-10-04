@@ -158,7 +158,7 @@ PACKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...], bool], ...] = (
     ("commercial", ("costs.",), ("costs", "payment"), False),
     ("payment", ("payment.", "costs.tax_basis", "costs.tax_rate_percent",
                  "costs.price_adjustment_clause", "costs.price_indexation",
-                 "costs.discounts"), ("payment", "costs"), True),
+                 "costs.discounts"), ("payment",), True),
     ("operations", ("equipment", "services.", "sla."), ("equipment", "services", "sla"), True),
 )
 
@@ -362,7 +362,6 @@ _SIGNAL_TOPICS = {
     "dates": {"date", "duration"},
     "termination": {"date", "duration", "renewal_negation"},
     "costs": {"money"},
-    "payment": {"money"},
 }
 
 # Obergrenze fuer die pro Pack gelieferten Quellseiten.  Signal-Seiten haben
@@ -377,6 +376,9 @@ def _pack_pages(
     canonical,
     source_signals,
     expand_keywords: bool = True,
+    *,
+    page_limit: int | None = None,
+    fallback_all: bool = True,
 ) -> list[int]:
     """Deterministic per-pack source page selection.
 
@@ -409,7 +411,7 @@ def _pack_pages(
         # The page cap applies only to packs that already have signal anchors.
         # Packs without literals (e.g. services) keep full keyword recall so their
         # annex pages are never dropped.
-        limit = _PACK_MAX_PAGES if wanted else None
+        limit = page_limit if page_limit is not None else (_PACK_MAX_PAGES if wanted else None)
         if keywords:
             for page in canonical.pages:
                 page_number = page.page_number
@@ -421,7 +423,11 @@ def _pack_pages(
                     wanted.add(page_number)
 
     if not wanted:
-        return sorted(page.page_number for page in canonical.pages)
+        return (
+            sorted(page.page_number for page in canonical.pages)
+            if fallback_all
+            else []
+        )
     return sorted(wanted)
 
 
@@ -902,6 +908,123 @@ _MONEY_PERIOD_BY_FIELD = {
     "costs.semi_annual_cost": "semi_annual",
     "costs.one_time_cost": "once",
 }
+
+_FINANCIAL_MONEY_LITERAL_RE = re.compile(
+    r"(?<!\w)(?:(?P<prefix_currency>EUR|USD|GBP|€|\$|£)\s*"
+    r"(?P<prefix_amount>\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)|"
+    r"(?P<suffix_amount>\d{1,3}(?:[.\s]\d{3})*(?:,\d{2})?|\d+(?:,\d{2})?)\s*"
+    r"(?P<suffix_currency>EUR|USD|GBP|€|\$|£))(?!\w)",
+    re.IGNORECASE,
+)
+
+_PERIOD_ANCHORS = {
+    "costs.annual_cost": re.compile(
+        r"(?:\b(?:jährlich(?:e|er|es)?|jährl\.?|jaehrlich(?:e|er|es)?|jaehrl\.?|"
+        r"pro\s+jahr|je\s+jahr|per\s+annum|annual(?:ly)?|yearly|per\s+year|each\s+year)\b|"
+        # Year-staged schedule rows ("2.Jahr", "3. Vertragsjahr") are explicit
+        # yearly periods; the pack guidance maps a steady staged amount to
+        # annual_cost, so the evidence gate must accept that same anchor.
+        r"(?<!\w)\d{1,2}\.\s*(?:vertrags)?jahr\b|"
+        r"(?<!\w)p\.?\s*a\.?(?!\w))",
+        re.IGNORECASE,
+    ),
+    "costs.monthly_cost": re.compile(
+        r"\b(?:monatlich(?:e|er|es)?|pro\s+monat|je\s+monat|monthly|per\s+month|each\s+month)\b",
+        re.IGNORECASE,
+    ),
+    "costs.quarterly_cost": re.compile(
+        r"\b(?:vierteljährlich(?:e|er|es)?|vierteljaehrlich(?:e|er|es)?|"
+        r"pro\s+quartal|je\s+quartal|quarterly|per\s+quarter)\b",
+        re.IGNORECASE,
+    ),
+    "costs.semi_annual_cost": re.compile(
+        r"\b(?:halbjährlich(?:e|er|es)?|halbjaehrlich(?:e|er|es)?|pro\s+halbjahr|"
+        r"alle\s+sechs\s+monate|"
+        r"semi[- ]annual(?:ly)?|twice\s+a\s+year)\b",
+        re.IGNORECASE,
+    ),
+}
+
+_TOTAL_VALUE_ANCHOR = re.compile(
+    r"\b(?:gesamt(?:vertragswert|auftragswert|preis|betrag|kosten)|"
+    r"vertragsgesamtwert|total\s+(?:contract|order|price|amount)|contract\s+value)\b",
+    re.IGNORECASE,
+)
+
+_NEGATED_CLASSIFICATION = re.compile(
+    r"\b(?:nicht\s+(?:jährlich|jaehrlich|monatlich|vierteljährlich|"
+    r"vierteljaehrlich|halbjährlich|halbjaehrlich|pro\s+jahr|je\s+jahr|p\.?\s*a\.?|"
+    r"pro\s+monat|je\s+monat|pro\s+quartal|je\s+quartal|pro\s+halbjahr|"
+    r"gesamt(?:vertragswert|auftragswert|preis|betrag|kosten))|"
+    r"keine?\s+(?:jährliche|jaehrliche|monatliche|vierteljährliche|vierteljaehrliche|"
+    r"halbjährliche|halbjaehrliche|gesamt(?:vertragswert|auftragswert|preis|betrag|kosten))|"
+    r"not\s+(?:annual|yearly|monthly|quarterly|semi[- ]annual|a\s+total)|"
+    r"non[- ](?:annual|yearly|monthly|quarterly|semi[- ]annual))\b",
+    re.IGNORECASE,
+)
+
+
+def _money_amount_from_value(value: Any) -> float | None:
+    if isinstance(value, dict):
+        value = value.get("amount")
+    elif hasattr(value, "amount"):
+        value = value.amount
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return _money_amount(value)
+    return None
+
+
+def _money_literals_in_source_quote(quote: str) -> list[tuple[float, str]]:
+    literals: list[tuple[float, str]] = []
+    for match in _FINANCIAL_MONEY_LITERAL_RE.finditer(quote or ""):
+        raw = match.group("prefix_amount") or match.group("suffix_amount")
+        amount = _money_amount(raw)
+        if amount is not None:
+            currency = match.group("prefix_currency") or match.group("suffix_currency") or ""
+            normalized_currency = {
+                "€": "EUR", "$": "USD", "£": "GBP"
+            }.get(currency, currency.upper())
+            literals.append((amount, normalized_currency))
+    return literals
+
+
+def _money_currency_from_value(value: Any) -> str | None:
+    if isinstance(value, dict):
+        currency = value.get("currency") or value.get("currency_code")
+    else:
+        currency = getattr(value, "currency", None)
+    if not isinstance(currency, str) or not currency.strip():
+        return None
+    normalized = currency.strip().upper()
+    return {"€": "EUR", "$": "USD", "£": "GBP"}.get(normalized, normalized)
+
+
+def _financial_source_rejection(field: str, value: Any, quote: str) -> str | None:
+    """Require cost classification and the exact amount to share source evidence."""
+    if field in _PERIOD_ANCHORS:
+        if _NEGATED_CLASSIFICATION.search(quote or ""):
+            return "financial_period_not_explicit_in_evidence"
+        anchor = _PERIOD_ANCHORS[field]
+        if not anchor.search(quote or ""):
+            return "financial_period_not_explicit_in_evidence"
+    elif field == "costs.total_contract_value":
+        if _NEGATED_CLASSIFICATION.search(quote or ""):
+            return "financial_total_not_explicit_in_evidence"
+        if not _TOTAL_VALUE_ANCHOR.search(quote or ""):
+            return "financial_total_not_explicit_in_evidence"
+    else:
+        return None
+
+    expected = _money_amount_from_value(value)
+    quoted = _money_literals_in_source_quote(quote)
+    if expected is None or len(quoted) != 1 or abs(quoted[0][0] - expected) >= 0.005:
+        return "financial_amount_not_bound_to_classification_evidence"
+    expected_currency = _money_currency_from_value(value)
+    if expected_currency and quoted[0][1] != expected_currency:
+        return "financial_amount_not_bound_to_classification_evidence"
+    return None
 
 
 # Zulaessige Felder eines Equipment-Objekts (vgl. app.models.contract.Equipment).
@@ -3321,7 +3444,14 @@ class DirectContractHarness:
             proposals: list[ProposedFact] = []
             for pack_name, selectors, topics, expand_keywords in PACKS:
                 catalog = _field_catalog(types, selectors)
-                pack_pages = _pack_pages(topics, canonical, source_signals, expand_keywords)
+                pack_pages = _pack_pages(
+                    topics,
+                    canonical,
+                    source_signals,
+                    expand_keywords,
+                    page_limit=5 if pack_name == "payment" else None,
+                    fallback_all=pack_name != "payment",
+                )
                 pack_signals = [
                     signal
                     for signal in source_signals
@@ -3686,6 +3816,20 @@ class DirectContractHarness:
                             "field": fact.field,
                             "reason": "schema_validation_failed",
                             "detail": str(exc)[:240],
+                        }
+                    )
+                    continue
+
+                financial_rejection = _financial_source_rejection(
+                    fact.field, value, resolved_quote
+                )
+                if financial_rejection:
+                    rejected.append(
+                        {
+                            "field": fact.field,
+                            "reason": financial_rejection,
+                            "page": page,
+                            "quote": resolved_quote[:240],
                         }
                     )
                     continue

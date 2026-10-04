@@ -18,6 +18,7 @@ Antwortmodells entscheidet weiterhin über Annahme oder Ablehnung.
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any
 
 from pydantic import BaseModel
@@ -46,6 +47,17 @@ _STRUCTURAL_KEYWORDS = frozenset(
 _PERMISSIVE_LEAF: dict[str, Any] = {
     "type": ["object", "array", "string", "number", "boolean", "null"]
 }
+
+_JSON_CODE_FENCE = re.compile(
+    r"\A```(?:json)?[ \t]*\r?\n(?P<body>.*?)\r?\n```[ \t]*\Z",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def strip_json_code_fence(response: str) -> str:
+    """Remove only a complete outer Markdown fence around a JSON response."""
+    match = _JSON_CODE_FENCE.fullmatch(response.strip())
+    return match.group("body").strip() if match else response
 
 
 def _deref(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:

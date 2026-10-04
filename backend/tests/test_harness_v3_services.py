@@ -216,8 +216,16 @@ async def test_included_services_stable_across_runs():
     )
     assert run1.contract is not None and run2.contract is not None
     assert run1.contract.services.included_services == run2.contract.services.included_services
-    assert not run1.diagnostics["rejected_facts"]
-    assert not run2.diagnostics["rejected_facts"]
+    for run in (run1, run2):
+        assert not [
+            row for row in run.diagnostics["rejected_facts"]
+            if row["field"].startswith("services.")
+        ]
+        assert any(
+            row["field"] == "costs.annual_cost"
+            and row["reason"] == "financial_period_not_explicit_in_evidence"
+            for row in run.diagnostics["rejected_facts"]
+        )
 
 
 @pytest.mark.asyncio

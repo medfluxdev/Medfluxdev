@@ -22,7 +22,11 @@ from app.ai.harness.v3 import (
     VisualPageReading,
 )
 from app.ai.providers.ollama import OllamaProvider, _safe_error_category
-from app.ai.schema import normalize_constrained_schema, pydantic_json_schema
+from app.ai.schema import (
+    normalize_constrained_schema,
+    pydantic_json_schema,
+    strip_json_code_fence,
+)
 from app.core.config import Settings
 
 
@@ -1116,3 +1120,16 @@ def test_primary_contract_heading_uses_generic_contract_markers():
     })
 
     assert _primary_contract_title(canonical, document)[0] == title
+
+
+# ------------------------------------------- Markdown-Fence (aus e2e-contracts-20261003)
+
+def test_json_response_code_fence_is_removed_only_when_it_wraps_the_whole_payload():
+    payload = '{"facts": []}'
+
+    assert strip_json_code_fence(f"```json\n{payload}\n```") == payload
+    assert strip_json_code_fence(f"```\n{payload}\n```") == payload
+    assert strip_json_code_fence(payload) == payload
+    assert strip_json_code_fence(f"prefix\n```json\n{payload}\n```") == (
+        f"prefix\n```json\n{payload}\n```"
+    )

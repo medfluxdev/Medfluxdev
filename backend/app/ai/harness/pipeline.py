@@ -58,7 +58,7 @@ RETRIEVAL_TERMS = {
     "dates": ("beginn", "vertragsbeginn", "laufzeit", "datum", "gültig", "gültigkeit", "ende", "verlänger", "jahr", "monat"),
     "termination": ("kündig", "kündigung", "kündigungsfrist", "laufzeit", "verlänger", "beend", "frist"),
     "costs": ("eur", "€", "preis", "kosten", "vergütung", "entgelt", "pauschale", "netto", "brutto", "kostenfrei", "kostenlos", "jahr", "call", "einsatz", "zusatzleistung", "fixed per call"),
-    "payment": ("zahlung", "zahlbar", "rechnung", "fällig", "fälligkeit", "monatlich", "jährlich", "quartal", "mwst", "umsatzsteuer"),
+    "payment": ("zahlung", "zahlbar", "rechnung", "fällig", "fälligkeit", "monatlich", "jährlich", "quartal", "mwst", "umsatzsteuer", "netto", "brutto", "rabatt", "nachlass", "preisanpassung", "index", "eur", "jahr"),
     "services": ("service", "leistung", "wartung", "reparatur", "inspektion", "umfang", "enthalten", "ausgeschlossen", "pflicht"),
     "sla": ("reaktionszeit", "response", "stunde", "werktag", "verfügbarkeit", "störung", "hotline", "bereitschaft", "servicezeit"),
 }
