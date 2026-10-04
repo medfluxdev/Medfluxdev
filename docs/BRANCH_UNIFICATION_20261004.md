@@ -87,3 +87,16 @@
 | 4 | فرق الواجهة بين الفرعين | الفرق في `package.json` و`package-lock.json` نهايات أسطر فقط، فلا حاجة إلى `npm install` |
 | 5 | اختبارات Windows | نُفذت عبر `RUN_VERIFY_UNIFIED_20261004.bat`: تبديل الفرع نجح (exit 0)، PyMuPDF 1.24.14 متوفرة، اختبارات PDF/OCR الـ 31 نجحت كلها (31/31)، backend كامل 1419 نجاحاً / 0 فشل / 3 تخطٍّ، `tsc` بلا أخطاء، vitest 170/170 في 35 ملفاً. النتائج في `Desktop\Medflux-backups\verify-20261004\` |
 | 6 | تسليم الجلسة | `HANDOFF_20261004.md` في جذر المستودع وفي `Desktop\Medflux-backups\` |
+
+## 8. سجل الجلسة الثالثة (Claude Code محلي على Windows)
+
+| # | الخطوة / المشكلة | النتيجة / الحل |
+|---|---|---|
+| 1 | `git fetch origin --prune` (بدون `--tags`) فشل: `cannot lock ref 'refs/tags/archive/stash-local-before-medflux-test'` | قفل فارغ قديم (02:46) تركته بيئة Linux عند إنشاء الـ tag، ولا عملية git تعمل. حُذف القفل، والـ tag سليم (`5ebeb9f`). أُعيد الجلب بنجاح، وما زالت الـ 39 tag محلية |
+| 2 | التحقق من GitHub بعد الجلب | `origin/main` ما زال `359b78b`. كل الفروع البعيدة الـ 30 (`main` + 29) سلف لـ `integration/unify-20261004`، فلا فروع جديدة، ولا دمج، ولا إعادة اختبار |
+| 3 | قرار JAMAL في 5.9 | حُذف `scripts/push_branch.bat` غير المتتبع، بعد التأكد أنه مطابق بايتياً لـ `Medflux-backups\push_branch-uncommitted-20261004.bat` |
+| 4 | قرار JAMAL في 5.10 | `git stash drop` (`5ebeb9f`). محفوظ في `archive/stash-local-before-medflux-test` |
+| 5 | قرار JAMAL في 5.8 | حُذف `_tmp_pure_site.tgz` و`_tmp_pg.tgz` من `Medflux-backups` |
+| 6 | قرار JAMAL في البند 3 من التسليم | موافقة على كل القرارات كما هي (8192، وتشديد بوابة المالية) |
+| 7 | فحص الـ worktrees (5.7) | 29 مسجلاً: 22 prunable و7 حية. **اكتُشفت تعديلات غير محفوظة لم يذكرها التسليم:** `.codex/worktrees/contract-e2e-review` (فرع `codex/e2e-contracts-20261003`): 4 ملفات معدلة (`source_signals.py`، `v3.py`، `evidence.py`، `test_harness_v3.py`؛ 228+/7−، منها `_table_money_signals` و`_financial_table_context_rejection`) وملف جديد `test_real_contract_acceptance_local_only.py`، وكلها **غير موجودة** في الفرع الموحد. كذلك 3 سكربتات غير متتبعة في `opencode/sr415-review-worktree`، ونسخة مختلفة من `test_source_region_pdf_content.py` في `opencode/sr415-parent-worktree`. نُسخت كلها إلى `Medflux-backups\worktree-dirty-20261004\` |
+| 8 | قرار 5.12 | المجلدان القديمان باقيان، وسيحذفهما JAMAL بنفسه |
