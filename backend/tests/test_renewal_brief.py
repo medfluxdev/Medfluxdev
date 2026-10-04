@@ -127,3 +127,18 @@ def test_renewal_list_and_brief_route_respect_scope(monkeypatch):
     other = client("other", "contract_manager")
     assert other.get("/api/register/renewals", params=query).json()["items"] == []
     assert other.get(f"/api/contracts/{cid}/renewal-brief", params=query).status_code == 404
+
+
+def test_fixed_term_needs_no_notice(monkeypatch):
+    slug, ids, client = _setup(monkeypatch)
+    admin = client("admin", "admin")
+    cid = admin.post("/api/contracts", params={"organization_slug": slug}, json={"values": {
+        "short_description": "Projekt", "term_model": "fixed_term", "term_start_date": "2026-01-01", "term_fixed_end_date": "2028-12-31",
+    }}).json()["contract_id"]
+    session = create_session()
+    try:
+        brief = renewal_brief(session, session.get(Contract, UUID(cid)), date(2026, 10, 4))
+    finally:
+        session.close()
+    assert brief["urgency"] == "none"
+    assert brief["if_no_action"].startswith("Der Vertrag endet am 31.12.2028 ohne Kündigung")

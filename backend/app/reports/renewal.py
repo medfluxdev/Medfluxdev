@@ -92,10 +92,10 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
 
     if contract.business_status == "gekuendigt":
         if_no_action = f"Der Vertrag ist gekündigt und endet am {_de(terms.actual_end or contract.terminated_effective)}."
+    elif contract.term_model == "fixed_term" and current_end is not None:
+        if_no_action = f"Der Vertrag endet am {_de(current_end)} ohne Kündigung. Für eine Weiterführung ist ein Anschlussvertrag nötig."
     elif cancel_by is None:
         if_no_action = "Kündigungsfrist nicht berechenbar – Laufzeitangaben in den Stammdaten vervollständigen."
-    elif contract.term_model == "fixed_term":
-        if_no_action = f"Der Vertrag endet am {_de(current_end)} ohne Kündigung. Für eine Weiterführung ist ein Anschlussvertrag nötig."
     elif contract.term_model == "auto_renewal":
         if_no_action = (
             f"Ohne Kündigung bis {_de(cancel_by)} verlängert sich der Vertrag "
@@ -155,7 +155,8 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
     def hint(kind: str, text: str, reason: str) -> None:
         hints.append({"kind": kind, "text": text, "reason": reason})
 
-    level = urgency(cancel_by, as_of) if contract.business_status in RUNNING else "none"
+    fixed = contract.term_model == "fixed_term" and cancel_by is None
+    level = urgency(cancel_by, as_of) if contract.business_status in RUNNING and not fixed else "none"
     if level == "missed" and decision is None:
         hint("action", "Die Kündigungsfrist ist verstrichen. Prüfen, ob der Vertrag sich verlängert hat, und die Folgefrist vormerken.",
              f"Kündbar bis {_de(cancel_by)} liegt vor dem Stichtag {_de(as_of)}.")

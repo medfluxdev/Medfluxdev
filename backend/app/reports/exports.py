@@ -192,7 +192,7 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
     current_total = sum((row.values["cost_current_year"] or Decimal("0") for row in running), Decimal("0"))
     concentration = (
         (Decimal(partner_top["cost_current_year"]) / current_total * 100).quantize(Decimal("0.1"))
-        if partner_top and current_total > 0 and partner_top["value"] is not None else None
+        if partner_top and current_total > 0 and partner_top["value"] else None
     )
     soon = [row for row in running if row.values["cancel_by"] and as_of <= row.values["cancel_by"] <= as_of.fromordinal(as_of.toordinal() + 90)]
     insights = [
