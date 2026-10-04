@@ -44,6 +44,7 @@ from app.database.models.register import (
     NumberRange,
     SavedView,
 )
+from app.database.models.content_search import ContractTextPage
 from app.database.models.equipment import Equipment
 from app.database.models.work_item import WorkItem
 from app.database.models.work_item_collaboration import WorkItemCollaboration, WorkItemComment
@@ -108,6 +109,7 @@ __all__ = [
     "NumberAllocation",
     "NumberRange",
     "SavedView",
+    "ContractTextPage",
     "Equipment",
     "WorkItem",
     "WorkItemCollaboration",

@@ -244,6 +244,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     if (subtab) setDocumentTab(subtab);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("source_evidence_id");
+    params.delete("source_document");
+    params.delete("source_page");
     setSourceLinkError(false);
     if (tab === "overview") params.delete("tab");
     else params.set("tab", tab);
@@ -302,6 +304,31 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     setActiveTab("documents");
     setDocumentTab("evidence");
   }, [linkedEvidenceId, data.evidence]);
+
+  // Sprung aus der Inhaltssuche: nur ein Dokument dieses Vertrags und eine
+  // Seitenzahl werden uebernommen, nie Geometrie aus der URL.
+  const linkedDocumentId = searchParams.get("source_document");
+  const linkedPage = Number(searchParams.get("source_page"));
+  useEffect(() => {
+    if (!linkedDocumentId) return;
+    const document = data.documents.find(doc => doc.document_version_id === linkedDocumentId);
+    if (!document || !Number.isInteger(linkedPage) || linkedPage < 1) {
+      setSourceLinkError(true);
+      return;
+    }
+    setSourceLinkError(false);
+    setDocumentVersionId(document.document_version_id);
+    setNavTarget({
+      document_version_id: document.document_version_id,
+      page: linkedPage,
+      bbox: null,
+      bbox_space: "pdf_points",
+      supports_exact_navigation: false,
+      label: `Suchtreffer Seite ${linkedPage}`,
+    });
+    setActiveTab("documents");
+    setDocumentTab("document");
+  }, [linkedDocumentId, linkedPage, data.documents]);
 
   function SourceButton({ evidence }: { evidence: EvidenceRef | null }) {
     if (!evidence) return null;

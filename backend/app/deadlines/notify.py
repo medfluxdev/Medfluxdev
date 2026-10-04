@@ -289,6 +289,8 @@ def run_daily(
             session.commit()
             counts["maintained_costs_refreshed"] = refresh_all_maintained_costs(session, as_of, organization_id)
             session.commit()
+            counts["content_pages_indexed"] = _index_contents(session, organization_id)
+            session.commit()
             factory = transport_factory or (SmtpTransport if smtp_configured() else None)
             if factory is not None:
                 send_outbox(session, factory, counts, organization_id)
@@ -314,6 +316,14 @@ def run_daily(
     finally:
         lock_session.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _ADVISORY_LOCK_KEY})
         lock_session.close()
+
+
+def _index_contents(session: Session, organization_id: Optional[uuid.UUID]) -> int:
+    from app.database.models import Organization
+    from app.search.content import ensure_index
+
+    org_ids = [organization_id] if organization_id else list(session.scalars(select(Organization.id)).all())
+    return sum(ensure_index(session, org_id, limit=500) for org_id in org_ids)
 
 
 def deputized_account_ids(session: Session, deputy_id: uuid.UUID, organization_id: uuid.UUID, as_of: date) -> list[uuid.UUID]:

@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     document_intelligence_atomic_geometry: bool = False
     document_intelligence_atomic_geometry_dpi: int = 200
     ollama_base_url: str = "http://127.0.0.1:11434"
+    # Optional: lokales Embedding-Modell (Ollama) fuer die semantische Inhaltssuche.
+    # Leer = nur Volltextsuche. Kein Standardmodell, kein stiller Fallback.
+    search_embedding_model: str = ""
     # Legacy-Kompatibilitätsfeld; wird NICHT als aktive Modellauswahl verwendet.
     ollama_model: str = ""
     lmstudio_base_url: str = "http://127.0.0.1:1234"

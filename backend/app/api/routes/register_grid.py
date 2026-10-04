@@ -42,6 +42,7 @@ from app.reports.grid import (
 )
 from app.reports.renewal import decision_summary, renewal_brief, upcoming_renewals, urgency
 from app.reports.views import ViewError, create_view, delete_view, list_views, update_view, view_payload
+from app.search.content import ensure_index, index_status, search_contents
 
 router = APIRouter(tags=["register-grid"])
 
@@ -375,5 +376,31 @@ def get_renewal_brief(contract_id: UUID, request: Request, organization_slug: st
         if contract is None:
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
         return renewal_brief(session, contract, date.today(), visible)
+    finally:
+        session.close()
+
+
+# --------------------------------------------------------------------------- content search (§4A)
+
+@router.get("/api/register/content-search")
+def content_search(request: Request, organization_slug: str, q: str = ""):
+    actor = current_actor(request, organization_slug)
+    if len(q) > 200:
+        raise HTTPException(status_code=422, detail="Suchbegriff zu lang (max. 200 Zeichen).")
+    session = create_session()
+    try:
+        ensure_index(session, actor.organization_id)
+        session.commit()
+        return search_contents(session, actor.organization_id, q, _visible(session, actor))
+    finally:
+        session.close()
+
+
+@router.get("/api/register/content-search/status")
+def content_search_status(request: Request, organization_slug: str):
+    actor = current_actor(request, organization_slug)
+    session = create_session()
+    try:
+        return index_status(session, actor.organization_id)
     finally:
         session.close()

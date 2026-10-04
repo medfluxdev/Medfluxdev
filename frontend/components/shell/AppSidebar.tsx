@@ -41,6 +41,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Postfach", href: "/postfach", icon: "inbox" },
     { label: "Verträge", href: "/contracts", icon: "contracts" },
     { label: "Vertragsregister", href: "/register", icon: "catalogs" },
+    { label: "Inhaltssuche", href: "/suche", icon: "evidence" },
     { label: "Vertragspartner", href: "/partners", icon: "partners" },
     { label: "Termine", href: "/termine", icon: "deadlines" },
     { label: "Verlängerungen", href: "/verlaengerungen", icon: "deadlines" },

@@ -217,6 +217,26 @@ export function listRenewals(organizationSlug: string, days = 120) {
   return apiGet<{ as_of: string; days: number; items: RenewalListItem[] }>(`/api/register/renewals?${org(organizationSlug)}&days=${days}`);
 }
 
+export interface ContentSearchResult {
+  query: string;
+  terms: { term: string; alternatives: string[] }[];
+  semantic: boolean;
+  items: {
+    contract_id: string;
+    register_number: string | null;
+    short_description: string | null;
+    hits: { document_version_id: string; document: string; document_valid: boolean; page: number; snippet: string; match: "text" | "semantic" }[];
+  }[];
+}
+
+export function searchContents(organizationSlug: string, q: string) {
+  return apiGet<ContentSearchResult>(`/api/register/content-search?${org(organizationSlug)}&q=${encodeURIComponent(q)}`, undefined, 60000);
+}
+
+export function getContentSearchStatus(organizationSlug: string) {
+  return apiGet<{ documents: number; indexed: number; without_text: number; semantic_model: string | null }>(`/api/register/content-search/status?${org(organizationSlug)}`);
+}
+
 export function getRenewalBrief(organizationSlug: string, contractId: string) {
   return apiGet<RenewalBrief>(`/api/contracts/${encodeURIComponent(contractId)}/renewal-brief?${org(organizationSlug)}`);
 }
