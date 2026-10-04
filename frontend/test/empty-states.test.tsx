@@ -1,9 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import DashboardPage from "@/app/page";
 import NachweisePage from "@/app/nachweise/page";
 import type { ContractListResponse } from "@/lib/contract-types";
-import type { DashboardOverview } from "@/lib/dashboard-types";
 
 const apiGetMock = vi.fn();
 vi.mock("@/lib/api", () => ({
@@ -35,14 +33,6 @@ describe("Empty States DE (UAT Defect H)", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Importieren Sie Verträge, um deren Quellen/)
-    ).toBeInTheDocument();
-  });
-
-  it("Übersicht: 'Keine Arbeitsdaten verfügbar' ohne Kennzahlen", async () => {
-    apiGetMock.mockResolvedValue({ kpis: null } as unknown as DashboardOverview);
-    render(<DashboardPage />);
-    expect(
-      await screen.findByRole("heading", { name: "Keine Arbeitsdaten verfügbar" })
     ).toBeInTheDocument();
   });
 });

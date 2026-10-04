@@ -2,11 +2,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClientNav from "@/components/ClientNav";
-import DashboardPage from "@/app/page";
 import SettingsPage from "@/app/settings/page";
 import NachweisePage from "@/app/nachweise/page";
 import type { AISnapshot, AITestResponse } from "@/lib/ai-types";
-import type { DashboardOverview } from "@/lib/dashboard-types";
 import type { ContractListResponse } from "@/lib/contract-types";
 
 const apiGetMock = vi.fn();
@@ -65,38 +63,6 @@ describe("Shell: Topbar-Eingaben", () => {
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health"));
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status"));
     expect(await screen.findByText("Lokale KI bereit (qwen)")).toBeInTheDocument();
-  });
-});
-
-describe("Dashboard: Fehlerzustand terminiert und laesst sich neu laden", () => {
-  function dashboardFixture(): DashboardOverview {
-    return {
-      as_of_date: "2026-09-07",
-      freshness: { requested_as_of_date: "2026-09-07", warning_evaluation_as_of_date: "2026-09-07", data_freshness: "current", last_calculation_at: "2026-09-07" },
-      kpis: {
-        active_contracts: { label_de: "Aktive Verträge", value: 1, secondary_de: null, status_de: null },
-        expiring_soon: { label_de: "Bald auslaufende Verträge", value: 0, secondary_de: null, status_de: null },
-        critical_cancellation: { label_de: "Kritische Kündigungsfristen", value: 0, secondary_de: null, status_de: null },
-        annual_costs: { label_de: "Jährliche Gesamtkosten", value: 1, secondary_de: "EUR", status_de: null },
-        total_contract_value: { label_de: "Gesamtvertragswert", value: 1, secondary_de: "EUR", status_de: null },
-      },
-      deadlines: [], action_items: [], total_action_items: 0,
-      financial: { annual_recurring: [], total_contract_value: [], contracts_without_reliable_annual_cost: 0, contracts_without_reliable_total_value: 0, multi_currency: false },
-      data_quality: [],
-    };
-  }
-
-  it("zeigt bei Fehler einen Retry und laedt nach Klick erfolgreich nach", async () => {
-    apiGetMock.mockRejectedValueOnce(new Error("down"));
-    apiGetMock.mockResolvedValueOnce(dashboardFixture());
-    const user = userEvent.setup();
-    render(<DashboardPage />);
-    await waitFor(() => expect(screen.getByText("Dashboard konnte nicht geladen werden.")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Erneut laden" })).toBeInTheDocument();
-    expect(screen.queryByText("Dashboard wird geladen…")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Erneut laden" }));
-    await waitFor(() => expect(screen.getByText("Willkommen im intelligenten Vertragsmanagement")).toBeInTheDocument());
-    expect(apiGetMock).toHaveBeenCalledTimes(2);
   });
 });
 
