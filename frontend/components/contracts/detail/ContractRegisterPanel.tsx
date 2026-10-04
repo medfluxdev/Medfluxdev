@@ -24,6 +24,7 @@ import {
   acceptRegisterProposal,
   changeContractStatus,
   getContractRegister,
+  updateContractConfidentiality,
   updateContractRegister,
   type BusinessStatus,
   type ContractRegister,
@@ -53,6 +54,7 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
       { key: "contract_type_id", kind: "type" },
       { key: "contract_category_id", kind: "category" },
       { key: "is_framework", kind: "bool" },
+      { key: "data_protection_relevant", kind: "bool" },
       { key: "subject_text", kind: "textarea" },
     ],
   },
@@ -160,6 +162,7 @@ function errorText(error: unknown, fallback: string) {
 export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }: { contractId: string; orgSlug: string; onChanged?: () => void }) {
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
+  const isAdmin = Boolean(account?.is_developer || role === "admin");
   const [register, setRegister] = useState<ContractRegister | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [editing, setEditing] = useState(false);
@@ -173,6 +176,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   const [assignees, setAssignees] = useState<AssigneeDto[]>([]);
   const [transition, setTransition] = useState<BusinessStatus | null>(null);
   const [transitionForm, setTransitionForm] = useState({ terminated_on: "", effective_date: "", note: "", acknowledge: false });
+  const [confidentialDraft, setConfidentialDraft] = useState<{ is_confidential: boolean; grants: string[] } | null>(null);
   const [newPartner, setNewPartner] = useState<{ short_name: string; name1: string; city: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -275,6 +279,15 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitConfidentiality() {
+    if (!confidentialDraft) return;
+    const ok = await run(() => updateContractConfidentiality(orgSlug, contractId, {
+      is_confidential: confidentialDraft.is_confidential,
+      grant_account_ids: confidentialDraft.grants,
+    }), "Vertraulichkeit gespeichert.");
+    if (ok) setConfidentialDraft(null);
   }
 
   async function submitTransition() {
@@ -446,6 +459,25 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
         <div><span>Erinnerung am</span><strong>{formatDate(terms.reminder_date)}</strong></div>
       </div>
       {terms.explanation.length > 0 ? <ul className="rg-explanation">{terms.explanation.map((line) => <li key={line}>{line}</li>)}</ul> : null}
+    </section>
+
+    <section className="cw-section" aria-labelledby="rg-protection-heading">
+      <div className="cw-section-head"><div><h2 id="rg-protection-heading">Vertraulichkeit & Aufbewahrung</h2><p>Wer den Vertrag sehen darf und ab wann er gelöscht werden darf.</p></div></div>
+      <div className="rg-terms">
+        <div><span>Vertraulich</span><strong>{register.confidentiality.effective ? (register.confidentiality.type_confidential && !register.confidentiality.is_confidential ? "Ja (über Vertragstyp)" : "Ja") : "Nein"}</strong></div>
+        <div><span>Aufbewahrung</span><strong>{register.retention.years == null ? "Nicht festgelegt" : `${register.retention.years} Jahr(e) nach Vertragsende`}</strong>{register.retention.source ? <small className="cw-muted">{register.retention.source === "contract" ? "am Vertrag festgelegt" : "aus Vertragstyp"}</small> : null}</div>
+        <div><span>Löschen ab</span><strong>{register.retention.deletion_from ? formatDate(register.retention.deletion_from) : "–"}</strong>{!register.retention.deletion_from ? <small className="cw-muted">erst nach bekanntem Vertragsende</small> : null}</div>
+      </div>
+      {register.confidentiality.effective ? <p className="cw-muted">Sichtbar für Administratoren, die verantwortliche Person, die Erinnerungsempfänger{register.confidentiality.grants.length > 0 ? ` und freigegeben für: ${register.confidentiality.grants.map((item) => item.display_name).join(", ")}` : ""}.</p> : null}
+      {isAdmin && !confidentialDraft ? <div className="rg-actions"><button type="button" className="btn" disabled={busy} onClick={() => setConfidentialDraft({ is_confidential: register.confidentiality.is_confidential, grants: register.confidentiality.grants.map((item) => item.account_id) })}>Vertraulichkeit bearbeiten</button></div> : null}
+      {confidentialDraft ? <form className="rg-transition" aria-label="Vertraulichkeit bearbeiten" onSubmit={(event) => { event.preventDefault(); void submitConfidentiality(); }}>
+        <label className="rg-check"><input type="checkbox" checked={confidentialDraft.is_confidential} onChange={(event) => setConfidentialDraft((form) => form && ({ ...form, is_confidential: event.target.checked }))} />Vertrag als vertraulich kennzeichnen</label>
+        {register.confidentiality.type_confidential ? <p className="rg-hint">Der Vertragstyp ist bereits vertraulich. Der Vertrag bleibt deshalb auch ohne Kennzeichen geschützt.</p> : null}
+        <fieldset className="rg-grants"><legend>Zusätzlich freigeben für</legend>
+          {assignees.length === 0 ? <p className="cw-muted">Keine Benutzer verfügbar.</p> : assignees.map((item) => <label key={item.id} className="rg-check"><input type="checkbox" checked={confidentialDraft.grants.includes(item.id)} onChange={(event) => setConfidentialDraft((form) => form && ({ ...form, grants: event.target.checked ? [...form.grants, item.id] : form.grants.filter((id) => id !== item.id) }))} />{item.display_name}</label>)}
+        </fieldset>
+        <div className="rg-actions"><button type="button" className="btn" onClick={() => setConfidentialDraft(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button></div>
+      </form> : null}
     </section>
 
     {editable && (register.partner_suggestions.length > 0 || register.type_suggestion || proposalKeys.length > 0) ? <section className="cw-section rg-ai" aria-labelledby="rg-ai-heading">

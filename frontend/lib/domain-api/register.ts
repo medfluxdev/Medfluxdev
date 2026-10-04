@@ -58,6 +58,22 @@ export interface ContractRegister {
   partner_suggestions: PartnerSuggestion[];
   type_suggestion: { id: string; label: string; reason: string } | null;
   storage_location_label: string | null;
+  retention: RetentionInfo;
+  confidentiality: ConfidentialityInfo;
+}
+
+export interface RetentionInfo {
+  years: number | null;
+  source: "contract" | "contract_type" | null;
+  contract_end: string | null;
+  deletion_from: string | null;
+}
+
+export interface ConfidentialityInfo {
+  is_confidential: boolean;
+  type_confidential: boolean;
+  effective: boolean;
+  grants: { account_id: string; display_name: string }[];
 }
 
 export interface ContractRemark {
@@ -184,4 +200,12 @@ export function updateContractHospitals(
   payload: { hospital_ids: string[]; primary_hospital_id: string | null },
 ) {
   return apiPut<{ items: ContractHospitalLink[] }>(contractPath(contractId, "hospitals", organizationSlug), payload);
+}
+
+export function updateContractConfidentiality(
+  organizationSlug: string,
+  contractId: string,
+  payload: { is_confidential: boolean; grant_account_ids: string[] },
+) {
+  return apiPut<ContractRegister>(contractPath(contractId, "confidentiality", organizationSlug), payload);
 }

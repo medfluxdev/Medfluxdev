@@ -36,6 +36,7 @@ export interface ContractTypeDto {
   is_confidential: boolean;
   is_active: boolean;
   sort_order: number;
+  retention_years: number | null;
 }
 
 export interface ContractCategoryDto {

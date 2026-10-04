@@ -127,6 +127,7 @@ export default function AdminPage() {
         <Link href="/contracts"><div><strong>Verträge verwalten</strong><small>Bestand, Zuordnung und Verantwortliche</small></div><span>→</span></Link>
         <Link href="/work-queue"><div><strong>Aufgaben bearbeiten</strong><small>Fristen, Risiken und offene Entscheidungen</small></div><span>→</span></Link>
         <Link href="/settings/users"><div><strong>Benutzer & Rollen</strong><small>Konten und Zugriffsbereiche verwalten</small></div><span>→</span></Link>
+        <Link href="/settings/roles"><div><strong>Rollen & Rechte</strong><small>Was jede Rolle darf</small></div><span>→</span></Link>
         <Link href="/settings/catalogs"><div><strong>Kataloge & Nummernkreis</strong><small>Vertragstypen, Auswahllisten, Vertragsnummern</small></div><span>→</span></Link>
         {deletionAllowed && <Link href="/admin/deletion"><div><strong>Vertragslöschung</strong><small>Vorgemerkte Verträge prüfen und wiederherstellen</small></div><span>→</span></Link>}
         <Link href="/audit"><div><strong>Audit öffnen</strong><small>Änderungen nachvollziehen</small></div><span>→</span></Link>

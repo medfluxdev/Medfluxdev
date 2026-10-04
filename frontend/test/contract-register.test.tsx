@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   updateContractRegister: vi.fn(),
   acceptRegisterProposal: vi.fn(),
   changeContractStatus: vi.fn(),
+  updateContractConfidentiality: vi.fn(),
   listContractRemarks: vi.fn(),
   addContractRemark: vi.fn(),
 }));
@@ -29,7 +30,7 @@ vi.mock("@/lib/domain-api/catalogs", async (importOriginal) => ({
 }));
 
 vi.mock("@/lib/domain-api/ownership", () => ({
-  listOwnershipAssignees: vi.fn().mockResolvedValue({ items: [] }),
+  listOwnershipAssignees: vi.fn().mockResolvedValue({ items: [{ id: "a-2", display_name: "Vera Viewer" }] }),
 }));
 
 function field(label: string, value: RegisterField["value"], extra: Partial<RegisterField> = {}): RegisterField {
@@ -57,6 +58,7 @@ function register(overrides: Partial<ContractRegister> = {}): ContractRegister {
       contract_type_id: field("Vertragstyp", null),
       contract_category_id: field("Kategorie", null),
       is_framework: field("Rahmenvertrag", false),
+      data_protection_relevant: field("Datenschutzrelevant (AVV erforderlich)", true),
       subject_text: field("Vertragsgegenstand", null),
       term_model: field("Vertragsart", "terminable", { origin: "manual" }),
       term_start_date: field("Vertragsbeginn", "2027-04-01", { origin: "ai_corrected", ai_proposed_value: { value: "2027-05-01", source_field: "dates.start_date" } }),
@@ -90,6 +92,8 @@ function register(overrides: Partial<ContractRegister> = {}): ContractRegister {
     partner_suggestions: [{ id: "p-1", short_name: "MEDTEC", name1: "Medtec GmbH", city: "Berlin", score: 0.97 }],
     type_suggestion: null,
     storage_location_label: null,
+    retention: { years: 10, source: "contract_type", contract_end: "2027-09-30", deletion_from: "2038-01-01" },
+    confidentiality: { is_confidential: false, type_confidential: false, effective: false, grants: [] },
     ...overrides,
   };
 }
@@ -159,6 +163,32 @@ describe("Vertragsregister – Stammdaten", () => {
     await user.click(screen.getByRole("button", { name: "Status ändern" }));
     await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "gueltig", acknowledge_unreviewed: true })));
     expect(await screen.findByText("Status auf „Gültig“ gesetzt.")).toBeInTheDocument();
+  });
+});
+
+describe("Vertragsregister – Vertraulichkeit & Aufbewahrung", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getContractRegister.mockResolvedValue(register());
+    api.updateContractConfidentiality.mockResolvedValue(register({
+      confidentiality: { is_confidential: true, type_confidential: false, effective: true, grants: [{ account_id: "a-2", display_name: "Vera Viewer" }] },
+    }));
+  });
+
+  it("zeigt Löschfrist aus dem Vertragstyp und setzt Vertraulichkeit mit Freigabe", async () => {
+    const user = userEvent.setup();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const section = (await screen.findByRole("heading", { name: "Vertraulichkeit & Aufbewahrung" })).closest("section")!;
+    expect(within(section).getByText("Löschen ab").nextElementSibling).toHaveTextContent("01.01.2038");
+    expect(within(section).getByText("aus Vertragstyp")).toBeInTheDocument();
+    expect(screen.getByText("Datenschutzrelevant (AVV erforderlich)")).toBeInTheDocument();
+
+    await user.click(within(section).getByRole("button", { name: "Vertraulichkeit bearbeiten" }));
+    await user.click(within(section).getByLabelText("Vertrag als vertraulich kennzeichnen"));
+    await user.click(await within(section).findByLabelText("Vera Viewer"));
+    await user.click(within(section).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(api.updateContractConfidentiality).toHaveBeenCalledWith("test-klinik", "c-1", { is_confidential: true, grant_account_ids: ["a-2"] }));
+    expect(await within(section).findByText(/freigegeben für: Vera Viewer/)).toBeInTheDocument();
   });
 });
 

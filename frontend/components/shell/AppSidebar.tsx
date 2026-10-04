@@ -55,6 +55,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
     { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
     { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
     { label: "Kataloge", href: "/settings/catalogs", icon: "catalogs", roles: ["admin"] },
+    { label: "Rollen & Rechte", href: "/settings/roles", icon: "admin" },
     { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
   ]},
 ];

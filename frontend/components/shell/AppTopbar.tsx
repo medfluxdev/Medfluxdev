@@ -28,6 +28,7 @@ function titleForPath(pathname: string) {
   if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname.startsWith("/settings/organization")) return "Organisation";
   if (pathname.startsWith("/settings/catalogs")) return "Kataloge";
+  if (pathname.startsWith("/settings/roles")) return "Rollen & Rechte";
   if (pathname.startsWith("/partners")) return "Vertragspartner";
   if (pathname === "/postfach") return "Postfach";
   if (pathname === "/termine") return "Termine";

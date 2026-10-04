@@ -136,10 +136,14 @@ export default function CatalogManager({ organizationSlug }: { organizationSlug:
     </form> : null}
 
     {tab === "types" ? <section className="cw-section"><table className="rg-table">
-      <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Code</th><th scope="col">Vertraulich</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Code</th><th scope="col">Vertraulich</th><th scope="col">Aufbewahrung (Jahre nach Ende)</th><th scope="col">Status</th></tr></thead>
       <tbody>{types.map((item) => <tr key={item.id} className={item.is_active ? undefined : "rg-inactive"}>
         <th scope="row">{item.label}</th><td>{item.code}</td>
         <td><input type="checkbox" aria-label={`${item.label} vertraulich`} checked={item.is_confidential} disabled={busy} onChange={(event) => void run(() => updateContractType(organizationSlug, item.id, { is_confidential: event.target.checked }), "Gespeichert.")} /></td>
+        <td><input type="number" min={0} max={100} className="rg-narrow" aria-label={`${item.label} Aufbewahrung in Jahren`} defaultValue={item.retention_years ?? ""} key={`${item.id}-${item.retention_years ?? ""}`} disabled={busy} onBlur={(event) => {
+          const next = event.target.value === "" ? null : Number(event.target.value);
+          if (next !== item.retention_years) void run(() => updateContractType(organizationSlug, item.id, { retention_years: next }), "Aufbewahrung gespeichert.");
+        }} /></td>
         <td><button type="button" className="rg-link" disabled={busy} onClick={() => void run(() => updateContractType(organizationSlug, item.id, { is_active: !item.is_active }), "Gespeichert.")}>{item.is_active ? "Deaktivieren" : "Aktivieren"}</button></td>
       </tr>)}</tbody>
     </table></section> : null}
