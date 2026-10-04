@@ -75,3 +75,6 @@ npm-debug.log*
 
 
 *.tsbuildinfo
+
+# Echte Vertragsdokumente nie einchecken (Datenschutz)
+/عقود حقيقية لتدريب النموذج/
