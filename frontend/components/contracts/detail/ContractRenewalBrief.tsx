@@ -36,7 +36,9 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
 
   const load = useCallback(async () => {
     try {
-      setBrief(await getRenewalBrief(orgSlug, contractId));
+      const result = await getRenewalBrief(orgSlug, contractId);
+      setBrief(result && Array.isArray(result.hints) ? { ...result, partner_contracts: result.partner_contracts ?? [] } : null);
+      if (!result || !Array.isArray(result.hints)) setError("Die Entscheidungsvorlage ist derzeit nicht verfügbar.");
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Die Entscheidungsvorlage konnte nicht geladen werden.");
     }

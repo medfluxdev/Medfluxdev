@@ -7,6 +7,7 @@ import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 
 const apiGetMock = vi.fn();
 vi.mock("@/lib/api", () => ({
+  scopedApiUrl: (path: string) => `http://test.local${path}`,
   apiGet: (...args: unknown[]) => apiGetMock(...args),
   contentUrl: (contractId: string, versionId: string) =>
     `http://test.local/content/${contractId}/${versionId}`,
@@ -200,11 +201,11 @@ async function renderWithData(data: ContractDetailResponse) {
 }
 
 async function openTab(name: string) {
-  await userEvent.click(screen.getByRole("button", { name }));
+  await userEvent.click(screen.getByRole("tab", { name }));
 }
 
 async function openDocuments(subtab?: "Dokument" | "Nachweise" | "Prüfung" | "Historie") {
-  await openTab("Dokumente & Prüfung");
+  await openTab("Dokumente & Nachweise");
   if (subtab && subtab !== "Dokument") {
     await userEvent.click(screen.getByRole("button", { name: subtab }));
   }
@@ -218,10 +219,10 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getAllByText("42.500,00 €").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
 
-    await openTab("Laufzeit & Kündigung");
+    await openTab("Fristen & Entscheidung");
     expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
 
-    await openTab("Geräte");
+    await openTab("Beziehungen");
     expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -230,7 +231,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture({
       equipment: [{ ...equipment[0], device_name: null, system_name: "Impella AIC System", model: null }],
     }));
-    await openTab("Geräte");
+    await openTab("Beziehungen");
     expect(screen.getByText("Impella AIC System")).toBeInTheDocument();
   });
 
@@ -239,7 +240,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture({
       equipment: [{ ...equipment[0], device_name: null, system_name: null, model: "Accutron MR" }],
     }));
-    await openTab("Geräte");
+    await openTab("Beziehungen");
     expect(screen.getAllByText("Accutron MR").length).toBeGreaterThanOrEqual(1);
   });
 

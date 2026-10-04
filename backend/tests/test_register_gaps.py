@@ -70,6 +70,11 @@ def test_contract_list_sorts_and_filters_by_maintained_annual_cost(monkeypatch):
     finally:
         session.close()
 
+    detail = client.get(f"/api/contracts/{created['Groß']}", params=query)
+    assert detail.status_code == 200, detail.text
+    facts = detail.json()["register_facts"]
+    assert facts["annual_cost"] == {"amount": "24000.00", "currency": "EUR"} and facts["cancel_by"] is not None
+
     ordered = client.get("/api/contracts", params={**query, "sort": "annual_cost", "direction": "desc", "business_status": []}).json()["items"]
     ids_in_order = [item["contract_id"] for item in ordered]
     assert ids_in_order.index(created["Groß"]) < ids_in_order.index(created["Klein"])

@@ -7,6 +7,7 @@ import type { ContractDetailResponse } from "@/lib/contract-detail-types";
 const apiGetMock = vi.fn();
 const apiPostMock = vi.fn();
 vi.mock("@/lib/api", () => ({
+  scopedApiUrl: (path: string) => `http://test.local${path}`,
   apiGet: (...args: unknown[]) => apiGetMock(...args),
   apiPost: (...args: unknown[]) => apiPostMock(...args),
 }));
@@ -93,7 +94,7 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
     const { container } = render(<ContractDetailPage />);
     await screen.findByRole("heading", { name: "MEDTRON Guard Servicevereinbarung Accutron MR" });
 
-    await user.click(screen.getByRole("button", { name: "Dokumente & Prüfung" }));
+    await user.click(screen.getByRole("tab", { name: "Dokumente & Nachweise" }));
     await user.click(screen.getByRole("button", { name: "Prüfung" }));
 
     const reviewRegion = await screen.findByRole("region", { name: "Faktprüfung" });

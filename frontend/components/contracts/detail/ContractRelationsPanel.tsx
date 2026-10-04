@@ -22,7 +22,8 @@ export default function ContractRelationsPanel({ contractId, orgSlug }: { contra
 
   const load = useCallback(async () => {
     try {
-      setData(await getContractRelations(orgSlug, contractId));
+      const result = await getContractRelations(orgSlug, contractId);
+      setData({ ...result, frameworks: result?.frameworks ?? [], members: result?.members ?? [], framework_options: result?.framework_options ?? [] });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Verknüpfungen konnten nicht geladen werden.");
     }

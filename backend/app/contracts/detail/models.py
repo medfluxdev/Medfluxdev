@@ -534,6 +534,8 @@ class ContractDetailResponse(BaseModel):
     supplier: str | None
     register_number: Optional[str] = None
     business_status: Optional[str] = None
+    # Fristen und gepflegte Jahreskosten aus dem Register (Vorrang im Vertragskopf).
+    register_facts: Optional[dict] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
 

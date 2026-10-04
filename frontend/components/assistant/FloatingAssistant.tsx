@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -102,16 +102,18 @@ export default function FloatingAssistant() {
     }
   }
 
+  useEffect(() => {
+    const toggle = () => setOpen((value) => !value);
+    window.addEventListener("medflux:assistant-toggle", toggle);
+    return () => window.removeEventListener("medflux:assistant-toggle", toggle);
+  }, []);
+
   if (!organizationSlug) return null;
   return <aside className="medflux-assistant" aria-label="Lokaler KI-Assistent">
-    <button type="button" className="medflux-assistant-toggle" aria-expanded={open}
-      aria-controls="medflux-assistant-panel" onClick={() => setOpen(value => !value)}>
-      {open ? "Assistent schließen" : "KI-Assistent"}
-    </button>
     {open && <section id="medflux-assistant-panel" className="medflux-assistant-panel" aria-label="KI-Chat">
-      <header><strong>Lokaler MedFlux-Assistent</strong><small>{contractId ? "Aktueller Vertrag" : "Ohne Vertragskontext"}</small></header>
+      <header><div><strong>Lokaler KI-Assistent</strong><small>{contractId ? "Fragen zum aktuellen Vertrag" : "Fragen zu Ihren Verträgen"}</small></div><button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => setOpen(false)} aria-label="Assistent schließen">×</button></header>
       <div className="medflux-assistant-messages" role="log" aria-live="polite">
-        {messages.length === 0 && !busy && <div className="medflux-assistant-message"><p><strong>MedFlux:</strong> Herzlich willkommen! 👋 Schön, dass du da bist. Ich helfe dir gern, deine Arbeit leichter zu machen: Frag mich nach deinen verfügbaren Verträgen, Terminen oder Details. Wir gehen es gemeinsam Schritt für Schritt an. Womit möchtest du starten? 🚀</p></div>}
+        {messages.length === 0 && !busy && <div className="medflux-assistant-message"><p>Fragen Sie nach Verträgen, Fristen oder Vertragsdetails. Die Antworten stammen ausschließlich aus Ihren Verträgen, laufen lokal auf diesem Rechner und nennen die Quelle.</p></div>}
         {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={source.evidence_id}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <Link href={`/contracts/${encodeURIComponent(contractId)}?tab=documents&subtab=evidence&source_evidence_id=${encodeURIComponent(source.evidence_id)}`}>Nachweis im Vertrag öffnen</Link>}{source.source_type === "page" && source.page != null && source.source_text.trim().length >= 2 && <button type="button" onClick={() => void checkSource(source, `${index}:${i}`)}>Fundstelle im Original prüfen</button>}{sourceStatus[`${index}:${i}`] && <p role="status">{sourceStatus[`${index}:${i}`]}</p>}</div>)}</details>}</div>)}
         {busy && <p role="status">Lokales Modell antwortet… <button type="button" onClick={() => { generation.current += 1; activeRequest.current?.abort(); activeRequest.current = null; setBusy(false); }}>Abbrechen</button></p>}
       </div>

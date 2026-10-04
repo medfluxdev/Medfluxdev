@@ -109,7 +109,7 @@ describe("Vertragsregister – Stammdaten", () => {
 
   it("zeigt Nummer, Status, berechnete Fristen und die Herkunft der Werte", async () => {
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    expect(await screen.findByRole("heading", { name: "Vertrag 000042" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Bearbeitungsstatus" })).toBeInTheDocument();
     expect(screen.getByText("In Arbeit")).toBeInTheDocument();
     const terms = screen.getByRole("heading", { name: "Berechnete Fristen" }).closest("section")!;
     expect(within(terms).getByText("Kündbar bis").nextElementSibling).toHaveTextContent("30.06.2027");
@@ -122,7 +122,7 @@ describe("Vertragsregister – Stammdaten", () => {
   it("ist barrierefrei in Ansicht und Bearbeitung", async () => {
     const user = userEvent.setup();
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Vertrag 000042" });
+    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     expect(await axe(container)).toHaveNoViolations();
     await user.click(screen.getByRole("button", { name: "Stammdaten bearbeiten" }));
     expect(await axe(container)).toHaveNoViolations();
@@ -131,7 +131,7 @@ describe("Vertragsregister – Stammdaten", () => {
   it("bestätigt einen KI-Wert und übernimmt Vorschläge nur auf Klick", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Vertrag 000042" });
+    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
 
     await user.click(screen.getByRole("button", { name: "Bestätigen" }));
     expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {}, confirm: ["short_description"] });
@@ -147,7 +147,7 @@ describe("Vertragsregister – Stammdaten", () => {
   it("speichert nur geänderte Felder", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Vertrag 000042" });
+    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     await user.click(screen.getByRole("button", { name: "Stammdaten bearbeiten" }));
     await user.type(screen.getByLabelText("Interne Nummer"), "INT-7");
     await user.click(screen.getByRole("button", { name: "Speichern" }));
@@ -157,7 +157,7 @@ describe("Vertragsregister – Stammdaten", () => {
   it("verlangt bei ungeprüften KI-Werten eine bewusste Freigabe", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Vertrag 000042" });
+    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     await user.click(screen.getByRole("button", { name: "→ Gültig" }));
     await user.click(screen.getByLabelText(/Ich gebe den Vertrag trotzdem frei/));
     await user.click(screen.getByRole("button", { name: "Status ändern" }));
@@ -211,5 +211,24 @@ describe("Vertragsregister – Bemerkungen", () => {
     expect(api.addContractRemark).toHaveBeenCalledWith("test-klinik", "c-1", "Neue Notiz");
     expect(await screen.findByText("Neue Notiz")).toBeInTheDocument();
     expect(screen.getByLabelText("Neue Bemerkung")).toHaveValue("");
+  });
+});
+
+describe("Vertragsregister – Formularschutz", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getContractRegister.mockResolvedValue(register());
+    api.updateContractRegister.mockImplementation(async () => register());
+  });
+
+  it("speichert mit Strg+S und markiert ungespeicherte Änderungen", async () => {
+    const user = userEvent.setup();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await user.click(screen.getByRole("button", { name: "Stammdaten bearbeiten" }));
+    await user.type(screen.getByLabelText("Interne Nummer"), "INT-9");
+    expect(screen.getByText(/Ungespeicherte Änderungen/)).toBeInTheDocument();
+    await user.keyboard("{Control>}s{/Control}");
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { internal_number: "INT-9" } }));
   });
 });

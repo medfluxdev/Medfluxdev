@@ -468,6 +468,7 @@ export interface ContractDetailResponse {
   supplier: string | null;
   register_number?: string | null;
   business_status?: string | null;
+  register_facts?: { cancel_by: string | null; contract_end: string | null; annual_cost: { amount: string; currency: string } | null } | null;
   status: string | null;
   risk_level: string | null;
   identity: Record<string, unknown>;

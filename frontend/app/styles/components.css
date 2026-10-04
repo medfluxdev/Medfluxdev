@@ -381,3 +381,46 @@
 .min-w-field { min-width: min(280px, 100%); }
 .form-grid-single { grid-template-columns: 1fr; }
 @media (max-width: 640px) { .span-2 { grid-column: 1 / -1; } }
+
+/* ---------- Objektseite (Vertrag, Partner, Geraet) ---------- */
+.object-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "main actions" "facts facts";
+  gap: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-2);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.object-header-main { grid-area: main; display: grid; gap: var(--space-2); min-width: 0; }
+.object-header-eyebrow { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); font-variant-numeric: tabular-nums; }
+.object-header h1 { font-size: var(--text-display); line-height: var(--leading-display); overflow-wrap: anywhere; }
+.object-header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.object-header-partner { color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-medium); }
+.object-header-facts { grid-area: facts; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-4); margin: 0; padding-top: var(--space-4); border-top: 1px solid var(--color-border-subtle); }
+.object-header-facts div { display: grid; gap: 2px; }
+.object-header-facts dt { color: var(--color-text-muted); font-size: var(--text-small); }
+.object-header-facts dd { margin: 0; font-size: var(--text-title-s); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.object-header-actions { grid-area: actions; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-2); }
+.object-header-actions .shell-menu-panel { width: 14rem; }
+.object-header-actions .shell-menu-panel .btn { justify-content: flex-start; width: 100%; }
+.badge-button { cursor: pointer; font-family: inherit; }
+.badge-button:hover { filter: brightness(0.97); text-decoration: underline; }
+.object-tabs {
+  position: sticky;
+  top: var(--header-height);
+  z-index: var(--z-sticky);
+  margin-bottom: var(--space-4);
+  background: var(--color-bg);
+}
+.dev-details { margin-top: var(--space-4); padding: var(--space-3) var(--space-4); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-md); }
+.dev-details > summary { cursor: pointer; color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-semibold); }
+@media (max-width: 960px) {
+  .object-header { grid-template-columns: 1fr; grid-template-areas: "main" "actions" "facts"; padding: var(--space-4); }
+  .object-header-actions { justify-content: flex-start; }
+}
+/* Kopfbereiche von Abschnitten: Schaltflaechen und Kennzeichen nicht strecken */
+.cw-section-head > :not(:first-child),
+.section-head > :not(:first-child) { align-self: flex-start; flex: none; }

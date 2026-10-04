@@ -24,6 +24,10 @@ import OverridePanel from "./OverridePanel";
 import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
+import Tabs from "@/components/ui/Tabs";
+import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
+
+const BUSINESS_STATUS_TONE: Record<string, string> = { in_arbeit: "badge--warning", gueltig: "badge--success", gekuendigt: "badge--danger", beendet: "", geloescht: "" };
 import Dialog from "@/components/ui/Dialog";
 import ContractHistoryPanel from "./ContractHistoryPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
@@ -33,28 +37,30 @@ import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
 
+export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
+
 interface Props {
   data: ContractDetailResponse;
   orgSlug: string;
   onReload?: () => void;
+  /** Zusaetzliche Bereiche je Reiter (z. B. Zustaendigkeit, Entscheidungen, Abrechnung). */
+  slots?: Partial<Record<WorkspaceSlot, React.ReactNode>>;
 }
 
-type TabKey = "overview" | "register" | "deadlines" | "term" | "finance" | "services" | "equipment" | "documents" | "relations" | "remarks" | "history";
+type TabKey = "overview" | "register" | "deadlines" | "finance" | "documents" | "relations" | "history";
+// Fruehere Reiter (Links aus E-Mails, Lesezeichen) zeigen auf den neuen Ort.
+const TAB_ALIASES: Record<string, TabKey> = { term: "deadlines", services: "overview", equipment: "relations", remarks: "history" };
 type DocumentTab = "document" | "attachments" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
   { key: "register", label: "Stammdaten" },
-  { key: "deadlines", label: "Termine" },
-  { key: "term", label: "Laufzeit & Kündigung" },
+  { key: "deadlines", label: "Fristen & Entscheidung" },
   { key: "finance", label: "Finanzen" },
-  { key: "services", label: "Leistungen & SLA" },
-  { key: "equipment", label: "Geräte" },
-  { key: "documents", label: "Dokumente & Prüfung" },
-  { key: "relations", label: "Verknüpfungen" },
-  { key: "remarks", label: "Bemerkungen" },
-  { key: "history", label: "Historie" },
+  { key: "documents", label: "Dokumente & Nachweise" },
+  { key: "relations", label: "Beziehungen" },
+  { key: "history", label: "Verlauf" },
 ];
 
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
@@ -163,19 +169,21 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-function isTab(value: string | null): value is TabKey {
-  return TABS.some((tab) => tab.key === value);
+function toTab(value: string | null): TabKey | null {
+  if (!value) return null;
+  if (TAB_ALIASES[value]) return TAB_ALIASES[value];
+  return TABS.some((tab) => tab.key === value) ? (value as TabKey) : null;
 }
 
 function isDocumentTab(value: string | null): value is DocumentTab {
   return DOCUMENT_TABS.some((tab) => tab.key === value);
 }
 
-export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
+export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = isTab(searchParams.get("tab")) ? searchParams.get("tab") as TabKey : "overview";
+  const initialTab = toTab(searchParams.get("tab")) ?? "overview";
   const initialSubtab = isDocumentTab(searchParams.get("subtab")) ? searchParams.get("subtab") as DocumentTab : "document";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [documentTab, setDocumentTab] = useState<DocumentTab>(initialSubtab);
@@ -240,7 +248,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
     data.warnings.filter((warning) => warning.requires_action || warning.requires_review),
   ), [data.warnings, openTasks]);
 
-  function setRoute(tab: TabKey, subtab?: DocumentTab) {
+  function setRoute(requested: TabKey, subtab?: DocumentTab) {
+    const tab = toTab(requested) ?? "overview";
     setActiveTab(tab);
     if (subtab) setDocumentTab(subtab);
     const params = new URLSearchParams(searchParams.toString());
@@ -359,15 +368,41 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   }
 
   const effectiveEnd = data.dates.documented_end_date ?? data.dates.calculated_end_date;
+  // KI-Auswertungen nur zeigen, wenn es ein analysiertes Dokument gibt (sonst nur "Fehlt"-Kacheln).
+  const hasAi = data.documents.length > 0;
   const endOrigin: OriginKind = data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis);
   const annualOrigin: OriginKind = data.costs.annual_recurring.amount == null ? "missing" : hasCalculationBasis(data.costs.annual_recurring_basis) ? "calculated" : annualCostEvidence ? "extracted" : "system";
   const cancellationOrigin = calculatedOrigin(data.dates.latest_cancellation_date, data.dates.latest_cancellation_basis);
 
   return (
     <div className="contract-workspace">
-      <header className="cw-header">
-        <div><div className="cw-breadcrumb">Verträge / {data.register_number ?? data.contract_number ?? data.contract_id}</div><h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1><p>{[data.register_number ? `Vertragsnr. ${data.register_number}` : null, data.contract_number ? `Nr. lt. Dokument ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p></div>
-        <div className="cw-header-badges">{canRequestDeletion && <button type="button" className="cw-badge cw-badge-button" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button>}<button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button>{data.business_status ? <button type="button" className="cw-badge cw-badge-button" onClick={() => setRoute("register")}>{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}<span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
+      <header className="object-header">
+        <div className="object-header-main">
+          <p className="object-header-eyebrow">{[data.register_number ? `Vertrag ${data.register_number}` : "Vertrag ohne Nummer", data.contract_number ? `Nr. lt. Dokument ${data.contract_number}` : null].filter(Boolean).join(" · ")}</p>
+          <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
+          <div className="object-header-meta">
+            {data.business_status ? <button type="button" className={`badge badge-button ${BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? ""}`} onClick={() => setRoute("register")} title="Status in den Stammdaten ändern">{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}
+            {data.supplier ? <span className="object-header-partner">{data.supplier}</span> : null}
+            {data.review.requires_manual_review ? <button type="button" className="badge badge--warning badge-button" onClick={() => setRoute("documents", "review")}>KI-Werte prüfen</button> : null}
+            {data.risk_level === "high" || data.risk_level === "medium" ? <span className={`badge ${data.risk_level === "high" ? "badge--danger" : "badge--warning"}`}>Risiko {riskLabel(data.risk_level).toLowerCase()}</span> : null}
+          </div>
+        </div>
+        <dl className="object-header-facts">
+          <div><dt>Vertragsende</dt><dd>{formatDate(data.register_facts?.contract_end ?? effectiveEnd) ?? "–"}</dd></div>
+          <div><dt>Kündbar bis</dt><dd>{formatDate(data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date) ?? "–"}</dd></div>
+          <div><dt>Jährliche Kosten</dt><dd className="num">{data.register_facts?.annual_cost ? moneyLike(data.register_facts.annual_cost.amount, data.register_facts.annual_cost.currency) : money(data.costs.annual_recurring)}</dd></div>
+        </dl>
+        <div className="object-header-actions">
+          <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer">Deckblatt (PDF)</a>
+          <button type="button" className="btn" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}>KI-Assistent</button>
+          <details className="shell-menu">
+            <summary className="btn btn-icon" aria-label="Weitere Aktionen">⋯</summary>
+            <div className="shell-menu-panel">
+              <button type="button" className="btn btn-ghost" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button>
+              {canRequestDeletion ? <button type="button" className="btn btn-ghost" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button> : null}
+            </div>
+          </details>
+        </div>
       </header>
       <Dialog
         open={deleteDialogOpen}
@@ -395,25 +430,25 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
         {archiveError && <p role="alert" className="field-error">{archiveError}</p>}
       </Dialog>
 
-      <nav className="cw-tabs" aria-label="Vertragsbereiche">{TABS.map((tab) => <button key={tab.key} type="button" className={activeTab === tab.key ? "active" : ""} onClick={() => setRoute(tab.key)}>{tab.label}</button>)}</nav>
+      <div className="object-tabs"><Tabs label="Vertragsbereiche" idPrefix="contract-tab" items={TABS} active={activeTab} onChange={(key) => setRoute(key)} /></div>
 
-      <div className="cw-content">
+      <div className="cw-content" id="contract-tab-panel" role="tabpanel" aria-labelledby={`contract-tab-${activeTab}`} tabIndex={0}>
         {activeTab === "overview" && <>
           <div className="cw-kpi-grid"><InfoCard label="Status" value={statusLabel(data.status)} origin="system" /><InfoCard label="Vertragsende" value={effectiveEnd ? formatDate(effectiveEnd) : "Nicht verfügbar"} origin={endOrigin} hint={<SourceButton evidence={data.dates.documented_end_date ? endEvidence : null} />} /><InfoCard label="Jährliche Kosten" value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} /><InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} origin={cancellationOrigin} hint={<SourceButton evidence={cancellationEvidence} />} /><InfoCard label="Risiko" value={riskLabel(data.risk_level)} origin="system" /></div>
-          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>)}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("term")}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
+          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>)}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("deadlines")}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
           <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
         </>}
 
-        {activeTab === "register" && <ContractRegisterPanel contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload} />}
+        {activeTab === "register" && <><ContractRegisterPanel contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload} />{slots.register}</>}
 
-        {activeTab === "remarks" && <ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} />}
-        {activeTab === "history" && <ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} />}
+        {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 
         {activeTab === "deadlines" && <><ContractRenewalBrief contractId={data.contract_id} orgSlug={orgSlug} /><ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} /></>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
-        {activeTab === "term" && <>
+        {activeTab === "deadlines" && hasAi && <>
+          <h2 className="cw-subheading">Aus dem Vertragsdokument (KI-Analyse)</h2>
           <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} origin={data.dates.start_date ? (startEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={startEvidence} />} /><InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} origin={data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={endEvidence} />} /><InfoCard label="Berechnetes Ende" value={data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} origin={calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis)} /><InfoCard label="Restlaufzeit" value={data.dates.days_until_end != null ? `${data.dates.days_until_end} Tage` : "Nicht verfügbar"} origin={data.dates.days_until_end != null ? "calculated" : "missing"} /></div>
           <Section title="Kündigung & Verlängerung"><dl className="cw-definition-grid"><div><dt>Spätester Kündigungstermin <SourceButton evidence={cancellationEvidence} /></dt><dd><span className="cw-value-origin">{data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"}<OriginBadge origin={cancellationOrigin} /></span></dd></div><div><dt>Automatische Verlängerung <SourceButton evidence={renewalEvidence} /></dt><dd>{yesNo(data.dates.automatic_renewal)}</dd></div><div><dt>Nächste Verlängerung</dt><dd><span className="cw-value-origin">{data.dates.next_renewal_date ? formatDate(data.dates.next_renewal_date) : "Nicht verfügbar"}<OriginBadge origin={calculatedOrigin(data.dates.next_renewal_date, data.dates.next_renewal_basis)} /></span></dd></div><div><dt>Mindestlaufzeit <SourceButton evidence={minimumDurationEvidence ?? durationEvidence} /></dt><dd>{data.dates.minimum_duration_months != null ? `${data.dates.minimum_duration_months} Monate` : "Nicht verfügbar"}</dd></div><div><dt>Zahlungsbeginn <SourceButton evidence={paymentStartEvidence} /></dt><dd>{data.dates.payment_start_rule ?? "Nicht verfügbar"}</dd></div><div><dt>Aktueller Status</dt><dd>{statusLabel(data.dates.current_status)}</dd></div></dl></Section>
           {(hasCalculationBasis(data.dates.calculated_end_basis) || hasCalculationBasis(data.dates.latest_cancellation_basis) || hasCalculationBasis(data.dates.next_renewal_basis)) && <Section title="Berechnungsgrundlage" description="Deterministische Grundlagen der vom Backend gelieferten Termine"><div className="cw-calc-grid"><CalculationBasisPanel title="Berechnetes Vertragsende" basis={data.dates.calculated_end_basis} /><CalculationBasisPanel title="Spätester Kündigungstermin" basis={data.dates.latest_cancellation_basis} /><CalculationBasisPanel title="Nächste Verlängerung" basis={data.dates.next_renewal_basis} /></div></Section>}
@@ -421,6 +456,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
 
         {activeTab === "finance" && <>
           <ContractFinancePanel contractId={data.contract_id} orgSlug={orgSlug} />
+          {hasAi && <>
           <h2 className="cw-subheading">KI-Analyse der Vertragskosten</h2>
           <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} /><InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} origin={data.costs.monthly_recurring.amount == null ? "missing" : monthlyCostEvidence ? "extracted" : "system"} hint={<SourceButton evidence={monthlyCostEvidence} />} /><InfoCard label="Steuersatz" value={data.costs.tax_rate_percent != null ? `${data.costs.tax_rate_percent} %` : "Nicht verfügbar"} origin={data.costs.tax_rate_percent != null ? (taxRateEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={taxRateEvidence} />} /><InfoCard label="Bezugsperiode" value={data.costs.source_period ?? "Nicht verfügbar"} origin={data.costs.source_period ? "system" : "missing"} /></div>
           {hasCalculationBasis(data.costs.annual_recurring_basis) ? <Section title="Kostenberechnung" description="Nachvollziehbare Grundlage des jährlichen Betrags"><CalculationBasisPanel title="Jährlich wiederkehrende Kosten" basis={data.costs.annual_recurring_basis} /></Section> : null}
@@ -428,12 +464,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           <Section title="Abrechnung & Steuer"><dl className="cw-definition-grid"><div><dt>Steuerbasis <SourceButton evidence={taxBasisEvidence} /></dt><dd>{data.costs.tax_basis ?? "Nicht verfügbar"}</dd></div><div><dt>Währung</dt><dd>{data.costs.annual_recurring.currency ?? data.costs.monthly_recurring.currency ?? "Nicht verfügbar"}</dd></div><div><dt>Währungskonflikt</dt><dd>{data.costs.currency_conflict ? "Ja – prüfen" : "Nein"}</dd></div></dl></Section>
           {(data.costs.scheduled_prices ?? []).length > 0 && <Section title="Preisplan (Staffel)" description="Belegte Preisstufen je Vertragsjahr – nie annualisiert"><div className="cw-finance-schedule">{data.costs.scheduled_prices.map((row) => <div className="cw-finance-schedule-row" key={`${row.period_index ?? "x"}-${row.period_label ?? ""}`}><span>{row.period_index ? `${row.period_index}. Vertragsjahr` : row.period_label ?? "Vertragsjahr"}</span><strong>{moneyLike(row.amount, row.currency)}</strong></div>)}</div></Section>}
           {(data.costs.variable_charges ?? []).length > 0 && <Section title="Bedingte Kosten (nicht im Fixwert enthalten)" description="Verbrauchs- oder einsatzabhängige Positionen, getrennt vom wiederkehrenden Jahresbetrag"><div className="cw-finance-variable">{data.costs.variable_charges.map((item, idx) => <dl className="cw-definition-grid" key={`${item.label}-${idx}`}><div><dt>Position</dt><dd>{item.label}</dd></div><div><dt>Betrag</dt><dd>{moneyLike(item.amount, item.currency)}{item.unit_label_de ? ` ${item.unit_label_de}` : ""}</dd></div>{item.condition ? <div><dt>Bedingung</dt><dd>{item.condition}</dd></div> : null}<div><dt>Hinweis</dt><dd className="cw-muted">{item.note_de ?? "Wird nicht zum Fixwert addiert."}</dd></div></dl>)}</div></Section>}
+          </>}
         </>}
 
-        {activeTab === "services" && <><Section title="Leistungsumfang" description="Enthaltene, ausgeschlossene und ungeklärte Leistungen"><div className="cw-service-grid">{SCOPE_FIELDS.map(([key, label, prop]) => { const state = scopeState(key, data.scope[prop]); return <div className="cw-service-row" key={key}><span>{label}</span><strong className={`cw-service-state cw-service-${state.tone}`}>{state.label}</strong><SourceButton evidence={state.evidence} /></div>; })}</div></Section><Section title="SLA"><dl className="cw-definition-grid"><div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? "Nicht verfügbar"}</dd></div><div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? "Nicht verfügbar"}</dd></div><div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? "Nicht verfügbar"}</dd></div><div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? yesNo(data.sla.availability_24_7)}</dd></div></dl></Section></>}
+        {activeTab === "overview" && hasAi && <><Section title="Leistungsumfang" description="Enthaltene, ausgeschlossene und ungeklärte Leistungen"><div className="cw-service-grid">{SCOPE_FIELDS.map(([key, label, prop]) => { const state = scopeState(key, data.scope[prop]); return <div className="cw-service-row" key={key}><span>{label}</span><strong className={`cw-service-state cw-service-${state.tone}`}>{state.label}</strong><SourceButton evidence={state.evidence} /></div>; })}</div></Section><Section title="SLA"><dl className="cw-definition-grid"><div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? "Nicht verfügbar"}</dd></div><div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? "Nicht verfügbar"}</dd></div><div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? "Nicht verfügbar"}</dd></div><div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? yesNo(data.sla.availability_24_7)}</dd></div></dl></Section></>}
 
-        {activeTab === "equipment" && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
+        {activeTab === "relations" && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
 
+        {activeTab === "overview" && slots.overview}
+        {activeTab === "deadlines" && slots.deadlines}
+        {activeTab === "finance" && slots.finance}
         {activeTab === "documents" && <>
           <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Offene Prüfungen" value={String(data.contract_review.unresolved_count)} /></div>
           <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>

@@ -275,3 +275,4 @@ kbd {
   .shell-search kbd { display: none; }
   .shell-topbar-title .breadcrumbs li:not(:last-child) { display: none; }
 }
+@media (max-width: 1280px) { .shell-assistant-button span { display: none; } }

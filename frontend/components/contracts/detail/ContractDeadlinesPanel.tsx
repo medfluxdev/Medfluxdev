@@ -39,7 +39,7 @@ export default function ContractDeadlinesPanel({ contractId, orgSlug }: { contra
 
   const load = useCallback(async () => {
     try {
-      setItems((await listContractDeadlines(orgSlug, contractId)).items);
+      setItems((await listContractDeadlines(orgSlug, contractId))?.items ?? []);
     } catch (error) {
       setItems([]);
       setMessage({ tone: "error", text: errorText(error, "Termine konnten nicht geladen werden.") });

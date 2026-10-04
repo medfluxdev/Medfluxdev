@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
+import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { formatDate } from "@/lib/format";
 import { listOwnershipAssignees, type AssigneeDto } from "@/lib/domain-api/ownership";
 import {
@@ -261,6 +262,10 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     if (await run(() => updateContractRegister(orgSlug, contractId, { changes }), "Stammdaten gespeichert.")) setEditing(false);
   }
 
+  const dirty = editing && Boolean(register) && Object.entries(register?.fields ?? {}).some(([key, field]) => !same(draft[key], field.value));
+  useUnsavedChanges(dirty);
+  useSaveShortcut(editing, () => { if (!busy) void save(); });
+
   function confirm(keys: string[]) {
     void run(() => updateContractRegister(orgSlug, contractId, { changes: {}, confirm: keys }), "KI-Wert bestätigt.");
   }
@@ -434,12 +439,12 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     <section className="cw-section rg-status" aria-labelledby="rg-status-heading">
       <div className="rg-status-row">
         <div>
-          <h2 id="rg-status-heading">Vertrag {register.register_number ?? "ohne Nummer"}</h2>
+          <h2 id="rg-status-heading">Bearbeitungsstatus</h2>
           <p className="cw-muted">{register.has_ai_analysis ? "Werte aus der KI-Analyse sind gekennzeichnet und können bestätigt oder korrigiert werden." : "Manuell angelegter Vertrag ohne KI-Analyse."}</p>
         </div>
         <div className="rg-status-actions">
           <span className={`cw-badge ${STATUS_TONE[register.business_status]}`}>{register.business_status_label}</span>
-          {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className="btn" disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>→ {item.label}</button>)}
+          {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-ghost btn-danger" : "btn"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>→ {item.label}</button>)}
         </div>
       </div>
       {register.business_status === "in_arbeit" && register.missing_for_valid.length > 0 ? <p className="rg-hint">Für „Gültig“ fehlen noch: {register.missing_for_valid.map((key) => labelFor(key)).join(", ")}.</p> : null}
@@ -509,7 +514,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
 
     <div className="rg-toolbar">
       {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Stammdaten bearbeiten</button> : null}
-      {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>{busy ? "Wird gespeichert…" : "Speichern"}</button></> : null}
+      {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>{dirty ? <span className="field-hint">Ungespeicherte Änderungen · Strg+S speichert</span> : null}</> : null}
       <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
       <Link href="/partners" className="rg-link">Vertragspartner verwalten</Link>
     </div>

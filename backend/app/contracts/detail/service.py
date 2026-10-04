@@ -276,6 +276,23 @@ def _snapshot_uses_harness(snapshot: dict | None) -> bool:
     return bool(analysis.get("harness_version"))
 
 
+def register_facts(contract, as_of: date) -> dict:
+    """Fristen und gepflegte Kosten aus dem Vertragsregister (Vorrang vor KI-Werten im Kopf)."""
+    from app.register.service import term_inputs
+    from app.register.terms import compute_terms
+
+    terms = compute_terms(term_inputs(contract), as_of)
+    end = terms.actual_end or terms.possible_end
+    return {
+        "cancel_by": terms.cancel_by.isoformat() if terms.cancel_by else None,
+        "contract_end": end.isoformat() if end else None,
+        "annual_cost": (
+            {"amount": str(contract.maintained_annual_cost), "currency": contract.maintained_annual_currency or "EUR"}
+            if contract.maintained_annual_cost is not None else None
+        ),
+    }
+
+
 def build_contract_detail(
     session: Session, *, organization_id, contract_id
 ):
@@ -448,6 +465,7 @@ def build_contract_detail(
         "supplier": contract.supplier,
         "register_number": contract.register_number,
         "business_status": contract.business_status,
+        "register_facts": register_facts(contract, date.today()),
         "status": contract.status,
         "risk_level": contract.risk_level,
         "identity": _identity_section(

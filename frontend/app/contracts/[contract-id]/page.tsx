@@ -91,7 +91,7 @@ function resolveEvidence(data: ContractDetailResponse, refs: string[]): Evidence
 export default function ContractDetailPage() {
   const params = useParams<{ "contract-id": string }>();
   const contractId = params?.["contract-id"] ?? "";
-  const { organizationSlug } = useAuth();
+  const { organizationSlug, account } = useAuth();
 
   const [data, setData] = useState<ContractDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,12 +151,25 @@ export default function ContractDetailPage() {
 
       {data && organizationSlug ? (
         <>
-          <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />
-          <ContractWorkspace data={data} orgSlug={organizationSlug} onReload={load} />
-          <ContractLifecyclePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
-          <ContractIntelligencePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
-          <ContractBackendAnalysisPanel data={data} organizationSlug={organizationSlug} />
-          <ContractBillingPanel contractId={data.contract_id} organizationSlug={organizationSlug} />
+          <ContractWorkspace
+            data={data}
+            orgSlug={organizationSlug}
+            onReload={load}
+            slots={{
+              overview: <>
+                <ContractIntelligencePanel contractId={data.contract_id} organizationSlug={organizationSlug} />
+                {account?.is_developer ? (
+                  <details className="dev-details">
+                    <summary>Entwicklerdetails: vollständige Analyse</summary>
+                    <ContractBackendAnalysisPanel data={data} organizationSlug={organizationSlug} />
+                  </details>
+                ) : null}
+              </>,
+              register: <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />,
+              deadlines: <ContractLifecyclePanel contractId={data.contract_id} organizationSlug={organizationSlug} />,
+              finance: <ContractBillingPanel contractId={data.contract_id} organizationSlug={organizationSlug} />,
+            }}
+          />
           {sourceUnavailable ? (
             <div id="intelligence-source-viewer" className="alert" role="status">
               Der Intelligence-Nachweis konnte keinem kanonischen Vertragsnachweis zugeordnet werden. Es wird keine Quelle erfunden.
