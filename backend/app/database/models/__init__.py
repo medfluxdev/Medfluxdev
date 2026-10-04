@@ -17,6 +17,18 @@ from app.database.models.calculation import (
     CalculationReviewFlag,
 )
 from app.database.models.contract import Contract, ContractDocument, ContractEquipment
+from app.database.models.register import (
+    CatalogContractCategory,
+    CatalogContractType,
+    CatalogContractTypeCategory,
+    ContractFieldProvenance,
+    ContractHospital,
+    ContractPartner,
+    ContractRemark,
+    LookupValue,
+    NumberAllocation,
+    NumberRange,
+)
 from app.database.models.equipment import Equipment
 from app.database.models.work_item import WorkItem
 from app.database.models.work_item_collaboration import WorkItemCollaboration, WorkItemComment
@@ -60,6 +72,16 @@ __all__ = [
     "Contract",
     "ContractDocument",
     "ContractEquipment",
+    "CatalogContractCategory",
+    "CatalogContractType",
+    "CatalogContractTypeCategory",
+    "ContractFieldProvenance",
+    "ContractHospital",
+    "ContractPartner",
+    "ContractRemark",
+    "LookupValue",
+    "NumberAllocation",
+    "NumberRange",
     "Equipment",
     "WorkItem",
     "WorkItemCollaboration",

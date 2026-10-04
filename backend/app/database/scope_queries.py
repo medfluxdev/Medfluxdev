@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database.models.contract import Contract
 from app.database.models.organization_structure import ContractDepartment, Department
+from app.database.models.register import ContractHospital
 
 
 def scoped_contract_ids(
@@ -34,10 +35,18 @@ def scoped_contract_ids(
         ContractDepartment.organization_id == organization_id,
         ContractDepartment.department_id.in_(department_ids),
     )
+    hospital_links = select(ContractHospital.contract_id).where(
+        ContractHospital.organization_id == organization_id,
+        ContractHospital.hospital_id == hospital_id,
+    )
     return set(session.scalars(
         select(Contract.id).where(
             Contract.organization_id == organization_id,
-            or_(Contract.hospital_id == hospital_id, Contract.id.in_(linked_ids)),
+            or_(
+                Contract.hospital_id == hospital_id,
+                Contract.id.in_(linked_ids),
+                Contract.id.in_(hospital_links),
+            ),
         )
     ).all())
 

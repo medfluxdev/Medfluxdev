@@ -29,8 +29,10 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,6 +48,20 @@ LIFECYCLE_STATE_ALLOWED = {
 }
 
 CONTRACT_SCOPE_ALLOWED = {"organization", "hospital", "department"}
+
+BUSINESS_STATUS_ALLOWED = ("in_arbeit", "gueltig", "gekuendigt", "beendet", "geloescht")
+TERM_MODEL_ALLOWED = ("fixed_term", "terminable", "terminable_min_term", "auto_renewal", "perpetual")
+NOTICE_TO_ALLOWED = ("contract_end", "month_end", "quarter_end", "half_year_end", "year_end", "anytime")
+DURATION_UNITS_ALLOWED = ("days", "weeks", "months", "years")
+
+# H1: Registernummer + Kurzbeschreibung sind Teil der Volltextsuche.
+SEARCH_VECTOR_EXPRESSION = (
+    "(setweight(to_tsvector('simple', coalesce(contract_number, '')), 'A') || ' ' || "
+    "setweight(to_tsvector('simple', coalesce(register_number, '')), 'A') || ' ' || "
+    "setweight(to_tsvector('german', coalesce(supplier, '')), 'B') || ' ' || "
+    "setweight(to_tsvector('german', coalesce(short_description, '')), 'B') || ' ' || "
+    "setweight(to_tsvector('simple', coalesce(status, '')), 'C'))"
+)
 
 CONTRACT_DOCUMENT_ROLE_ALLOWED = {
     "main",
@@ -100,9 +116,7 @@ class Contract(OrgOwnedMixin, Base):
     search_vector: Mapped[Optional[str]] = mapped_column(
         TSVECTOR,
         Computed(
-            "(setweight(to_tsvector('simple', coalesce(contract_number, '')), 'A') || ' ' || "
-            "setweight(to_tsvector('german', coalesce(supplier, '')), 'B') || ' ' || "
-            "setweight(to_tsvector('simple', coalesce(status, '')), 'C'))",
+            SEARCH_VECTOR_EXPRESSION,
             persisted=True,
         ),
         nullable=False,
@@ -129,6 +143,59 @@ class Contract(OrgOwnedMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Vertragsregister (H1): editierbare Stammdaten unabhaengig von der KI.
+    # Herkunft je Feld in `contract_field_provenance`; die Projektionsfelder
+    # oben (supplier, contract_number, start_date, end_date, status) bleiben
+    # reine KI-Projektion.
+    register_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    internal_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    short_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    subject_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_framework: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    manual_billing: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    account_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    partner_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract_partner.id", ondelete="SET NULL"), nullable=True
+    )
+    contract_type_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("catalog_contract_type.id", ondelete="SET NULL"), nullable=True
+    )
+    contract_category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("catalog_contract_category.id", ondelete="SET NULL"), nullable=True
+    )
+    storage_location_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    business_status: Mapped[str] = mapped_column(
+        String(24), default="in_arbeit", server_default="in_arbeit", nullable=False
+    )
+    term_model: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    term_start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    term_fixed_end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    initial_term_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    initial_term_unit: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    minimum_term_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    minimum_term_unit: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    notice_period_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    notice_period_unit: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    notice_to: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    renewal_period_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    renewal_period_unit: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    reminder_lead_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reminder_recipient_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    escalation_recipient_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    reminder_todo: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    terminated_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    terminated_effective: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    retention_years_after_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     document_links: Mapped[list["ContractDocument"]] = relationship(
         back_populates="contract",
         cascade="all, delete-orphan",
@@ -144,6 +211,27 @@ class Contract(OrgOwnedMixin, Base):
             f"scope_type IN ({', '.join(repr(v) for v in sorted(CONTRACT_SCOPE_ALLOWED))})",
             name="scope_type",
         ),
+        CheckConstraint(
+            f"business_status IN ({', '.join(repr(v) for v in BUSINESS_STATUS_ALLOWED)})",
+            name="business_status",
+        ),
+        CheckConstraint(
+            f"term_model IS NULL OR term_model IN ({', '.join(repr(v) for v in TERM_MODEL_ALLOWED)})",
+            name="term_model",
+        ),
+        CheckConstraint(
+            f"notice_to IS NULL OR notice_to IN ({', '.join(repr(v) for v in NOTICE_TO_ALLOWED)})",
+            name="notice_to",
+        ),
+        Index(
+            "uq_contract_org_register_number",
+            "organization_id",
+            "register_number",
+            unique=True,
+            postgresql_where=text("register_number IS NOT NULL"),
+        ),
+        Index("ix_contract_org_business_status", "organization_id", "business_status"),
+        Index("ix_contract_partner_id", "partner_id"),
         Index("ix_contract_status", "status"),
         Index("ix_contract_risk_level", "risk_level"),
         Index("ix_contract_accepted_extraction_id", "accepted_extraction_id"),

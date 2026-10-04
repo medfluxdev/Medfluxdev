@@ -91,6 +91,7 @@ from app.documents.intelligence.provider import (
 from app.documents.persistence import DocumentPersistenceService
 from app.documents.storage import DocumentStorage, StorageError
 from app.models.enums import ExtractionStatus, ValidationStatus
+from app.register.service import ensure_register_number, sync_from_extraction
 from app.work_queue.derive import derive_work_items
 from app.work_queue.service import reconcile_work_items
 
@@ -1556,6 +1557,15 @@ class DocumentProcessingService:
                 contract_id=contract.id,
                 calculation_run_id=calculation.id,
             )
+            # Vertragsregister: KI-Werte nur in KI-eigene/leere Felder,
+            # Menschwerte bleiben (Abweichungen werden als Vorschlag gemerkt).
+            sync_from_extraction(
+                session,
+                contract=contract,
+                extracted=contract_model,
+                extraction_id=extraction.id,
+            )
+            ensure_register_number(session, contract)
             run_warning_evaluation(
                 session,
                 organization_id=organization_id,
