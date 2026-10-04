@@ -100,6 +100,11 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
 - `contracts/`:
   - `calculation/`: `calculate_contract(contract, as_of_date)`. Pure, no DB, no hidden `now()`, Decimal via `money.to_decimal`.
   - Also `warnings/`, `detail/` (the Contract 360 read model), `search/` (pg_trgm), `overrides/` and `review/`.
+- `register/` (contract register, replaces the legacy contract manager; plan in `docs/architecture/HYDMEDIA_GAP_ANALYSIS_AND_INTEGRATION_PLAN_20261004.md`):
+  - Editable master fields live as columns on `contract`; their origin is in `contract_field_provenance` (`ai`, `manual`, `ai_confirmed`, `ai_corrected`). A re-analysis may only replace `ai` values; human values get an `ai_proposed_value` instead. The pipeline calls `sync_from_extraction` after each analysis.
+  - `terms.py`: deterministic deadlines for five term models (fixed, terminable, terminable with minimum term, auto renewal, perpetual), notice to month/quarter/half-year/year end. Pure, explicit `as_of`.
+  - `status.py`: business status workflow (`in_arbeit` → `gueltig` → `gekuendigt`/`beendet` → `geloescht`), separate from the computed `contract.status` and from the review status.
+  - `catalogs.py`/`defaults.py`: partners, contract types/categories, lookup lists. Numbers come from `number_range`, allocated under a row lock.
 - Other packages:
   - Domain layer: `contract_intelligence/`, `equipment/`, `work_queue/`, `dashboard/`, `organization_structure/`.
   - `integrations/` holds the connector interface only.
@@ -108,7 +113,7 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - UUID PKs come from server-side `uuidv7()`. `OrgOwnedMixin`/`organization_id` sit on tenant rows. A naming convention covers `pk_/fk_/ix_/uq_/ck_`.
   - Use `session_scope()` for short transactions and keep expensive work outside them.
 - **Alembic migrations:**
-  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `d5e7f9a01003`.
+  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `e6f8a0b21004` (contract register).
   - Add FKs onto populated tables as `NOT VALID` (precedent: step16 `app_user` provenance).
   - Tests don't exercise migrations, so a new migration needs `alembic upgrade head` against a disposable DB.
 - **Auth:** a cookie session (`medflux_session`), not JWT. Account roles are admin, contract_manager, reviewer and viewer, plus an `is_developer` flag, with per-org `account_membership`. Passwords use PBKDF2-SHA256. Cookie writes require an allowed `Origin`. Viewers are read-only.

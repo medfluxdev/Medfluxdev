@@ -15,6 +15,17 @@
 
 ---
 
+## Implementation status
+
+| Phase | Status | Date | Commits / notes |
+|---|---|---|---|
+| H0 | done (privacy fix; screenshots still to request) | 2026-10-04 | `87ccbee` |
+| H1.1–H1.5 register core, term engine, status workflow, numbering, manual creation | done | 2026-10-04 | `cac5d0e`, `86958e9`, `1014c60`, `b587775` |
+| H2.1–H2.5 partners, types/categories, lookups, multi-hospital, admin UI | done | 2026-10-04 | as above |
+| H6.1 remarks journal | done; H6.2 global history page open | 2026-10-04 | as above |
+| H3, H4, H5, H7, H8, H9 | open | – | next: H5 (M2) |
+| H10 | on hold (no replacement agreement yet) | – | – |
+
 ## 0. Executive summary
 
 **What HYDMedia is.** HYDMedia is a **manual contract register on top of a DMS**. It has:

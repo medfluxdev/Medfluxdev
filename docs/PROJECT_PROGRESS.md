@@ -5099,3 +5099,27 @@ Grundlage: `docs/architecture/WORKPLAN_ORGSTRUKTUR_PHASE1_20261003.md` (Anforder
 **Entscheidungen (vorläufig, änderbar):** `unit_type` optional; Kostenverteilung in Analysen standardmäßig nach verantwortlicher Einheit (WP5); E-Mail-Versand nach In-App-Benachrichtigung (WP4).
 
 **Offen (nächste WPs):** WP2 Finanzfelder (Zahlungsintervall, Netto/Brutto beide Varianten, Preisanpassung), WP3 Review-Provenienz, WP4 Benachrichtigungen/E-Mail, WP5 Analysen.
+
+## 2026-10-04 – H0–H2/H6: Vertragsregister (Ablösung HYDMedia, Meilenstein M1)
+
+Grundlage: `docs/architecture/HYDMEDIA_GAP_ANALYSIS_AND_INTEGRATION_PLAN_20261004.md` (Entscheidungen D1–D4: MedFlux ersetzt das Altsystem; Status-Set wie HYDMedia; ein Vertrag kann mehreren Gesellschaften gehören; alle Vertragstypen). Datenmigration (H10) bleibt bis zu einer Vereinbarung mit dem Krankenhaus zurückgestellt. Kein neuer Hauptschritt der 18er-Roadmap (18/18 = 100 % bleibt); Erweiterung auf Branch `feature/contract-register-core`.
+
+**Umgesetzt:**
+- H0: Ordner mit echten Vertrags-PDFs aus der Git-Verfolgung genommen und ignoriert (bleibt lokal; ältere Historie enthält die Dateien weiterhin). `CLAUDE.md` und Plan-Dokument ergänzt.
+- H1.1 Register-Stammdaten am Vertrag (Kurzbeschreibung, interne Nr., Gegenstand, Rahmenvertrag, Partner, Typ/Kategorie, Lagerort, Konto, manuelle Abrechnung, Vertragsart, Beginn/Ende, Laufzeit, Mindestlaufzeit, Kündigungsfrist + „Kündigung zum“, Verlängerung, Erinnerung/Eskalation/ToDo, Kündigung am/zum, Löschfrist). Feld-Herkunft in `contract_field_provenance` (`ai`, `manual`, `ai_confirmed`, `ai_corrected`); Reanalyse überschreibt Menschwerte nie, sondern legt einen KI-Vorschlag ab. Pipeline-Anbindung in `DocumentProcessingService._persist_pipeline`, Bestandsverträge werden beim ersten Aufruf abgeglichen.
+- H1.2 Vertrag ohne Dokument anlegen (`POST /api/contracts`, Seite `/contracts/new`); Abteilungsnutzer werden verantwortliche Abteilung.
+- H1.3 Deterministische Fristenlogik für fünf Vertragsarten inkl. Monats-/Quartals-/Halbjahres-/Jahresende und Mindestlaufzeit (`app/register/terms.py`); HYDMedia-Beispiele als Tests.
+- H1.4 Status-Workflow In Arbeit → Gültig → Gekündigt/Beendet → Gelöscht (+ Reaktivierung), rollen- und prüfgebunden.
+- H1.5 Nummernkreis mit Reservierung, nebenläufigkeitssicher; Bestandsverträge je Organisation nummeriert.
+- H2 Vertragspartner (Dublettenerkennung, Ähnlichkeitsvorschläge), Vertragstypen/Kategorien (n:m), Auswahllisten, bereinigter Standardkatalog; Mehrfach-Gesellschaften (`contract_hospital`) im Scope berücksichtigt.
+- H6 Bemerkungs-Journal (append-only); alle Änderungen mit Feld-Diff im Activity-Log.
+- UI: Tabs „Stammdaten“ und „Bemerkungen“ in Contract360, Vertragsliste/Kopf mit Vertragsnr. und Status, `/partners`, `/settings/catalogs`.
+
+**Dateien (Auswahl):** `backend/app/register/*`, `backend/app/api/routes/{contract_register,catalogs}.py`, `backend/app/database/models/register.py`, Migration `20261004_e6f8a0b21004_contract_register_core.py`, `frontend/components/contracts/detail/{ContractRegisterPanel,ContractRemarksPanel}.tsx`, `frontend/components/catalogs/*`, `frontend/app/{contracts/new,partners,settings/catalogs}`.
+
+**Verifikation (2026-10-04, Windows, isolierter PostgreSQL-18-Container):** Backend 1484 passed / 3 skipped / 1 failed – der Fehlschlag (`test_source_navigation.py::test_ocr_word_data_empty_when_unavailable`) tritt identisch auf dem Stand vor der Änderung auf (OCR-Umgebung). Neue Tests: `test_register_terms.py` (26), `test_register_units.py` (31), `test_contract_register_api.py` (7, inkl. Nebenläufigkeit). Migration up/down/up geprüft, Modell ↔ Migration ohne neue Abweichung, Migration + KI-Abgleich auf einer Kopie der lokalen Datenbank geprüft. Frontend `npm run verify` grün (176 Tests, Build). End-to-End über die echte Middleware (Login, Origin-Prüfung, Scope) und im Browser geprüft.
+Hinweis: Die DB-Tests liefen gegen einen Wegwerf-Container (Port 55499) mit einem Plugin, das `conftest.py` spiegelt; der vorgesehene WSL-Testcluster 55432 existiert auf diesem Rechner nicht. CI führt die Tests regulär aus.
+
+**Bekannte Punkte:** Schreibanfragen ohne `Origin`-Header werden von der bestehenden Middleware akzeptiert (unverändert, Sicherheitsreview). Warnungen/Arbeitsliste/E-Mail-Erinnerungen für reine Registerverträge folgen mit H5. KI-Werte, die Abteilungs-/Kostenstellen betreffen, werden noch nicht abgebildet.
+
+**Nächster Schritt:** M2 – H5 (Fristen-Entität, Scheduler, E-Mail/ICS, Vertretung, Postfach), danach H3 (Dokumente/Nachträge/Rahmenverträge).
