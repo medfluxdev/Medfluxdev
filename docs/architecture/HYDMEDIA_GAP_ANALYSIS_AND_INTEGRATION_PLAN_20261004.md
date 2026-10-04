@@ -22,11 +22,15 @@
 | H0 | done (privacy fix; screenshots still to request) | 2026-10-04 | `87ccbee` |
 | H1.1–H1.5 register core, term engine, status workflow, numbering, manual creation | done | 2026-10-04 | `cac5d0e`, `86958e9`, `1014c60`, `b587775` |
 | H2.1–H2.5 partners, types/categories, lookups, multi-hospital, admin UI | done | 2026-10-04 | as above |
-| H6.1 remarks journal | done; H6.2 global history page open | 2026-10-04 | as above |
+| H6.1 remarks journal, H6.2 contract history tab + organisation-wide history with filters and CSV export | done | 2026-10-04 | as above, `6e6518c` |
 | H5.1–H5.4 deadlines, daily job, e-mail/ICS, deputies, inbox | done (D5: in-process opt-in or Task Scheduler; D6: SMTP optional) | 2026-10-04 | `2695467`, `68ed23f` |
 | H3.1–H3.3 documents, amendment proposals, framework links, import destination | done | 2026-10-04 | `db16dd7`, `6145003`, `50501e6` |
 | H4.1–H4.3 finance entries, service catalogue, cost-centre split, price adjustment, AI suggestions | done | 2026-10-04 | `c53082e`, `d9fd4fb`, `c1f1cf5` |
-| H7, H8, H9 | open | – | next: H8 |
+| H8.1–H8.2 permission matrix, confidential contracts with grants, „Rollen & Rechte“ page | done | 2026-10-04 | `e948586`, `662771c` |
+| H9 retention per type/contract, „Löschen ab“, retention review deadline, AI data-protection flag | done | 2026-10-04 | `e948586`, `662771c` |
+| H7.1–H7.5 register grid (columns, filters, grouping, sums), saved views, tree, Excel export, portfolio report, analytics, cover-sheet PDF | done | 2026-10-04 | `da4e646` |
+| 13a renewal briefs (advice only) and renewals overview | done | 2026-10-04 | `ec29d83`, `c8d5582` |
+| Open from §4A | semantic search across contract contents; AI narrative for briefs; dark theme for charts (app has no dark theme) | – | – |
 | H10 | on hold (no replacement agreement yet) | – | – |
 
 ## 0. Executive summary

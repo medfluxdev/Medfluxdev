@@ -5166,3 +5166,29 @@ Branch `feature/finance` (auf `feature/deadlines-documents`).
 **Bekannte Punkte:** Sortieren/Filtern nach Jahreskosten in der Vertragsliste nutzt weiterhin die KI-Berechnung (gepflegte Finanzeinträge nur in der Anzeige). Keine Währungsumrechnung. Dashboard-Summen folgen in H7.
 
 **Nächster Schritt:** H8 Rechte-Matrix und vertrauliche Verträge, danach H7 Listen/Export/Berichte/Analysen und H9 Aufbewahrung.
+
+## 2026-10-04 – M3 abgeschlossen: H8 Rechte/Vertraulichkeit, H9 Aufbewahrung, H6.2 Historie, H7 Register/Export/Berichte, 13a Entscheidungsvorlagen
+
+Branch `feature/permissions-reports` (auf `feature/finance`). Kein neuer Hauptschritt der 18er-Roadmap (18/18 = 100 % bleibt). H10 (Datenübernahme) bleibt zurückgestellt.
+
+**Umgesetzt:**
+- H8.1 Zentrale Rechte-Matrix `app/auth/permissions.py` (Rolle × Aktion, `require()` in allen neuen und umgestellten Routen); `GET /api/permissions`; Seite „Rollen & Rechte“ (`/settings/roles`).
+- H8.2 Vertrauliche Verträge (Kennzeichen am Vertrag oder am Vertragstyp) mit Einzelfreigaben; zentral in `scoped_contract_ids` ausgeblendet (fail-closed). Sichtbar für Admin, Verantwortliche, Erinnerungsempfänger und Freigegebene. UI im Reiter Stammdaten.
+- H9 Aufbewahrung je Vertragstyp (Standard 10 Jahre) oder je Vertrag; „Löschen ab“ = 1.1. nach Jahresende + Frist; Systemtermin „Löschprüfung“. KI erkennt Datenschutzbezug (AVV/Art. 28 DSGVO) als Vorschlag, ohne Menschwerte zu überschreiben.
+- H6.2 Reiter „Historie“ am Vertrag (Aktivitäten, Fakt-Prüfungen, manuelle Werte, Dokumente, versendete E-Mails); organisationsweite Historie (`/audit`) mit Filtern Benutzer/Bereich/Vertrag/Zeitraum, Seitenweise, CSV-Export (protokolliert, Excel-sicher).
+- H7.1 Vertragsregister `/register`: 32 Spalten (Register, Fristen, Personen, Organisation, Kosten, Aufbewahrung), Spaltenauswahl, Spaltenfilter (leer/nicht leer/Werteliste/Bereich/„in N Tagen“/„ich“), Gruppierung (2 Ebenen) mit Anzahl und Summen, Sortierung, Suche. Berechnung gebündelt ohne N+1.
+- H7.2 Gespeicherte Ansichten (`saved_view`): persönlich oder global (nur Admin), Standardansichten „Meine Verträge“, „Meine Wiedervorlage“, „Kündigungsfrist < 90 Tage“, „In Arbeit“, „Zum Löschen vorgesehen“, „Gelöschte Verträge“.
+- H7.3 Baum Gesellschaft → Abteilung mit Anzahl als Filter.
+- H7.4 Excel-Export der aktuellen Ansicht (mit Gruppen- und Info-Blatt), Portfoliobericht als Excel, Deckblatt-PDF je Vertrag (lokal mit PyMuPDF). Exporte werden protokolliert.
+- H7.5 `/analysen`: Kennzahlen, Handlungsbedarf (ohne Verantwortliche, ohne Kosten, ohne Ende, Löschprüfung, Lieferantenkonzentration) mit Sprung in das Register, Kosten je Gesellschaft/Abteilung/Kostenstelle/Typ/Partner, Ausgaben/Einnahmen je Jahr (inkl. Prognose), Fristen der nächsten 6 Monate, Status. Diagramme nach Dataviz-Regeln (validierte Palette, Tabellenansicht, Hover).
+- 13a Entscheidungsvorlage vor Kündigungsfristen (Reiter Termine) und Übersicht `/verlaengerungen`: was ohne Handeln passiert, Kosten der Verlängerung, Preisanpassung, weitere Verträge mit dem Partner, Datenlücken – jeweils mit Begründung; Entscheidung wird nur auf Klick als Lifecycle-Entscheidung erfasst, nichts automatisch.
+
+**Migrationen:** `i0d2e4f61004` (Vertraulichkeit, Freigaben, Aufbewahrung), `j1e3f5a71004` (gespeicherte Ansichten). Up/Down/Up und Modellabgleich geprüft; alle sechs M1–M3-Migrationen auf einer Kopie der lokalen Datenbank geprüft (Kopie danach gelöscht).
+
+**Verifikation (2026-10-04, isolierter PostgreSQL-18-Container):** Backend 1557 passed / 3 skipped / 1 failed (vorbestehend, OCR-Umgebung). Frontend: Lint, 44 Dateien / 197 Tests und Produktions-Build grün. Im Medflux-Browserprofil gegen eine Testinstanz geprüft (Register, Analysen, Entscheidungsvorlage); dabei zwei Fehler gefunden und behoben (feste Laufzeit meldete „Frist nicht berechenbar“; Lieferantenkonzentration für Verträge ohne Partner).
+
+**Neue Tests:** Backend `test_confidential_retention.py` (5), `test_history.py` (3), `test_register_grid.py` (5), `test_renewal_brief.py` (4). Frontend `contract-register` (Vertraulichkeit/Aufbewahrung), `permissions`, `history`, `register-grid`, `register-portfolio`, `renewal-brief`.
+
+**Bekannte Punkte:** Die ältere KI-Vertragsliste (`/contracts`) sortiert weiterhin nach KI-Kosten; das neue Register nutzt die gepflegten Finanzdaten. Semantische Suche über Vertragsinhalte und KI-Fließtext für Entscheidungsvorlagen sind offen (§4A). Diagramme nur im hellen Design (die App hat kein dunkles Design).
+
+**Nächster Schritt:** Abnahme mit Fachanwender:innen, danach Merge der Feature-Branches nach `main` (CI + Release-Gate). H10 erst nach Vereinbarung mit dem Krankenhaus.
