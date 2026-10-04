@@ -25,6 +25,8 @@ export interface ContractListItem {
   contract_number: string | null;
   contract_title: string | null;
   supplier: string | null;
+  register_number?: string | null;
+  business_status?: string | null;
   equipment_summary: string | null;
   status: string | null;
   risk_level: string | null;

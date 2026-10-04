@@ -22,6 +22,9 @@ import EvidencePane from "./EvidencePane";
 import FactReviewPanel from "./FactReviewPanel";
 import OverridePanel from "./OverridePanel";
 import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPanel";
+import ContractRegisterPanel from "./ContractRegisterPanel";
+import ContractRemarksPanel from "./ContractRemarksPanel";
+import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
 
 interface Props {
   data: ContractDetailResponse;
@@ -29,17 +32,19 @@ interface Props {
   onReload?: () => void;
 }
 
-type TabKey = "overview" | "term" | "finance" | "services" | "equipment" | "documents";
+type TabKey = "overview" | "register" | "term" | "finance" | "services" | "equipment" | "documents" | "remarks";
 type DocumentTab = "document" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
+  { key: "register", label: "Stammdaten" },
   { key: "term", label: "Laufzeit & Kündigung" },
   { key: "finance", label: "Finanzen" },
   { key: "services", label: "Leistungen & SLA" },
   { key: "equipment", label: "Geräte" },
   { key: "documents", label: "Dokumente & Prüfung" },
+  { key: "remarks", label: "Bemerkungen" },
 ];
 
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
@@ -323,8 +328,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
   return (
     <div className="contract-workspace">
       <header className="cw-header">
-        <div><div className="cw-breadcrumb">Verträge / {data.contract_number ?? data.contract_id}</div><h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1><p>{[data.contract_number ? `Nr. ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p></div>
-        <div className="cw-header-badges">{canRequestDeletion && <button type="button" className="cw-badge cw-badge-button" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button>}<button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button><span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
+        <div><div className="cw-breadcrumb">Verträge / {data.register_number ?? data.contract_number ?? data.contract_id}</div><h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1><p>{[data.register_number ? `Vertragsnr. ${data.register_number}` : null, data.contract_number ? `Nr. lt. Dokument ${data.contract_number}` : null, data.supplier].filter(Boolean).join(" · ")}</p></div>
+        <div className="cw-header-badges">{canRequestDeletion && <button type="button" className="cw-badge cw-badge-button" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button>}<button type="button" className="cw-badge cw-badge-button" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button>{data.business_status ? <button type="button" className="cw-badge cw-badge-button" onClick={() => setRoute("register")}>{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}<span className="cw-badge cw-badge-green">{statusLabel(data.status)}</span><span className={`cw-badge ${data.risk_level === "high" ? "cw-badge-red" : ""}`}>Risiko: {riskLabel(data.risk_level)}</span>{data.review.requires_manual_review ? <button type="button" className="cw-badge cw-badge-amber cw-badge-button" onClick={() => setRoute("documents", "review")}>Manuelle Prüfung</button> : null}</div>
       </header>
       {deleteDialogOpen && <div role="dialog" aria-modal="true" aria-labelledby="cw-delete-title" className="cw-section" style={{ margin: "1rem 0", padding: "1rem", border: "1px solid currentColor" }}>
         <h2 id="cw-delete-title">Vertragslöschung beantragen?</h2>
@@ -354,6 +359,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>)}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("term")}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
           <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
         </>}
+
+        {activeTab === "register" && <ContractRegisterPanel contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload} />}
+
+        {activeTab === "remarks" && <ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
         {activeTab === "term" && <>
           <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} origin={data.dates.start_date ? (startEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={startEvidence} />} /><InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} origin={data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={endEvidence} />} /><InfoCard label="Berechnetes Ende" value={data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} origin={calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis)} /><InfoCard label="Restlaufzeit" value={data.dates.days_until_end != null ? `${data.dates.days_until_end} Tage` : "Nicht verfügbar"} origin={data.dates.days_until_end != null ? "calculated" : "missing"} /></div>

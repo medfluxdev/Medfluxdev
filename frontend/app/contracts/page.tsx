@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ContractTable from "@/components/contracts/ContractTable";
@@ -136,7 +137,8 @@ function ContractsInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsStr = searchParams.toString();
-  const { organizationSlug } = useAuth();
+  const { organizationSlug, role, account } = useAuth();
+  const canCreate = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const effectiveOrgSlug = organizationSlug ?? "krankenhaus";
 
   const [data, setData] = useState<ContractListResponse | null>(null);
@@ -244,6 +246,7 @@ function ContractsInner() {
     <div className="page">
       <PageHeader
         title="Verträge"
+        actions={canCreate ? <Link href="/contracts/new" className="btn btn-primary">Vertrag anlegen</Link> : undefined}
         description={
           <>
             {total} {total === 1 ? "Vertrag" : "Verträge"}

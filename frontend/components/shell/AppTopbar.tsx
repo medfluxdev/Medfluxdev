@@ -10,6 +10,7 @@ import NotificationCenter from "@/components/shell/NotificationCenter";
 import { ROLE_LABELS } from "@/lib/auth-types";
 
 function titleForPath(pathname: string) {
+  if (pathname === "/contracts/new") return "Vertrag anlegen";
   if (pathname.startsWith("/contracts/")) return "Vertrag 360";
   if (pathname === "/contracts") return "Verträge";
   if (pathname === "/analysen") return "Analysen";
@@ -26,6 +27,9 @@ function titleForPath(pathname: string) {
   if (pathname === "/profile") return "Mein Profil";
   if (pathname.startsWith("/settings/users")) return "Benutzer";
   if (pathname.startsWith("/settings/organization")) return "Organisation";
+  if (pathname.startsWith("/settings/catalogs")) return "Kataloge";
+  if (pathname.startsWith("/partners")) return "Vertragspartner";
+
   if (pathname === "/settings") return "Einstellungen";
   return "MedFlux";
 }

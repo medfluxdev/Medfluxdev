@@ -466,6 +466,8 @@ export interface ContractDetailResponse {
   contract_number: string | null;
   contract_title: string | null;
   supplier: string | null;
+  register_number?: string | null;
+  business_status?: string | null;
   status: string | null;
   risk_level: string | null;
   identity: Record<string, unknown>;

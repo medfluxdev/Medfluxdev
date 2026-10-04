@@ -532,6 +532,8 @@ class ContractDetailResponse(BaseModel):
     contract_number: Optional[str] = None
     contract_title: Optional[str] = None
     supplier: str | None
+    register_number: Optional[str] = None
+    business_status: Optional[str] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
 

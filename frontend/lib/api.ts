@@ -90,6 +90,8 @@ async function errorMessage(res: Response): Promise<string> {
     try {
       const body = JSON.parse(text) as { detail?: unknown };
       if (typeof body.detail === "string" && body.detail.trim()) return body.detail.trim();
+      const message = (body.detail as { message?: unknown } | null)?.message;
+      if (typeof message === "string" && message.trim()) return message.trim();
     } catch {
       // Non-JSON server responses use the standardized status message below.
     }

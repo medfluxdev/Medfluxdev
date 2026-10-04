@@ -23,6 +23,8 @@ const icons: Record<string, Icon> = {
   evidence: <><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></>,
   audit: <><path d="M5 20V4h14v16z"/><path d="M8 8h8M8 12h8M8 16h5"/></>,
   archive: <><path d="M4 8h16v12H4z"/><path d="M7 8V4h10v4"/><path d="M9 12h6"/></>,
+  partners: <><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 4a3 3 0 0 1 0 6M18 14a6 6 0 0 1 3 6"/></>,
+  catalogs: <><path d="M5 4h14v16H5z"/><path d="M9 8h6M9 12h6M9 16h6"/><path d="M5 8h1M5 12h1M5 16h1"/></>,
   settings: <><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a7 7 0 0 0-1.7 1l-2.4-1-2 3.4L5 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 3.1h5l.4-3.1a7 7 0 0 0 1.7 1l2.4 1 2-3.4L19 13a7 7 0 0 0 0-1z"/></>,
 };
 
@@ -35,6 +37,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Arbeitsbereich", items: [
     { label: "Übersicht", href: "/", icon: "dashboard" },
     { label: "Verträge", href: "/contracts", icon: "contracts" },
+    { label: "Vertragspartner", href: "/partners", icon: "partners" },
     { label: "Geräte", href: "/equipment", icon: "equipment" },
     { label: "To-dos", href: "/work-queue", icon: "workQueue", roles: REVIEWERS },
   ]},
@@ -47,6 +50,7 @@ const GROUPS: { label: string; items: NavItem[] }[] = [
   { label: "Administration", items: [
     { label: "Audit", href: "/audit", icon: "audit", roles: EDITORS },
     { label: "Admin Dashboard", href: "/admin", icon: "admin", roles: ["admin"] },
+    { label: "Kataloge", href: "/settings/catalogs", icon: "catalogs", roles: ["admin"] },
     { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
   ]},
 ];

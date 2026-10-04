@@ -11,6 +11,7 @@ import {
   formatAnnualCost,
   formatDate,
 } from "@/lib/format";
+import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
 
 interface Props {
   items: ContractListItem[];
@@ -167,8 +168,8 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
                 <tr key={c.contract_id} className="contract-row" onClick={openContract360}>
                   {visibleColumns.number ? (
                     <th scope="row" className="contract-number">
-                      <Link href={`/contracts/${c.contract_id}`} onClick={rememberListContext} className="contract-number-link" aria-label={`${c.contract_number ?? "Vertrag"} öffnen`}>
-                        {c.contract_number ?? "–"}
+                      <Link href={`/contracts/${c.contract_id}`} onClick={rememberListContext} className="contract-number-link" aria-label={`${c.register_number ?? c.contract_number ?? "Vertrag"} öffnen`}>
+                        {c.register_number ?? c.contract_number ?? "–"}
                       </Link>
                     </th>
                   ) : null}
@@ -184,7 +185,7 @@ export default function ContractTable({ items, extraHeader, extra }: Props) {
                     </td>
                   ) : null}
                   {visibleColumns.supplier ? <td>{c.supplier ?? "–"}</td> : null}
-                  {visibleColumns.status ? <td><span className={`badge badge-${c.status ?? "unknown"}`}>{statusLabel}</span></td> : null}
+                  {visibleColumns.status ? <td><span className={`badge badge-${c.status ?? "unknown"}`}>{statusLabel}</span>{c.business_status ? <span className="contract-business-status">{BUSINESS_STATUS_LABEL[c.business_status as BusinessStatus] ?? c.business_status}</span> : null}</td> : null}
                   {visibleColumns.risk ? <td>{c.risk_level ? <span className={`risk-badge risk-${c.risk_level}`}>{riskLabel}</span> : "–"}</td> : null}
                   {visibleColumns.annualCost ? <td className={c.annual_cost?.unreliable ? "cost unreliable" : "cost"}>{formatAnnualCost(c.annual_cost)}</td> : null}
                   {visibleColumns.endDate ? <td>{formatDate(c.contract_end_date)}</td> : null}

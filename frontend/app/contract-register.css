@@ -1,0 +1,54 @@
+/* Vertragsregister (Stammdaten, Status, Fristen, Bemerkungen, Kataloge) */
+.rg-panel{display:flex;flex-direction:column;gap:18px}
+.rg-status-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.rg-status-row h2{margin:0 0 4px;font-size:22px}
+.rg-status-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rg-hint{margin:12px 0 0;padding:10px 12px;border:1px solid #e7c58c;border-radius:10px;background:#fff8eb;color:#7a4500;font-size:14px}
+.rg-transition{display:grid;gap:10px;margin-top:14px;padding:14px;border:1px solid #dfe7ef;border-radius:12px;background:#fbfdff}
+.rg-transition label{display:grid;gap:4px;font-size:13px;font-weight:700;color:#40536f}
+.rg-transition input{min-height:38px;padding:6px 10px;border:1px solid #d6e1eb;border-radius:8px;font:inherit}
+.rg-check{display:flex!important;grid-template-columns:none;align-items:flex-start;gap:8px;font-weight:600!important}
+.rg-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.rg-terms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.rg-terms div{display:flex;flex-direction:column;gap:6px;padding:14px;border:1px solid #e5ebf1;border-radius:10px}
+.rg-terms span{font-size:13px;font-weight:700;color:#5f718a}
+.rg-terms strong{font-size:20px;color:#101828}
+.rg-explanation{margin:12px 0 0;padding-left:18px;color:#526782;font-size:14px}
+.rg-ai ul{margin:0;padding:0;list-style:none;display:grid;gap:10px}
+.rg-ai li{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border:1px solid #b9dce6;border-radius:10px;background:#f4fbfd}
+.rg-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.rg-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 26px;margin:0}
+.rg-field{display:grid;gap:6px;padding:12px 0;border-bottom:1px solid #eef2f6}
+.rg-field dt{font-size:13px;font-weight:700;color:#5f718a}
+.rg-field dd{margin:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rg-field input[type=text],.rg-field input[type=date],.rg-field input[type=number],.rg-field input:not([type]),.rg-field select,.rg-field textarea{min-height:38px;padding:6px 10px;border:1px solid #d6e1eb;border-radius:8px;font:inherit;max-width:100%}
+.rg-field textarea{width:100%}
+.rg-value{font-weight:700;color:#101828}
+.rg-period,.rg-partner{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rg-period input{width:90px}
+.rg-origin{display:inline-flex;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800;border:1px solid #dbe4ee;background:#f7fafc;color:#40536f}
+.rg-origin-ai{border-color:#b9dce6;background:#f4fbfd;color:#087a99}
+.rg-origin-ai_confirmed{border-color:#9edcc6;background:#effbf6;color:#07845b}
+.rg-origin-ai_corrected{border-color:#e7c58c;background:#fff8eb;color:#a35b00}
+.rg-link{border:0;background:transparent;padding:0;font:inherit;font-size:13px;font-weight:700;color:#087a99;cursor:pointer;text-decoration:underline}
+.rg-error{color:#b42318;font-weight:700}
+.rg-ok{color:#07845b;font-weight:700}
+.rg-remark-form{display:grid;gap:8px;margin-bottom:16px}
+.rg-remark-form label{font-size:13px;font-weight:700;color:#40536f}
+.rg-remark-form textarea{width:100%;padding:8px 10px;border:1px solid #d6e1eb;border-radius:8px;font:inherit}
+.rg-remarks{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.rg-remarks li{padding:12px 14px;border:1px solid #e5ebf1;border-radius:10px}
+.rg-remarks p{margin:6px 0 0;white-space:pre-wrap}
+.rg-remark-meta{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#5f718a}
+.rg-table{width:100%;border-collapse:collapse;font-size:14px}
+.rg-table th{text-align:left;padding:10px;border-bottom:1px solid #dfe7ef;background:#f7fafc;color:#40536f}
+.rg-table td{padding:10px;border-bottom:1px solid #edf2f6;vertical-align:top}
+.rg-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:end}
+.rg-form-grid label{display:grid;gap:4px;font-size:13px;font-weight:700;color:#40536f}
+.rg-form-grid input,.rg-form-grid select{min-height:38px;padding:6px 10px;border:1px solid #d6e1eb;border-radius:8px;font:inherit}
+.rg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.rg-tabs button{border:1px solid #dce5ed;background:#fff;color:#53657d;border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
+.rg-tabs button.active{border-color:#0b86a8;background:#eef9fc;color:#087a99}
+.rg-inactive{opacity:.55}
+@media (max-width:900px){.rg-terms,.rg-fields,.rg-form-grid{grid-template-columns:1fr}}
+.contract-business-status{display:block;margin-top:4px;font-size:11px;font-weight:700;color:#5f718a}

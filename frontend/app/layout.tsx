@@ -8,6 +8,7 @@ import "./desktop-shell-fix.css";
 import "./dashboard-reference.css";
 import "./contract-workspace.css";
 import "./contract-workspace-enhancements.css";
+import "./contract-register.css";
 import "./auth.css";
 import "./profile.css";
 import "./organization.css";
