@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatDate } from "@/lib/format";
 import { listOwnershipAssignees, type AssigneeDto } from "@/lib/domain-api/ownership";
@@ -167,6 +167,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   const [register, setRegister] = useState<ContractRegister | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [editing, setEditing] = useState(false);
+  // Ein spaet eintreffender Ladevorgang darf laufende Eingaben nie ueberschreiben.
+  const editingRef = useRef(false);
+  useEffect(() => { editingRef.current = editing; }, [editing]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
   const [partners, setPartners] = useState<PartnerDto[]>([]);
@@ -184,7 +187,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     try {
       const data = await getContractRegister(orgSlug, contractId);
       setRegister(data);
-      setDraft(draftFrom(data));
+      if (!editingRef.current) setDraft(draftFrom(data));
     } catch (error) {
       setMessage({ tone: "error", text: errorText(error, "Stammdaten konnten nicht geladen werden.") });
     }
@@ -501,7 +504,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     </form> : null}
 
     <div className="rg-toolbar">
-      {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Stammdaten bearbeiten</button> : null}
+      {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Stammdaten bearbeiten</button> : null}
       {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>{busy ? "Wird gespeichert…" : "Speichern"}</button></> : null}
       <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
       <Link href="/partners" className="rg-link">Vertragspartner verwalten</Link>
