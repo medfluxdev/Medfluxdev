@@ -8,7 +8,8 @@ from app.auth.dependencies import current_actor
 from app.core.scope_context import current_scope_context
 from app.database.models.activity_log import ActivityLog
 from app.database.models.organization import Organization
-from app.database.models.organization_structure import DEPARTMENT_UNIT_TYPES, CostCenter, Department, Hospital
+from app.database.models.contract import Contract
+from app.database.models.organization_structure import DEPARTMENT_UNIT_TYPES, ContractDepartment, CostCenter, Department, Hospital
 from app.organization_structure.search import search_structure
 from app.database.session import create_session
 
@@ -194,6 +195,21 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         session.close()
 
 
+def _active_contract_link_count(session, *, organization_id: UUID, department_id: UUID) -> int:
+    """Live (not deleted, not archived) contracts linked to the department."""
+    return int(session.scalar(
+        select(func.count(func.distinct(ContractDepartment.contract_id)))
+        .join(Contract, Contract.id == ContractDepartment.contract_id)
+        .where(
+            ContractDepartment.organization_id == organization_id,
+            ContractDepartment.department_id == department_id,
+            Contract.organization_id == organization_id,
+            Contract.deleted_at.is_(None),
+            Contract.is_archived.is_(False),
+        )
+    ) or 0)
+
+
 @router.patch("/departments/{department_id}")
 def update_department(department_id: UUID, payload: DepartmentUpdate, request: Request, organization_slug: str):
     actor = _admin(request, organization_slug)
@@ -225,6 +241,18 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
         if payload.name is not None: row.name = payload.name.strip() or row.name
         if payload.code is not None: row.code = payload.code.strip().upper() or row.code
         if "unit_type" in payload.model_fields_set: row.unit_type = _normalize_unit_type(payload.unit_type)
+        if payload.is_active is False and row.is_active:
+            linked = _active_contract_link_count(session, organization_id=organization.id, department_id=row.id)
+            if linked:
+                # WP1.7: a unit that still owns/benefits from live contracts must
+                # not silently disappear from scope selection; reassign first.
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Abteilung ist noch mit {linked} aktiven Vertrag/Verträgen verknüpft. "
+                        "Bitte die Verträge zuerst einer anderen Einheit zuordnen."
+                    ),
+                )
         if payload.is_active is not None: row.is_active = payload.is_active
         _record_activity(session, actor, event_name="department.updated", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "is_active": row.is_active})
         session.commit()
