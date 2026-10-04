@@ -25,7 +25,8 @@
 | H6.1 remarks journal | done; H6.2 global history page open | 2026-10-04 | as above |
 | H5.1–H5.4 deadlines, daily job, e-mail/ICS, deputies, inbox | done (D5: in-process opt-in or Task Scheduler; D6: SMTP optional) | 2026-10-04 | `2695467`, `68ed23f` |
 | H3.1–H3.3 documents, amendment proposals, framework links, import destination | done | 2026-10-04 | `db16dd7`, `6145003`, `50501e6` |
-| H4, H7, H8, H9 | open | – | next: H4 (M3) |
+| H4.1–H4.3 finance entries, service catalogue, cost-centre split, price adjustment, AI suggestions | done | 2026-10-04 | `c53082e`, `d9fd4fb`, `c1f1cf5` |
+| H7, H8, H9 | open | – | next: H8 |
 | H10 | on hold (no replacement agreement yet) | – | – |
 
 ## 0. Executive summary

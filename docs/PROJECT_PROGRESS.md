@@ -5146,3 +5146,23 @@ Branch `feature/deadlines-documents` (auf `feature/contract-register-core`). Ent
 **Bekannte Punkte:** Kein echter SMTP-Versand getestet (Fake-Transport in Tests). Nutzer ohne Krankenhaus-Mitgliedschaft sehen organisationsweite Verträge nicht (bestehende Scope-Regel) – Erinnerungen an sie bleiben unsichtbar; Zuständige sollten passende Mitgliedschaften haben.
 
 **Nächster Schritt:** M3 – H4 Finanzen (Finanzeinträge, Leistungskatalog, Kostenstellen-Aufteilung, Preisanpassung), danach H8 Rechte/Vertraulichkeit, H7 Listen/Export/Berichte.
+
+## 2026-10-04 – M3/H4: Finanzdaten (Finanzeinträge, Leistungskatalog, Kostenstellen, Preisanpassung)
+
+Branch `feature/finance` (auf `feature/deadlines-documents`).
+
+**Umgesetzt:**
+- H4.1 `contract_finance_entry`: Ausgaben/Einnahmen mit Betrag, Netto/Brutto, Steuersatz, Währung, Intervall, Gültig ab/bis, Kostenart. Deterministische Berechnung kalkulatorisch auf Basis ganzer Monate (`app/finance/calc.py`): laufendes Jahr, bisher, bis Vertragsende, Gesamtlaufzeit, jährlich aktuell – je Währung, ohne Umrechnung; ohne bekanntes Vertragsende werden „bis Vertragsende“/„Gesamtlaufzeit“ nicht geraten. CSV-Export (Ausgaben/Einnahmen).
+- H4.2 `contract_service_item` (Leistungskatalog: Leistung, Betrag, Einheit, zzgl. USt., Gültigkeit).
+- H4.3 `contract_cost_allocation`: Aufteilung auf Kostenstellen (Summe 100 %, gleiches Krankenhaus, Weiterbelastung); größter Anteil wird Hauptkostenstelle. Strukturierte Preisanpassung als Registerfelder (prozentual/Index/Festpreis/Verhandlung) mit Projektion bei prozentualer Anpassung und Systemtermin „Preisanpassung prüfen“ einen Monat vorher.
+- KI: Vorschläge für Finanzeinträge (wiederkehrende Kosten, Preisstufen je Vertragsjahr, Einmalkosten) und Leistungen (variable Kosten, Stundensatz, Reisekosten) aus der akzeptierten Extraktion; fehlende Steuerbasis/-satz nur als gekennzeichnete Annahme; Übernehmen/Verwerfen, nie automatisch. Preisanpassungsklausel wird gelesen und als Registervorschlag abgelegt.
+- Vertragsliste nutzt gepflegte Finanzeinträge für die Jahreskosten.
+- UI: Tab „Finanzen“ mit Übersichtsmatrix, KI-Vorschlägen, Einträgen, Leistungskatalog, Kostenstellen-Aufteilung; Stammdaten-Abschnitt „Preisanpassung“.
+
+**Migration:** `h9c1d3e51004` (additiv). Up/Down/Up, Modellabgleich und Kopie der lokalen Datenbank geprüft.
+
+**Verifikation (2026-10-04):** Backend 1538+ passed / 1 failed (vorbestehend, OCR-Umgebung); neue Tests `test_finance_calc.py` (14), `test_finance_ai.py` (12), `test_finance_api.py` (2), Preisanpassungs-Termin in `test_deadlines_units.py`. Frontend `npm run verify` grün (39 Dateien, 187 Tests). Im Medflux-Browserprofil gegen eine Testinstanz geprüft: 3.500 € netto monatlich + 3 % ab 2027 + 2.000 € einmalig ⇒ Gesamtlaufzeit 131.817,80 € netto (2026–2028); Umstellung auf feste Laufzeit ersetzt die Fristen automatisch.
+
+**Bekannte Punkte:** Sortieren/Filtern nach Jahreskosten in der Vertragsliste nutzt weiterhin die KI-Berechnung (gepflegte Finanzeinträge nur in der Anzeige). Keine Währungsumrechnung. Dashboard-Summen folgen in H7.
+
+**Nächster Schritt:** H8 Rechte-Matrix und vertrauliche Verträge, danach H7 Listen/Export/Berichte/Analysen und H9 Aufbewahrung.
