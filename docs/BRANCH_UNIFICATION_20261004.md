@@ -76,3 +76,12 @@
 ## 6. المزامنة مع GitHub
 
 انظر `Desktop\Medflux-backups\SYNC_UNIFIED_MAIN.ps1`. يجلب السكربت حالة GitHub الحالية، ويتوقف إن وُجد على GitHub أي commit غير موجود في الفرع الموحد. ثم يرفع الفرع الموحد ويحدّث `main` (fast-forward فقط، بلا force) ويرفع tags الأرشيف. ولا يحذف الفروع البعيدة إلا بعد تأكيد صريح، وبعد التحقق من أن كل فرع منها داخل `main`.
+
+## 7. سجل الجلسة الثانية (التحقق والمزامنة)
+
+| # | المشكلة | الحل |
+|---|---|---|
+| 1 | لا يستطيع Claude الكتابة في الطرفية ولا في مستكشف الملفات على Windows (صلاحية "click" فقط)، وبيئة Linux المساعدة لا تصل إلى npm أو PyPI أو GitHub | جُمعت الخطوات في ملفين يُشغَّلان بنقرة مزدوجة من `Desktop\Medflux-backups`: `RUN_VERIFY_UNIFIED_20261004.bat` (تبديل الفرع + PyMuPDF + الاختبارات الـ 31 + backend كامل + tsc + npm test) و `RUN_SYNC_GITHUB_20261004.bat`. النتائج تُكتب في ملفات يقرؤها Claude |
+| 2 | كان `SYNC_UNIFIED_MAIN.ps1` يشغّل `git fetch --prune --tags`، وهذا الأمر يحذف محلياً كل tag غير موجود على GitHub، أي كل tags الأرشيف الـ 39 قبل رفعها | أُزيل `--tags` من الجلب، فتُرفع الـ tags صراحة في المرحلة B |
+| 3 | `push_branch.bat` غير محفوظ في git | نُسخ إلى `Medflux-backups\push_branch-uncommitted-20261004.bat` قبل تبديل الفرع |
+| 4 | فرق الواجهة بين الفرعين | الفرق في `package.json` و`package-lock.json` نهايات أسطر فقط، فلا حاجة إلى `npm install` |
