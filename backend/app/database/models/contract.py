@@ -198,6 +198,10 @@ class Contract(OrgOwnedMixin, Base):
     terminated_effective: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     retention_years_after_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # H8 Vertraulichkeit (Sichtbarkeit nur Admin, Verantwortliche, Freigaben)
+    # und Datenschutzbezug (AVV); H9 nutzt retention_years_after_end.
+    is_confidential: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    data_protection_relevant: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     # H4.3 Preisanpassung (strukturiert; Projektion rechnet Code).
     price_adjustment_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     price_adjustment_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 3), nullable=True)

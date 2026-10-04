@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from app.auth.dependencies import current_actor
-from app.auth.service import require_role
+from app.auth.permissions import require
 from app.core.scope_context import current_scope_context
 from app.database.models.activity_log import ActivityLog
 from app.database.scope_queries import intersect_ids, scoped_contract_ids
@@ -24,10 +24,7 @@ def list_activity(
     limit: int = 200,
 ):
     actor = current_actor(request, organization_slug)
-    try:
-        require_role(actor, "admin", "contract_manager")
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+    require(actor, "audit.view")
 
     object_uuid = None
     if object_id:

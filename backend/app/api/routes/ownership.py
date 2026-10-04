@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 
 from app.auth.dependencies import current_actor
+from app.auth.permissions import require
 from app.core.scope_context import current_scope_context
 from app.database.models import Account, AccountMembership, Contract, ContractDepartment, Department, Equipment
 from app.database.models.activity_log import ActivityLog
@@ -35,8 +36,7 @@ class EquipmentOwnershipUpdate(BaseModel):
 
 def _actor(request: Request, organization_slug: str):
     actor = current_actor(request, organization_slug)
-    if actor.role not in {"admin", "contract_manager"} and not actor.is_developer:
-        raise HTTPException(status_code=403, detail="Keine Berechtigung für Eigentumszuordnungen.")
+    require(actor, "contract.edit", "Keine Berechtigung für Eigentumszuordnungen.")
     return actor
 
 

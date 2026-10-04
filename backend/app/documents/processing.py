@@ -92,7 +92,13 @@ from app.documents.persistence import DocumentPersistenceService
 from app.documents.storage import DocumentStorage, StorageError
 from app.deadlines.system import sync_system_deadlines
 from app.models.enums import ExtractionStatus, ValidationStatus
-from app.register.documents import ANALYZABLE_TYPES, detect_framework_references, link_attachment, propose_from_document
+from app.register.documents import (
+    ANALYZABLE_TYPES,
+    detect_data_protection,
+    detect_framework_references,
+    link_attachment,
+    propose_from_document,
+)
 from app.register.service import ensure_register_number, sync_from_extraction
 from app.work_queue.derive import derive_work_items
 from app.work_queue.service import reconcile_work_items
@@ -1659,6 +1665,7 @@ class DocumentProcessingService:
             ensure_register_number(session, contract)
             sync_system_deadlines(session, contract, as_of)
             detect_framework_references(session, contract, document_text)
+            detect_data_protection(session, contract, document_text, extraction.id)
             run_warning_evaluation(
                 session,
                 organization_id=organization_id,
@@ -1768,6 +1775,8 @@ class DocumentProcessingService:
                 document_label=attachment.label,
             )
             frameworks = detect_framework_references(session, contract, document_text)
+            if detect_data_protection(session, contract, document_text, extraction.id):
+                proposed.append("data_protection_relevant")
             self._finish_run_in_session(
                 session=session,
                 stored=stored,

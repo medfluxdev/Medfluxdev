@@ -9,7 +9,8 @@ from sqlalchemy import func, select
 
 from app.auth.credential_store import derive_password
 from app.auth.dependencies import current_actor
-from app.auth.service import create_account, require_role
+from app.auth.permissions import require
+from app.auth.service import create_account
 from app.database.models import Account, AccountMembership
 from app.database.models.account import ACCOUNT_ROLES
 from app.database.models.activity_log import ActivityLog
@@ -37,10 +38,7 @@ class UserUpdateRequest(BaseModel):
 
 def _admin_actor(request: Request, organization_slug: str):
     actor = current_actor(request, organization_slug)
-    try:
-        require_role(actor, "admin")
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+    require(actor, "user.admin")
     return actor
 
 

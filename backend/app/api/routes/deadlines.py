@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.auth.dependencies import current_actor
+from app.auth.permissions import is_admin, require
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import Account, Contract
@@ -40,7 +41,6 @@ from app.register.service import RegisterActor
 
 router = APIRouter(prefix="/api", tags=["deadlines"])
 
-WRITE_ROLES = frozenset({"admin", "contract_manager"})
 STALE_AFTER = timedelta(hours=26)
 
 
@@ -78,12 +78,11 @@ def _actor(request: Request, organization_slug: str) -> RegisterActor:
 
 
 def _is_admin(actor: RegisterActor) -> bool:
-    return actor.role == "admin" or actor.is_developer
+    return is_admin(actor)
 
 
 def _require_write(actor: RegisterActor) -> None:
-    if actor.role not in WRITE_ROLES and not actor.is_developer:
-        raise HTTPException(status_code=403, detail="Keine Berechtigung zum Bearbeiten von Terminen.")
+    require(actor, "deadline.edit", "Keine Berechtigung zum Bearbeiten von Terminen.")
 
 
 def _allowed(session, actor: RegisterActor) -> Optional[set[UUID]]:
@@ -415,8 +414,7 @@ def _job_status(session, organization_id: UUID) -> dict:
 @router.get("/jobs/daily")
 def get_job_status(request: Request, organization_slug: str):
     actor = _actor(request, organization_slug)
-    if not _is_admin(actor):
-        raise HTTPException(status_code=403, detail="Nur für Administratoren.")
+    require(actor, "job.admin", "Nur für Administratoren.")
     session = create_session()
     try:
         return _job_status(session, actor.organization_id)
@@ -427,8 +425,7 @@ def get_job_status(request: Request, organization_slug: str):
 @router.post("/jobs/daily/run")
 def run_job_now(request: Request, organization_slug: str):
     actor = _actor(request, organization_slug)
-    if not _is_admin(actor):
-        raise HTTPException(status_code=403, detail="Nur für Administratoren.")
+    require(actor, "job.admin", "Nur für Administratoren.")
     result = run_daily(trigger="manual", organization_id=actor.organization_id)
     if result.skipped_locked:
         raise HTTPException(status_code=409, detail="Der Tageslauf läuft bereits.")

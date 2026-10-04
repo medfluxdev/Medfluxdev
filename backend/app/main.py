@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    access,
     activity,
     ai,
     auth,
@@ -117,6 +118,7 @@ app.include_router(contract_documents.router)
 app.include_router(contract_finance.router)
 app.include_router(catalogs.router)
 app.include_router(deadlines.router)
+app.include_router(access.router)
 app.include_router(equipment.router)
 app.include_router(lifecycle.router)
 app.include_router(work_queue.router)

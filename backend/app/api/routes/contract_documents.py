@@ -77,7 +77,7 @@ async def upload_documents(
     analyze: bool = Form(default=True),
 ):
     actor = _register_actor(request, organization_slug)
-    _require_write(actor)
+    _require_write(actor, "document.attach")
     if not files or len(files) > 20:
         raise HTTPException(status_code=422, detail="Bitte 1 bis 20 Dateien hochladen.")
     session = create_session()
@@ -121,7 +121,7 @@ async def upload_documents(
 @router.patch("/{contract_id}/documents/{link_id}")
 def patch_document(contract_id: UUID, link_id: UUID, payload: DocumentUpdate, request: Request, organization_slug: str):
     actor = _register_actor(request, organization_slug)
-    _require_write(actor)
+    _require_write(actor, "document.attach")
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id, for_update=True)
@@ -144,7 +144,7 @@ def _relations(session, actor, contract) -> dict:
     allowed = None if actor.role == "admin" or actor.is_developer else scoped_contract_ids(
         session, actor.organization_id, scope.hospital_id, scope.department_id
     )
-    return {**relation_payloads(session, contract), "framework_options": framework_options(session, contract, allowed)}
+    return {**relation_payloads(session, contract, allowed), "framework_options": framework_options(session, contract, allowed)}
 
 
 @router.get("/{contract_id}/relations")

@@ -102,6 +102,42 @@ def propose_from_document(
     return proposed
 
 
+# --------------------------------------------------------------------------- data protection detection
+
+_DATA_PROTECTION = re.compile(
+    r"(auftragsverarbeitung|art\.?\s*28\s*dsgvo|art\.?\s*28\s*ds-gvo|personenbezogene[nr]?\s+daten|patientendaten|gesundheitsdaten)",
+    re.IGNORECASE,
+)
+
+
+def detect_data_protection(session: Session, contract: Contract, text: str, extraction_id: Optional[uuid.UUID]) -> bool:
+    """KI-Hinweis: Text nennt Auftragsverarbeitung/personenbezogene Daten.
+
+    Setzt das Feld nur, wenn es leer oder KI-eigen ist; menschliche Werte
+    erhalten einen Vorschlag. Liefert True, wenn ein Treffer vorlag.
+    """
+    match = _DATA_PROTECTION.search(text or "")
+    if match is None:
+        return False
+    row = session.scalars(select(ContractFieldProvenance).where(
+        ContractFieldProvenance.contract_id == contract.id,
+        ContractFieldProvenance.field_key == "data_protection_relevant",
+    )).first()
+    if row is not None and row.origin != "ai":
+        if contract.data_protection_relevant is not True:
+            row.ai_proposed_value = {"value": True, "source_field": f"Dokumenttext: „{match.group(1)}“"}
+        session.flush()
+        return True
+    contract.data_protection_relevant = True
+    if row is None:
+        session.add(ContractFieldProvenance(
+            organization_id=contract.organization_id, contract_id=contract.id, field_key="data_protection_relevant",
+            origin="ai", extraction_id=extraction_id, source_field=f"Dokumenttext: „{match.group(1)}“",
+        ))
+    session.flush()
+    return True
+
+
 # --------------------------------------------------------------------------- framework detection
 
 
@@ -255,11 +291,14 @@ def update_document(
 # --------------------------------------------------------------------------- relations
 
 
-def relation_payloads(session: Session, contract: Contract) -> dict:
-    rows = session.scalars(select(ContractRelationRecord).where(
-        ContractRelationRecord.relation_type == FRAMEWORK_RELATION,
-        or_(ContractRelationRecord.source_contract_id == contract.id, ContractRelationRecord.target_contract_id == contract.id),
-    )).all()
+def relation_payloads(session: Session, contract: Contract, allowed: Optional[set[uuid.UUID]] = None) -> dict:
+    rows = [
+        row for row in session.scalars(select(ContractRelationRecord).where(
+            ContractRelationRecord.relation_type == FRAMEWORK_RELATION,
+            or_(ContractRelationRecord.source_contract_id == contract.id, ContractRelationRecord.target_contract_id == contract.id),
+        )).all()
+        if allowed is None or (row.source_contract_id if row.target_contract_id == contract.id else row.target_contract_id) in allowed
+    ]
     other_ids = {row.source_contract_id if row.target_contract_id == contract.id else row.target_contract_id for row in rows}
     others = {
         row.id: row for row in session.scalars(select(Contract).where(Contract.id.in_(other_ids))).all()

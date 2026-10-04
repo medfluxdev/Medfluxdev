@@ -184,11 +184,33 @@ class CatalogContractType(OrgOwnedMixin, Base):
     label: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_confidential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # H9: Standard-Aufbewahrung nach Vertragsende (Jahre), falls am Vertrag leer.
+    retention_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     __table_args__ = (
         UniqueConstraint("organization_id", "code", name="uq_catalog_contract_type_org_code"),
+    )
+
+
+class ContractAccessGrant(OrgOwnedMixin, Base):
+    """H8.2: Freigabe eines vertraulichen Vertrags fuer ein Konto."""
+
+    __tablename__ = "contract_access_grant"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract.id", ondelete="CASCADE"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="CASCADE"), nullable=False
+    )
+    granted_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("contract_id", "account_id", name="uq_contract_access_grant_pair"),
+        Index("ix_contract_access_grant_account", "account_id"),
     )
 
 

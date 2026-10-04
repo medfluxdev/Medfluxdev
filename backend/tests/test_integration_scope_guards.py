@@ -29,8 +29,15 @@ def test_contract_csv_export_is_scope_filtered_and_role_restricted():
     assert "current_scope_context" in source
     assert "scoped_contract_ids" in source
     assert "Contract.id.in_(visible_ids)" in source
-    assert 'identity.role not in {"admin", "contract_manager"}' in source
+    assert 'require(identity, "export"' in source
     assert 'event_name="contracts.exported"' in source
+
+
+def test_export_permission_is_limited_to_editors():
+    from app.auth.permissions import PERMISSIONS
+
+    roles = next(roles for key, _, _, roles in PERMISSIONS if key == "export")
+    assert roles == frozenset({"admin", "contract_manager"})
 
 
 def test_document_routes_fail_closed_for_scoped_access():

@@ -32,6 +32,7 @@ from app.register.defaults import (
 )
 
 LOOKUP_FIELD_KEYS = tuple(LOOKUPS.keys())
+DEFAULT_RETENTION_YEARS = 10
 
 _LEGAL_FORMS = re.compile(
     r"\b(gmbh|mbh|ag|kg|ohg|gbr|ug|se|e\.?\s?v|ev|co|und|&|partg|partmbb|inc|ltd|llc|bv|sa|sas|srl|plc|holding|deutschland|germany)\b"
@@ -68,7 +69,7 @@ def ensure_defaults(session: Session, organization_id: uuid.UUID) -> dict[str, i
         if code not in types:
             row = CatalogContractType(
                 organization_id=organization_id, code=code, label=label,
-                is_confidential=confidential, sort_order=index * 10,
+                is_confidential=confidential, sort_order=index * 10, retention_years=DEFAULT_RETENTION_YEARS,
             )
             session.add(row)
             types[code] = row
@@ -293,6 +294,7 @@ def type_payload(row: CatalogContractType) -> dict[str, Any]:
     return {
         "id": str(row.id), "code": row.code, "label": row.label, "description": row.description,
         "is_confidential": row.is_confidential, "is_active": row.is_active, "sort_order": row.sort_order,
+        "retention_years": row.retention_years,
     }
 
 
@@ -388,6 +390,18 @@ def upsert_type(session: Session, organization_id: uuid.UUID, values: dict[str, 
     _apply_common(row, values)
     if "is_confidential" in values:
         row.is_confidential = _bool(values["is_confidential"])
+    if "retention_years" in values:
+        value = values["retention_years"]
+        if value in (None, ""):
+            row.retention_years = None
+        else:
+            try:
+                years = int(value)
+            except (TypeError, ValueError):
+                raise CatalogError(422, "Aufbewahrung: ganze Zahl erwartet.")
+            if not 0 <= years <= 100:
+                raise CatalogError(422, "Aufbewahrung: 0 bis 100 Jahre.")
+            row.retention_years = years
     session.flush()
     return row
 

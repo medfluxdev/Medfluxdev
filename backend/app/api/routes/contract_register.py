@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.auth.dependencies import current_actor
+from app.auth.permissions import require
 from app.core.scope_context import current_scope_context
 from app.database.models import Contract, Department, Hospital
 from app.database.scope_queries import scoped_contract_ids
@@ -29,14 +30,13 @@ from app.register.service import (
     ensure_synced,
     list_remarks,
     load_extracted,
+    set_confidentiality,
     set_contract_hospitals,
     transition_status,
     update_register,
 )
 
 router = APIRouter(prefix="/api/contracts", tags=["contract-register"])
-
-WRITE_ROLES = frozenset({"admin", "contract_manager"})
 
 
 class RegisterUpdate(BaseModel):
@@ -62,6 +62,11 @@ class HospitalAssignment(BaseModel):
     primary_hospital_id: Optional[UUID] = None
 
 
+class ConfidentialityUpdate(BaseModel):
+    is_confidential: bool
+    grant_account_ids: list[UUID] = Field(default_factory=list)
+
+
 class RemarkCreate(BaseModel):
     body: str = Field(max_length=10000)
 
@@ -80,9 +85,8 @@ def _register_actor(request: Request, organization_slug: str) -> RegisterActor:
     )
 
 
-def _require_write(actor: RegisterActor) -> None:
-    if actor.role not in WRITE_ROLES and not actor.is_developer:
-        raise HTTPException(status_code=403, detail="Keine Berechtigung zum Bearbeiten von Verträgen.")
+def _require_write(actor: RegisterActor, permission: str = "contract.edit") -> None:
+    require(actor, permission, "Keine Berechtigung für diese Änderung.")
 
 
 def _contract(session, actor: RegisterActor, contract_id: UUID, *, for_update: bool = False) -> Contract:
@@ -131,7 +135,7 @@ def _register_payload(session, contract: Contract, actor: RegisterActor) -> dict
 @router.post("")
 def create_contract(payload: ContractCreate, request: Request, organization_slug: str):
     actor = _register_actor(request, organization_slug)
-    _require_write(actor)
+    _require_write(actor, "contract.create")
     session = create_session()
     try:
         hospital_id = payload.hospital_id or (actor.hospital_id if actor.role != "admin" else None)
@@ -216,7 +220,7 @@ def accept_proposal(contract_id: UUID, field_key: str, request: Request, organiz
 @router.post("/{contract_id}/status")
 def change_status(contract_id: UUID, payload: StatusTransition, request: Request, organization_slug: str):
     actor = _register_actor(request, organization_slug)
-    _require_write(actor)
+    _require_write(actor, "contract.status")
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id, for_update=True)
@@ -255,7 +259,7 @@ def get_remarks(contract_id: UUID, request: Request, organization_slug: str):
 @router.post("/{contract_id}/remarks")
 def post_remark(contract_id: UUID, payload: RemarkCreate, request: Request, organization_slug: str):
     actor = _register_actor(request, organization_slug)
-    _require_write(actor)
+    _require_write(actor, "remark.add")
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id)
@@ -305,5 +309,26 @@ def put_hospitals(contract_id: UUID, payload: HospitalAssignment, request: Reque
             raise _http(exc)
         session.commit()
         return {"items": contract_hospitals(session, contract.id)}
+    finally:
+        session.close()
+
+
+@router.put("/{contract_id}/confidentiality")
+def put_confidentiality(contract_id: UUID, payload: ConfidentialityUpdate, request: Request, organization_slug: str):
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "contract.confidential_manage")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            set_confidentiality(
+                session, contract=contract, actor=actor, is_confidential=payload.is_confidential,
+                grant_account_ids=payload.grant_account_ids,
+            )
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
+        return _register_payload(session, contract, actor)
     finally:
         session.close()

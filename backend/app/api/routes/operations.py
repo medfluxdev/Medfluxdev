@@ -15,6 +15,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 
 from app.auth.context import enforce_org, optional_identity
+from app.auth.permissions import require
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.database.models import Contract
@@ -59,8 +60,7 @@ def export_contracts_csv(
         if identity is None:
             raise HTTPException(status_code=401, detail="Anmeldung erforderlich.")
         enforce_org(identity, organization_slug)
-        if identity.role not in {"admin", "contract_manager"} and not getattr(identity, "is_developer", False):
-            raise HTTPException(status_code=403, detail="Keine Berechtigung für Vertrags-Exporte.")
+        require(identity, "export", "Keine Berechtigung für Vertrags-Exporte.")
 
     session = create_session()
     try:

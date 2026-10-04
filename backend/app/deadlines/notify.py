@@ -178,7 +178,7 @@ def _eligible_contracts(session: Session, organization_id: Optional[uuid.UUID]) 
     stmt = select(Contract).where(
         Contract.lifecycle_state == "active",
         Contract.is_archived.is_(False),
-        Contract.business_status.in_(("in_arbeit", "gueltig", "gekuendigt")),
+        Contract.business_status.in_(("in_arbeit", "gueltig", "gekuendigt", "beendet")),
     )
     if organization_id is not None:
         stmt = stmt.where(Contract.organization_id == organization_id)

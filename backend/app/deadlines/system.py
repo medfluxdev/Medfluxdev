@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.contracts.calculation.calendar_ import month_add
 from app.database.models import Contract
 from app.database.models.deadlines import ContractDeadline
-from app.register.service import term_inputs
+from app.register.service import retention_info, term_inputs
 from app.register.terms import TermResult, compute_terms
 
 DEFAULT_LEAD_MONTHS = 3
@@ -52,7 +52,9 @@ def _remind_on(due: date, lead_months: Optional[int]) -> date:
     return min(due, month_add(due, -lead))
 
 
-def plan_system_deadlines(contract: Contract, terms: TermResult) -> list[SystemDeadlineSpec]:
+def plan_system_deadlines(
+    contract: Contract, terms: TermResult, deletion_from: Optional[date] = None
+) -> list[SystemDeadlineSpec]:
     if contract.lifecycle_state != "active" or contract.is_archived:
         return []
     assignee = contract.reminder_recipient_account_id or contract.responsible_account_id
@@ -93,7 +95,18 @@ def plan_system_deadlines(contract: Contract, terms: TermResult) -> list[SystemD
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
             ))
-    elif contract.business_status == "gekuendigt" and terms.actual_end is not None:
+    if contract.business_status in ("beendet", "gekuendigt") and deletion_from is not None:
+        specs.append(SystemDeadlineSpec(
+            system_key="retention_review",
+            kind="loeschpruefung",
+            title="Löschprüfung (Aufbewahrungsfrist abgelaufen)",
+            due_date=deletion_from,
+            remind_on=deletion_from,
+            todo_text="Prüfen, ob Vertrag und Dokumente gelöscht werden können; Löschung über den Löschablauf beantragen.",
+            assignee_account_id=assignee,
+            escalation_account_id=escalation,
+        ))
+    if contract.business_status == "gekuendigt" and terms.actual_end is not None:
         specs.append(SystemDeadlineSpec(
             system_key="set_ended",
             kind="statuswechsel",
@@ -109,7 +122,12 @@ def plan_system_deadlines(contract: Contract, terms: TermResult) -> list[SystemD
 
 def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> dict[str, int]:
     """Gleicht die offenen Systemtermine mit den aktuellen Fristen ab (idempotent)."""
-    specs = {spec.system_key: spec for spec in plan_system_deadlines(contract, compute_terms(term_inputs(contract), as_of))}
+    terms = compute_terms(term_inputs(contract), as_of)
+    deletion_from = retention_info(session, contract, terms)["deletion_from"]
+    specs = {
+        spec.system_key: spec
+        for spec in plan_system_deadlines(contract, terms, date.fromisoformat(deletion_from) if deletion_from else None)
+    }
     rows = session.scalars(
         select(ContractDeadline).where(
             ContractDeadline.contract_id == contract.id, ContractDeadline.source == "system"

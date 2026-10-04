@@ -34,6 +34,7 @@ from app.database.models.fact_review import ContractReview
 from app.database.models.register import (
     CatalogContractCategory,
     CatalogContractType,
+    ContractAccessGrant,
     ContractFieldProvenance,
     ContractHospital,
     ContractPartner,
@@ -416,6 +417,87 @@ def _reference_labels(session: Session, contract: Contract) -> dict[str, Optiona
     return labels
 
 
+def effective_retention_years(session: Session, contract: Contract) -> tuple[Optional[int], Optional[str]]:
+    if contract.retention_years_after_end is not None:
+        return contract.retention_years_after_end, "contract"
+    if contract.contract_type_id is not None:
+        years = session.scalar(
+            select(CatalogContractType.retention_years).where(CatalogContractType.id == contract.contract_type_id)
+        )
+        if years is not None:
+            return years, "contract_type"
+    return None, None
+
+
+def retention_info(session: Session, contract: Contract, terms) -> dict:
+    """H9: Aufbewahrung beginnt mit Schluss des Kalenderjahres des Vertragsendes
+    (§ 257 Abs. 5 HGB / § 147 Abs. 4 AO); geloescht werden darf ab dem 1.1. danach."""
+    years, source = effective_retention_years(session, contract)
+    ended = contract.business_status in ("beendet", "gekuendigt") or contract.term_model == "fixed_term"
+    end = terms.actual_end or (terms.possible_end if ended else None)
+    deletion_from = date(end.year + years + 1, 1, 1) if end is not None and years is not None else None
+    return {
+        "years": years,
+        "source": source,
+        "contract_end": end.isoformat() if end else None,
+        "deletion_from": deletion_from.isoformat() if deletion_from else None,
+    }
+
+
+def confidentiality(session: Session, contract: Contract) -> dict:
+    type_confidential = False
+    if contract.contract_type_id is not None:
+        type_confidential = bool(session.scalar(
+            select(CatalogContractType.is_confidential).where(CatalogContractType.id == contract.contract_type_id)
+        ))
+    grants = session.execute(
+        select(ContractAccessGrant.account_id, Account.display_name)
+        .join(Account, Account.id == ContractAccessGrant.account_id)
+        .where(ContractAccessGrant.contract_id == contract.id)
+        .order_by(Account.display_name)
+    ).all()
+    return {
+        "is_confidential": contract.is_confidential,
+        "type_confidential": type_confidential,
+        "effective": contract.is_confidential or type_confidential,
+        "grants": [{"account_id": str(account_id), "display_name": name} for account_id, name in grants],
+    }
+
+
+def set_confidentiality(
+    session: Session, *, contract: Contract, actor: RegisterActor, is_confidential: bool, grant_account_ids: list[uuid.UUID]
+) -> None:
+    for account_id in grant_account_ids:
+        member = session.scalar(select(AccountMembership.id).where(
+            AccountMembership.account_id == account_id,
+            AccountMembership.organization_id == contract.organization_id,
+            AccountMembership.is_active.is_(True),
+        ))
+        if member is None:
+            raise RegisterError(422, "Freigabe: Benutzer ist für diese Organisation nicht verfügbar.")
+    before = confidentiality(session, contract)
+    contract.is_confidential = is_confidential
+    existing = {
+        row.account_id: row for row in session.scalars(
+            select(ContractAccessGrant).where(ContractAccessGrant.contract_id == contract.id)
+        ).all()
+    }
+    wanted = set(grant_account_ids)
+    for account_id, row in existing.items():
+        if account_id not in wanted:
+            session.delete(row)
+    for account_id in wanted - set(existing):
+        session.add(ContractAccessGrant(
+            organization_id=contract.organization_id, contract_id=contract.id, account_id=account_id,
+            granted_by_name=actor.display_name,
+        ))
+    log_activity(session, actor, contract.id, "contract.confidentiality_updated", {
+        "before": {"is_confidential": before["is_confidential"], "grants": [g["account_id"] for g in before["grants"]]},
+        "after": {"is_confidential": is_confidential, "grants": sorted(str(value) for value in wanted)},
+    })
+    session.flush()
+
+
 def build_register(session: Session, contract: Contract, actor: RegisterActor, as_of: Optional[date] = None) -> dict:
     as_of = as_of or date.today()
     provenance = _provenance(session, contract.id)
@@ -441,6 +523,7 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
     missing_for_valid = [key for key in REQUIRED_FOR_VALID if values.get(key) in (None, "")]
     if contract.partner_id is None and not contract.supplier:
         missing_for_valid.append("partner_id")
+    terms = compute_terms(term_inputs(contract), as_of)
     return {
         "contract_id": str(contract.id),
         "register_number": contract.register_number,
@@ -455,7 +538,9 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
         "review_pending": review_pending(session, contract),
         "ended_on": contract.ended_on.isoformat() if contract.ended_on else None,
         "fields": fields,
-        "terms": compute_terms(term_inputs(contract), as_of).as_dict(),
+        "terms": terms.as_dict(),
+        "retention": retention_info(session, contract, terms),
+        "confidentiality": confidentiality(session, contract),
         "missing_for_valid": missing_for_valid,
         "as_of": as_of.isoformat(),
     }

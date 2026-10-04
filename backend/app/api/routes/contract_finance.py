@@ -45,7 +45,7 @@ def _http(exc: FinanceError) -> HTTPException:
 
 def _write(request: Request, organization_slug: str, contract_id: UUID, action) -> dict:
     actor = _register_actor(request, organization_slug)
-    _require_write(actor)
+    _require_write(actor, "finance.edit")
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id, for_update=True)

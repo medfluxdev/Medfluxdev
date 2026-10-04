@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
 from app.auth.dependencies import current_actor
+from app.auth.permissions import is_admin, require
+from app.database.scope_queries import scoped_contract_ids
 from app.core.scope_context import current_scope_context
 from app.database.models import ActivityLog, Contract
 from app.database.models.register import (
@@ -34,7 +36,6 @@ from app.register.service import (
 
 router = APIRouter(prefix="/api/catalogs", tags=["catalogs"])
 
-PARTNER_WRITE_ROLES = frozenset({"admin", "contract_manager"})
 
 
 class PartnerCreate(BaseModel):
@@ -61,18 +62,12 @@ def _actor(request: Request, organization_slug: str):
     return current_actor(request, organization_slug)
 
 
-def _is_admin(actor) -> bool:
-    return actor.role == "admin" or bool(getattr(actor, "is_developer", False))
-
-
 def _require_admin(actor) -> None:
-    if not _is_admin(actor):
-        raise HTTPException(status_code=403, detail="Nur Administratoren können Kataloge pflegen.")
+    require(actor, "catalog.admin", "Nur Administratoren können Kataloge pflegen.")
 
 
 def _require_partner_write(actor) -> None:
-    if actor.role not in PARTNER_WRITE_ROLES and not getattr(actor, "is_developer", False):
-        raise HTTPException(status_code=403, detail="Keine Berechtigung zum Pflegen von Vertragspartnern.")
+    require(actor, "partner.edit", "Keine Berechtigung zum Pflegen von Vertragspartnern.")
 
 
 def _log(session, actor, event_name: str, object_type: str, object_id, context: Optional[dict] = None) -> None:
@@ -227,11 +222,17 @@ def get_partner(partner_id: UUID, request: Request, organization_slug: str):
     session = create_session()
     try:
         row = _own(session, ContractPartner, partner_id, actor.organization_id)
-        contracts = session.execute(
+        stmt = (
             select(Contract.id, Contract.register_number, Contract.short_description, Contract.business_status)
             .where(Contract.partner_id == row.id, Contract.organization_id == actor.organization_id)
             .order_by(Contract.register_number)
-        ).all()
+        )
+        if not is_admin(actor):
+            scope = current_scope_context()
+            allowed = scoped_contract_ids(session, actor.organization_id, scope.hospital_id, scope.department_id)
+            if allowed is not None:
+                stmt = stmt.where(Contract.id.in_(allowed))
+        contracts = session.execute(stmt).all()
         return {
             **catalogs.partner_payload(row),
             "contracts": [

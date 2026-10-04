@@ -39,6 +39,7 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("short_description", "text", "Kurzbeschreibung", "identity", max_length=500),
     FieldSpec("subject_text", "text", "Vertragsgegenstand", "identity", max_length=20000),
     FieldSpec("is_framework", "bool", "Rahmenvertrag", "identity"),
+    FieldSpec("data_protection_relevant", "bool", "Datenschutzrelevant (AVV erforderlich)", "identity"),
     FieldSpec("partner_id", "uuid", "Vertragspartner", "identity", reference="partner"),
     FieldSpec("contract_type_id", "uuid", "Vertragstyp", "identity", reference="contract_type"),
     FieldSpec("contract_category_id", "uuid", "Kategorie", "identity", reference="contract_category"),
