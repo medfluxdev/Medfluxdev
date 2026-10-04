@@ -431,7 +431,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       <ul>
         {register.partner_suggestions.map((item) => <li key={item.id}>Vertragspartner „{register.supplier_text}“ entspricht vermutlich <strong>{item.short_name}</strong>{item.city ? ` (${item.city})` : ""} · Übereinstimmung {Math.round(item.score * 100)} % <button type="button" className="btn" disabled={busy} onClick={() => applySuggestion("partner_id", item.id)}>Übernehmen</button></li>)}
         {register.type_suggestion ? <li>Vertragstyp <strong>{register.type_suggestion.label}</strong> (aus {register.type_suggestion.reason}) <button type="button" className="btn" disabled={busy} onClick={() => applySuggestion("contract_type_id", register.type_suggestion!.id)}>Übernehmen</button></li> : null}
-        {proposalKeys.map((key) => <li key={key}>Neue Analyse schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button></li>)}
+        {proposalKeys.map((key) => <li key={key}>{register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button></li>)}
       </ul>
     </section> : null}
 

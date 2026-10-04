@@ -15,7 +15,7 @@ export interface RegisterField {
   origin: FieldOrigin | null;
   source_field: string | null;
   extraction_id: string | null;
-  ai_proposed_value: { value: RegisterValue; source_field: string | null } | null;
+  ai_proposed_value: { value: RegisterValue; source_field: string | null; document?: string | null } | null;
   confirmed_by_name: string | null;
   confirmed_at: string | null;
   updated_by_name: string | null;

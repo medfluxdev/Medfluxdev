@@ -128,6 +128,12 @@ export async function apiPatch<T>(path: string, body: unknown, timeoutMs: number
   return (await res.json()) as T;
 }
 
+export async function apiDelete<T>(path: string, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<T> {
+  const res = await fetchWithTimeout(`${API_BASE}${scopedPath(path)}`, { method: "DELETE" }, timeoutMs);
+  if (!res.ok) return throwForResponse(res, path);
+  return (await res.json()) as T;
+}
+
 export async function apiDownload(
   path: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,

@@ -25,6 +25,8 @@ import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPa
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
+import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
+import ContractRelationsPanel from "./ContractRelationsPanel";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
 
 interface Props {
@@ -33,8 +35,8 @@ interface Props {
   onReload?: () => void;
 }
 
-type TabKey = "overview" | "register" | "deadlines" | "term" | "finance" | "services" | "equipment" | "documents" | "remarks";
-type DocumentTab = "document" | "evidence" | "review" | "history";
+type TabKey = "overview" | "register" | "deadlines" | "term" | "finance" | "services" | "equipment" | "documents" | "relations" | "remarks";
+type DocumentTab = "document" | "attachments" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -46,11 +48,13 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "services", label: "Leistungen & SLA" },
   { key: "equipment", label: "Geräte" },
   { key: "documents", label: "Dokumente & Prüfung" },
+  { key: "relations", label: "Verknüpfungen" },
   { key: "remarks", label: "Bemerkungen" },
 ];
 
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
   { key: "document", label: "Dokument" },
+  { key: "attachments", label: "Anlagen verwalten" },
   { key: "evidence", label: "Nachweise" },
   { key: "review", label: "Prüfung" },
   { key: "history", label: "Historie" },
@@ -368,6 +372,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
 
         {activeTab === "deadlines" && <ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
+        {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
+
         {activeTab === "term" && <>
           <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} origin={data.dates.start_date ? (startEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={startEvidence} />} /><InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} origin={data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={endEvidence} />} /><InfoCard label="Berechnetes Ende" value={data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} origin={calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis)} /><InfoCard label="Restlaufzeit" value={data.dates.days_until_end != null ? `${data.dates.days_until_end} Tage` : "Nicht verfügbar"} origin={data.dates.days_until_end != null ? "calculated" : "missing"} /></div>
           <Section title="Kündigung & Verlängerung"><dl className="cw-definition-grid"><div><dt>Spätester Kündigungstermin <SourceButton evidence={cancellationEvidence} /></dt><dd><span className="cw-value-origin">{data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"}<OriginBadge origin={cancellationOrigin} /></span></dd></div><div><dt>Automatische Verlängerung <SourceButton evidence={renewalEvidence} /></dt><dd>{yesNo(data.dates.automatic_renewal)}</dd></div><div><dt>Nächste Verlängerung</dt><dd><span className="cw-value-origin">{data.dates.next_renewal_date ? formatDate(data.dates.next_renewal_date) : "Nicht verfügbar"}<OriginBadge origin={calculatedOrigin(data.dates.next_renewal_date, data.dates.next_renewal_basis)} /></span></dd></div><div><dt>Mindestlaufzeit <SourceButton evidence={minimumDurationEvidence ?? durationEvidence} /></dt><dd>{data.dates.minimum_duration_months != null ? `${data.dates.minimum_duration_months} Monate` : "Nicht verfügbar"}</dd></div><div><dt>Zahlungsbeginn <SourceButton evidence={paymentStartEvidence} /></dt><dd>{data.dates.payment_start_rule ?? "Nicht verfügbar"}</dd></div><div><dt>Aktueller Status</dt><dd>{statusLabel(data.dates.current_status)}</dd></div></dl></Section>
@@ -391,6 +397,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload }: Props) {
           <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Offene Prüfungen" value={String(data.contract_review.unresolved_count)} /></div>
           <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
           {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div>}
+          {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
           {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
           {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
