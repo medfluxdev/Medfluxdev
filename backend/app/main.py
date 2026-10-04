@@ -36,10 +36,12 @@ from app.auth.middleware import LocalAuthMiddleware
 from app.auth.provenance import register_auth_provenance_hooks
 from app.core.config import settings
 from app.core.scope_context import ScopeContextMiddleware
+from app.documents.storage_check import log_document_store_findings
 from app.security.headers import SecurityHeadersMiddleware
 from app.security.request_context import LoginRateLimitMiddleware, RequestIdMiddleware
 
 register_auth_provenance_hooks()
+log_document_store_findings(settings.contracts_dir)
 
 app = FastAPI(
     title=settings.app_name,

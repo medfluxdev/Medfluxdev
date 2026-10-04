@@ -1,9 +1,23 @@
 """Zentrale Konfiguration von Medflux (aus .env bzw. Umgebungsvariablen)."""
 
+from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import make_url
+
+# backend/ – relative storage paths are anchored here instead of the process
+# working directory, so a server started from another folder never silently
+# opens (or creates) a second, empty document store.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def resolve_storage_path(value: str) -> str:
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = BACKEND_DIR / path
+    return str(path.resolve())
 
 
 class Settings(BaseSettings):
@@ -109,6 +123,11 @@ class Settings(BaseSettings):
     data_dir: str = "./data"
     contracts_dir: str = "./data/contracts"
     backups_dir: str = "./data/backups"
+
+    @field_validator("data_dir", "contracts_dir", "backups_dir")
+    @classmethod
+    def _anchor_storage_paths(cls, value: str) -> str:
+        return resolve_storage_path(value)
 
     # STEP 16 + integriertes Ahmad-Accountmodell.
     app_secret_key: str = "change-me"
