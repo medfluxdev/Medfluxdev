@@ -30,6 +30,8 @@ from sqlalchemy.orm import Session
 
 from app.contracts.calculation.models import ContractCalculationResult
 from app.database.models.contract import BUSINESS_STATUS_ALLOWED
+from app.finance.calc import summarize
+from app.finance.service import contract_end as finance_contract_end, entry_inputs, price_adjustment
 from app.register.service import term_inputs
 from app.register.terms import compute_terms
 from app.database.models import (
@@ -38,6 +40,7 @@ from app.database.models import (
     CostCenter,
     ContractEquipment,
     ContractExtraction,
+    ContractFinanceEntry,
     ContractPartner,
     ContractWarning,
     WarningEvaluationRun,
@@ -683,6 +686,15 @@ def build_contract_search(session: Session, params: SearchParams, *, organizatio
         ).all()
     ) if partner_ids else {}
 
+    entries_by_contract: dict = {}
+    if contract_ids:
+        for entry in session.scalars(
+            select(ContractFinanceEntry).where(
+                ContractFinanceEntry.contract_id.in_(contract_ids), ContractFinanceEntry.direction == "expense"
+            )
+        ).all():
+            entries_by_contract.setdefault(entry.contract_id, []).append(entry)
+
     items = [
         _list_item(
             session, c,
@@ -691,6 +703,7 @@ def build_contract_search(session: Session, params: SearchParams, *, organizatio
             ext_by_id.get(c.accepted_extraction_id),
             equipment_by_contract.get(c.id, []),
             partner_names.get(c.partner_id),
+            entries_by_contract.get(c.id),
         )
         for c in contracts
     ]
@@ -734,7 +747,17 @@ def _org_lookup(session: Session, organization_id) -> str:
 # DTO-Aufbau
 # ---------------------------------------------------------------------------
 
-def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_name=None) -> dict:
+def _maintained_annual(contract, entries) -> Optional[dict]:
+    """Jahreskosten aus gepflegten Finanzeintraegen (netto, Hauptwaehrung)."""
+    today = date.today()
+    adjustment, _ = price_adjustment(contract, today)
+    summaries = summarize(entry_inputs(entries), as_of=today, contract_end=finance_contract_end(contract, today), adjustment=adjustment)
+    main = max(summaries, key=lambda item: item.expense.annual_run_rate.net)
+    rate = main.expense.annual_run_rate.net.quantize(Decimal("0.01"))
+    return {"currency": main.currency, "amount": rate, "unreliable": False}
+
+
+def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_name=None, finance_entries=None) -> dict:
     calc = None
     if calc_run is not None and calc_run.result_snapshot:
         try:
@@ -742,7 +765,7 @@ def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_na
         except Exception:
             calc = None
 
-    annual = _extract_annual(calc)
+    annual = _maintained_annual(contract, finance_entries) if finance_entries else _extract_annual(calc)
 
     title = None
     auto_renewal = None

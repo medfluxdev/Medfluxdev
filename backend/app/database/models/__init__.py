@@ -24,6 +24,12 @@ from app.database.models.deadlines import (
     Notification,
     NotificationOutbox,
 )
+from app.database.models.finance import (
+    ContractCostAllocation,
+    ContractFinanceEntry,
+    ContractServiceItem,
+    ContractSuggestionDismissal,
+)
 from app.database.models.register import (
     CatalogContractCategory,
     CatalogContractType,
@@ -80,6 +86,10 @@ __all__ = [
     "ContractDocument",
     "ContractEquipment",
     "AccountDeputy",
+    "ContractCostAllocation",
+    "ContractFinanceEntry",
+    "ContractServiceItem",
+    "ContractSuggestionDismissal",
     "ContractDeadline",
     "JobRun",
     "Notification",

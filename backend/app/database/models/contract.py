@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -28,6 +29,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -53,6 +55,7 @@ BUSINESS_STATUS_ALLOWED = ("in_arbeit", "gueltig", "gekuendigt", "beendet", "gel
 TERM_MODEL_ALLOWED = ("fixed_term", "terminable", "terminable_min_term", "auto_renewal", "perpetual")
 NOTICE_TO_ALLOWED = ("contract_end", "month_end", "quarter_end", "half_year_end", "year_end", "anytime")
 DURATION_UNITS_ALLOWED = ("days", "weeks", "months", "years")
+PRICE_ADJUSTMENT_ALLOWED = ("fixed", "percent", "index", "negotiation")
 
 # H1: Registernummer + Kurzbeschreibung sind Teil der Volltextsuche.
 SEARCH_VECTOR_EXPRESSION = (
@@ -195,6 +198,12 @@ class Contract(OrgOwnedMixin, Base):
     terminated_effective: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     retention_years_after_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # H4.3 Preisanpassung (strukturiert; Projektion rechnet Code).
+    price_adjustment_kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    price_adjustment_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 3), nullable=True)
+    price_adjustment_index_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    price_adjustment_next_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    price_adjustment_interval_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     document_links: Mapped[list["ContractDocument"]] = relationship(
         back_populates="contract",
@@ -222,6 +231,10 @@ class Contract(OrgOwnedMixin, Base):
         CheckConstraint(
             f"notice_to IS NULL OR notice_to IN ({', '.join(repr(v) for v in NOTICE_TO_ALLOWED)})",
             name="notice_to",
+        ),
+        CheckConstraint(
+            f"price_adjustment_kind IS NULL OR price_adjustment_kind IN ({', '.join(repr(v) for v in PRICE_ADJUSTMENT_ALLOWED)})",
+            name="price_adjustment_kind",
         ),
         Index(
             "uq_contract_org_register_number",

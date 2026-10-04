@@ -122,10 +122,14 @@ def load_defaults(request: Request, organization_slug: str):
 
 
 def _ensure_seeded(session, organization_id) -> None:
+    """Standardkatalog anlegen bzw. neu eingefuehrte Auswahllisten ergaenzen."""
     has_types = session.scalar(
         select(func.count(CatalogContractType.id)).where(CatalogContractType.organization_id == organization_id)
     )
-    if not has_types:
+    present = set(session.scalars(
+        select(LookupValue.field_key).where(LookupValue.organization_id == organization_id).distinct()
+    ).all())
+    if not has_types or set(catalogs.LOOKUP_FIELD_KEYS) - present:
         catalogs.ensure_defaults(session, organization_id)
         session.commit()
 

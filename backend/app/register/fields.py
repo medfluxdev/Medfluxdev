@@ -5,9 +5,15 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-from app.database.models.contract import DURATION_UNITS_ALLOWED, NOTICE_TO_ALLOWED, TERM_MODEL_ALLOWED
+from app.database.models.contract import (
+    DURATION_UNITS_ALLOWED,
+    NOTICE_TO_ALLOWED,
+    PRICE_ADJUSTMENT_ALLOWED,
+    TERM_MODEL_ALLOWED,
+)
 
 
 class FieldValidationError(ValueError):
@@ -20,7 +26,7 @@ class FieldValidationError(ValueError):
 @dataclass(frozen=True)
 class FieldSpec:
     key: str
-    kind: str  # text | bool | date | int | enum | uuid
+    kind: str  # text | bool | date | int | decimal | enum | uuid
     label_de: str
     group: str
     max_length: Optional[int] = None
@@ -58,6 +64,11 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("terminated_on", "date", "Gekündigt am", "termination"),
     FieldSpec("terminated_effective", "date", "Gekündigt zum", "termination"),
     FieldSpec("retention_years_after_end", "int", "Löschen nach Ende (Jahre)", "termination"),
+    FieldSpec("price_adjustment_kind", "enum", "Preisanpassung", "finance", choices=PRICE_ADJUSTMENT_ALLOWED),
+    FieldSpec("price_adjustment_percent", "decimal", "Preisanpassung (% je Anpassung)", "finance"),
+    FieldSpec("price_adjustment_index_name", "text", "Preisindex", "finance", max_length=120),
+    FieldSpec("price_adjustment_next_date", "date", "Nächste Preisanpassung", "finance"),
+    FieldSpec("price_adjustment_interval_months", "int", "Anpassung alle (Monate)", "finance"),
 )
 
 FIELDS: dict[str, FieldSpec] = {spec.key: spec for spec in FIELD_SPECS}
@@ -68,6 +79,7 @@ REQUIRED_FOR_VALID: tuple[str, ...] = ("short_description", "term_model", "term_
 _INT_LIMITS = {
     "reminder_lead_months": (0, 60),
     "retention_years_after_end": (0, 100),
+    "price_adjustment_interval_months": (1, 120),
 }
 
 
@@ -107,6 +119,16 @@ def coerce_value(key: str, raw: Any) -> Any:
         if not low <= value <= high:
             raise FieldValidationError(key, f"{spec.label_de}: Wert zwischen {low} und {high} erwartet.")
         return value
+    if spec.kind == "decimal":
+        if isinstance(raw, bool):
+            raise FieldValidationError(key, f"{spec.label_de}: Zahl erwartet.")
+        try:
+            value = Decimal(str(raw).strip().replace(",", "."))
+        except InvalidOperation:
+            raise FieldValidationError(key, f"{spec.label_de}: Zahl erwartet.")
+        if not value.is_finite() or not Decimal("-50") <= value <= Decimal("100"):
+            raise FieldValidationError(key, f"{spec.label_de}: Wert zwischen -50 und 100 erwartet.")
+        return value.quantize(Decimal("0.001"))
     if spec.kind == "enum":
         value = str(raw).strip()
         if value not in spec.choices:
@@ -121,8 +143,12 @@ def coerce_value(key: str, raw: Any) -> Any:
 
 
 def to_json(value: Any) -> Any:
-    if isinstance(value, (date, uuid.UUID)):
-        return str(value) if isinstance(value, uuid.UUID) else value.isoformat()
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return format(value.normalize(), "f")
     return value
 
 

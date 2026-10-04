@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from app.contracts.calculation.dates import group_cancellation_relation
+from app.finance.ai import price_adjustment_from_text
 from app.models.contract import Contract as ExtractedContract
 from app.models.values import Duration
 
@@ -100,4 +101,17 @@ def proposals_from_extraction(contract: ExtractedContract) -> dict[str, Proposal
         term_model = "terminable_min_term" if "minimum_term_value" in out else "terminable"
     if term_model is not None:
         out["term_model"] = Proposal(term_model, "termination")
+
+    costs = contract.costs
+    for source, text in (("costs.price_indexation", costs.price_indexation), ("costs.price_adjustment_clause", costs.price_adjustment_clause)):
+        adjustment = price_adjustment_from_text(text)
+        if adjustment is None:
+            continue
+        out["price_adjustment_kind"] = Proposal(adjustment["kind"], source)
+        if "percent" in adjustment:
+            out["price_adjustment_percent"] = Proposal(adjustment["percent"], source)
+            out["price_adjustment_interval_months"] = Proposal(adjustment["interval_months"], source)
+        if "index_name" in adjustment:
+            out["price_adjustment_index_name"] = Proposal(adjustment["index_name"], source)
+        break
     return out

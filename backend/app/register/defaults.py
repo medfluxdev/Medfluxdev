@@ -168,6 +168,17 @@ LOOKUPS: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("mitarbeiter", "Mitarbeiter/in", None),
         ("assistenz", "Assistenz", None),
     ),
+    "cost_type": (
+        ("wartung", "Wartung / Service", None),
+        ("lizenz", "Lizenz / Software", None),
+        ("miete", "Miete / Leasing", None),
+        ("material", "Material / Ersatzteile", None),
+        ("personal", "Personal / Dienstleistung", None),
+        ("energie", "Energie / Versorgung", None),
+        ("versicherung", "Versicherung", None),
+        ("investition", "Investition / Kauf", None),
+        ("sonstiges", "Sonstiges", None),
+    ),
     "service_kind": (
         ("pauschale", "Pauschale", None),
         ("kosten", "Kosten", None),
