@@ -46,6 +46,15 @@ test("5 – Termin anlegen", async ({ page }, info) => {
   await form.getByRole("button", { name: /speichern|anlegen/i }).click();
   await expect(page.getByText("Angebot einholen").first()).toBeVisible();
   await checkA11y(page, info, "termine");
+
+  // Aufraeumen ueber die Oberflaeche (prueft zugleich „Abbrechen“): offene Testtermine schliessen,
+  // damit Folgelaeufe und Bildvergleich denselben Datenstand sehen.
+  const open = page.locator("li.rg-deadline:not(.rg-inactive)").filter({ hasText: "Angebot einholen" });
+  while (await open.count()) {
+    const before = await open.count();
+    await open.first().getByRole("button", { name: "Abbrechen" }).click();
+    await expect(open).toHaveCount(before - 1);
+  }
 });
 
 test("6 – Dokument ablegen (ohne KI-Analyse)", async ({ page }, info) => {

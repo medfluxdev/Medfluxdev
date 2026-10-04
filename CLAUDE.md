@@ -121,7 +121,7 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - UUID PKs come from server-side `uuidv7()`. `OrgOwnedMixin`/`organization_id` sit on tenant rows. A naming convention covers `pk_/fk_/ix_/uq_/ck_`.
   - Use `session_scope()` for short transactions and keep expensive work outside them.
 - **Alembic migrations:**
-  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `l3a5b7c91004` (contract text search).
+  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `m4b6c8d01004` (account UI preferences).
   - Add FKs onto populated tables as `NOT VALID` (precedent: step16 `app_user` provenance).
   - Tests don't exercise migrations, so a new migration needs `alembic upgrade head` against a disposable DB.
 - **Auth:** a cookie session (`medflux_session`), not JWT. Account roles are admin, contract_manager, reviewer and viewer, plus an `is_developer` flag, with per-org `account_membership`. Passwords use PBKDF2-SHA256. Cookie writes require an allowed `Origin`. Viewers are read-only.
@@ -135,11 +135,17 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - Typed per-domain wrappers live in `lib/domain-api/*.ts` and types in `lib/*-types.ts`.
   - A 401 fires the `medflux:session-expired` event. `components/auth/AuthProvider.tsx` handles `/api/me` and redirects.
   - Org/hospital/department scope is kept in localStorage and injected by `scopedPath()`.
-- **Styling:** global CSS in `app/*.css` (imported in `layout.tsx`) with BEM-like classes and CSS custom-property tokens from `app/design-system.css`/`globals.css`, plus a few CSS Modules. Reuse existing tokens.
+- **Styling** (rules in `docs/FRONTEND_CONVENTIONS.md`, live reference at `/developer/components`):
+  - Tokens in `app/styles/tokens.css` (primitives → semantic `--color-*`, `--text-*`, `--space-*`), dark values via `prefers-color-scheme`/`[data-theme]`, plus `data-text-size`/`data-density` on `<html>`. Fonts are self-hosted Inter / JetBrains Mono (`@fontsource-variable`).
+  - Shared styles in `app/styles/base.css`, `components.css`, `shell.css`; older per-area files in `app/*.css` remain (unused rules were pruned). stylelint (part of `verify`) forbids hex colours, free font sizes/families/z-index and `!important` outside `base.css`.
+  - Primitives in `components/ui/` (Button, Field, Badge, InlineAlert, Toast, Skeleton, EmptyState, Dialog, Drawer, Tabs/TabPanel, KpiTile, DataTable, Breadcrumbs, Tooltip, `useUnsavedChanges`/`useSaveShortcut`). Use them instead of new markup.
+- **Shell** (`components/ClientNav.tsx`, `components/shell/`): six navigation areas from `navigation.tsx` (add new pages there, or they are missing from the menu and Ctrl+K), command palette, shortcuts, account menu with display preferences (localStorage + `/api/profile/preferences`), admin-only "Ansicht als Rolle" (display only; the backend still checks the real role), developer mode with API timings (`lib/request-log.ts`, paths and durations only).
+- **Key screens:** `/` is "Mein Tag"; `/register` is the single contract list (`/contracts` redirects); the contract page uses `ContractWorkspace` with seven tabs and panels passed as slots; tab-only panels and the PDF viewer load through `components/contracts/detail/lazy.tsx`.
 - **PDF evidence:** `components/contracts/detail/PdfViewer.tsx` uses `pdfjs-dist` with the worker at `public/pdfjs/pdf.worker.min.js` (keep it in sync with the package version). `lib/source-geometry.ts` handles highlights.
 - **UI text is German** and hard-coded (`lang="de"`, no i18n). Accessibility is tested with jest-axe.
 - **Security headers and CSP** live in `next.config.js`. Every new origin must be added there.
 - **Tests:** Vitest + Testing Library in `test/`. `test/setup.ts` globally mocks `useAuth()` as an admin in org `test-klinik`.
+- **Browser tests:** Playwright in `e2e/` (journeys, axe sweep light/dark/forced colours, layout at 1440/900/390 px, visual references). Run with `scripts/run_e2e.ps1` against a disposable database (`backend/scripts/seed_e2e.py` refuses port 5432 and DB `medflux`). Refresh visual references only after intended changes. A verify build next to a running `next dev`: `NEXT_DIST_DIR=.next-verify npx next build`.
 - **Design reference** (`design-reference/medflux_final_design_system/`, `docs/VISUAL_IDENTITY.md`): no visual fixtures. Every data region shows real API data or an honest empty/loading/error/unavailable state. Never hard-code sample contracts or amounts.
 
 ## Conventions

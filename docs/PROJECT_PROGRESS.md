@@ -5214,3 +5214,28 @@ Branch `feature/register-gaps` (auf `feature/permissions-reports`). Kein neuer H
 **Bekannte Punkte:** Diagramme nur hell (die App hat kein dunkles Design). Semantische Suche erst nach Installation eines lokalen Embedding-Modells. H10 zurückgestellt.
 
 **Nächster Schritt:** Abnahme, Merge der Feature-Branches nach `main`, danach `alembic upgrade head` auf der Produktivdatenbank.
+
+## 2026-10-04 – Frontend-UX-Plan U0–U10 umgesetzt
+
+Branch `feature/ui-refactor` (auf `feature/register-gaps`). Plan: `docs/architecture/FRONTEND_UX_ANALYSIS_AND_REFACTORING_PLAN_20261004.md` (Abschnitt 0 = Umsetzungsstand). Kein neuer Hauptschritt (18/18 bleibt).
+
+**Umgesetzt:**
+- U0: Playwright-Journeys mit axe, Bildvergleich, abgesicherter e2e-Seed (verweigert Port 5432 und DB `medflux`), Ausgangsbericht `docs/ux/BASELINE_20261004.md`.
+- U1: Inter/JetBrains Mono lokal, 7-stufige Schriftskala, semantische Farb-Tokens mit dunklen Werten, stylelint-Regeln (69 → 7 Schriftgrößen, 263 → 0 Hex-Farben außerhalb der Tokens, 31 → 0 Kontrastfehler).
+- U2: Bausteine in `components/ui` (Dialog, Drawer, Tabs, DataTable, Badge, Breadcrumbs, Skeleton, Tooltip, KpiTile, Formular-Wächter).
+- U3: neuer Anwendungsrahmen mit 6 Bereichen, Strg+K-Befehlspalette, Tastenkürzel, Kontomenü mit Darstellung.
+- U4: Vertragsseite mit Objektkopf und 7 Reitern, eine Vertragsliste (`/register`), Startseite „Mein Tag“, Import-Assistent.
+- U5: verständliche Texte und Feldhilfen, Einrichtungs-Checkliste für Admins (`GET /api/admin/setup-status`), „Ansicht als Rolle“ (nur Darstellung), Historienfilter in der Adresse, Entwicklermodus mit API-Zeiten, `docs/FRONTEND_CONVENTIONS.md`, Bausteinreferenz `/developer/components`.
+- U6: axe-Prüfung aller 25 Seiten hell, dunkel und im Windows-Kontrastmodus; Katalog-Reiter korrigiert.
+- U7: PDF-Viewer und Reiter-Panels werden nachgeladen (Vertragsseite 150 → 140 kB).
+- U8: Darstellung je Konto gespeichert (`GET/PUT /api/profile/preferences`).
+- U9: kein waagerechtes Scrollen bei 1440/900/390 px (automatisch geprüft); Registerspalte und Telefon-Umbrüche korrigiert.
+- U10: PR-Vorlage, Leistungsbudget, neue Referenzbilder; 375 ungenutzte CSS-Regeln (~43 KB) entfernt.
+
+**Migration:** `m4b6c8d01004` (`account.ui_preferences`, JSONB, nullable). Up/Down/Up auf einer Wegwerf-DB geprüft.
+
+**Verifikation:** Backend 1573 passed / 3 skipped / 1 failed (vorbestehend, OCR-Umgebung `test_ocr_word_data_empty_when_unavailable`). Frontend `npm run verify` grün (45 Dateien / 178 Tests, Build). Playwright 146/146 (Journeys, axe-Sweep, Layout, Bildvergleich Desktop + Telefon) gegen die Wegwerf-DB.
+
+**Offen:** Massenimport von Benutzern (Entscheidung zur Vergabe der Erstpasswörter nötig); Combobox/Datums-/Betragsfeld als eigene Bausteine; Lighthouse noch manuell; Usability-Runde mit Anwendern (SUS, Aufgabenzeiten); restliche Alt-CSS-Dateien (~170 KB) weiter zusammenführen.
+
+**Nächster Schritt:** Abnahme im Browser, Merge der Feature-Branches nach `main`, danach `alembic upgrade head` auf der Produktivdatenbank (jetzt bis `m4b6c8d01004`).

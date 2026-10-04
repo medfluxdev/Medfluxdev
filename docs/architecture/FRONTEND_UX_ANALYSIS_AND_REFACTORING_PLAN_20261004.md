@@ -6,6 +6,28 @@ Goal: the best possible experience for three audiences – **users** (contract m
 
 ---
 
+## 0. Implementation status (2026-10-04)
+
+All phases U0–U10 are implemented on branch `feature/ui-refactor` (stacked on `feature/register-gaps`). Details per phase in `docs/PROJECT_PROGRESS.md`; working rules in `docs/FRONTEND_CONVENTIONS.md`.
+
+| Phase | Status | Notes / deviations |
+|---|---|---|
+| U0 Baseline | done | Playwright journeys (8), axe, visual references, guarded e2e seed, `docs/ux/BASELINE_20261004.md`. SUS/task times need the real usability round (`docs/ux/USABILITY_TEST_SCRIPT.md`). |
+| U1 Tokens, fonts | done | Inter + JetBrains Mono self-hosted, 7-step scale, semantic colours with dark values, stylelint. |
+| U2 Components | done | Dialog, Drawer, Tabs, DataTable, Badge, Breadcrumbs, Skeleton, Tooltip, KpiTile, form guards. Not built: Combobox, DateField, MoneyField, Popover, row selection in DataTable (native controls kept). |
+| U3 Navigation | done | 6 areas, icon rail, phone drawer, Ctrl+K palette, shortcuts. |
+| U4 Key screens | done | Contract page (object header, 7 tabs), one list `/register`, "Mein Tag", import wizard. |
+| U5 Roles | done | Plain language, field help, admin set-up checklist, "Ansicht als Rolle", history filters in the URL, developer mode (context + API timings), conventions, style guide. **Open:** bulk user import (needs a decision on how initial passwords are issued). |
+| U6 Accessibility | done | axe sweep on 25 pages in light, dark and forced colours; catalog tabs fixed; forced-colors rules. |
+| U7 Performance | done | Lazy PDF viewer and tab panels: contract page 150 → 140 kB first load. Optimistic updates and hover prefetch not added. INP not measured yet. |
+| U8 Personalisation | done | Theme/text size/density/sidebar saved per account (`/api/profile/preferences`); dark mode reviewed on all main pages. |
+| U9 Responsive | done | No horizontal page scroll at 1440/900/390 px (automated). Wide tables scroll inside their frame on phones instead of turning into cards. |
+| U10 Quality gates | done | PR template, performance budget, refreshed visual references. Lighthouse is a manual check (no CI job yet). |
+
+**Metrics now** (baseline → now): font sizes 69 → 7 tokens; hex colours outside tokens 263 → 0; `!important` 67 → 5 (reduced-motion only); inline styles 35 → 3 (dynamic values); contrast failures 31 → 0; sidebar 19 entries → 6 areas; contract tabs 12 + 4 panels → 7; global CSS 20 files / ~190 KB → 22 files / ~170 KB (375 unused rules removed; target of two files not reached, the rest is still used legacy styling); axe in 22 of 40 component test files plus every page in e2e.
+
+---
+
 ## 1. Summary
 
 MedFlux already has a lot of working functionality, and the newer screens (register grid, finance, deadlines, history, search) follow a consistent pattern. The experience suffers from **growth without a design system**:
