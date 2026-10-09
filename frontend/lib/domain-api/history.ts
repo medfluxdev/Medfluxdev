@@ -22,6 +22,8 @@ export interface HistoryFilters {
   contract_id?: string;
   date_from?: string;
   date_to?: string;
+  object_type?: string;
+  object_id?: string;
 }
 
 export interface HistoryPage {

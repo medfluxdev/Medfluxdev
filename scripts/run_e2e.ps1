@@ -62,7 +62,8 @@ try {
   }
   if ($Baseline) { $env:E2E_AXE_BASELINE = "1" }
   $args = @("playwright", "test")
-  if ($UpdateSnapshots) { $args += "--update-snapshots" }
+  # "all": auch Referenzen mit kleinen Abweichungen neu schreiben (z. B. nach Farbaenderungen).
+  if ($UpdateSnapshots) { $args += "--update-snapshots=all" }
   & npx.cmd @args
   $code = $LASTEXITCODE
 } finally {

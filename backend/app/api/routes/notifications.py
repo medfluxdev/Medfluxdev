@@ -15,6 +15,7 @@ from app.database.models import ActionProposalRecord, WorkItem
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
+from app.work_queue.derive import task_items_only
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -38,6 +39,7 @@ def notification_feed(
             WorkItem.organization_id == org.id,
             WorkItem.active.is_(True),
             WorkItem.status != "resolved",
+            task_items_only(WorkItem.item_type),
         )
         action_stmt = select(ActionProposalRecord).where(
             ActionProposalRecord.organization_id == org.id,

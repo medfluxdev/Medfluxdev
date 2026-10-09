@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import AiPortfolioNotes from "@/components/analytics/AiPortfolioNotes";
 import PortfolioQueryPanel from "@/components/analytics/PortfolioQueryPanel";
 import RegisterPortfolio from "@/components/analytics/RegisterPortfolio";
+import InlineAlert from "@/components/ui/InlineAlert";
+import PageHeader from "@/components/ui/PageHeader";
+import Skeleton from "@/components/ui/Skeleton";
 import { getPortfolioReport, type PortfolioReport } from "@/lib/domain-api/reports";
 import { getSupplierPerformance, type SupplierPerformanceItem } from "@/lib/domain-api/intelligenceAnalytics";
 
@@ -24,25 +28,13 @@ export default function AnalyticsPage() {
   }, [organizationSlug]);
 
   return (
-    <div className="page">
-      <header className="entity-header"><h1>Analysen</h1><p className="page-sub">Kosten, Fristen und Handlungsbedarf im Vertragsportfolio.</p></header>
+    <div className="page analytics-page">
+      <PageHeader title="Analysen" description="Kosten, Fristen und Handlungsbedarf im Vertragsportfolio." />
       {organizationSlug ? <RegisterPortfolio organizationSlug={organizationSlug} /> : null}
+      {error ? <InlineAlert tone="critical" role="alert">{error}</InlineAlert> : null}
+      {!report && !error ? <Skeleton lines={3} label="KI-Hinweise werden geladen…" /> : null}
+      {report ? <AiPortfolioNotes report={report} suppliers={suppliers} /> : null}
       {organizationSlug ? <PortfolioQueryPanel organizationSlug={organizationSlug} /> : null}
-      {error ? <div className="alert alert--critical">{error}</div> : null}
-      {!report && !error ? <p className="state-loading">Analysen werden geladen…</p> : null}
-      {report ? <>
-        <section className="intel-strip">
-          <article className="intel"><span>Verträge</span><strong>{report.contracts.total}</strong></article>
-          <article className="intel"><span>Aktiv</span><strong>{report.contracts.active}</strong></article>
-          <article className="intel"><span>Archiviert</span><strong>{report.contracts.archived}</strong></article>
-          <article className="intel"><span>Lieferanten</span><strong>{suppliers.length}</strong></article>
-        </section>
-        <div className="cw-two-col">
-          <section className="card card-pad"><h2>Risiken</h2><ul>{Object.entries(report.contracts.by_risk).map(([key, value]) => <li key={key}>{key.replace(/_/g, " ")}: <strong>{value}</strong></li>)}</ul></section>
-          <section className="card card-pad"><h2>To-dos</h2><ul>{Object.entries(report.work_queue.by_status).map(([key, value]) => <li key={key}>{key.replace(/_/g, " ")}: <strong>{value}</strong></li>)}</ul></section>
-        </div>
-        <section className="card card-pad"><h2>Lieferanten</h2>{suppliers.length === 0 ? <p>Keine Daten vorhanden.</p> : <ul>{suppliers.map((item) => <li key={item.supplier}><strong>{item.supplier}</strong> · {item.contract_count} Verträge · {item.breached_obligations}/{item.total_obligations} Pflichten verletzt</li>)}</ul>}</section>
-      </> : null}
     </div>
   );
 }

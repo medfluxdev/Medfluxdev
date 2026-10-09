@@ -139,3 +139,59 @@ prueferin-${tag}@medflux.test;Pia Prüferin ${tag};Prüfer;Klinikum Nord;;
   await expect(fresh.getByRole("link", { name: "Vertrag anlegen" })).toHaveCount(0);
   await context.close();
 });
+
+test("10 – Stammdaten: Vertragspartner anlegen, finden und deaktivieren", async ({ page }, info) => {
+  await page.goto("/stammdaten");
+  await expect(page.getByRole("heading", { level: 1, name: "Stammdaten" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  await checkA11y(page, info, "stammdaten-uebersicht");
+
+  await page.getByRole("link", { name: "Vertragspartner öffnen" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Vertragspartner" })).toBeVisible();
+  const name = `E2E Partner ${Date.now() % 100000}`;
+  await page.getByRole("button", { name: "Vertragspartner anlegen" }).click();
+  const drawer = page.getByRole("dialog", { name: "Vertragspartner anlegen" });
+  await drawer.getByLabel("Kurzname *", { exact: true }).fill(name);
+  await drawer.getByLabel("Name *", { exact: true }).fill(`${name} GmbH`);
+  await drawer.getByLabel("Ort", { exact: true }).fill("Teststadt");
+  await checkA11y(page, info, "stammdaten-formular");
+  await drawer.getByRole("button", { name: "Anlegen" }).click();
+  await expect(drawer).toBeHidden();
+
+  await page.getByRole("searchbox", { name: "Vertragspartner durchsuchen" }).fill(name);
+  await expect(page.getByRole("rowheader", { name })).toBeVisible();
+  await page.getByRole("button", { name: `${name} bearbeiten` }).click();
+  const editor = page.getByRole("dialog", { name });
+  await expect(editor.getByText("In keinem Vertrag verwendet.")).toBeVisible();
+  await editor.getByRole("button", { name: "Deaktivieren" }).click();
+  await expect(editor).toBeHidden();
+  await expect(page.getByRole("rowheader", { name })).toHaveCount(0);
+});
+
+test("11 – Vertragsregel anlegen und in der Vertragsliste nutzen", async ({ page }, info) => {
+  await page.goto("/stammdaten/vertragsregeln");
+  await expect(page.getByRole("heading", { level: 1, name: "Vertragsregeln" })).toBeVisible();
+  const label = `E2E Kündigungsfrist ${Date.now() % 100000}`;
+  await page.getByRole("button", { name: "Vertragsregel anlegen" }).click();
+  const drawer = page.getByRole("dialog", { name: "Vertragsregel anlegen" });
+  await drawer.getByLabel("Bezeichnung *", { exact: true }).fill(label);
+  await drawer.getByLabel(/Grenzwert/).fill("3");
+  await checkA11y(page, info, "vertragsregel-formular");
+  await drawer.getByRole("button", { name: "Anlegen" }).click();
+  await expect(drawer).toBeHidden();
+  await expect(page.getByRole("rowheader", { name: label })).toBeVisible();
+
+  await page.goto("/register");
+  await page.getByText(/^Spalten/).click();
+  await expect(page.getByRole("checkbox", { name: "Vertragsregeln" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "Regelverstöße" })).toBeVisible();
+
+  // Aufräumen: Regel wieder deaktivieren.
+  await page.goto("/stammdaten/vertragsregeln");
+  await page.getByRole("button", { name: `${label} bearbeiten` }).click();
+  const editor = page.getByRole("dialog", { name: label });
+  await editor.getByRole("button", { name: /Deaktivieren/ }).click();
+  const confirm = editor.getByRole("button", { name: "Trotzdem deaktivieren" });
+  if (await confirm.isVisible().catch(() => false)) await confirm.click();
+  await expect(editor).toBeHidden();
+});

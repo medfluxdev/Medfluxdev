@@ -50,7 +50,7 @@ export default function InboxView({ organizationSlug }: { organizationSlug: stri
     {data.representing.length > 0 ? <p className="rg-hint">Sie vertreten derzeit: {data.representing.map((item) => item.display_name).join(", ")}. Deren Termine erscheinen hier mit.</p> : null}
 
     <section className="cw-section" aria-labelledby="inbox-deadlines-heading">
-      <div className="cw-section-head"><div><h2 id="inbox-deadlines-heading">Meine Wiedervorlage</h2><p>Offene Termine, für die Sie zuständig sind ({data.deadlines.length}).</p></div><Link href="/termine" className="rg-link">Alle Termine</Link></div>
+      <div className="cw-section-head"><div><h2 id="inbox-deadlines-heading">Meine Wiedervorlage</h2><p>Offene Termine, für die Sie zuständig sind ({data.deadlines.length}).</p></div><Link href="/fristen?nur=meine" className="rg-link">In Fristen & Aufgaben öffnen</Link></div>
       {data.deadlines.length === 0 ? <p className="cw-muted">Keine offenen Termine.</p> : <ul className="rg-deadlines">{data.deadlines.map((item) => <li key={item.id} className={`rg-deadline${item.overdue ? " rg-deadline-overdue" : ""}`}>
         <div className="rg-deadline-main">
           <Link href={`/contracts/${item.contract_id}?tab=deadlines`}><strong>{item.title}</strong></Link>

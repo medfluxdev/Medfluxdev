@@ -23,6 +23,23 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+# Fristen (Kuendigung, Vertragsende, Verlaengerung) sind keine Aufgaben der
+# Arbeitsliste: sie kommen allein aus den gepflegten Vertragsdaten
+# (`deadlines/system.py`, Termine). Sonst stuende dieselbe Frist doppelt und
+# ggf. mit abweichendem Datum (KI-Wert vs. gepflegter Wert) in zwei Listen.
+DEADLINE_ITEM_TYPES = frozenset({
+    WorkItemType.CANCELLATION_DEADLINE.value,
+    WorkItemType.CONTRACT_EXPIRY.value,
+    WorkItemType.AUTOMATIC_RENEWAL.value,
+    WorkItemType.CONTRACT_EXPIRED.value,
+})
+
+
+def task_items_only(column):
+    """SQL-Bedingung: nur echte Aufgaben, keine Fristen (fuer Altbestand vor Neuanalyse)."""
+    return column.not_in(DEADLINE_ITEM_TYPES)
+
+
 # Warn-Typ -> PR-4-Arbeiten (maschinenlesbare, deterministische Zuordnung).
 _WARNING_TO_WORKITEM = {
     "contract_end_approaching": WorkItemType.CONTRACT_EXPIRY,
@@ -86,7 +103,7 @@ def derive_from_warning(warning) -> Optional[dict]:
     """
     wtype = _get(warning, "warning_type")
     item_type = _WARNING_TO_WORKITEM.get(wtype)
-    if item_type is None:
+    if item_type is None or item_type.value in DEADLINE_ITEM_TYPES:
         return None
     if not (
         _get(warning, "requires_action", False)

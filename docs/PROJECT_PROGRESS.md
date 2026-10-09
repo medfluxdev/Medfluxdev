@@ -5250,3 +5250,137 @@ Entscheidung des Product Owners: Der Administrator vergibt jedem neuen Benutzer 
 - Tests: Backend `tests/test_user_import.py` (3); Frontend `test/user-import.test.tsx` (5); Playwright-Journey 9 (Liste hochladen, fehlendes Passwort erkannt, Passwörter erzeugen, anlegen, Anmeldung des neuen Benutzers mit dem Erstpasswort).
 - Verifikation: Backend 1576 passed / 3 skipped / 1 failed (vorbestehend, OCR); `npm run verify` grün (46 Dateien); Playwright 147/147.
 - Hinweis: Ein Zwang zum Passwortwechsel bei der ersten Anmeldung gibt es noch nicht.
+
+## 2026-10-06 – Stammdaten an einem Ort (S1–S5)
+
+Branch `feature/stammdaten-hub` (auf `feature/ui-refactor`). Plan und Aufbau: `docs/architecture/STAMMDATEN_20261006.md`. Kein neuer Hauptschritt (18/18 bleibt), keine Migration.
+
+**Status:** umgesetzt.
+
+**Umgesetzt:**
+- S1: Bereich `/stammdaten` (Navigation „Verwaltung → Stammdaten“, `g d`, alle Datenarten in Strg+K) mit Bereichsnavigation und Übersicht (Bestand je Datenart, zuletzt geändert, Hinweise auf Dubletten und Partner ohne Vertrag, Suche über alle Stammdaten). Alte Seiten leiten weiter (`/partners`, `/settings/organization`, `/settings/catalogs`); Nummernkreis eigene Seite `/settings/nummernkreis`. Einrichtungs-Checkliste, Verwaltungsseite, Entwicklerseite und Befehlspalette verweisen auf die neuen Adressen.
+- S2: eine Bedienung für alle Datenarten (`components/master-data/`: `EntityManager`, `EntityEditor`, `EntityForm`, Definitionen je Art). Tabelle mit Suche/Filter/Status in der Adresse, Bearbeiten in der Seitenleiste, Pflichtfeldprüfung, Strg+S, Rückfrage bei ungespeicherten Änderungen, Strukturbaum für Abteilungen. Die drei alten Verwaltungen (`PartnerManager`, `CatalogManager`, `OrganizationStructureManager`) und ihre CSS-Regeln sind entfernt.
+- S3: Spalte „Verträge“ mit Link in die gefilterte Vertragsliste (`GET /api/master-data/usage`), Deaktivieren mit Rückfrage bei verwendeten Einträgen, Änderungsverlauf je Eintrag (`GET /api/history?object_type=&object_id=`), Dubletten zusammenführen (`POST /api/catalogs/partners/{id}/merge`, Vertragshistorie `contract.partner_merged`).
+- S4: „Neuer Partner“/„Neuer Typ“ im Formular „Vertrag anlegen“ und „Neuer Partner“ in den Vertrags-Stammdaten mit demselben Formular (`QuickCreate`, nachgeladen); der neue Eintrag ist danach ausgewählt.
+- S5: CSV-Import (Vertragspartner, Abteilungen, Kostenstellen, Auswahllisten; `POST /api/master-data/import/{kind}`, erst prüfen, alles oder nichts, Hinweise blockieren nicht) und CSV-Export der sichtbaren Zeilen. `lib/csv.ts` ist jetzt auch die Grundlage des Benutzerimports.
+- Nebenbei: doppelte Kürzel bei Krankenhaus/Abteilung/Kostenstelle liefern 409 statt Serverfehler; leere Namen/Kürzel 422. `useFocusTrap` setzte bei jedem neuen `onClose` den Fokus neu (Eingaben in Seitenleisten verloren den Fokus nach dem ersten Zeichen) – behoben. Rechte für Bedienelemente kommen aus `lib/use-permissions.ts` (`/api/permissions`, berücksichtigt die Rollenvorschau). `Drawer` kann breit (`wide`).
+
+**Dateien (Auswahl):** `backend/app/master_data/{service,imports}.py`, `backend/app/api/routes/master_data.py`, `backend/app/register/catalogs.py`, `backend/app/api/routes/{catalogs,history,organization_structure,cost_center_routes,admin_setup}.py`, `backend/app/history/service.py`; `frontend/components/master-data/**`, `frontend/app/stammdaten/**`, `frontend/app/settings/nummernkreis/page.tsx`, `frontend/lib/{master-data,use-permissions,csv,lookup-fields}.ts`, `frontend/lib/domain-api/masterData.ts`, `frontend/app/master-data.css`.
+
+**Tests:** Backend `tests/test_master_data.py` (7: Übersicht/Verwendung mit Bereich und gelöschten Verträgen, Zusammenführen, Partner-Import alles-oder-nichts, Struktur-Import mit Elterneinheiten aus der Datei, Auswahllisten-Import, Einzelhistorie, 409 bei doppelten Kürzeln). Frontend `test/master-data.test.tsx` (13) und `test/master-data-quick-create.test.tsx` (1), jeweils mit axe. Playwright-Journey 10 (Partner anlegen, finden, deaktivieren) und die Stammdaten-Seiten im axe- und Layout-Durchlauf.
+
+**Verifikation:** Backend 1584 passed / 3 skipped / 0 failed. Auf diesem Rechner gibt es den WSL-Testcluster nicht; gelaufen in einem Wegwerf-Container (`postgres:18` + Python 3.12, CI-Identität `127.0.0.1:5432/medflux` nur im Container-Netz). Die 8 Fehler in `test_text_extraction.py` beim ersten Lauf kamen von einer fehlenden Schrift im schlanken Container und verschwinden mit `fonts-dejavu-core`. Frontend `npm run verify` grün (46 Testdateien). Playwright 168/168 gegen eine Wegwerf-Datenbank (Docker, Port 55499), Bildvergleich-Referenzen erneuert (neue Seitenleiste mit „Stammdaten“; dazu Hell/Dunkel-Schalter und Banner aus 195f75e, deren Referenzen noch nicht erneuert waren). Im Windows-Kontrastmodus hatte das Banner auf „Mein Tag“ unlesbaren Text (aus 195f75e) – behoben. Leistungsbudget: Vertragsseite 143 kB (vorher 140), Stammdaten-Seiten ≤ 120 kB.
+
+**Offen:** Verwendung weiterer Auswahllisten zählen; Import für Krankenhäuser/Vertragstypen; „Neu anlegen“ für Kostenstellen in der Kostenaufteilung und Abteilungen in der Zuständigkeit.
+
+**Nächster Schritt:** Abnahme im Browser, dann Merge mit den übrigen Feature-Branches.
+
+## 2026-10-06 – Ein Thema, eine Stelle: Fristen & Aufgaben, Vertragslisten, Verwaltung
+
+Branch `feature/stammdaten-hub` (nach den Stammdaten S1–S5). Grundlage: UX-Analyse vom selben Tag – dieselbe Kündigungsfrist stand an fünf Stellen, davon zweimal aus verschiedenen Quellen. Kein neuer Hauptschritt, keine Migration.
+
+**Status:** umgesetzt.
+
+**Umgesetzt:**
+- **Fristen & Aufgaben** (`/fristen`, Menü „Verträge“, `g t`): Reiter Termine, Kündigungsentscheidungen, Aufgaben; Reiter und „Nur meine“ in der Adresse. `/termine`, `/verlaengerungen`, `/work-queue` leiten weiter. Entscheidung: Fristdaten kommen **nur** aus den gepflegten Vertragsdaten (Systemtermine). Die KI-Arbeitsliste erzeugt keine Aufgaben mehr für Kündigungsfrist, Vertragsende, Verlängerung und ausgelaufene Verträge (`work_queue/derive.DEADLINE_ITEM_TYPES`); vorhandene Einträge dieser Art sind in Liste, Glocke, Berichten und Vertragsseite ausgeblendet (`task_items_only`), nicht gelöscht. „Aufgaben“ enthält nur noch Prüfbedarf, fehlende Kosten, Geräte- und Service-Level-Punkte. Das Postfach behält seine Wiedervorlage (enthält auch Termine vertretener Kolleginnen und Kollegen) und verweist auf „Fristen & Aufgaben“.
+- **Vertragslisten**: Archiv (`/archiv`) und Prüfungen (`/review`) zeigen jetzt die Vertragsliste mit fester Standardansicht („Archiv“ mit „Wiederherstellen“ je Zeile, „Zu prüfen“ mit „Prüfen“ je Zeile) – gleiche Spalten, Filter, Gruppen und Excel-Export wie überall. Backend: `GridSpec.archived`, Spalte „Archiviert am“, Standardansichten `review` und `archive`, `system_key` in der Ansichtsliste, `?ansicht=<system_key>` auf `/register`. Die alte Tabelle `ContractTable` ist entfernt. Seiten mit fester Ansicht überschreiben die zuletzt genutzte Ansicht der Vertragsliste nicht.
+- **Verwaltung**: alle Seiten unter `/admin` und `/settings` haben dieselbe Bereichsnavigation wie die Stammdaten (Übersicht, Benutzer, Rollen & Rechte, Stammdaten, Nummernkreis, Vertragslöschung, Einstellungen, Entwicklung; je nach Rolle). Eine gemeinsame Umsetzung `components/shell/AreaNav.tsx` für Stammdaten und Verwaltung.
+- Navigation: fünf statt sechs Bereiche (Start, Verträge, Prüfung, Auswertungen, Verwaltung); „Aufgaben“ heißt überall so (vorher „To-dos“ auf der Seite).
+
+**Hinweis zur Prüfliste:** Die frühere Prüfungsliste zählte Verträge mit prüfbedürftigen Warnungen; die Ansicht „Zu prüfen“ zeigt Verträge, deren KI-Analyse noch nicht geprüft ist (das, was „Prüfen“ öffnet). Prüfbedürftige Warnungen stehen weiterhin als Aufgaben unter „Fristen & Aufgaben“.
+
+**Tests:** Backend `test_pr4_equipment_work_item.py` (Fristwarnungen erzeugen keine Aufgaben; Altbestand ausgeblendet, Fristtyp als Filter abgelehnt), `test_register_grid.py` (Archiv-Ansicht, neue Standardansichten). Frontend `test/areas.test.tsx` (Reiter, Adresse, Rollen, Verwaltungsnavigation), `test/register-grid.test.tsx` (Archiv wiederherstellen, Prüfen-Ansicht, letzte Ansicht bleibt), `test/work-queue.test.tsx` und `test/shell.test.tsx` angepasst; `test/contract-list-preferences.test.tsx` mit der alten Tabelle entfernt.
+
+**Verifikation:** Backend 1586 passed / 3 skipped / 0 failed (Wegwerf-Container). Frontend `npm run verify` grün (46 Testdateien); `/fristen` 111 kB, `/archiv` und `/review` 110 kB, Vertragsseite 143 kB. Playwright 168/168 (eigener Build-Ordner `NEXT_DIST_DIR=.next-e2e`; Bildvergleich-Referenzen erneuert). Nebenbei: `next dev` behält kompilierte Seiten länger (`onDemandEntries`), sonst verwarf er im Testlauf Seitenpakete (404, leere Seite); Benutzerzeilen brechen neben der Bereichsnavigation um statt überzulaufen; überflüssige „Zurück zu Einstellungen“-Links entfernt.
+
+## 2026-10-06 – Vertragsregeln, KI-Übersicht am Vertrag, häufige Fragen, Sicherheitsseite
+
+Branch `feature/stammdaten-hub`. Anlass: Vergleich mit einem Wettbewerber (Zefort) – übernommen, was zu Medflux passt (Regeln als Spalten, KI-Übersicht mit Prüfstatus, Fragevorschläge), bewusst nicht: E-Signatur, Vertragserstellung aus Vorlagen, CRM-Anbindungen.
+
+**Status:** umgesetzt.
+
+**Umgesetzt:**
+- **Vertragsregeln** („Playbooks“): Die Administration legt unter Stammdaten → Vertragsregeln fest, was jeder Vertrag erfüllen soll (Kündigungsfrist mindestens, Laufzeit höchstens, Verlängerung höchstens, Preiserhöhung höchstens, jährliche Kosten höchstens, Pflichtangabe vorhanden; optional nur für bestimmte Vertragstypen). Das System prüft im Code gegen die gepflegten Vertragsdaten – nie die KI; fehlt eine Angabe, lautet das Ergebnis „Angabe fehlt“. Vertragsliste: Spalten „Vertragsregeln“ (Erfüllt/Unvollständig/Verstoß) und „Regelverstöße“, Standardansicht „Regelverstöße“. Stammdaten: Spalte „Verstöße“ je Regel mit Link in die gefilterte Liste. Vertragsseite: Abschnitt „Vertragsregeln“ mit Ergebnis und Begründung je Regel. Neue Tabelle `contract_rule`, Migration `n5c7d9e01006` (auf einer Wegwerf-DB hoch/runter/hoch geprüft). Code: `backend/app/rules/service.py`, `backend/app/api/routes/rules.py`, `frontend/components/master-data/definitions/rules.tsx`, `frontend/components/contracts/detail/ContractRulesSection.tsx`.
+- **KI-Übersicht am Vertrag** (`AiFillSummary`): „KI hat N Angaben aus dem Dokument übernommen“ mit noch nicht bestätigten/bestätigten/korrigierten Angaben, Status „Prüfung offen“/„Geprüft“ und „Jetzt prüfen“.
+- **Häufige Fragen im KI-Assistenten** auf Vertragsseiten (Leistungsumfang, Laufzeit/Kündigung, Kosten, Reaktionszeiten, Preisanpassung) – ein Klick stellt die Frage.
+- **„Vertrag hinzufügen“** in der Vertragsliste (`AddContractMenu`): Dokument importieren oder ohne Dokument anlegen.
+- **Sicherheit & Datenschutz** (`/sicherheit`, alle Rollen): nur belegbare Aussagen (lokale Speicherung, keine externen KI-Dienste, PBKDF2-Passwörter, Rollen, Vertraulichkeit, Historie, zweistufiges Löschen) und was die IT selbst sicherstellt (Verschlüsselung der Datenträger, Datensicherung).
+
+**Offene Punkte / Hinweise:**
+- Die Adressen der KI-Dienste sind standardmäßig lokal (127.0.0.1), werden aber im Code nicht auf lokale Ziele beschränkt; eine falsch konfigurierte Adresse würde nicht abgewiesen. Empfehlung: in `backend/app/core/config.py` beim Start erzwingen (fail closed).
+- Medflux verschlüsselt die Dateiablage nicht selbst. Zwei-Faktor-Anmeldung, SSO (Active Directory/Entra) und Pflicht zum Passwortwechsel bei der ersten Anmeldung fehlen noch.
+- Favoriten (Stern am Vertrag) bewusst zurückgestellt; die Ansicht „Meine Verträge“ deckt den häufigsten Fall ab.
+- Produktiv- und Entwicklungsdatenbank müssen auf `n5c7d9e01006` migriert werden (`python -m alembic upgrade head`), sonst lädt die Vertragsliste nicht (Tabelle `contract_rule` fehlt).
+
+**Tests:** Backend `tests/test_rules.py` (alle Regelarten ohne Raten, Pflege nur durch Administration, Ergebnis je Vertrag, Spalten der Vertragsliste, Verstöße je Regel, deaktivierte Regeln), `tests/test_register_grid.py` (Standardansichten). Frontend `test/rules-and-contract-help.test.tsx` (Regeln pflegen, Ergebnis am Vertrag, KI-Übersicht, Fragevorschläge, Menü „Vertrag hinzufügen“). Playwright-Journey 11 (Regel anlegen, Spalten in der Vertragsliste, Regel deaktivieren); neue Seiten im axe- und Layout-Durchlauf.
+
+**Verifikation:** Backend 1588 passed / 3 skipped / 0 failed. Frontend `npm run verify` grün (47 Testdateien); Vertragsseite 144 kB, Stammdaten-Seiten 120 kB. Playwright 179/179 (Bildvergleich-Referenzen erneuert: Vertragsliste mit „Vertrag hinzufügen“).
+
+## 2026-10-06 – Farben, Schrift und Gestaltung nach Marktvergleich
+
+Branch `feature/stammdaten-hub`. Grundlage: Vergleich von zehn führenden Vertragsmanagement-Anbietern (Ironclad, Icertis, Juro, SpotDraft, Agiloft, Concord, Sirion, LinkSquares, ContractSafe, Zefort; Schriften und Farben im Browser gemessen). Entscheidung des Product Owners, dokumentiert oben in `docs/VISUAL_IDENTITY.md`.
+
+**Status:** umgesetzt (nur über Design-Tokens, keine Komponentenänderung nötig).
+
+**Umgesetzt:**
+- **Eine Markenfarbe:** Teal `#0b7368` (Hover `#095c54`) für Hauptaktion, Links und aktive Navigation statt Blau. Blau nur noch für Information und den Fokusring; Violett bleibt KI. Helles Teal `#14b8a6` nur als Fläche/Logo (als Text nur 2,5:1).
+- **Warme Flächen:** Hintergrund „Papier“ `#f6f6f2` und warme helle Graustufen; Textstufen unverändert.
+- **Heller Seitenbanner** (Mein Tag, Organisationen, Entwickler) statt dunkelblau, mit dunkler Variante im dunklen Design.
+- **Schrift:** Inter bleibt für alles; Seitentitel in *Source Serif 4* (selbst gehostet, SIL OFL, `--font-display`; zurück auf Inter mit einer Zeile). In Tabellen, Eingaben und Codes sind 1, l und I unterscheidbar (`cv05`, `cv08`).
+- Dunkles Design: Teal `#4fd1c0` als Akzent.
+- Kontraste rechnerisch geprüft (u. a. weiß auf Teal 5,7:1, Link auf Papier 5,3:1, aktiver Menüpunkt 7,1:1, dunkel 9–10:1).
+- Browser-Tests: axe misst erst nach Ende der Ein-/Ausblendungen (vorher Mischfarben mitten in der Animation); `scripts/run_e2e.ps1 -UpdateSnapshots` schreibt alle Referenzbilder neu (`--update-snapshots=all`), damit kleine Farbänderungen nicht in alten Referenzen hängen bleiben.
+
+**Verifikation:** Frontend `npm run verify` grün (47 Testdateien); Playwright 179/179 mit neuen Referenzbildern (hell, dunkel, Windows-Kontrastmodus, 1440/900/390 px).
+
+**Offen:** Kurzer Test mit 3–5 Anwendern aus dem Vertragsmanagement (Wirkung von Farbe und Titelschrift).
+
+### Nachtrag 2026-10-06 – Gestaltungsideen aus Squarespace-Vorlagen
+
+Aus den beliebtesten Squarespace-Vorlagen (Kategorie „Professional Services“) und deren eigener Oberfläche übernommen, was zu einer Arbeitsanwendung passt (keine großen Bilder, keine lauten Farben):
+- **Flache Karten:** Karten, Abschnitte, Kennzahlen und Leerzustände ohne Schatten, nur mit feiner Linie; Schatten bleiben für Schwebendes (Menüs, Seitenleisten, Dialoge).
+- **Leichte Bereichsnavigation** (Stammdaten, Verwaltung): ohne Kasten, aktive Seite mit Markierung links – wie eine Filterliste.
+- **Aktive Filter als Chips** in allen Stammdaten-Listen („Suche: „…“ ×“, „Krankenhaus: … ×“, „Mit deaktivierten ×“, „Alle zurücksetzen“); Filter-Chips neutral grau statt Informationsblau.
+- **Einheitlicher Seitenkopf** auch auf „Rollen & Rechte“ und „Benutzerverwaltung“ (vorher eigene Kopfzeilen ohne Titelschrift).
+
+**Verifikation:** Frontend `npm run verify` grün; Playwright 179/179 mit neuen Referenzbildern.
+
+### Nachtrag 2026-10-06 – Farbwelt der Anmeldeseite auf allen Seiten
+
+Entscheidung des Product Owners (Bildschirmfoto der Anmeldeseite als Vorgabe): Die Farben der Anmeldeseite gelten für alle Seiten. Hauptaktion, Links und aktive Navigation wieder in Navy `#0f4c81` (statt Teal); Hintergrund wieder kühles Hellblaugrau (`#f4f7f9`/`#eaf0f4`/`#f8fafc`) mit den weichen Lichtflecken der Anmeldeseite (Teal oben links, Navy unten rechts) auf jeder Seite (`body`, Tokens `--glow-teal`/`--glow-navy`, dunkle Variante abgeschwächt, im Windows-Kontrastmodus aus). Teal bleibt Markenbegleiter. Beibehalten: Serifen-Seitentitel, flache Karten, heller Seitenbanner, Filter-Chips, leichte Bereichsnavigation. Nur Design-Tokens, `shell.css` (Rahmen durchsichtig) und eine Regel in `components.css` geändert.
+
+### Nachtrag 2026-10-06 – Gestaltungsdurchgang (Analysen, Mein Tag, Vertragsliste)
+
+Durchsicht der aktuellen Seiten anhand der Referenzbilder; behoben:
+- **Analysen:** Der alte KI-Block (Kennzahlen doppelt zur Portfolio-Übersicht, „unknown: 3“, leere „To-dos“-Karte, „0/0 Pflichten verletzt“) ist ersetzt durch eine Karte „Aus der KI-Analyse“: Risiko je Vertrag auf Deutsch (Hoch/Mittel/Niedrig/Nicht bewertet) mit Link in die gefilterte Vertragsliste, offene Aufgaben und Archiv mit Links, Pflichten der Vertragspartner nur, wenn die Analyse welche gefunden hat (`components/analytics/AiPortfolioNotes.tsx`). „Fragen an das Portfolio“ ohne Fachjargon („ohne Frontend-Neuberechnung“ entfernt), Eingabe und Knopf in einer Zeile, Ergebnis mit Links. Einheitlicher Seitenkopf. Diagrammkarten nicht mehr auf Zeilenhöhe gestreckt.
+- **Mein Tag:** Kennzahlkarten oben ausgerichtet (Wert sprang ohne Untertitel nach unten); Link „Zu den Kündigungsentscheidungen“ statt des alten Seitennamens.
+- **Vertragsliste:** Seitentitel „Vertragsliste“ wie im Menü (vorher „Vertragsregister“); Auswahl „Gesellschaft → Abteilung“ ist auf dem Telefon eingeklappt, damit die Verträge sofort sichtbar sind.
+- Browser-Tests: Warten auf Animationen höchstens 2 s und nur für laufende Animationen.
+
+**Tests:** `test/analytics-notes.test.tsx` (neu). **Verifikation:** `npm run verify` grün (48 Testdateien); Playwright 179/179.
+
+### Nachtrag 2026-10-06 – Design-System angewendet (claude.ai-Artefakt „MedFlux“)
+
+Abgleich mit dem Design-System-Artefakt: alle 91 Farb-Tokens, Abstände, Radien, Größen und Schriftstile stimmen mit `tokens.css` überein (nur rgb/rgba-Schreibweise unterschiedlich). Angewendet wurden die Regeln, in denen der Code abwich:
+
+- **Rahmen der Eingabefelder** erreichen jetzt 3:1 (vorher 1,6:1 hell / 1,9:1 dunkel, die im Design-System dokumentierte Ausnahme): neues Token `--color-border-control` (hell `#7d8d9c`, dunkel `#62748a`), genutzt vom globalen Feldstil, dem Suchfeld oben und 22 älteren Feldregeln in `app/*.css`; Hover dunkler (`--color-text-muted`).
+- **Satzschreibung:** Tabellenköpfe (`.data-table`, `.rg-table`), Kennzahl-Beschriftungen, Abschnittsköpfe der Übersteuerungen, Protokoll-Aktionen, Legende der Darstellungseinstellungen, Statuskacheln im Entwickler-Dashboard und Benachrichtigungstyp nicht mehr in Großbuchstaben. Eyebrow-/Kicker-Stile bleiben.
+- **Produktname** `MedFlux` in allen Oberflächentexten und im Fenstertitel (`PageHeader`).
+- **Kennzahlen:** `KpiTile` zeigt ohne Wert „—“ mit „Noch keine Daten“ und während des Ladens „…“ (`loading`). Mein Tag blieb bei fehlgeschlagenem Laden dauerhaft auf „…“ bzw. zeigte 0 Fristen – jetzt ehrlicher Leerzustand bzw. Fehlerhinweis; jährliche Kosten ohne gepflegte Finanzdaten zeigen „—“ statt „0,00 €“.
+
+**Dateien:** `app/styles/tokens.css`, `components.css`, `shell.css`, `app/globals.css` und weitere `app/*.css`, `components/ui/KpiTile.tsx`, `components/ui/PageHeader.tsx`, `components/dashboard/MyDay.tsx`, Seiten mit Produktnamen, `docs/FRONTEND_CONVENTIONS.md`. **Tests:** `test/kpi-tile.test.tsx` (neu), `test/shell-roles.test.tsx` angepasst. **Verifikation:** `npm run verify` grün (49 Testdateien); Playwright 179/179 inkl. axe hell/dunkel/forced-colors, visuelle Referenzen aktualisiert.
+
+**Offen:** Das Design-System-Artefakt nennt noch die Kontrast-Ausnahme und Karten mit `shadow-sm` (Code: flache Karten) – bei Bedarf dort nachziehen.
+
+### Nachtrag 2026-10-06 – Richtung „Sachlich-institutionell“ übernommen (Paket MedFlux-Sachlich)
+
+Ruhiger, flacher Auftritt für das Arbeitsumfeld eines öffentlichen Krankenhauses, vollständig aus dem Design-System-Paket übernommen (Komponenten unverändert, nur Werte und Stile):
+
+- **Tokens** (`app/styles/tokens.css`, hell und beide dunklen Blöcke): `--color-border-strong` `#7d8c9b` / `#64768a` (3,4:1 / 3,6:1, ersetzt das kurzzeitige `--color-border-control`, alle Feldregeln zeigen wieder auf `--color-border-strong`); `--glow-teal`/`--glow-navy` transparent; `--color-highlight-from/to` weiß bzw. `#151e28`; `--color-highlight-eyebrow` Navy `--blue-700` bzw. `#8cc0f2`; `--shadow-sm: none`.
+- **Seiten:** `body` flach `--color-bg` ohne Lichtflecken; hervorgehobener Seitenkopf weiße Fläche mit Haarlinie, `--radius-md`, ohne Schatten, Titel 24 px (Sonderregeln für Knöpfe im Kopf entfernt, normale Knöpfe gelten).
+- **Anmeldeseite:** flacher Hintergrund, Lichtkreise entfernt, Karte mit `--color-border` und `--shadow-md`, Feldfokus Navy statt Teal, Link-Unterstreichung in Textfarbe (`brand-identity.css`, `auth.css`).
+- **Keine Verläufe, Teal nur im Logo:** Admin-Kopf flach, Aktivitätspunkt Navy, Entwickler-Statuspunkt `--color-success-fill`, Entwickler-Formularknopf Navy, Lebenszyklus-Hauptknopf ohne Verlauf (Standard-`btn-primary`). Verbleibende Verläufe sind funktional: Pfeil der Auswahlliste und Skeleton-Schimmer.
+- Doku: Entscheidung oben in `docs/VISUAL_IDENTITY.md`, Farbzeile und Rahmenregel in `docs/FRONTEND_CONVENTIONS.md`, `CLAUDE.md`.
+
+**Verifikation:** `npm run verify` grün (49 Testdateien); Playwright 179/179 inkl. axe hell/dunkel/forced-colors, visuelle Referenzen aktualisiert. Kein Commit (Arbeitsstand auf `feature/stammdaten-hub` noch uncommittet).
+- **Titelbild (Cover) aus dem Paket:** neue Komponente `components/brand/BrandCover.tsx` (flache Navy-Flächen, Blatt mit Haarlinien, eine Teal-Marke, Serifen-Schriftzug „MedFlux“, Token `--text-cover`). Auf der Anmeldeseite ab 900 px Breite und 700 px Höhe: Logo oben links, Design-Schalter oben rechts, darunter Titelbild und Anmeldekarte; auf dem Telefon nur Logo und Karte. Verify grün, Playwright 179/179.

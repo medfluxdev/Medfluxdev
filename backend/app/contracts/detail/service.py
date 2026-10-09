@@ -33,6 +33,7 @@ from app.contracts.detail.recovery import (
     load_canonical_pages,
     recover_financial_facts,
 )
+from app.work_queue.derive import task_items_only
 from app.contracts.overrides.keys import (
     OVERRIDE_KEY_EVENT_START,
     OVERRIDE_KEY_TAX_BASIS,
@@ -350,6 +351,7 @@ def build_contract_detail(
             (WorkItem.organization_id == organization_id)
             & (WorkItem.contract_id == contract.id)
             & (WorkItem.active.is_(True))
+            & task_items_only(WorkItem.item_type)
         )
     ).all()
 

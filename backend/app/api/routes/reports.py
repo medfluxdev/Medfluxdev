@@ -11,6 +11,7 @@ from app.database.models import Contract, WorkItem
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
+from app.work_queue.derive import task_items_only
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -41,7 +42,7 @@ def portfolio_report(request: Request, organization_slug: str):
             select(Contract.risk_level, func.count()).where(*contract_filter).group_by(Contract.risk_level)
         ).all()
 
-        work_filter = [WorkItem.organization_id == org.id, WorkItem.active.is_(True)]
+        work_filter = [WorkItem.organization_id == org.id, WorkItem.active.is_(True), task_items_only(WorkItem.item_type)]
         if allowed is not None:
             work_filter.append(WorkItem.contract_id.in_(allowed))
         work_rows = session.execute(

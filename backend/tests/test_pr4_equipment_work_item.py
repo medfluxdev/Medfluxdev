@@ -486,7 +486,7 @@ def test_partial_identity_gets_own_master_not_merged(db):
 def test_derive_work_items_from_warnings_and_equipment(db):
     org = _org(db)
     c = _contract(db, org, "WQ")
-    w_active = _warning(db, org, c, wtype="cancellation_deadline_approaching",
+    w_active = _warning(db, org, c, wtype="missing_cost_data",
                         requires_review=True, fingerprint="fp-cancel")
     eq = add_equipment(db, contract_id=c.id, model="ECG", has_evidence=True)
     db.flush()
@@ -497,7 +497,7 @@ def test_derive_work_items_from_warnings_and_equipment(db):
         as_of_date=date(2026, 9, 3), policy_version="pr4-1",
     )
     types = {d["item_type"].value for d in derived}
-    assert "cancellation_deadline" in types
+    assert "missing_cost" in types
     assert "equipment_coverage_review" in types
     # Fingerprints stabil/deterministisch.
     again = derive_work_items(
@@ -521,17 +521,33 @@ def test_derive_skips_non_actionable_warning(db):
     assert derived == []
 
 
+def test_deadline_warnings_are_not_tasks(db):
+    """Fristen kommen nur aus den gepflegten Vertragsdaten (Termine), nie doppelt als KI-Aufgabe."""
+    org = _org(db)
+    c = _contract(db, org, "WQ-F")
+    warnings = [
+        _warning(db, org, c, wtype=wtype, requires_review=True, fingerprint=f"fp-{wtype}")
+        for wtype in ("cancellation_deadline_approaching", "cancellation_deadline_passed",
+                      "contract_end_approaching", "contract_expired", "automatic_renewal_attention")
+    ]
+    derived = derive_work_items(
+        contract_id=str(c.id), warnings=warnings, equipment_rows=[],
+        as_of_date=date(2026, 9, 3), policy_version="pr4-1",
+    )
+    assert derived == []
+
+
 def test_warning_lineage_fields(db):
     org = _org(db)
     c = _contract(db, org, "WQ2")
-    w = _warning(db, org, c, wtype="automatic_renewal_attention", requires_review=True,
+    w = _warning(db, org, c, wtype="unclear_contract_data", requires_review=True,
                  fingerprint="fp-renew", severity="medium")
     db.flush()
     item = derive_work_items(
         contract_id=str(c.id), warnings=[w], equipment_rows=[],
         as_of_date=date(2026, 9, 3), policy_version="pr4-1",
     )[0]
-    assert item["item_type"].value == "automatic_renewal"
+    assert item["item_type"].value == "manual_review"
     assert item["source_warning_fingerprint"] == "fp-renew"
     assert item["source_warning_id"] == w.id
 
@@ -568,7 +584,7 @@ def test_reconcile_idempotent_creates_once(db):
 def test_reconcile_stale_becomes_inactive(db):
     org = _org(db)
     c = _contract(db, org, "STALE")
-    w = _warning(db, org, c, wtype="cancellation_deadline_approaching", requires_review=True, fingerprint="fp-s1")
+    w = _warning(db, org, c, wtype="missing_cost_data", requires_review=True, fingerprint="fp-s1")
     eq = add_equipment(db, contract_id=c.id, model="Y", has_evidence=True)
     db.flush()
     _reconcile(db, org, c, [w], [eq], date(2026, 9, 3))
@@ -581,7 +597,7 @@ def test_reconcile_stale_becomes_inactive(db):
     warning_item = db.scalars(
         select(WorkItem).where(
             (WorkItem.contract_id == c.id)
-            & (WorkItem.item_type == "cancellation_deadline")
+            & (WorkItem.item_type == "missing_cost")
         )
     ).one()
     assert warning_item.active is False
@@ -597,7 +613,7 @@ def test_reconcile_stale_becomes_inactive(db):
 def test_lifecycle_transitions(db):
     org = _org(db)
     c = _contract(db, org, "LC")
-    w = _warning(db, org, c, wtype="contract_expired", requires_review=True, fingerprint="fp-lc")
+    w = _warning(db, org, c, wtype="manual_review_required", requires_review=True, fingerprint="fp-lc")
     db.flush()
     _reconcile(db, org, c, [w], [], date(2026, 9, 3))
     item = db.scalars(select(WorkItem).where(WorkItem.contract_id == c.id)).one()
@@ -646,7 +662,7 @@ def _committed(engine, db, org, contract, *, equipment=True, work=True):
     if equipment:
         add_equipment(db, contract_id=contract.id, serial_number="SN-API", device_name="CT-API", has_evidence=True)
     if work:
-        w = _warning(db, org, contract, wtype="contract_expired", requires_review=True, fingerprint="fp-api")
+        w = _warning(db, org, contract, wtype="manual_review_required", requires_review=True, fingerprint="fp-api")
         db.flush()
         eqs = db.scalars(select(ContractEquipment).where(ContractEquipment.contract_id == contract.id)).all()
         _reconcile(db, org, contract, [w], eqs, date(2026, 9, 3))
@@ -712,11 +728,17 @@ def test_work_queue_routes_ok_and_cross_org_404(engine, db):
             wi = s.scalars(
                 select(WorkItem).where(
                     (WorkItem.organization_id == org.id)
-                    & (WorkItem.item_type == "contract_expired")
+                    & (WorkItem.item_type == "manual_review")
                 )
             ).one()
             wi_id = wi.id
             slug = org.slug
+            # Altbestand aus der Zeit vor der Trennung: KI-Frist als Aufgabe.
+            s.add(WorkItem(
+                organization_id=org.id, contract_id=c.id, logical_fingerprint="legacy-deadline",
+                item_type="cancellation_deadline", severity="high", status="open",
+                title_de="Kündigungsfrist (alt)", active=True,
+            ))
             org_b = create_organization(s, name="B2", slug=f"klinik-b2-{uuid.uuid4().hex[:8]}")
             slug_b = org_b.slug
             s.commit()
@@ -724,6 +746,8 @@ def test_work_queue_routes_ok_and_cross_org_404(engine, db):
         r = client.get(f"/api/work-queue?organization_slug={slug}")
         assert r.status_code == 200
         assert r.json()["total"] >= 1
+        assert all(item["item_type"] != "cancellation_deadline" for item in r.json()["items"])
+        assert client.get(f"/api/work-queue?organization_slug={slug}&item_type=cancellation_deadline").status_code == 422
         # Status-Transition (PATCH) erlaubt
         rp = client.patch(
             f"/api/work-queue/{wi_id}?organization_slug={slug}",
@@ -802,7 +826,7 @@ def test_reprocessing_no_duplicate_equipment_or_relationships(db):
     c = _contract(db, org, "REPRO")
     # Simuliert zwei identische Verarbeitungs-Durchläufe für denselben Vertrag.
     e1 = add_equipment(db, contract_id=c.id, serial_number="SN-R", device_name="R", has_evidence=True)
-    w = _warning(db, org, c, wtype="cancellation_deadline_approaching", requires_review=True, fingerprint="fp-r")
+    w = _warning(db, org, c, wtype="missing_cost_data", requires_review=True, fingerprint="fp-r")
     db.flush()
     eqs = db.scalars(select(ContractEquipment).where(ContractEquipment.contract_id == c.id)).all()
     _reconcile(db, org, c, [w], eqs, date(2026, 9, 3))

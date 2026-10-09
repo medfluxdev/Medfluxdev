@@ -27,6 +27,19 @@ DEFAULT_VIEWS: tuple[tuple[str, str, dict], ...] = (
         "filters": [{"column": "cancel_by", "op": "within_days", "value": 90}],
         "sort": {"column": "cancel_by", "dir": "asc"},
     }),
+    ("review", "Zu prüfen", {
+        "columns": [*DEFAULT_COLUMNS, "review_pending"],
+        "filters": [{"column": "review_pending", "op": "is", "value": True}],
+    }),
+    ("rule_violations", "Regelverstöße", {
+        "columns": [*DEFAULT_COLUMNS, "rules_violated"],
+        "filters": [{"column": "rules_status", "op": "in", "value": ["Verstoß"]}],
+    }),
+    ("archive", "Archiv", {
+        "columns": [*[key for key in DEFAULT_COLUMNS if key not in ("cancel_by", "possible_end")], "archived_at"],
+        "archived": True,
+        "sort": {"column": "archived_at", "dir": "desc"},
+    }),
     ("in_work", "In Arbeit", {"filters": [{"column": "business_status", "op": "in", "value": ["in_arbeit"]}]}),
     ("deletion_due", "Zum Löschen vorgesehen", {
         "columns": [*DEFAULT_COLUMNS, "deletion_from", "storage_location"],
@@ -67,6 +80,7 @@ def view_payload(row: SavedView, account_id: Optional[uuid.UUID]) -> dict:
         "config": row.config,
         "is_global": row.owner_account_id is None,
         "is_system": row.system_key is not None,
+        "system_key": row.system_key,
         "is_own": row.owner_account_id is not None and row.owner_account_id == account_id,
         "created_by_name": row.created_by_name,
         "view_kind": row.view_kind,

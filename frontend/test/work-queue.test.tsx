@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import WorkQueuePage from "@/app/work-queue/page";
+import TaskQueue from "@/components/work-queue/TaskQueue";
 import type { WorkItemList, WorkItemSummary } from "@/lib/pr4-types";
 
 const apiGetMock = vi.fn();
@@ -21,12 +21,12 @@ function item(overrides: Partial<WorkItemSummary> = {}): WorkItemSummary {
     equipment_id: null,
     contract_equipment_id: null,
     source_warning_id: null,
-    item_type: "cancellation_deadline",
+    item_type: "missing_cost",
     severity: "high",
     status: "open",
-    title_de: "Kündigungsfrist nähert sich",
-    why_de: "Vertrag kann noch bis 2026-06-01 gekündigt werden.",
-    action_hint_de: "Kündigung prüfen.",
+    title_de: "Kosten fehlen",
+    why_de: "Im Vertrag ist kein Betrag erfasst.",
+    action_hint_de: "Kosten nachtragen.",
     target_date: "2026-06-01",
     days_remaining: 14,
     requires_review: false,
@@ -52,7 +52,7 @@ beforeEach(() => {
 
 async function renderWithData(data: WorkItemList) {
   apiGetMock.mockResolvedValue(data);
-  const utils = render(<WorkQueuePage />);
+  const utils = render(<TaskQueue />);
   await waitFor(() => expect(apiGetMock).toHaveBeenCalled());
   return utils;
 }
@@ -61,22 +61,22 @@ function taskRow(contractNumber = "CN-1") {
   return screen.getByRole("link", { name: contractNumber }).closest("tr") as HTMLTableRowElement;
 }
 
-describe("To-dos (PR-4 / FE-09)", () => {
+describe("Aufgaben (PR-4 / FE-09)", () => {
   it("zeigt einen Ladezustand während des Ladens", () => {
     apiGetMock.mockImplementation(() => new Promise(() => {}));
-    render(<WorkQueuePage />);
-    expect(screen.getByText("To-dos werden geladen…")).toBeInTheDocument();
+    render(<TaskQueue />);
+    expect(screen.getByText("Aufgaben werden geladen…")).toBeInTheDocument();
   });
 
   it("zeigt einen generischen Fehlerzustand bei Backend-Fehler", async () => {
     apiGetMock.mockRejectedValue(new Error("boom"));
-    render(<WorkQueuePage />);
-    await waitFor(() => expect(screen.getByText("To-dos konnten nicht geladen werden.")).toBeInTheDocument());
+    render(<TaskQueue />);
+    await waitFor(() => expect(screen.getByText("Aufgaben konnten nicht geladen werden.")).toBeInTheDocument());
   });
 
-  it("zeigt 'keine offenen To-dos' bei leerer Liste", async () => {
+  it("zeigt 'keine offenen Aufgaben' bei leerer Liste", async () => {
     await renderWithData(list());
-    expect(screen.getByText("Keine offenen To-dos")).toBeInTheDocument();
+    expect(screen.getByText("Keine offenen Aufgaben")).toBeInTheDocument();
     expect(screen.getByText("Aktuell sind keine offenen Aufgaben vorhanden.")).toBeInTheDocument();
   });
 
@@ -90,16 +90,15 @@ describe("To-dos (PR-4 / FE-09)", () => {
     expect(screen.getByText(/Accutron MR · MEDTRON \(X-9000\) · Seriennr\. 88024307/)).toBeInTheDocument();
   });
 
-  it("zeigt Vertrags-Link, Status, Terminart und nächsten Schritt", async () => {
+  it("zeigt Vertrags-Link, Status, Termin und nächsten Schritt", async () => {
     await renderWithData(list(item()));
     const row = taskRow();
-    expect(within(row).getByText(/Kündigungsfrist: Kündigungsfrist nähert sich/)).toBeInTheDocument();
+    expect(within(row).getByText(/: Kosten fehlen/)).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: "CN-1" })).toHaveAttribute("href", "/contracts/c-1");
     expect(within(row).getByText("Offen")).toBeInTheDocument();
     expect(within(row).getByText(/in 14 Tagen/)).toBeInTheDocument();
-    expect(within(row).getByText("Kündigungsfrist", { selector: ".work-deadline-kind" })).toBeInTheDocument();
     expect(within(row).getByText(/Nächster Schritt:/)).toBeInTheDocument();
-    expect(within(row).getByText(/Kündigung prüfen/)).toBeInTheDocument();
+    expect(within(row).getByText(/Kosten nachtragen/)).toBeInTheDocument();
   });
 
   it("öffnet bei Prüfbedarf direkt die Vertragsprüfung", async () => {
@@ -109,18 +108,20 @@ describe("To-dos (PR-4 / FE-09)", () => {
 
   it("sendet unterstützte Filter an die Work-Queue-API", async () => {
     apiGetMock.mockResolvedValue(list(item()));
-    render(<WorkQueuePage />);
+    render(<TaskQueue />);
     await waitFor(() => expect(apiGetMock).toHaveBeenCalled());
     await userEvent.selectOptions(screen.getByLabelText("Priorität filtern"), "high");
     await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith(expect.stringContaining("severity=high")));
-    await userEvent.selectOptions(screen.getByLabelText("Aufgabentyp filtern"), "cancellation_deadline");
-    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith(expect.stringContaining("item_type=cancellation_deadline")));
+    await userEvent.selectOptions(screen.getByLabelText("Aufgabentyp filtern"), "missing_cost");
+    await waitFor(() => expect(apiGetMock).toHaveBeenLastCalledWith(expect.stringContaining("item_type=missing_cost")));
   });
 
-  it("unterscheidet Kündigungsfrist und Vertragsende textuell", async () => {
-    await renderWithData(list(item(), item({ id: "wi-2", item_type: "contract_expiry", title_de: "Vertragsende nähert sich" })));
-    expect(screen.getAllByText("Kündigungsfrist").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Vertragsende").length).toBeGreaterThan(0);
+  it("bietet keine Fristen als Aufgabentyp an und verweist auf die Termine", async () => {
+    await renderWithData(list(item()));
+    const types = Array.from((screen.getByLabelText("Aufgabentyp filtern") as HTMLSelectElement).options).map((option) => option.value);
+    expect(types).not.toContain("cancellation_deadline");
+    expect(types).not.toContain("contract_expiry");
+    expect(screen.getByRole("note")).toHaveTextContent("stehen unter „Termine“");
   });
 
   it("übernimmt einen offenen Punkt (acknowledged) per PATCH", async () => {
@@ -137,7 +138,7 @@ describe("To-dos (PR-4 / FE-09)", () => {
     await renderWithData(list(item()));
     await userEvent.click(within(taskRow()).getByRole("button", { name: "Erledigt" }));
     await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith(expect.stringContaining("/api/work-queue/wi-1"), { status: "resolved" }));
-    await waitFor(() => expect(screen.getByText("Keine offenen To-dos")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Keine offenen Aufgaben")).toBeInTheDocument());
   });
 
   it("meldet einen Fehler, wenn die Status-Aktualisierung fehlschlägt", async () => {

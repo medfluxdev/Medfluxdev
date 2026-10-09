@@ -18,6 +18,12 @@ const api = vi.hoisted(() => ({
   saveBlob: vi.fn(),
 }));
 
+const contracts = vi.hoisted(() => ({ unarchiveContract: vi.fn() }));
+vi.mock("@/lib/domain-api/contracts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/domain-api/contracts")>()),
+  ...contracts,
+}));
+
 vi.mock("@/lib/domain-api/registerGrid", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/domain-api/registerGrid")>()),
   ...api,
@@ -135,5 +141,37 @@ describe("Vertragsliste – Übernahme der früheren Liste", () => {
         { column: "cancel_by", op: "within_days", value: 90 },
       ],
     });
+  });
+
+  const SYSTEM_VIEWS = [
+    { id: "v-review", system_key: "review", name: "Zu prüfen", is_global: true, is_system: true, is_own: false, created_by_name: "System",
+      config: { columns: ["register_number", "short_description"], filters: [{ column: "review_pending", op: "is", value: true }], sort: null, group_by: [], q: null, include_deleted: false, archived: false } },
+    { id: "v-archive", system_key: "archive", name: "Archiv", is_global: true, is_system: true, is_own: false, created_by_name: "System",
+      config: { columns: ["register_number", "short_description"], filters: [], sort: null, group_by: [], q: null, include_deleted: false, archived: true } },
+  ];
+
+  it("Archiv-Seite: zeigt nur Archiviertes und stellt einen Vertrag wieder her, ohne die zuletzt genutzte Ansicht zu ändern", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("medflux.register.lastView", "v-1");
+    api.listSavedViews.mockResolvedValue({ can_manage_global: false, items: SYSTEM_VIEWS });
+    contracts.unarchiveContract.mockResolvedValue({});
+    const { container } = render(<RegisterGrid organizationSlug="test-klinik" initialViewKey="archive" />);
+    expect(await screen.findByRole("heading", { name: "Archiv" })).toBeInTheDocument();
+    expect(api.getGrid).toHaveBeenLastCalledWith("test-klinik", expect.objectContaining({ archived: true }), expect.anything());
+    expect(screen.getByText(/Es wird nichts gelöscht/)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Vertrag 000001 wiederherstellen" }));
+    await waitFor(() => expect(contracts.unarchiveContract).toHaveBeenCalledWith("c-1", "test-klinik"));
+    await waitFor(() => expect(api.getGrid.mock.calls.length).toBeGreaterThan(1));
+    expect(window.localStorage.getItem("medflux.register.lastView")).toBe("v-1");
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("Prüfungen: Ansicht über ?ansicht=review mit „Prüfen“ je Zeile", async () => {
+    window.history.replaceState(null, "", "/register?ansicht=review");
+    api.listSavedViews.mockResolvedValue({ can_manage_global: false, items: SYSTEM_VIEWS });
+    render(<RegisterGrid organizationSlug="test-klinik" />);
+    expect(await screen.findByRole("heading", { name: "Zu prüfen" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Vertrag 000002 prüfen" })).toHaveAttribute("href", "/contracts/c-2?tab=documents&subtab=review");
+    window.history.replaceState(null, "", "/");
   });
 });

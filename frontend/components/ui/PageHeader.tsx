@@ -31,7 +31,7 @@ export default function PageHeader({
 }: Props) {
   const pageTitle = documentTitle ?? title;
   useEffect(() => {
-    const base = "Medflux";
+    const base = "MedFlux";
     document.title = pageTitle === base ? base : `${pageTitle} · ${base}`;
   }, [pageTitle]);
 

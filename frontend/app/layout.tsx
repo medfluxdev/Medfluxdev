@@ -4,6 +4,7 @@ import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
+import "@fontsource-variable/source-serif-4";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./globals.css";
@@ -24,6 +25,7 @@ import "./operational-workflows.css";
 import "./release-gate.css";
 import "./brand-identity.css";
 import "./assistant.css";
+import "./master-data.css";
 import "./styles/components.css";
 import "./styles/shell.css";
 

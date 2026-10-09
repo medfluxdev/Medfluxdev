@@ -29,17 +29,30 @@ from app.history.service import (
 router = APIRouter(tags=["history"])
 
 EXPORT_LIMIT = 10000
+# Stammdaten, deren Einzelhistorie abgefragt werden kann.
+MASTER_DATA_OBJECT_TYPES = frozenset({
+    "contract_partner", "hospital", "department", "cost_center",
+    "catalog_contract_type", "catalog_contract_category", "lookup_value", "contract_rule",
+})
 
 
 def _filters(
     account_id: Optional[UUID], category: Optional[str], contract_id: Optional[UUID],
     date_from: Optional[date], date_to: Optional[date],
+    object_type: Optional[str] = None, object_id: Optional[UUID] = None,
 ) -> HistoryFilter:
     if category and category not in CATEGORIES:
         raise HTTPException(status_code=422, detail="Unbekannter Bereich.")
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=422, detail="Der Zeitraum ist ungültig.")
-    return HistoryFilter(account_id=account_id, category=category or None, contract_id=contract_id, date_from=date_from, date_to=date_to)
+    if (object_type is None) != (object_id is None):
+        raise HTTPException(status_code=422, detail="Objektart und Objekt gehören zusammen.")
+    if object_type is not None and object_type not in MASTER_DATA_OBJECT_TYPES:
+        raise HTTPException(status_code=422, detail="Unbekannte Objektart.")
+    return HistoryFilter(
+        account_id=account_id, category=category or None, contract_id=contract_id, date_from=date_from, date_to=date_to,
+        object_type=object_type, object_id=object_id,
+    )
 
 
 def _query(session, actor, filters: HistoryFilter, limit: int, offset: int) -> dict:
@@ -63,12 +76,14 @@ def list_history(
     contract_id: Optional[UUID] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    object_type: Optional[str] = None,
+    object_id: Optional[UUID] = None,
     limit: int = 100,
     offset: int = 0,
 ):
     actor = current_actor(request, organization_slug)
     require(actor, "audit.view")
-    filters = _filters(account_id, category, contract_id, date_from, date_to)
+    filters = _filters(account_id, category, contract_id, date_from, date_to, object_type, object_id)
     session = create_session()
     try:
         result = _query(session, actor, filters, min(max(limit, 1), 500), offset)

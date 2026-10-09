@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { useAuth } from "@/components/auth/AuthProvider";
+import BrandCover from "@/components/brand/BrandCover";
 import MedFluxLogo from "@/components/brand/MedFluxLogo";
 import ThemeToggle from "@/components/shell/ThemeToggle";
 
@@ -74,37 +75,39 @@ function LoginContent() {
   return (
     <main className="auth-page" id="main-content">
       <ThemeToggle className="auth-theme-toggle" />
-      <div className="auth-login-shell">
-        <header className="auth-login-brand">
-          <MedFluxLogo priority />
-        </header>
-
-        <section className="auth-card" aria-labelledby="login-title" aria-busy={busy}>
-          <h2 id="login-title">Willkommen</h2>
-          <p className="auth-intro">Melden Sie sich bei Ihrem MedFlux-Konto an.</p>
-          <form className="auth-form" method="post" onSubmit={submit}>
-            <label>
-              E-Mail
-              <input type="email" autoComplete="username" inputMode="email" placeholder="E-Mail-Adresse eingeben" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus disabled={busy} />
-            </label>
-            <label>
-              Passwort
-              <span className="auth-password-field">
-                <input type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Passwort eingeben" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} />
-                <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Passwort ausblenden" : "Passwort anzeigen"} aria-pressed={showPassword} disabled={busy}>
-                  <EyeIcon hidden={showPassword} />
-                </button>
-              </span>
-            </label>
-            {error ? <p className="auth-error" role="alert">{error}</p> : null}
-            <button className="auth-submit" type="submit" disabled={busy}>{busy ? "Anmeldung läuft…" : "Anmelden"}</button>
-          </form>
-          <div className="auth-benefits" aria-label="MedFlux Vorteile">
-            <div><ShieldIcon /><span>Sicher</span></div>
-            <div><BoltIcon /><span>Schnell</span></div>
-            <div><DocumentIcon /><span>Intelligent</span></div>
-          </div>
-        </section>
+      <header className="auth-login-brand">
+        <MedFluxLogo priority />
+      </header>
+      <div className="auth-login-layout">
+        <BrandCover className="auth-cover" />
+        <div className="auth-login-shell">
+          <section className="auth-card" aria-labelledby="login-title" aria-busy={busy}>
+            <h2 id="login-title">Willkommen</h2>
+            <p className="auth-intro">Melden Sie sich bei Ihrem MedFlux-Konto an.</p>
+            <form className="auth-form" method="post" onSubmit={submit}>
+              <label>
+                E-Mail
+                <input type="email" autoComplete="username" inputMode="email" placeholder="E-Mail-Adresse eingeben" value={email} onChange={(event) => setEmail(event.target.value)} required autoFocus disabled={busy} />
+              </label>
+              <label>
+                Passwort
+                <span className="auth-password-field">
+                  <input type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="Passwort eingeben" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} />
+                  <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Passwort ausblenden" : "Passwort anzeigen"} aria-pressed={showPassword} disabled={busy}>
+                    <EyeIcon hidden={showPassword} />
+                  </button>
+                </span>
+              </label>
+              {error ? <p className="auth-error" role="alert">{error}</p> : null}
+              <button className="auth-submit" type="submit" disabled={busy}>{busy ? "Anmeldung läuft…" : "Anmelden"}</button>
+            </form>
+            <div className="auth-benefits" aria-label="MedFlux Vorteile">
+              <div><ShieldIcon /><span>Sicher</span></div>
+              <div><BoltIcon /><span>Schnell</span></div>
+              <div><DocumentIcon /><span>Intelligent</span></div>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
   );

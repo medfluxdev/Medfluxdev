@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.auth.dependencies import current_actor
 from app.core.scope_context import current_scope_context
@@ -26,6 +26,14 @@ class CostCenterUpdate(BaseModel):
     code: str | None = None
     name: str | None = None
     is_active: bool | None = None
+
+
+def _ensure_code_free(session, organization_id: UUID, code: str, exclude: UUID | None = None) -> None:
+    stmt = select(CostCenter.id).where(CostCenter.organization_id == organization_id, func.upper(CostCenter.code) == code.upper())
+    if exclude is not None:
+        stmt = stmt.where(CostCenter.id != exclude)
+    if session.scalar(stmt) is not None:
+        raise HTTPException(status_code=409, detail="Diese Kostenstelle gibt es bereits.")
 
 
 def _organization(session, organization_slug: str):
@@ -92,6 +100,7 @@ def add_item(payload: CostCenterPayload, request: Request, organization_slug: st
         name = payload.name.strip()
         if not code or not name:
             raise HTTPException(status_code=422, detail="Code und Bezeichnung sind erforderlich.")
+        _ensure_code_free(session, organization.id, code)
         row = CostCenter(
             organization_id=organization.id,
             hospital_id=hospital.id,
@@ -143,6 +152,7 @@ def update_item(cost_center_id: UUID, payload: CostCenterUpdate, request: Reques
             code = payload.code.strip().upper()
             if not code:
                 raise HTTPException(status_code=422, detail="Code ist erforderlich.")
+            _ensure_code_free(session, organization.id, code, row.id)
             row.code = code
         if payload.name is not None:
             name = payload.name.strip()

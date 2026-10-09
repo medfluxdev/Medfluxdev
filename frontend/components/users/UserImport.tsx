@@ -4,29 +4,8 @@ import { useState, type ChangeEvent } from "react";
 import Badge from "@/components/ui/Badge";
 import { ROLE_LABELS } from "@/lib/auth-types";
 import { importUsers, type UserImportResult, type UserImportRow } from "@/lib/domain-api/users";
+import { csvCell, downloadCsv as download, readFileText as readText } from "@/lib/csv";
 import { generatePassword, parseUserCsv, USER_IMPORT_TEMPLATE } from "@/lib/user-import-csv";
-
-function download(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function readText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file, "utf-8");
-  });
-}
-
-function csvCell(value: string) {
-  return /[;"\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
 
 // Mehrere Benutzer auf einmal anlegen. Der Administrator vergibt jedem Benutzer
 // sein Erstpasswort (aus der Liste, von Hand oder erzeugt) und gibt es ihm weiter.

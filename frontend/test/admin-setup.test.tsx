@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
   getSetupStatus: vi.fn().mockResolvedValue({
     done: 1, total: 3, required: 2, required_open: 1,
     items: [
-      { key: "organization", label: "Organisationsstruktur", status: "ok", detail: "1 Krankenhäuser, 2 Bereiche, 0 Kostenstellen", href: "/settings/organization" },
+      { key: "organization", label: "Organisationsstruktur", status: "ok", detail: "1 Krankenhäuser, 2 Bereiche, 0 Kostenstellen", href: "/stammdaten/abteilungen" },
       { key: "users", label: "Benutzer und Rollen", status: "todo", detail: "1 aktive Zugänge", href: "/settings/users" },
       { key: "mail", label: "E-Mail-Versand (SMTP)", status: "optional", detail: "nicht eingerichtet", href: "/settings" },
     ],
@@ -22,7 +22,7 @@ describe("Einrichtungs-Checkliste", () => {
     expect(await screen.findByText(/1 notwendige Schritte offen · 1 von 3 erledigt/)).toBeInTheDocument();
     const users = screen.getByRole("link", { name: "Benutzer und Rollen" }).closest("li")!;
     expect(within(users).getByText("Offen")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Organisationsstruktur" })).toHaveAttribute("href", "/settings/organization");
+    expect(screen.getByRole("link", { name: "Organisationsstruktur" })).toHaveAttribute("href", "/stammdaten/abteilungen");
     expect(screen.getByText("Optional")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });

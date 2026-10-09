@@ -39,6 +39,15 @@ EVENT_LABELS: dict[str, str] = {
     "notification.deadline_escalation": "Eskalation gemeldet",
     "partner.created": "Vertragspartner angelegt",
     "partner.updated": "Vertragspartner geändert",
+    "partner.merged": "Vertragspartner zusammengeführt",
+    "partner.merged_into": "Vertragspartner in Dublette überführt",
+    "partner.bulk_imported": "Vertragspartner importiert",
+    "contract.partner_merged": "Vertragspartner durch Zusammenführung ersetzt",
+    "department.bulk_imported": "Abteilungen importiert",
+    "cost_center.bulk_imported": "Kostenstellen importiert",
+    "catalog.lookup_bulk_imported": "Auswahlwerte importiert",
+    "catalog.rule_created": "Vertragsregel angelegt",
+    "catalog.rule_updated": "Vertragsregel geändert",
     "catalog.contract_type_created": "Vertragstyp angelegt",
     "catalog.contract_type_updated": "Vertragstyp geändert",
     "catalog.contract_category_created": "Kategorie angelegt",
@@ -230,6 +239,8 @@ class HistoryFilter:
     contract_id: Optional[uuid.UUID] = None
     date_from: Optional[date] = None
     date_to: Optional[date] = None
+    object_type: Optional[str] = None
+    object_id: Optional[uuid.UUID] = None
 
 
 def _filtered(
@@ -250,6 +261,8 @@ def _filtered(
         stmt = stmt.where(ActivityLog.account_id == filters.account_id)
     if filters.contract_id is not None:
         stmt = stmt.where(ActivityLog.object_type == "contract", ActivityLog.object_id == filters.contract_id)
+    if filters.object_type is not None and filters.object_id is not None:
+        stmt = stmt.where(ActivityLog.object_type == filters.object_type, ActivityLog.object_id == filters.object_id)
     if filters.category == "other":
         known = [prefix for prefixes in _CATEGORY_PREFIXES.values() for prefix in prefixes]
         stmt = stmt.where(*[~ActivityLog.event_name.startswith(prefix) for prefix in known])

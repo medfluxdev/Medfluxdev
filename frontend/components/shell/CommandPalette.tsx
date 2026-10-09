@@ -75,7 +75,7 @@ export default function CommandPalette({ open, onClose, onShowShortcuts }: { ope
         }
         if (partners.status === "fulfilled") {
           for (const item of partners.value.items) {
-            found.push({ id: `partner:${item.id}`, section: "Vertragspartner", label: item.short_name, hint: item.name1, icon: "partners", run: go(`/partners?q=${encodeURIComponent(item.short_name)}`) });
+            found.push({ id: `partner:${item.id}`, section: "Vertragspartner", label: item.short_name, hint: item.name1, icon: "partners", run: go(`/stammdaten/vertragspartner?id=${encodeURIComponent(item.id)}`) });
           }
         }
         found.push({ id: "content", section: "Inhalte", label: `In allen Vertragsdokumenten suchen: „${q}“`, icon: "search", run: go(`/suche?q=${encodeURIComponent(q)}`) });

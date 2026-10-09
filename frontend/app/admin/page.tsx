@@ -109,7 +109,7 @@ export default function AdminPage() {
 
   return <div className={styles.page}>
     <section className={styles.hero}>
-      <div><span className={styles.kicker}>Organisation verwalten</span><h1>Admin Dashboard</h1><p>{membership?.organization_name ?? "Medflux"}: Verträge, Aufgaben, Benutzer und Aktivitäten auf einen Blick.</p></div>
+      <div><span className={styles.kicker}>Organisation verwalten</span><h1>Admin Dashboard</h1><p>{membership?.organization_name ?? "MedFlux"}: Verträge, Aufgaben, Benutzer und Aktivitäten auf einen Blick.</p></div>
       <div className={styles.identity}><span>{account?.display_name?.slice(0, 1).toUpperCase() ?? "A"}</span><div><strong>{account?.display_name}</strong><small>Administrator · {account?.email}</small></div></div>
     </section>
 
@@ -128,10 +128,11 @@ export default function AdminPage() {
 
       <section className={styles.actions} aria-label="Schnellzugriffe">
         <Link href="/register"><div><strong>Verträge verwalten</strong><small>Bestand, Zuordnung und Verantwortliche</small></div><span>→</span></Link>
-        <Link href="/work-queue"><div><strong>Aufgaben bearbeiten</strong><small>Fristen, Risiken und offene Entscheidungen</small></div><span>→</span></Link>
+        <Link href="/fristen"><div><strong>Fristen & Aufgaben</strong><small>Termine, Kündigungsentscheidungen und offene Aufgaben</small></div><span>→</span></Link>
         <Link href="/settings/users"><div><strong>Benutzer & Rollen</strong><small>Konten und Zugriffsbereiche verwalten</small></div><span>→</span></Link>
         <Link href="/settings/roles"><div><strong>Rollen & Rechte</strong><small>Was jede Rolle darf</small></div><span>→</span></Link>
-        <Link href="/settings/catalogs"><div><strong>Kataloge & Nummernkreis</strong><small>Vertragstypen, Auswahllisten, Vertragsnummern</small></div><span>→</span></Link>
+        <Link href="/stammdaten"><div><strong>Stammdaten</strong><small>Vertragspartner, Organisation, Vertragstypen, Auswahllisten</small></div><span>→</span></Link>
+        <Link href="/settings/nummernkreis"><div><strong>Nummernkreis</strong><small>Vergabe der Vertragsnummern</small></div><span>→</span></Link>
         {deletionAllowed && <Link href="/admin/deletion"><div><strong>Vertragslöschung</strong><small>Vorgemerkte Verträge prüfen und wiederherstellen</small></div><span>→</span></Link>}
         <Link href="/audit"><div><strong>Historie öffnen</strong><small>Änderungen organisationsweit nachvollziehen</small></div><span>→</span></Link>
         <button type="button" onClick={() => void exportContracts()} disabled={exporting}><div><strong>Verträge exportieren</strong><small>Scope-gefilterte CSV mit aktuellem Vertragsbestand</small></div><span>{exporting ? "…" : "↓"}</span></button>

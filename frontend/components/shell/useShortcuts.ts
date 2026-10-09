@@ -8,14 +8,15 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: "/", label: "Suche öffnen" },
   { keys: "g dann s", label: "Mein Tag" },
   { keys: "g dann v", label: "Vertragsliste" },
-  { keys: "g dann t", label: "Termine" },
+  { keys: "g dann t", label: "Fristen & Aufgaben" },
   { keys: "g dann p", label: "Postfach" },
+  { keys: "g dann d", label: "Stammdaten" },
   { keys: "Strg + S", label: "Formular speichern (wo verfügbar)" },
   { keys: "?", label: "Diese Übersicht" },
   { keys: "Esc", label: "Dialog oder Seitenleiste schließen" },
 ];
 
-const ROUTES: Record<string, string> = { s: "/", v: "/register", t: "/termine", p: "/postfach" };
+const ROUTES: Record<string, string> = { s: "/", v: "/register", t: "/fristen", p: "/postfach", d: "/stammdaten" };
 
 function typing(target: EventTarget | null) {
   const element = target as HTMLElement | null;

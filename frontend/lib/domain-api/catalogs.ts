@@ -69,17 +69,8 @@ export interface NumberRangeDto {
   reserved: { value: number; formatted: string; note: string | null }[];
 }
 
-export const LOOKUP_FIELD_LABEL: Record<string, string> = {
-  storage_location: "Lagerort des Originals",
-  attachment_type: "Anlagentyp",
-  deadline_kind: "Terminart",
-  todo_template: "ToDo-Vorlagen",
-  recharge_mode: "Weiterbelastung",
-  industry: "Branche",
-  address_type: "Adressart",
-  job_function: "Funktion",
-  service_kind: "Leistungsart",
-};
+// Bezeichnungen liegen in lib/lookup-fields.ts (ohne API-Abhaengigkeit, auch fuer die Navigation).
+export { LOOKUP_FIELD_LABEL } from "@/lib/lookup-fields";
 
 function orgQuery(organizationSlug: string) {
   return `organization_slug=${encodeURIComponent(organizationSlug)}`;

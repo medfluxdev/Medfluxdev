@@ -62,12 +62,12 @@ def setup_status(request: Request, organization_slug: str):
     run_age = (datetime.now(timezone.utc) - last_run.started_at).days if last_run else None
     items = [
         _item("organization", "Organisationsstruktur", hospitals > 0 and departments > 0,
-              f"{hospitals} Krankenhäuser, {departments} Bereiche, {cost_centers} Kostenstellen", "/settings/organization"),
+              f"{hospitals} Krankenhäuser, {departments} Bereiche, {cost_centers} Kostenstellen", "/stammdaten/abteilungen"),
         _item("users", "Benutzer und Rollen", members > 1, f"{members} aktive Zugänge", "/settings/users"),
-        _item("catalogs", "Kataloge (Vertragstypen, Auswahllisten)", types > 0, f"{types} Vertragstypen", "/settings/catalogs"),
+        _item("catalogs", "Kataloge (Vertragstypen, Auswahllisten)", types > 0, f"{types} Vertragstypen", "/stammdaten/vertragstypen"),
         _item("numbers", "Nummernkreis für Vertragsnummern", number_range is not None,
               f"nächste Nummer {number_range.prefix}{str(number_range.next_value).zfill(number_range.padding)}" if number_range else "noch nicht eingerichtet",
-              "/settings/catalogs"),
+              "/settings/nummernkreis"),
         _item("ai", "Lokales KI-Modell", _ai.configured, f"Modell: {_ai.active_model_id()}" if _ai.configured else "kein Modell ausgewählt", "/settings"),
         _item("mail", "E-Mail-Versand (SMTP)", smtp_configured(),
               "eingerichtet" if smtp_configured() else "nicht eingerichtet – Erinnerungen nur im Postfach", "/settings", optional=True),

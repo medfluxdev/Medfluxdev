@@ -277,6 +277,44 @@ def patch_partner(partner_id: UUID, payload: CatalogEntry, request: Request, org
         session.close()
 
 
+class PartnerMerge(BaseModel):
+    source_ids: list[UUID] = Field(min_length=1, max_length=catalogs.MAX_MERGE_SOURCES)
+
+
+@router.post("/partners/{partner_id}/merge")
+def merge_partners(partner_id: UUID, payload: PartnerMerge, request: Request, organization_slug: str):
+    """Dubletten zusammenfuehren: Vertraege umhaengen, Quellen deaktivieren."""
+    actor = _actor(request, organization_slug)
+    _require_partner_write(actor)
+    session = create_session()
+    try:
+        target = _own(session, ContractPartner, partner_id, actor.organization_id)
+        try:
+            moved = catalogs.merge_partners(session, actor.organization_id, target, payload.source_ids)
+        except CatalogError as exc:
+            session.rollback()
+            raise _http(exc)
+        for source, contract_ids in moved:
+            _log(session, actor, "partner.merged_into", "contract_partner", source.id, {
+                "short_name": source.short_name, "target": target.short_name, "contracts": len(contract_ids),
+            })
+            for contract_id in contract_ids:
+                _log(session, actor, "contract.partner_merged", "contract", contract_id, {
+                    "before": source.short_name, "after": target.short_name,
+                })
+        _log(session, actor, "partner.merged", "contract_partner", target.id, {
+            "sources": [source.short_name for source, _ in moved],
+            "contracts": sum(len(ids) for _, ids in moved),
+        })
+        session.commit()
+        return {
+            **catalogs.partner_payload(target),
+            "merged": [{"id": str(source.id), "short_name": source.short_name, "contracts": len(ids)} for source, ids in moved],
+        }
+    finally:
+        session.close()
+
+
 # --------------------------------------------------------------------------- types / categories
 
 

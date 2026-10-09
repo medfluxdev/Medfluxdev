@@ -6,7 +6,7 @@
 .rg-hint{margin: 12px 0 0;padding: 10px 12px;border: 1px solid var(--color-warning-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle);color: var(--color-warning);font-size: var(--text-small)}
 .rg-transition{display: grid;gap: 10px;margin-top: 14px;padding: 14px;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface)}
 .rg-transition label{display: grid;gap: 4px;font-size: var(--text-small);font-weight: 700;color: var(--color-text-muted)}
-.rg-transition input{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);font: inherit}
+.rg-transition input{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);font: inherit}
 :is(label, div, span, p).rg-check{display: flex;grid-template-columns: none;align-items: flex-start;gap: 8px;font-weight: 600}
 .rg-actions{display: flex;gap: 8px;justify-content: flex-end;flex-wrap: wrap}
 .rg-terms{display: grid;grid-template-columns: repeat(4,minmax(0,1fr));gap: 12px}
@@ -21,7 +21,7 @@
 .rg-field{display: grid;gap: 6px;padding: 12px 0;border-bottom: 1px solid var(--color-border-subtle)}
 .rg-field dt{font-size: var(--text-small);font-weight: 700;color: var(--color-text-subtle)}
 .rg-field dd{margin: 0;display: flex;flex-wrap: wrap;gap: 8px;align-items: center}
-.rg-field input[type=text],.rg-field input[type=date],.rg-field input[type=number],.rg-field input:not([type]),.rg-field select,.rg-field textarea{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);font: inherit;max-width: 100%}
+.rg-field input[type=text],.rg-field input[type=date],.rg-field input[type=number],.rg-field input:not([type]),.rg-field select,.rg-field textarea{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);font: inherit;max-width: 100%}
 .rg-field textarea{width: 100%}
 .rg-value{font-weight: 700;color: var(--color-text)}
 .rg-period,.rg-partner{display: flex;gap: 6px;flex-wrap: wrap;align-items: center}
@@ -35,7 +35,7 @@
 .rg-ok{color: var(--color-success);font-weight: 700}
 .rg-remark-form{display: grid;gap: 8px;margin-bottom: 16px}
 .rg-remark-form label{font-size: var(--text-small);font-weight: 700;color: var(--color-text-muted)}
-.rg-remark-form textarea{width: 100%;padding: 8px 10px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);font: inherit}
+.rg-remark-form textarea{width: 100%;padding: 8px 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);font: inherit}
 .rg-remarks{list-style: none;margin: 0;padding: 0;display: grid;gap: 10px}
 .rg-remarks li{padding: 12px 14px;border: 1px solid var(--color-border-subtle);border-radius: var(--radius-sm)}
 .rg-remarks p{margin: 6px 0 0;white-space: pre-wrap}
@@ -45,7 +45,7 @@
 .rg-table td{padding: 10px;border-bottom: 1px solid var(--color-border-subtle);vertical-align: top}
 .rg-form-grid{display: grid;grid-template-columns: repeat(3,minmax(0,1fr));gap: 10px;align-items: end}
 .rg-form-grid label{display: grid;gap: 4px;font-size: var(--text-small);font-weight: 700;color: var(--color-text-muted)}
-.rg-form-grid input,.rg-form-grid select{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);font: inherit}
+.rg-form-grid input,.rg-form-grid select{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);font: inherit}
 .rg-tabs{display: flex;gap: 6px;flex-wrap: wrap;margin-bottom: 12px}
 .rg-tabs button{border: 1px solid var(--color-border);background: var(--color-surface);color: var(--color-text-muted);border-radius: var(--radius-sm);padding: 8px 12px;font: inherit;font-weight: 700;cursor: pointer}
 .rg-tabs button.active{border-color: var(--color-focus);background: var(--color-bg);color: var(--color-text-subtle)}
@@ -74,7 +74,7 @@
 @media (max-width:640px){.hist-list>li{grid-template-columns: 1fr;gap: 2px}}
 .reg-layout{display: grid;grid-template-columns: 240px minmax(0,1fr);gap: 16px;align-items: start}
 .reg-main{display: grid;grid-template-columns: minmax(0,1fr);gap: 12px;min-width: 0}
-.reg-tree h2{font-size: var(--text-small);margin: 0 0 8px}
+.reg-tree h2{display: inline;font-size: var(--text-small);margin: 0}.reg-tree summary{margin-bottom: 8px;cursor: pointer}.reg-tree details:not([open]) summary{margin-bottom: 0}
 .reg-tree ul{list-style: none;margin: 0;padding: 0;display: grid;gap: 4px}
 .reg-tree ul ul{padding-left: 14px;margin-top: 4px}
 .reg-tree .rg-link{text-align: left}
@@ -116,7 +116,7 @@
 .viz-tiles strong{font-size: var(--text-title-l);font-variant-numeric: tabular-nums}
 .viz-tiles small{color: var(--viz-text,var(--color-text-muted))}
 
-.viz-layout{display: grid;grid-template-columns: repeat(auto-fit,minmax(min(100%,460px),1fr));gap: 12px}
+.viz-layout{display: grid;grid-template-columns: repeat(auto-fit,minmax(min(100%,460px),1fr));gap: 12px;align-items: start}
 .viz-head{display: flex;justify-content: space-between;align-items: end;gap: 12px;flex-wrap: wrap}
 .viz-head label{display: grid;gap: 4px;font-size: var(--text-small);font-weight: 600}
 .viz-insights{list-style: none;margin: 8px 0 0;padding: 0;display: grid;gap: 6px}

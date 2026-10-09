@@ -28,9 +28,11 @@ from app.api.routes import (
     intelligence_actions,
     intelligence_analytics,
     lifecycle,
+    master_data,
     notifications,
     operations,
     register_grid,
+    rules,
     organization_structure,
     ownership,
     processing_jobs,
@@ -136,6 +138,8 @@ app.include_router(contract_billing.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(operations.router)
+app.include_router(master_data.router)
+app.include_router(rules.router)
 
 
 @app.get("/")

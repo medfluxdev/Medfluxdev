@@ -12,6 +12,10 @@ function apiOrigin() {
 const nextConfig = {
   // Eigener Build-Ordner moeglich (z. B. Pruef-Build neben laufendem `next dev`).
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  // Nur `next dev`: kompilierte Seiten länger behalten. Der Browser-Testlauf besucht
+  // viele Seiten schnell hintereinander; mit dem Standard (5 Seiten, 60 s) verwarf der
+  // Entwicklungsserver Seitenpakete, die gerade geladen wurden (404, Seite blieb leer).
+  onDemandEntries: { maxInactiveAge: 60 * 60 * 1000, pagesBufferLength: 60 },
   reactStrictMode: true,
   webpack(config) {
     // pdfjs-dist's build statically imports a Node-only display module whose

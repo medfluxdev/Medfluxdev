@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import type { AccountRole } from "@/lib/auth-types";
+import { MASTER_DATA_SECTIONS } from "@/lib/master-data";
 
 // Einzige Quelle fuer Navigation, Seitentitel, Brotkrumen und Befehlspalette (UX-Plan U3).
 
 export type IconName =
   | "home" | "inbox" | "contracts" | "partners" | "equipment" | "deadlines" | "renewal" | "tasks"
-  | "import" | "review" | "evidence" | "archive" | "analytics" | "history" | "admin" | "settings" | "search" | "developer";
+  | "import" | "review" | "evidence" | "archive" | "analytics" | "history" | "admin" | "settings" | "search" | "developer" | "masterdata";
 
 export const ICONS: Record<IconName, ReactNode> = {
   home: <><path d="M4 11 12 4l8 7" /><path d="M6 10v10h12V10" /></>,
@@ -26,6 +27,7 @@ export const ICONS: Record<IconName, ReactNode> = {
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
   developer: <><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16" /></>,
+  masterdata: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></>,
 };
 
 export function Icon({ name }: { name: IconName }) {
@@ -57,26 +59,22 @@ export const NAV_GROUPS: NavGroup[] = [
   ] },
   { label: "Verträge", items: [
     { label: "Vertragsliste", href: "/register", icon: "contracts", keywords: "verträge register liste", shortcut: "g v" },
-    { label: "Vertragspartner", href: "/partners", icon: "partners", keywords: "lieferanten firmen" },
+    { label: "Fristen & Aufgaben", href: "/fristen", icon: "deadlines", keywords: "termine fristen wiedervorlage kündigung verlängerung entscheidung aufgaben to-dos", shortcut: "g t" },
+    { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS, keywords: "archiviert wiederherstellen" },
     { label: "Geräte", href: "/equipment", icon: "equipment", keywords: "medizintechnik anlagen" },
-  ] },
-  { label: "Fristen", items: [
-    { label: "Termine", href: "/termine", icon: "deadlines", keywords: "fristen wiedervorlage", shortcut: "g t" },
-    { label: "Verlängerungen", href: "/verlaengerungen", icon: "renewal", keywords: "kündigung entscheidung" },
-    { label: "Aufgaben", href: "/work-queue", icon: "tasks", roles: REVIEWERS, keywords: "to-dos arbeitsliste" },
   ] },
   { label: "Prüfung", items: [
     { label: "Import", href: "/import", icon: "import", roles: EDITORS, keywords: "hochladen pdf docx" },
     { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS, keywords: "ki werte bestätigen" },
     { label: "Nachweise", href: "/nachweise", icon: "evidence", keywords: "quellen belege" },
-    { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS },
   ] },
   { label: "Auswertungen", items: [
     { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio" },
     { label: "Historie", href: "/audit", icon: "history", roles: EDITORS, keywords: "audit protokoll änderungen" },
   ] },
   { label: "Verwaltung", items: [
-    { label: "Verwaltung", href: "/admin", icon: "admin", roles: ["admin"], keywords: "admin benutzer rollen kataloge organisation" },
+    { label: "Stammdaten", href: "/stammdaten", icon: "masterdata", keywords: "vertragspartner lieferanten abteilungen kostenstellen krankenhäuser kataloge auswahllisten", shortcut: "g d" },
+    { label: "Verwaltung", href: "/admin", icon: "admin", roles: ["admin"], keywords: "admin benutzer rollen einstellungen nummernkreis löschung" },
     { label: "Entwicklung", href: "/developer", icon: "developer", developerOnly: true, keywords: "developer diagnose" },
   ] },
 ];
@@ -88,13 +86,18 @@ export const EXTRA_PAGES: NavItem[] = [
   { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
   { label: "Mein Profil", href: "/profile", icon: "settings" },
   { label: "Benutzer", href: "/settings/users", icon: "admin", roles: ["admin"] },
-  { label: "Organisation", href: "/settings/organization", icon: "admin", roles: ["admin"] },
-  { label: "Kataloge", href: "/settings/catalogs", icon: "admin", roles: ["admin"] },
+  { label: "Sicherheit & Datenschutz", href: "/sicherheit", icon: "admin", keywords: "datenschutz dsgvo it sicherheit verschlüsselung ki lokal" },
+  { label: "Nummernkreis", href: "/settings/nummernkreis", icon: "admin", roles: ["admin"], keywords: "vertragsnummer nummern" },
   { label: "Rollen & Rechte", href: "/settings/roles", icon: "admin" },
   { label: "Vertragslöschung", href: "/admin/deletion", icon: "admin", roles: ["admin"] },
-  { label: "Verträge (klassisch)", href: "/contracts", icon: "contracts" },
   { label: "UI-Komponenten", href: "/developer/components", icon: "developer", developerOnly: true },
   { label: "Organisationen", href: "/system/organizations", icon: "developer", developerOnly: true },
+  ...MASTER_DATA_SECTIONS.map((section): NavItem => ({
+    label: section.label,
+    href: section.href,
+    icon: section.kind === "partner" ? "partners" : "masterdata",
+    keywords: `stammdaten ${section.group.toLowerCase()} ${section.description.toLowerCase()}`,
+  })),
 ];
 
 export function visibleGroups(role: AccountRole | null | undefined, isDeveloper: boolean): NavGroup[] {

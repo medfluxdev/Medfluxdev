@@ -56,43 +56,14 @@ body {
 }
 
 a {
-  text-decoration-color: color-mix(in srgb, var(--brand-teal), transparent 42%);
+  text-decoration-color: currentcolor;
 }
 
 /* Identity-led dashboard area */
 
 /* Login */
 .auth-page {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background: radial-gradient(circle at 12% 10%, rgba(20, 184, 166, 0.22), transparent 30%),
-    radial-gradient(circle at 88% 86%, rgba(15, 76, 129, 0.14), transparent 34%),
-    linear-gradient(135deg, var(--color-surface-subtle) 0%, var(--color-surface-muted) 52%, var(--color-bg) 100%);
-}
-
-.auth-page::before,
-.auth-page::after {
-  content: "";
-  position: fixed;
-  z-index: -1;
-  width: 34rem;
-  height: 34rem;
-  border-radius: 50%;
-  pointer-events: none;
-  filter: blur(2px);
-}
-
-.auth-page::before {
-  top: -22rem;
-  left: -12rem;
-  background: rgba(20, 184, 166, 0.12);
-}
-
-.auth-page::after {
-  right: -18rem;
-  bottom: -24rem;
-  background: rgba(15, 76, 129, 0.1);
+  background: var(--color-bg);
 }
 
 .auth-login-brand {
@@ -116,8 +87,8 @@ a {
 
 
 .auth-card {
-  border-color: rgba(15, 76, 129, 0.12);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-md);
 }
 
 .auth-card h2,
@@ -135,8 +106,8 @@ a {
 .user-admin-form select:focus,
 .user-edit-row input:focus,
 .user-edit-row select:focus {
-  border-color: var(--brand-teal);
-  outline-color: rgba(20, 184, 166, 0.34);
+  border-color: var(--color-accent);
+  outline-color: var(--color-focus);
 }
 
 .auth-password-toggle:focus-visible {
@@ -171,4 +142,49 @@ a {
   .auth-login-brand .medflux-logo__image {
     width: 220px;
   }
+}
+
+/* Titelbild (BrandCover) – Richtung "Sachlich-institutionell" */
+.brand-cover {
+  position: relative;
+  container-type: inline-size;
+  width: 100%;
+  aspect-ratio: 960 / 288;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+.brand-cover-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.brand-cover-panel { fill: var(--color-surface); stroke: var(--color-border-strong); stroke-width: 1; }
+.brand-cover-navy { fill: var(--color-accent); }
+.brand-cover-deep { fill: var(--color-accent-hover); }
+.brand-cover-mark { fill: var(--color-brand); }
+.brand-cover-rule { stroke: var(--color-border-strong); stroke-width: 1; }
+.brand-cover-rule-inverse { stroke: var(--color-bg); stroke-width: 1; }
+.brand-cover-text { position: absolute; left: 4.17cqi; bottom: 13.9%; max-width: 46cqi; }
+.brand-cover-name {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-cover);
+  font-weight: var(--weight-semibold);
+  line-height: 0.92;
+  letter-spacing: -0.01em;
+}
+.brand-cover-tagline { margin: var(--space-4) 0 0; color: var(--color-text-muted); font-size: var(--text-small); line-height: var(--leading-small); }
+@media (forced-colors: active) {
+  .brand-cover-art { display: none; }
+}
+
+/* Anmeldeseite: Kopfzeile mit Logo links und Design-Schalter rechts, darunter Titelbild und Karte */
+.auth-page { align-content: start; gap: var(--space-4); padding-top: var(--space-4); }
+.auth-page .auth-login-brand { margin: 0; }
+.auth-login-layout { display: grid; justify-items: center; gap: var(--space-6); width: 100%; }
+@media (min-width: 900px) {
+  .auth-page .auth-login-brand { justify-self: start; }
+  .auth-page .auth-login-brand .medflux-logo,
+  .auth-page .auth-login-brand .medflux-logo__image { width: 128px; }
+}
+.auth-cover { width: min(960px, 100%); }
+@media (max-width: 899px), (max-height: 699px) {
+  .auth-cover { display: none; }
 }

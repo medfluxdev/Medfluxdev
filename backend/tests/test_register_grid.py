@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -145,13 +145,37 @@ def test_grid_filters_groups_sort_and_tree(monkeypatch):
     assert [item["contract_id"] for item in mine["items"]] == [a]
 
 
+def test_archive_view_shows_only_archived_contracts(monkeypatch):
+    slug, ids = _seed()
+    admin = _as(monkeypatch, ids, "admin", "admin")
+    a, b, _ = _populate(admin, slug, ids)
+    session = create_session()
+    try:
+        row = session.get(Contract, UUID(a))
+        row.is_archived = True
+        row.archived_at = datetime(2026, 9, 30, 8, 0, tzinfo=timezone.utc)
+        session.commit()
+    finally:
+        session.close()
+
+    active = _grid(admin, slug, {"include_deleted": True})
+    assert a not in [item["contract_id"] for item in active["items"]]
+    assert b in [item["contract_id"] for item in active["items"]]
+
+    archived = _grid(admin, slug, {"archived": True, "columns": ["register_number", "archived_at"]})
+    assert [item["contract_id"] for item in archived["items"]] == [a]
+    assert archived["spec"]["archived"] is True
+    assert archived["items"][0]["values"]["archived_at"] == "2026-09-30"
+
+
 def test_saved_views_defaults_permissions_and_ownership(monkeypatch):
     slug, ids = _seed()
     query = {"organization_slug": slug}
     viewer = _as(monkeypatch, ids, "viewer", "viewer")
     listed = viewer.get("/api/register/views", params=query).json()
     names = [item["name"] for item in listed["items"]]
-    assert names == ["Meine Verträge", "Meine Wiedervorlage", "Kündigungsfrist < 90 Tage", "In Arbeit", "Zum Löschen vorgesehen", "Gelöschte Verträge"]
+    assert names == ["Meine Verträge", "Meine Wiedervorlage", "Kündigungsfrist < 90 Tage", "Zu prüfen", "Regelverstöße", "Archiv", "In Arbeit", "Zum Löschen vorgesehen", "Gelöschte Verträge"]
+    assert {item["system_key"] for item in listed["items"]} >= {"review", "archive"}
     assert listed["can_manage_global"] is False
     system_id = listed["items"][0]["id"]
 

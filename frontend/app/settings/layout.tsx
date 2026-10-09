@@ -1,4 +1,7 @@
-// "Mein Profil" erreicht man ueber das Kontomenue und die Einstellungs-Navigation.
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+import type { ReactNode } from "react";
+import AdminNav from "@/components/shell/AdminNav";
+import { AreaLayout } from "@/components/shell/AreaNav";
+
+export default function AdminAreaLayout({ children }: { children: ReactNode }) {
+  return <AreaLayout nav={<AdminNav />}>{children}</AreaLayout>;
 }

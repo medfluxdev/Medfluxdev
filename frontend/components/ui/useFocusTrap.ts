@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Haelt den Fokus im Dialog, schliesst mit Escape und gibt den Fokus beim
-// Schliessen an das ausloesende Element zurueck.
+// Schliessen an das ausloesende Element zurueck. onClose liegt in einer Ref,
+// damit ein neues Callback (jedes Rendern) den Fokus nicht erneut setzt.
 export function useFocusTrap(ref: RefObject<HTMLElement>, active: boolean, onClose: () => void) {
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!active || !ref.current) return;
     const container = ref.current;
@@ -17,7 +20,7 @@ export function useFocusTrap(ref: RefObject<HTMLElement>, active: boolean, onClo
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        close.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -38,5 +41,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement>, active: boolean, onClo
       container.removeEventListener("keydown", onKey);
       previous?.focus?.();
     };
-  }, [active, onClose, ref]);
+  }, [active, ref]);
 }

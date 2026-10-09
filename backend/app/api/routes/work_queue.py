@@ -30,9 +30,9 @@ from app.work_queue.service import (
 router = APIRouter(prefix="/api/work-queue", tags=["work-queue"])
 
 SEVERITY_ALLOWED = {"critical", "high", "medium", "low", "info"}
+# Fristen-Typen sind keine Aufgaben mehr (siehe work_queue/derive.DEADLINE_ITEM_TYPES).
 WORKITEM_TYPE_ALLOWED = {
-    "cancellation_deadline", "contract_expiry", "contract_expired",
-    "automatic_renewal", "manual_review", "missing_cost",
+    "manual_review", "missing_cost",
     "equipment_coverage_review", "equipment_relationship_ambiguous", "sla_issue",
 }
 

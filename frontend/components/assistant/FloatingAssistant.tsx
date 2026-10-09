@@ -8,6 +8,15 @@ import { apiGet, apiPost } from "@/lib/api";
 
 type Evidence = { evidence_id: string; field_ref: string; source_type: string; document_version_id: string; page: number | null; source_text: string; requires_review: boolean };
 type Reply = { answer: string; contract_id: string | null; evidence: Evidence[] };
+
+// Häufige Fragen zu einem Vertrag – ein Klick stellt sie (die Antwort nennt immer die Quelle).
+export const CONTRACT_QUESTIONS = [
+  "Was umfasst die Leistung (Leistungsumfang)?",
+  "Wie lange läuft der Vertrag und wie kann gekündigt werden?",
+  "Welche Kosten fallen an, auch zusätzlich?",
+  "Welche Reaktions- und Wiederherstellungszeiten gelten?",
+  "Wie werden die Preise angepasst?",
+];
 type SourceRegion = { status: string; message_de: string };
 type Message = { sender: "user" | "assistant"; text: string; evidence?: Evidence[] };
 
@@ -49,7 +58,10 @@ export default function FloatingAssistant() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    const message = draft.trim();
+    await ask(draft.trim());
+  }
+
+  async function ask(message: string) {
     if (!message || !organizationSlug || busy) return;
     const current = generation.current;
     const controller = new AbortController();
@@ -114,6 +126,9 @@ export default function FloatingAssistant() {
       <header><div><strong>Lokaler KI-Assistent</strong><small>{contractId ? "Fragen zum aktuellen Vertrag" : "Fragen zu Ihren Verträgen"}</small></div><button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => setOpen(false)} aria-label="Assistent schließen">×</button></header>
       <div className="medflux-assistant-messages" role="log" aria-live="polite">
         {messages.length === 0 && !busy && <div className="medflux-assistant-message"><p>Fragen Sie nach Verträgen, Fristen oder Vertragsdetails. Die Antworten stammen ausschließlich aus Ihren Verträgen, laufen lokal auf diesem Rechner und nennen die Quelle.</p></div>}
+        {messages.length === 0 && !busy && contractId ? <div className="medflux-assistant-suggestions" role="group" aria-label="Häufige Fragen">
+          {CONTRACT_QUESTIONS.map((question) => <button key={question} type="button" className="chip-button" onClick={() => void ask(question)}>{question}</button>)}
+        </div> : null}
         {messages.map((item, index) => <div key={index} className="medflux-assistant-message"><p><strong>{item.sender === "user" ? "Sie" : "Assistent"}:</strong> {item.text}</p>{item.evidence && item.evidence.length > 0 && <details><summary>Quellenauszüge ({item.evidence.length})</summary>{item.evidence.map((source, i) => <div key={source.evidence_id}><strong>{source.field_ref}</strong> · {source.page == null ? "Keine Seitenangabe" : `Seite ${source.page}`} · {source.requires_review ? "Prüfung erforderlich" : "Extraktionsbeleg (nicht unabhängig verifiziert)"}<p>{source.source_text}</p>{contractId && <Link href={`/contracts/${encodeURIComponent(contractId)}?tab=documents&subtab=evidence&source_evidence_id=${encodeURIComponent(source.evidence_id)}`}>Nachweis im Vertrag öffnen</Link>}{source.source_type === "page" && source.page != null && source.source_text.trim().length >= 2 && <button type="button" onClick={() => void checkSource(source, `${index}:${i}`)}>Fundstelle im Original prüfen</button>}{sourceStatus[`${index}:${i}`] && <p role="status">{sourceStatus[`${index}:${i}`]}</p>}</div>)}</details>}</div>)}
         {busy && <p role="status">Lokales Modell antwortet… <button type="button" onClick={() => { generation.current += 1; activeRequest.current?.abort(); activeRequest.current = null; setBusy(false); }}>Abbrechen</button></p>}
       </div>

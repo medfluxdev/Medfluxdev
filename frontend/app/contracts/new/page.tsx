@@ -4,11 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { contractTypeDefinition } from "@/components/master-data/definitions/catalogs";
+import { loadAllPartners, partnerDefinition } from "@/components/master-data/definitions/partners";
+import QuickCreate from "@/components/master-data/QuickCreate";
 import PageHeader from "@/components/ui/PageHeader";
+import { masterDataSection } from "@/lib/master-data";
+import { usePermissions } from "@/lib/use-permissions";
 import { getOrganizationStructure } from "@/lib/domain-api/organizations";
 import {
   listContractTypes,
-  listPartners,
   type ContractCategoryDto,
   type ContractTypeDto,
   type PartnerDto,
@@ -55,17 +59,19 @@ export default function NewContractPage() {
   const [categories, setCategories] = useState<ContractCategoryDto[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quick, setQuick] = useState<"partner" | "contract_type" | null>(null);
+  const { can } = usePermissions();
 
   useEffect(() => {
     if (!organizationSlug || !canCreate) return;
     let cancelled = false;
     Promise.allSettled([
-      listPartners(organizationSlug, { limit: 500 }),
+      loadAllPartners(organizationSlug, false),
       listContractTypes(organizationSlug),
       role === "admin" || account?.is_developer ? getOrganizationStructure(organizationSlug) : Promise.resolve(null),
     ]).then(([partnerResult, typeResult, structureResult]) => {
       if (cancelled) return;
-      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value.items);
+      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value);
       if (typeResult.status === "fulfilled") {
         setTypes(typeResult.value.contract_types.filter((item) => item.is_active));
         setCategories(typeResult.value.contract_categories.filter((item) => item.is_active));
@@ -138,8 +144,14 @@ export default function NewContractPage() {
       <div className="rg-form-grid">
         <label className="span-full">Kurzbeschreibung *<input required maxLength={500} value={form.short_description} onChange={(event) => set("short_description", event.target.value)} /></label>
         {hospitals.length > 0 ? <label>Krankenhaus / Gesellschaft<select value={hospitalId} onChange={(event) => setHospitalId(event.target.value)}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
-        <label>Vertragspartner<select value={form.partner_id} onChange={(event) => set("partner_id", event.target.value)}><option value="">Später auswählen</option>{partners.map((item) => <option key={item.id} value={item.id}>{item.short_name}{item.city ? ` · ${item.city}` : ""}</option>)}</select></label>
-        <label>Vertragstyp<select value={form.contract_type_id} onChange={(event) => set("contract_type_id", event.target.value)}><option value="">Bitte auswählen</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <div className="md-select-with-action">
+          <label>Vertragspartner<select value={form.partner_id} onChange={(event) => set("partner_id", event.target.value)}><option value="">Später auswählen</option>{partners.map((item) => <option key={item.id} value={item.id}>{item.short_name}{item.city ? ` · ${item.city}` : ""}</option>)}</select></label>
+          {can("partner.edit") ? <button type="button" className="btn btn-sm" onClick={() => setQuick("partner")}>Neuer Partner</button> : null}
+        </div>
+        <div className="md-select-with-action">
+          <label>Vertragstyp<select value={form.contract_type_id} onChange={(event) => set("contract_type_id", event.target.value)}><option value="">Bitte auswählen</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          {can("catalog.admin") ? <button type="button" className="btn btn-sm" onClick={() => setQuick("contract_type")}>Neuer Typ</button> : null}
+        </div>
         <label>Kategorie<select value={form.contract_category_id} onChange={(event) => set("contract_category_id", event.target.value)}><option value="">Bitte auswählen</option>{visibleCategories.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
         <label>Vertragsart<select value={form.term_model} onChange={(event) => set("term_model", event.target.value)}><option value="">Bitte auswählen</option>{(Object.keys(TERM_MODEL_LABEL) as TermModel[]).map((value) => <option key={value} value={value}>{TERM_MODEL_LABEL[value]}</option>)}</select></label>
         <label>Vertragsbeginn<input type="date" value={form.term_start_date} onChange={(event) => set("term_start_date", event.target.value)} /></label>
@@ -156,5 +168,30 @@ export default function NewContractPage() {
       </div>
       <p className="cw-muted">Der Vertrag erhält automatisch die nächste Vertragsnummer und startet im Status „In Arbeit“. Weitere Angaben folgen in den Stammdaten.</p>
     </form>
+    {organizationSlug ? <QuickCreate
+      definition={partnerDefinition}
+      section={masterDataSection("vertragspartner")!}
+      organizationSlug={organizationSlug}
+      open={quick === "partner"}
+      onClose={() => setQuick(null)}
+      onCreated={async ({ id }) => {
+        setQuick(null);
+        setPartners(await loadAllPartners(organizationSlug, false).catch(() => partners));
+        set("partner_id", id);
+      }}
+    /> : null}
+    {organizationSlug ? <QuickCreate
+      definition={contractTypeDefinition}
+      section={masterDataSection("vertragstypen")!}
+      organizationSlug={organizationSlug}
+      open={quick === "contract_type"}
+      onClose={() => setQuick(null)}
+      onCreated={async ({ id }) => {
+        setQuick(null);
+        const data = await listContractTypes(organizationSlug).catch(() => null);
+        if (data) setTypes(data.contract_types.filter((item) => item.is_active));
+        set("contract_type_id", id);
+      }}
+    /> : null}
   </div>;
 }

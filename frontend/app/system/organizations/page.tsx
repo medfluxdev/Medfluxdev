@@ -48,7 +48,7 @@ export default function SystemOrganizationsPage() {
   }
 
   if (!account?.is_developer) {
-    return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Dieser Bereich ist nur für den Medflux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
+    return <section className="cw-section"><h2>Keine Berechtigung</h2><p className="cw-muted">Dieser Bereich ist nur für den MedFlux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
   }
 
   return (

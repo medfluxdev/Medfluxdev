@@ -56,13 +56,14 @@ beforeEach(() => {
 });
 
 describe("App-Shell", () => {
-  it("zeigt sechs Bereiche mit den wichtigsten Zielen", () => {
+  it("zeigt fünf Bereiche mit den wichtigsten Zielen", () => {
     render(<ClientNav>Inhalt</ClientNav>);
     const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
-    expect(within(nav).getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Start", "Verträge", "Fristen", "Prüfung", "Auswertungen", "Verwaltung"]);
+    expect(within(nav).getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Start", "Verträge", "Prüfung", "Auswertungen", "Verwaltung"]);
     expect(within(nav).getByRole("link", { name: "Mein Tag" })).toHaveAttribute("href", "/");
     expect(within(nav).getByRole("link", { name: "Vertragsliste" })).toHaveAttribute("href", "/register");
-    expect(within(nav).getByRole("link", { name: "Aufgaben" })).toHaveAttribute("href", "/work-queue");
+    expect(within(nav).getByRole("link", { name: "Fristen & Aufgaben" })).toHaveAttribute("href", "/fristen");
+    expect(within(nav).getByRole("link", { name: "Stammdaten" })).toHaveAttribute("href", "/stammdaten");
     expect(within(nav).getByRole("link", { name: "Verwaltung" })).toHaveAttribute("href", "/admin");
     expect(within(nav).queryByRole("link", { name: "Entwicklung" })).not.toBeInTheDocument();
   });
@@ -96,7 +97,7 @@ describe("App-Shell", () => {
     await user.clear(input);
     await user.type(input, "termi");
     await user.keyboard("{Enter}");
-    expect(push).toHaveBeenCalledWith("/termine");
+    expect(push).toHaveBeenCalledWith("/fristen");
   });
 
   it("zeigt die Tastenkürzel mit ? und navigiert mit g v", async () => {

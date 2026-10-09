@@ -76,6 +76,29 @@ def _validate_department_parent(session, *, organization_id: UUID, hospital_id: 
     raise HTTPException(status_code=422, detail="Abteilungs-Hierarchie ist zu tief.")
 
 
+def _hospital_code_taken(session, organization_id: UUID, code: str, exclude: UUID | None = None) -> None:
+    stmt = select(Hospital.id).where(Hospital.organization_id == organization_id, func.upper(Hospital.code) == code.upper())
+    if exclude is not None:
+        stmt = stmt.where(Hospital.id != exclude)
+    if session.scalar(stmt) is not None:
+        raise HTTPException(status_code=409, detail="Dieses Kürzel ist bereits einem Krankenhaus zugeordnet.")
+
+
+def _department_code_taken(session, hospital_id: UUID, code: str, exclude: UUID | None = None) -> None:
+    stmt = select(Department.id).where(Department.hospital_id == hospital_id, func.upper(Department.code) == code.upper())
+    if exclude is not None:
+        stmt = stmt.where(Department.id != exclude)
+    if session.scalar(stmt) is not None:
+        raise HTTPException(status_code=409, detail="Dieses Kürzel gibt es in diesem Krankenhaus bereits.")
+
+
+def _required(value: str, label: str) -> str:
+    text = value.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail=f"{label} ist erforderlich.")
+    return text
+
+
 def _organization(session, organization_slug: str):
     organization = session.scalar(select(Organization).where(Organization.slug == organization_slug))
     if organization is None:
@@ -145,7 +168,9 @@ def add_hospital(payload: HospitalCreate, request: Request, organization_slug: s
         organization = _organization(session, organization_slug)
         if organization.id != actor.organization_id:
             raise HTTPException(status_code=403, detail="Kein Zugriff auf diese Organisation.")
-        row = Hospital(organization_id=organization.id, name=payload.name.strip(), code=payload.code.strip().upper(), address=(payload.address or "").strip() or None, is_active=True)
+        name, code = _required(payload.name, "Name"), _required(payload.code, "Kürzel").upper()
+        _hospital_code_taken(session, organization.id, code)
+        row = Hospital(organization_id=organization.id, name=name, code=code, address=(payload.address or "").strip() or None, is_active=True)
         session.add(row)
         session.flush()
         _record_activity(session, actor, event_name="hospital.created", object_type="hospital", object_id=row.id, hospital_id=row.id, context_data={"name": row.name, "code": row.code})
@@ -165,7 +190,9 @@ def update_hospital(hospital_id: UUID, payload: HospitalUpdate, request: Request
         if row is None or row.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Krankenhaus nicht gefunden.")
         if payload.name is not None: row.name = payload.name.strip() or row.name
-        if payload.code is not None: row.code = payload.code.strip().upper() or row.code
+        if payload.code is not None and payload.code.strip():
+            _hospital_code_taken(session, organization.id, payload.code.strip(), row.id)
+            row.code = payload.code.strip().upper()
         if payload.address is not None: row.address = payload.address.strip() or None
         if payload.is_active is not None: row.is_active = payload.is_active
         _record_activity(session, actor, event_name="hospital.updated", object_type="hospital", object_id=row.id, hospital_id=row.id, context_data={"name": row.name, "code": row.code, "is_active": row.is_active})
@@ -185,7 +212,9 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         if hospital is None or hospital.organization_id != organization.id or organization.id != actor.organization_id:
             raise HTTPException(status_code=404, detail="Krankenhaus nicht gefunden.")
         _validate_department_parent(session, organization_id=organization.id, hospital_id=hospital.id, department_id=None, parent_id=payload.parent_id)
-        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=payload.name.strip(), code=payload.code.strip().upper(), unit_type=_normalize_unit_type(payload.unit_type), is_active=True)
+        name, code = _required(payload.name, "Name"), _required(payload.code, "Kürzel").upper()
+        _department_code_taken(session, hospital.id, code)
+        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=name, code=code, unit_type=_normalize_unit_type(payload.unit_type), is_active=True)
         session.add(row)
         session.flush()
         _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "unit_type": row.unit_type})
@@ -239,7 +268,9 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
             _validate_department_parent(session, organization_id=organization.id, hospital_id=row.hospital_id, department_id=row.id, parent_id=payload.parent_id)
             row.parent_id = payload.parent_id
         if payload.name is not None: row.name = payload.name.strip() or row.name
-        if payload.code is not None: row.code = payload.code.strip().upper() or row.code
+        if payload.code is not None and payload.code.strip():
+            _department_code_taken(session, row.hospital_id, payload.code.strip(), row.id)
+            row.code = payload.code.strip().upper()
         if "unit_type" in payload.model_fields_set: row.unit_type = _normalize_unit_type(payload.unit_type)
         if payload.is_active is False and row.is_active:
             linked = _active_contract_link_count(session, organization_id=organization.id, department_id=row.id)

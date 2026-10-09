@@ -5,8 +5,8 @@ import { expect, test } from "@playwright/test";
 const PAGES: [string, string][] = [
   ["start", "/"],
   ["vertragsliste", "/register"],
-  ["termine", "/termine"],
-  ["verlaengerungen", "/verlaengerungen"],
+  ["fristen", "/fristen"],
+  ["entscheidungen", "/fristen?ansicht=entscheidungen"],
   ["suche", "/suche"],
   ["analysen", "/analysen"],
   ["einstellungen", "/settings"],

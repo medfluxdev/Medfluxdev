@@ -50,10 +50,10 @@ export default function DeveloperDashboard() {
 
   function openOrganization(item: OrganizationItem, target: string) { selectOrganization(item.slug); window.location.href = target; }
 
-  if (!account?.is_developer) return <section className="cw-section"><h1>Keine Berechtigung</h1><p className="cw-muted">Dieser Bereich ist ausschließlich für den Medflux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
+  if (!account?.is_developer) return <section className="cw-section"><h1>Keine Berechtigung</h1><p className="cw-muted">Dieser Bereich ist ausschließlich für den MedFlux Developer verfügbar.</p><Link href="/">Zur Übersicht</Link></section>;
 
   return <div className={styles.page}>
-    <PageHeader variant="highlight" eyebrow="Systemverwaltung" title="Developer Dashboard" description="Technischer Zustand, lokale KI und alle Medflux-Organisationen." actions={<button type="button" className="btn" onClick={() => void load()} disabled={loading}>{loading ? "Prüfe…" : "Status aktualisieren"}</button>} />
+    <PageHeader variant="highlight" eyebrow="Systemverwaltung" title="Developer Dashboard" description="Technischer Zustand, lokale KI und alle MedFlux-Organisationen." actions={<button type="button" className="btn" onClick={() => void load()} disabled={loading}>{loading ? "Prüfe…" : "Status aktualisieren"}</button>} />
     {message?.text ? <div className={`${styles.message}${message.error ? ` ${styles.messageError}` : ""}`} role="status">{message.text}</div> : null}
 
     <section className={styles.statusGrid} aria-label="Systemstatus">
@@ -66,7 +66,7 @@ export default function DeveloperDashboard() {
     <div className={styles.mainGrid}>
       <section className={styles.panel}>
         <div className={styles.panelHead}><div><h2>Organisationen</h2><p>Arbeitsbereiche öffnen und administrieren</p></div><span>{organizations.length}</span></div>
-        <div className={styles.orgList}>{organizations.length === 0 ? <p className={styles.empty}>Noch keine Organisation angelegt.</p> : organizations.map((item) => <article className={styles.orgRow} key={item.id}><div><span>{item.name.slice(0, 1).toUpperCase()}</span><p><strong>{item.name}</strong><small>{item.slug}</small></p></div><div className={styles.orgActions}><button type="button" onClick={() => openOrganization(item, "/")}>Arbeitsbereich</button><button type="button" onClick={() => openOrganization(item, "/settings/organization")}>Struktur</button><button type="button" onClick={() => openOrganization(item, "/settings/users")}>Benutzer</button><DeleteOrganizationButton organizationId={item.id} organizationName={item.name} onDeleted={async () => { await refresh(); await load(); }} onMessage={setMessage}/></div></article>)}</div>
+        <div className={styles.orgList}>{organizations.length === 0 ? <p className={styles.empty}>Noch keine Organisation angelegt.</p> : organizations.map((item) => <article className={styles.orgRow} key={item.id}><div><span>{item.name.slice(0, 1).toUpperCase()}</span><p><strong>{item.name}</strong><small>{item.slug}</small></p></div><div className={styles.orgActions}><button type="button" onClick={() => openOrganization(item, "/")}>Arbeitsbereich</button><button type="button" onClick={() => openOrganization(item, "/stammdaten/abteilungen?ansicht=struktur")}>Struktur</button><button type="button" onClick={() => openOrganization(item, "/settings/users")}>Benutzer</button><DeleteOrganizationButton organizationId={item.id} organizationName={item.name} onDeleted={async () => { await refresh(); await load(); }} onMessage={setMessage}/></div></article>)}</div>
       </section>
 
       <aside className={styles.sideColumn}>

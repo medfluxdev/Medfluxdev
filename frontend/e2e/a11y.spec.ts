@@ -3,9 +3,9 @@ import { checkA11y } from "./helpers";
 
 // U6: jede Seite der Navigation ohne schwere axe-Verstoesse, hell und dunkel.
 const PAGES = [
-  "/", "/postfach", "/register", "/partners", "/equipment", "/termine", "/verlaengerungen", "/work-queue",
+  "/", "/postfach", "/register", "/equipment", "/fristen", "/fristen?ansicht=entscheidungen", "/fristen?ansicht=aufgaben",
   "/import", "/review", "/nachweise", "/archiv", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
-  "/settings", "/profile", "/settings/users", "/settings/organization", "/settings/catalogs", "/settings/roles",
+  "/settings", "/profile", "/settings/users", "/stammdaten", "/stammdaten/vertragspartner", "/stammdaten/abteilungen", "/stammdaten/kostenstellen", "/stammdaten/vertragstypen", "/stammdaten/vertragsregeln", "/stammdaten/auswahllisten/storage_location", "/sicherheit", "/settings/nummernkreis", "/settings/roles",
   "/developer", "/developer/components",
 ];
 
@@ -27,7 +27,7 @@ for (const theme of ["light", "dark"] as const) {
 
 test.describe("Windows-Kontrastmodus", () => {
   test.use({ forcedColors: "active" });
-  for (const path of ["/", "/register", "/settings/catalogs"]) {
+  for (const path of ["/", "/register", "/stammdaten/vertragspartner"]) {
     test(`${path} bleibt bedienbar`, async ({ page }, info) => {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();

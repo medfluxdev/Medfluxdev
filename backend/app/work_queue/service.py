@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database.models import WorkItem
+from app.work_queue.derive import task_items_only
 from app.database.services import PersistenceError
 from app.models.enums import WorkItemStatus
 
@@ -272,6 +273,7 @@ def list_work_items(
             & (Contract.is_archived.is_(False))
         )
     )
+    stmt = stmt.where(task_items_only(WorkItem.item_type))
     if allowed_contract_ids is not None:
         if not allowed_contract_ids:
             return []

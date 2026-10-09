@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { loadAllPartners } from "@/components/master-data/definitions/partners";
+import { QuickCreatePartner } from "@/components/master-data/lazy";
+import AiFillSummary from "./AiFillSummary";
+import ContractRulesSection from "./ContractRulesSection";
+import type { FormValues } from "@/components/master-data/types";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { formatDate } from "@/lib/format";
 import { listOwnershipAssignees, type AssigneeDto } from "@/lib/domain-api/ownership";
 import {
-  createPartner,
   listContractTypes,
   listLookups,
-  listPartners,
   type ContractCategoryDto,
   type ContractTypeDto,
   type LookupDto,
@@ -38,6 +41,7 @@ import {
 } from "@/lib/domain-api/register";
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
+import { usePermissions } from "@/lib/use-permissions";
 
 type Draft = Record<string, RegisterValue>;
 type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo";
@@ -196,7 +200,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   const [transition, setTransition] = useState<BusinessStatus | null>(null);
   const [transitionForm, setTransitionForm] = useState({ terminated_on: "", effective_date: "", note: "", acknowledge: false });
   const [confidentialDraft, setConfidentialDraft] = useState<{ is_confidential: boolean; grants: string[] } | null>(null);
-  const [newPartner, setNewPartner] = useState<{ short_name: string; name1: string; city: string } | null>(null);
+  const [newPartner, setNewPartner] = useState<FormValues | null>(null);
+  const { can } = usePermissions();
 
   const load = useCallback(async () => {
     try {
@@ -213,13 +218,13 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   useEffect(() => {
     let cancelled = false;
     Promise.allSettled([
-      listPartners(orgSlug, { limit: 500 }),
+      loadAllPartners(orgSlug, true),
       listContractTypes(orgSlug),
       listLookups(orgSlug),
       editable ? listOwnershipAssignees(orgSlug) : Promise.resolve({ items: [] as AssigneeDto[] }),
     ]).then(([partnerResult, typeResult, lookupResult, assigneeResult]) => {
       if (cancelled) return;
-      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value.items);
+      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value);
       if (typeResult.status === "fulfilled") {
         setTypes(typeResult.value.contract_types);
         setCategories(typeResult.value.contract_categories);
@@ -290,20 +295,10 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     void run(() => updateContractRegister(orgSlug, contractId, { changes: { [key]: value } }), "Vorschlag übernommen.");
   }
 
-  async function submitNewPartner() {
-    if (!newPartner) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      const created = await createPartner(orgSlug, { short_name: newPartner.short_name, name1: newPartner.name1 || newPartner.short_name, city: newPartner.city || null });
-      setPartners((current) => [...current, created].sort((a, b) => a.short_name.localeCompare(b.short_name)));
-      setDraft((current) => ({ ...current, partner_id: created.id }));
-      setNewPartner(null);
-    } catch (error) {
-      setMessage({ tone: "error", text: errorText(error, "Vertragspartner konnte nicht angelegt werden.") });
-    } finally {
-      setBusy(false);
-    }
+  async function partnerCreated(id: string) {
+    setNewPartner(null);
+    setPartners(await loadAllPartners(orgSlug, true).catch(() => partners));
+    setDraft((current) => ({ ...current, partner_id: id }));
   }
 
   async function submitConfidentiality() {
@@ -408,7 +403,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
             <option value="">Kein Vertragspartner</option>
             {partners.filter((item) => item.is_active || item.id === draft[key]).map((item) => <option key={item.id} value={item.id}>{item.short_name}{item.city ? ` · ${item.city}` : ""}</option>)}
           </select>
-          <button type="button" className="rg-link" onClick={() => setNewPartner({ short_name: register?.supplier_text ?? "", name1: register?.supplier_text ?? "", city: "" })}>Neuer Partner</button>
+          {can("partner.edit") ? <button type="button" className="rg-link" onClick={() => setNewPartner({ short_name: register?.supplier_text ?? "", name1: register?.supplier_text ?? "" })}>Neuer Partner</button> : null}
         </span>;
       case "type":
         return <select id={id} value={text(key)} onChange={(event) => setDraft((current) => ({ ...current, contract_type_id: event.target.value || null, contract_category_id: null }))}>
@@ -474,6 +469,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       </form> : null}
     </section>
 
+    <AiFillSummary register={register} contractId={contractId} />
+    <ContractRulesSection organizationSlug={orgSlug} contractId={contractId} version={register} />
+
     <section className="cw-section" aria-labelledby="rg-terms-heading">
       <div className="cw-section-head"><div><h2 id="rg-terms-heading">Berechnete Fristen</h2><p>Deterministisch aus den Stammdaten berechnet (Stand {formatDate(register.as_of)}).</p></div></div>
       {terms.status === "incomplete" ? <p className="rg-hint">Fristen noch nicht berechenbar. Es fehlen: {terms.missing.map((key) => labelFor(key)).join(", ")}.</p> : null}
@@ -516,19 +514,19 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
 
     {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}
 
-    {newPartner ? <form className="cw-section rg-transition" aria-label="Neuen Vertragspartner anlegen" onSubmit={(event) => { event.preventDefault(); void submitNewPartner(); }}>
-      <strong>Neuen Vertragspartner anlegen</strong>
-      <label>Kurzname<input required value={newPartner.short_name} onChange={(event) => setNewPartner((form) => form && ({ ...form, short_name: event.target.value }))} /></label>
-      <label>Name<input value={newPartner.name1} onChange={(event) => setNewPartner((form) => form && ({ ...form, name1: event.target.value }))} /></label>
-      <label>Ort<input value={newPartner.city} onChange={(event) => setNewPartner((form) => form && ({ ...form, city: event.target.value }))} /></label>
-      <div className="rg-actions"><button type="button" className="btn" onClick={() => setNewPartner(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Partner anlegen</button></div>
-    </form> : null}
+    {newPartner !== null ? <QuickCreatePartner
+      organizationSlug={orgSlug}
+      open={newPartner !== null}
+      preset={newPartner ?? undefined}
+      onClose={() => setNewPartner(null)}
+      onCreated={({ id }) => void partnerCreated(id)}
+    /> : null}
 
     <div className="rg-toolbar">
       {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Stammdaten bearbeiten</button> : null}
       {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>{dirty ? <span className="field-hint">Ungespeicherte Änderungen · Strg+S speichert</span> : null}</> : null}
       <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
-      <Link href="/partners" className="rg-link">Vertragspartner verwalten</Link>
+      <Link href="/stammdaten/vertragspartner" className="rg-link">Vertragspartner verwalten</Link>
     </div>
 
     {SECTIONS.map((section) => {

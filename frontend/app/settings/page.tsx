@@ -202,7 +202,7 @@ export default function SettingsPage() {
     <div className="page">
       <PageHeader
         title="Einstellungen"
-        description="Laufzeit- und Systemstatus der lokalen Medflux-Installation."
+        description="Laufzeit- und Systemstatus der lokalen MedFlux-Installation."
       />
 
       <div className="settings-layout">
@@ -272,7 +272,7 @@ export default function SettingsPage() {
                 <InlineAlert tone="info" role="status">
                   Es gibt kein Standardmodell. Provider und Modell werden bewusst
                   ausgewählt und serverseitig gespeichert. Ohne gespeicherte Auswahl
-                  startet Medflux keine KI-Analyse. Gespeicherte Verträge werden beim
+                  startet MedFlux keine KI-Analyse. Gespeicherte Verträge werden beim
                   Wechsel des Modells nicht automatisch neu analysiert.
                 </InlineAlert>
 
@@ -451,7 +451,7 @@ export default function SettingsPage() {
           {activeSection === "sicherheit" && (
             <Section id="sicherheit" title="Benutzer &amp; Sicherheit">
             <p className="side-note">
-              Medflux läuft derzeit als lokale Installation. Eine verwaltete
+              MedFlux läuft derzeit als lokale Installation. Eine verwaltete
               Benutzer- und Rechteverwaltung ist für einen späteren Schritt
               vorgesehen. Es werden keine Vertragsdaten an externe Dienste
               übertragen; Provider werden ausschließlich über lokale

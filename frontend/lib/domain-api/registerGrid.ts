@@ -25,6 +25,8 @@ export interface GridSpec {
   group_by: string[];
   q: string | null;
   include_deleted: boolean;
+  /** Archiv-Ansicht: nur archivierte Verträge. */
+  archived?: boolean;
 }
 
 export interface GridGroup {
@@ -50,6 +52,8 @@ export interface SavedViewDto {
   config: GridSpec;
   is_global: boolean;
   is_system: boolean;
+  /** Schlüssel der Standardansicht (z. B. "review", "archive"), für Links ?ansicht=. */
+  system_key?: string | null;
   is_own: boolean;
   created_by_name: string | null;
   view_kind?: "register" | "contracts";
@@ -91,7 +95,7 @@ export interface PortfolioReport {
   insights: { key: string; label: string; count: number; filter: GridFilter }[];
 }
 
-export const EMPTY_SPEC: GridSpec = { columns: [], filters: [], sort: null, group_by: [], q: null, include_deleted: false };
+export const EMPTY_SPEC: GridSpec = { columns: [], filters: [], sort: null, group_by: [], q: null, include_deleted: false, archived: false };
 
 function org(organizationSlug: string) {
   return `organization_slug=${encodeURIComponent(organizationSlug)}`;

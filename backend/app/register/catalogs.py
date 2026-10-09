@@ -16,6 +16,7 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.database.models.contract import Contract
 from app.database.models.register import (
     CatalogContractCategory,
     CatalogContractType,
@@ -233,6 +234,44 @@ def update_partner(session: Session, row: ContractPartner, values: dict[str, Any
         row.is_active = values["is_active"]
     session.flush()
     return row
+
+
+MAX_MERGE_SOURCES = 20
+
+
+def merge_partners(
+    session: Session, organization_id: uuid.UUID, target: ContractPartner, source_ids: list[uuid.UUID]
+) -> list[tuple[ContractPartner, list[uuid.UUID]]]:
+    """Fuehrt Dubletten in `target` zusammen: Vertraege der Quellen zeigen danach
+    auf `target`, die Quellen werden deaktiviert (nicht geloescht).
+
+    Gibt je Quelle die umgehaengten Vertrags-IDs zurueck.
+    """
+    unique = list(dict.fromkeys(source_ids))
+    if not unique:
+        raise CatalogError(422, "Bitte mindestens einen Vertragspartner zum Zusammenführen wählen.")
+    if len(unique) > MAX_MERGE_SOURCES:
+        raise CatalogError(422, f"Höchstens {MAX_MERGE_SOURCES} Vertragspartner auf einmal zusammenführen.")
+    if target.id in unique:
+        raise CatalogError(422, "Der Ziel-Vertragspartner kann nicht mit sich selbst zusammengeführt werden.")
+    if not target.is_active:
+        raise CatalogError(422, "Der Ziel-Vertragspartner ist deaktiviert. Bitte zuerst aktivieren.")
+    sources = list(session.scalars(
+        select(ContractPartner).where(ContractPartner.organization_id == organization_id, ContractPartner.id.in_(unique))
+    ).all())
+    if len(sources) != len(unique):
+        raise CatalogError(404, "Vertragspartner nicht gefunden.")
+    moved: list[tuple[ContractPartner, list[uuid.UUID]]] = []
+    for source in sources:
+        contracts = list(session.scalars(
+            select(Contract).where(Contract.organization_id == organization_id, Contract.partner_id == source.id)
+        ).all())
+        for contract in contracts:
+            contract.partner_id = target.id
+        source.is_active = False
+        moved.append((source, [contract.id for contract in contracts]))
+    session.flush()
+    return moved
 
 
 def duplicate_groups(session: Session, organization_id: uuid.UUID, threshold: float = 0.88) -> list[list[dict]]:

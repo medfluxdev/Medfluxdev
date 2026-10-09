@@ -56,7 +56,7 @@ export default function ClientNav({ children }: { children: React.ReactNode }) {
         <AppTopbar onOpenMenu={() => setMobileOpen(true)} onOpenPalette={openPalette} onOpenDeveloper={() => setDeveloperOpen(true)} />
         {previewOf && role ? (
           <div className="shell-preview-banner" role="status">
-            <span>Vorschau: Sie sehen Medflux wie die Rolle <strong>{ROLE_LABELS[role]}</strong>. Nur die Darstellung ändert sich – Ihre Rechte bleiben unverändert.</span>
+            <span>Vorschau: Sie sehen MedFlux wie die Rolle <strong>{ROLE_LABELS[role]}</strong>. Nur die Darstellung ändert sich – Ihre Rechte bleiben unverändert.</span>
             <button type="button" className="btn btn-sm" onClick={() => setPreviewRole(null)}>Vorschau beenden</button>
           </div>
         ) : null}

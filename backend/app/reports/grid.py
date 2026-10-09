@@ -38,6 +38,7 @@ from app.finance.service import entry_inputs, price_adjustment
 from app.register.service import retention_dates, term_inputs
 from app.register.status import STATUS_LABELS
 from app.register.terms import TERM_MODEL_LABELS, compute_terms
+from app.rules.service import active_rules, evaluate_all as evaluate_rules, summary_status as rules_summary
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,9 @@ COLUMNS: tuple[Column, ...] = (
     Column("attachments", "Anhänge", "number"),
     Column("storage_location", "Lagerort", "enum", groupable=True),
     Column("deletion_from", "Löschen ab", "date"),
+    Column("archived_at", "Archiviert am", "date"),
+    Column("rules_status", "Vertragsregeln", "enum", groupable=True),
+    Column("rules_violated", "Regelverstöße", "text"),
 )
 COLUMN_BY_KEY = {column.key: column for column in COLUMNS}
 MONEY_KEYS = tuple(column.key for column in COLUMNS if column.type == "money")
@@ -107,6 +111,8 @@ class GridSpec:
     group_by: list[str] = field(default_factory=list)
     q: Optional[str] = None
     include_deleted: bool = False
+    # Archiv-Ansicht: nur archivierte Vertraege (sonst sind sie ausgeblendet).
+    archived: bool = False
 
     @classmethod
     def parse(cls, raw: Optional[dict]) -> "GridSpec":
@@ -131,12 +137,14 @@ class GridSpec:
         return cls(
             columns=columns, filters=filters, sort=sort, group_by=group_by,
             q=str(q).strip() or None if q else None, include_deleted=bool(raw.get("include_deleted")),
+            archived=raw.get("archived") is True,
         )
 
     def as_dict(self) -> dict:
         return {
             "columns": self.columns, "filters": self.filters, "sort": self.sort,
             "group_by": self.group_by, "q": self.q, "include_deleted": self.include_deleted,
+            "archived": self.archived,
         }
 
 
@@ -180,11 +188,12 @@ def build_rows(
     *,
     include_deleted: bool = True,
     years: Optional[range] = None,
+    archived: bool = False,
 ) -> list[GridRow]:
     stmt = select(Contract).where(
         Contract.organization_id == organization_id,
         Contract.lifecycle_state == "active",
-        Contract.is_archived.is_(False),
+        Contract.is_archived.is_(archived),
     )
     if visible is not None:
         stmt = stmt.where(Contract.id.in_(visible))
@@ -237,6 +246,7 @@ def build_rows(
     ).all():
         allocations[contract_id].append((cost_centers.get(cost_center_id, "?"), Decimal(share)))
 
+    contract_rules = active_rules(session, organization_id)
     warnings_by_contract: dict[uuid.UUID, list] = defaultdict(list)
     for warning in session.scalars(
         select(ContractWarning).where(ContractWarning.contract_id.in_(ids), ContractWarning.active.is_(True))
@@ -327,8 +337,15 @@ def build_rows(
             "warning": (_primary_warning(warnings_by_contract[contract.id]) or {}).get("title_de") if warnings_by_contract.get(contract.id) else None,
             "attachments": int(attachments.get(contract.id, 0)),
             "storage_location": storage.get(contract.storage_location_code, contract.storage_location_code) if contract.storage_location_code else None,
+            "archived_at": contract.archived_at.date() if contract.archived_at else None,
             "deletion_from": deletion_from,
         }
+        rule_results = evaluate_rules(contract_rules, contract, values.get("annual_cost"))
+        failed = [item for item in rule_results if item.outcome == "fail"]
+        values["rules_status"] = rules_summary(rule_results)
+        values["rules_violated"] = ", ".join(item.label for item in failed) or None
+        # Nicht als Spalte sichtbar: fuer die Zaehlung je Regel (Stammdaten).
+        values["_rule_failures"] = [str(item.rule_id) for item in failed]
         row = GridRow(
             contract_id=contract.id,
             values=values,
@@ -370,6 +387,7 @@ SELECT concat_ws('|',
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM catalog_contract_type WHERE organization_id = :org),
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM catalog_contract_category WHERE organization_id = :org),
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM lookup_value WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM contract_rule WHERE organization_id = :org),
   (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') || ':' || coalesce(max(last_seen_at)::text, '')
      FROM contract_warning WHERE organization_id = :org AND active),
   (SELECT count(*) || ':' || coalesce(max(r.updated_at)::text, '')
@@ -390,10 +408,13 @@ def data_fingerprint(session: Session, organization_id: uuid.UUID) -> str:
 
 
 def cached_rows(
-    session: Session, organization_id: uuid.UUID, as_of: date, *, years: Optional[range] = None
+    session: Session, organization_id: uuid.UUID, as_of: date, *, years: Optional[range] = None, archived: bool = False
 ) -> list[GridRow]:
-    """Alle Registerzeilen der Organisation (inkl. geloeschter); Sichtbarkeit filtert der Aufrufer."""
-    key = (organization_id, as_of, (years.start, years.stop) if years else None)
+    """Alle Registerzeilen der Organisation (inkl. geloeschter); Sichtbarkeit filtert der Aufrufer.
+
+    `archived=True` liefert stattdessen nur die archivierten Vertraege (Archiv-Ansicht).
+    """
+    key = (organization_id, as_of, (years.start, years.stop) if years else None, archived)
     fingerprint = data_fingerprint(session, organization_id)
     now = time.monotonic()
     with _cache_lock:
@@ -401,7 +422,7 @@ def cached_rows(
         if hit and hit[0] == fingerprint and now - hit[1] < _CACHE_TTL_SECONDS:
             _cache.move_to_end(key)
             return hit[2]
-    rows = build_rows(session, organization_id, None, as_of, years=years)
+    rows = build_rows(session, organization_id, None, as_of, years=years, archived=archived)
     with _cache_lock:
         _cache[key] = (fingerprint, now, rows)
         _cache.move_to_end(key)

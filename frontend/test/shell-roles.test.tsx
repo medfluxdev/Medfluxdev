@@ -58,7 +58,7 @@ describe("Rollenvorschau", () => {
     auth.role = "viewer";
     auth.previewOf = "admin";
     render(<ClientNav>Inhalt</ClientNav>);
-    expect(screen.getByText(/Sie sehen Medflux wie die Rolle/).closest("[role=status]")).toHaveTextContent("Ihre Rechte bleiben unverändert");
+    expect(screen.getByText(/Sie sehen MedFlux wie die Rolle/).closest("[role=status]")).toHaveTextContent("Ihre Rechte bleiben unverändert");
     expect(screen.queryByRole("link", { name: /Verwaltung/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Vorschau beenden" }));
     expect(auth.setPreviewRole).toHaveBeenCalledWith(null);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   createSavedView,
@@ -21,7 +21,9 @@ import {
   type SavedViewDto,
   type TreeHospital,
 } from "@/lib/domain-api/registerGrid";
+import { unarchiveContract } from "@/lib/domain-api/contracts";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { useToast } from "@/components/ui/Toast";
 import ContractQuickView from "./ContractQuickView";
 import FilterEditor from "./FilterEditor";
 import { describeFilter } from "./filters";
@@ -33,6 +35,22 @@ type Spec = GridSpec;
 
 function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+// Standardansicht aus der Adresse (?ansicht=archive), z. B. aus dem Menü oder einer alten Seite.
+function linkedViewKey(): string | null {
+  try { return new URLSearchParams(window.location.search).get("ansicht"); } catch { return null; }
+}
+
+function writeViewKey(key: string | null) {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (key) params.set("ansicht", key); else params.delete("ansicht");
+    const query = params.toString();
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  } catch {
+    // Adresse ist nur Komfort.
+  }
 }
 
 function readLastView(): string | null {
@@ -92,7 +110,7 @@ function formatCell(column: GridColumn | undefined, value: unknown): string {
   }
 }
 
-export default function RegisterGrid({ organizationSlug }: { organizationSlug: string }) {
+export default function RegisterGrid({ organizationSlug, initialViewKey }: { organizationSlug: string; /** Standardansicht dieser Seite (z. B. "review" unter /review). */ initialViewKey?: string }) {
   const { role, account } = useAuth();
   const canExport = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const [columns, setColumns] = useState<GridColumn[]>([]);
@@ -110,18 +128,29 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
   const [saveForm, setSaveForm] = useState<{ name: string; is_global: boolean } | null>(null);
   const [legacyViews, setLegacyViews] = useState<ListViewDto[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
+  const [busyRow, setBusyRow] = useState<string | null>(null);
+  // Auf dem Telefon eingeklappt, damit die Verträge sofort sichtbar sind.
+  const [treeOpen, setTreeOpen] = useState(true);
+  useEffect(() => {
+    try { if (window.matchMedia("(max-width: 900px)").matches) setTreeOpen(false); } catch { /* ohne matchMedia bleibt er offen */ }
+  }, []);
+  // Seiten mit fester Ansicht (Archiv, Prüfungen) überschreiben die zuletzt genutzte Ansicht der Vertragsliste nicht.
+  const presetPage = useRef(Boolean(initialViewKey));
+  const toast = useToast();
 
   const columnByKey = useMemo(() => new Map(columns.map((item) => [item.key, item])), [columns]);
   const view = views.find((item) => item.id === viewId) ?? null;
 
   const applyView = useCallback((next: SavedViewDto | null, defaults: GridColumn[]) => {
-    const base: Spec = { columns: defaults.filter((item) => item.default).map((item) => item.key), filters: [], sort: null, group_by: [], q: null, include_deleted: false };
+    const base: Spec = { columns: defaults.filter((item) => item.default).map((item) => item.key), filters: [], sort: null, group_by: [], q: null, include_deleted: false, archived: false };
     const config = next ? { ...base, ...next.config } : base;
     setViewId(next?.id ?? null);
     setSpec(config);
     setSearch(config.q ?? "");
     setOffset(0);
+    if (presetPage.current) return;
     writeLastView(next?.id ?? null);
+    writeViewKey(next?.system_key ?? null);
   }, []);
 
   useEffect(() => {
@@ -143,12 +172,18 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
           setSearch(linkedQ ?? "");
           return;
         }
+        const key = linkedViewKey() ?? initialViewKey ?? null;
+        const keyed = key ? viewResult.items.find((item) => item.system_key === key) : undefined;
+        if (keyed) {
+          applyView(keyed, columnResult.columns);
+          return;
+        }
         const remembered = readLastView();
         applyView(viewResult.items.find((item) => item.id === remembered) ?? null, columnResult.columns);
       })
       .catch((error) => { if (!cancelled) setMessage({ tone: "error", text: errorText(error, "Das Vertragsregister konnte nicht geladen werden.") }); });
     return () => { cancelled = true; };
-  }, [applyView, organizationSlug]);
+  }, [applyView, initialViewKey, organizationSlug]);
 
   useEffect(() => {
     if (!spec) return;
@@ -260,10 +295,28 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
   const total = data?.total ?? 0;
 
   let previous: (string | number | boolean | null)[] | null = null;
+  const archiveMode = Boolean(spec.archived);
+  const reviewMode = spec.filters.some((item) => item.column === "review_pending" && item.op === "is" && item.value === true);
+  const actionColumn = (archiveMode && canExport) || reviewMode;
+
+  async function restore(contractId: string) {
+    if (!spec) return;
+    setBusyRow(contractId);
+    try {
+      await unarchiveContract(contractId, organizationSlug);
+      toast("Vertrag wieder ins aktive Portfolio verschoben.", "success");
+      setSpec({ ...spec });
+    } catch (error) {
+      toast(errorText(error, "Wiederherstellung fehlgeschlagen."), "error");
+    } finally {
+      setBusyRow(null);
+    }
+  }
 
   return <div className="reg-layout">
     <nav className="cw-section reg-tree" aria-label="Verträge nach Gesellschaft und Abteilung">
-      <h2>Gesellschaft → Abteilung</h2>
+      <details open={treeOpen} onToggle={(event) => setTreeOpen((event.target as HTMLDetailsElement).open)}>
+      <summary><h2>Gesellschaft → Abteilung</h2></summary>
       <ul>
         <li><button type="button" className="rg-link" onClick={() => update({ filters: spec.filters.filter((item) => item.column !== "hospital" && item.column !== "department") })}>Alle</button></li>
         {tree.map((hospital) => <li key={hospital.label}>
@@ -271,6 +324,7 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
           <ul>{hospital.departments.map((department) => <li key={department.label}><button type="button" className="rg-link" onClick={() => pickTree(hospital.hospital, department.department)}>{department.label} <span className="cw-muted">({department.count})</span></button></li>)}</ul>
         </li>)}
       </ul>
+      </details>
     </nav>
 
     <div className="reg-main">
@@ -340,13 +394,14 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
       <section className="cw-section reg-table-wrap" aria-labelledby="reg-heading" aria-busy={loading}>
         <div className="cw-section-head"><div>
           <h2 id="reg-heading">{view?.name ?? "Alle Verträge"}</h2>
+          {archiveMode ? <p>Archivierte Verträge sind aus Vertragsliste und Fristen ausgeblendet; „Wiederherstellen“ holt sie zurück. Es wird nichts gelöscht.</p> : null}
           <p>{total === 0 ? "Keine Verträge für diese Auswahl." : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} von ${total} · Jährliche Kosten gesamt ${formatCurrency(data?.totals.sums.annual_cost ?? "0", "EUR")} · Kosten lfd. Jahr ${formatCurrency(data?.totals.sums.cost_current_year ?? "0", "EUR")}`}</p>
         </div></div>
         {data && data.items.length > 0 ? <div className="reg-scroll"><table className="rg-table reg-table">
           <thead><tr>{shown.map((column) => {
             const sorted = spec.sort?.column === column.key ? (spec.sort.dir === "asc" ? "ascending" : "descending") : "none";
             return <th key={column.key} scope="col" aria-sort={sorted}><button type="button" className="reg-sort" onClick={() => sortBy(column.key)}>{column.label}{sorted === "ascending" ? " ▲" : sorted === "descending" ? " ▼" : ""}</button></th>;
-          })}</tr></thead>
+          })}{actionColumn ? <th scope="col">Aktion</th> : null}</tr></thead>
           <tbody>{data.items.map((row) => {
             const headers = spec.group_by.map((_, depth) => {
               const path = row.group.slice(0, depth + 1);
@@ -354,7 +409,7 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
               if (!changed) return null;
               const group = groupIndex.get(JSON.stringify(path));
               return <tr key={`g-${depth}-${JSON.stringify(path)}`} className={`reg-group reg-group-${depth}`}>
-                <th scope="colgroup" colSpan={shown.length}>
+                <th scope="colgroup" colSpan={shown.length + (actionColumn ? 1 : 0)}>
                   {columnByKey.get(spec.group_by[depth])?.label}: {group?.labels[depth] ?? "(ohne)"} <span className="cw-muted">· {group?.count ?? 0} Verträge · {formatCurrency(group?.sums.annual_cost ?? "0", "EUR")} jährlich</span>
                 </th>
               </tr>;
@@ -372,7 +427,9 @@ export default function RegisterGrid({ organizationSlug }: { organizationSlug: s
                   return <td key={column.key}><button type="button" className="btn-link reg-preview" onClick={() => setPreview(row.contract_id)} aria-label={`${text} in der Schnellansicht öffnen`}>{text}</button></td>;
                 }
                 return <td key={column.key} className={column.type === "money" || column.type === "number" ? "num" : undefined}>{text}</td>;
-              })}</tr>
+              })}{archiveMode && canExport
+                ? <td><button type="button" className="btn btn-sm" disabled={busyRow === row.contract_id} onClick={() => void restore(row.contract_id)} aria-label={`Vertrag ${row.values.register_number ?? ""} wiederherstellen`}>Wiederherstellen</button></td>
+                : reviewMode ? <td><Link className="btn btn-sm btn-primary" href={`/contracts/${row.contract_id}?tab=documents&subtab=review`} aria-label={`Vertrag ${row.values.register_number ?? ""} prüfen`}>Prüfen</Link></td> : null}</tr>
             </Fragment>;
           })}</tbody>
         </table></div> : null}

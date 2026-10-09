@@ -77,7 +77,7 @@ def _visible(session, actor):
 
 
 def _rows(session, actor, spec: GridSpec, as_of: date, *, years: Optional[range] = None):
-    rows = visible_rows(cached_rows(session, actor.organization_id, as_of, years=years), _visible(session, actor))
+    rows = visible_rows(cached_rows(session, actor.organization_id, as_of, years=years, archived=spec.archived), _visible(session, actor))
     try:
         return rows, apply_filters(rows, spec, as_of, actor.account_id)
     except GridError as exc:

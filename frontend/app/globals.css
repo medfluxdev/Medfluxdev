@@ -194,7 +194,7 @@ a:focus-visible {
 .search-row input[type="search"] {
   flex: 1 1 260px;
   padding: 0.5rem 0.6rem;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
   font-size: var(--text-body);
 }
@@ -446,8 +446,6 @@ a:focus-visible {
 }
 .kpi-label {
   font-size: var(--text-caption);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 .kpi-value {
@@ -837,7 +835,7 @@ a:focus-visible {
 .field select,
 .field textarea {
   padding: 0.4rem 0.6rem;
-  border: var(--border-width) solid var(--border-strong);
+  border: var(--border-width) solid var(--color-border-strong);
   border-radius: var(--radius-md);
   font-size: var(--text-body);
   font-family: var(--font-sans);
@@ -871,7 +869,7 @@ a:focus-visible {
 .import-assignment-card legend { padding: 0 6px; color: var(--text); font-size: var(--text-small); font-weight: var(--fw-bold); }
 .import-assignment-card > p { margin: 0; color: var(--text-muted); font-size: var(--text-caption); }
 .import-assignment-card label { display: grid; gap: 5px; color: var(--text-secondary); font-size: var(--text-caption); font-weight: var(--fw-semibold); }
-.import-assignment-card select { min-height: 40px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 10px; background: var(--surface); color: var(--text); font: inherit; }
+.import-assignment-card select { min-height: 40px; width: 100%; border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); padding: 8px 10px; background: var(--surface); color: var(--text); font: inherit; }
 .import-assignment-card select[multiple] { min-height: 100px; }
 .import-assignment-card:disabled { opacity: .72; }
 @media (max-width: 640px) {
@@ -1079,7 +1077,7 @@ a:focus-visible {
   width: 100%;
   max-width: 30rem;
   padding: 0.5rem 0.75rem;
-  border: var(--border-width) solid var(--border);
+  border: var(--border-width) solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
@@ -1249,8 +1247,6 @@ a:focus-visible {
 .override-group h4 {
   margin: 0 0 0.4rem;
   font-size: var(--text-small);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   color: var(--text-muted);
 }
 .override-row {
@@ -1263,7 +1259,7 @@ a:focus-visible {
 .override-row input,
 .override-row select {
   padding: 0.4rem 0.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-xs);
   background: var(--surface-1);
   color: var(--text);
@@ -1297,7 +1293,6 @@ a:focus-visible {
 .audit-action {
   font-weight: 600;
   font-size: var(--text-caption);
-  text-transform: uppercase;
   border-radius: var(--radius-xs);
   padding: 0.05rem 0.4rem;
 }
@@ -1576,7 +1571,7 @@ a:focus-visible {
 .override-row input,
 .override-row select {
   background: var(--surface);
-  border-color: var(--border);
+  border-color: var(--color-border-strong);
   color: var(--text);
 }
 .notice {

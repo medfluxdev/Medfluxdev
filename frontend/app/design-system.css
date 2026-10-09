@@ -60,7 +60,7 @@ textarea,
 .field textarea {
   width: 100%;
   min-height: var(--control-height-md);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
   color: var(--text-primary);
@@ -75,7 +75,7 @@ textarea,
 .field input:hover:not(:disabled),
 .field select:hover:not(:disabled),
 .field textarea:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-text-muted);
 }
 
 .field input:disabled,

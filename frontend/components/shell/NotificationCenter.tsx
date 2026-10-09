@@ -73,7 +73,7 @@ export default function NotificationCenter() {
           </Link>
         ))}
         <Link href="/postfach" className="btn-link">Postfach öffnen{unread > 0 ? ` (${unread} ungelesen)` : ""}</Link>
-        {items.some((item) => item.kind === "work_item") ? <Link href="/work-queue" className="btn-link">Alle Aufgaben öffnen</Link> : null}
+        {items.some((item) => item.kind === "work_item") ? <Link href="/fristen?ansicht=aufgaben" className="btn-link">Alle Aufgaben öffnen</Link> : null}
       </div>
     </details>
   );

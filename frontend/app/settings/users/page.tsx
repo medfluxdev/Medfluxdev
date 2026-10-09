@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import UserImport from "@/components/users/UserImport";
+import PageHeader from "@/components/ui/PageHeader";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ROLE_LABELS, type AccountRole, type ManagedUserDto } from "@/lib/auth-types";
 import {
@@ -178,7 +179,7 @@ export default function UsersPage() {
   }
 
   return <div className="page user-admin">
-    <div className="user-admin-head"><div><h1>Benutzerverwaltung</h1><p className="cw-muted">Benutzer, Rollen sowie Krankenhaus- und Abteilungszugriffe verwalten.</p></div><Link href="/settings">Zurück zu Einstellungen</Link></div>
+    <PageHeader title="Benutzerverwaltung" description="Benutzer, Rollen sowie Krankenhaus- und Abteilungszugriffe verwalten." />
     {message ? <div className={`user-admin-message${message.error ? " error" : ""}`} role="status">{message.text}</div> : null}
     <form className="user-admin-form" onSubmit={createManagedUser}>
       <label>Name<input value={form.display_name} onChange={(e) => setForm((v) => ({ ...v, display_name: e.target.value }))} required /></label>

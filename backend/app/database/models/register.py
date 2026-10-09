@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -316,4 +317,29 @@ class SavedView(OrgOwnedMixin, Base):
             "uq_saved_view_org_system_key", "organization_id", "system_key",
             unique=True, postgresql_where=text("system_key IS NOT NULL"),
         ),
+    )
+
+
+class ContractRule(OrgOwnedMixin, Base):
+    """Vertragsregel der Organisation ("Playbook"), deterministisch im Code geprueft.
+
+    `rule_kind` waehlt die Pruefung (siehe app/rules/service.RULE_KINDS),
+    `threshold` ist der Grenzwert (Monate, Prozent oder Euro), `field_key` das
+    Pflichtfeld bei `required_field`. Leere `contract_type_ids` = alle Typen.
+    """
+
+    __tablename__ = "contract_rule"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    rule_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    threshold = mapped_column(Numeric(14, 2), nullable=True)
+    field_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    contract_type_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    __table_args__ = (
+        Index("ix_contract_rule_org_active", "organization_id", "is_active"),
     )
