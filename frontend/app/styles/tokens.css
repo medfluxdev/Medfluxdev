@@ -13,15 +13,22 @@
   /* ---------- Schrift ---------- */
   --font-sans: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  /* Nur Seitentitel (ein h1 je Seite): ruhige Serifenschrift fuer "vertrauenswuerdig, juristisch".
+     Zurueck auf Inter: --font-display: var(--font-sans). */
+  --font-display: "Source Serif 4 Variable", Georgia, "Times New Roman", serif;
 
   /* Typo-Skala (rem; folgt der Benutzer-Textgroesse) */
   --text-caption: 0.75rem;     /* 12px – nur Metadaten */
   --text-small: 0.875rem;      /* 14px – dichte Tabellen, Hilfetexte */
+  --text-ui: 0.9375rem;        /* 15px – Zeilen in Uebersichtskarten (Mein Tag v2) */
   --text-body: 1rem;           /* 16px – Standard */
   --text-title-s: 1.125rem;    /* 18px – Abschnittstitel */
   --text-title-m: 1.25rem;     /* 20px – Panel-/Dialogtitel */
   --text-title-l: 1.5rem;      /* 24px – Seitentitel */
+  /* Titelbild (BrandCover): 96 px bei 960 px Breite, skaliert mit dem Container */
+  --text-cover: clamp(2.5rem, 10cqi, 6rem);
   --text-display: clamp(1.75rem, 1.2rem + 1.5vw, 2.25rem); /* eine Ueberschrift je Seite */
+  --text-kpi: 2rem;            /* 32px – Wert der Kennzahl-Kachel (Mein Tag v2) */
 
   --leading-caption: 1rem;
   --leading-small: 1.25rem;
@@ -35,6 +42,7 @@
   --weight-bold: 700;
 
   /* ---------- Primitive Paletten ---------- */
+  /* Kuehles Hellblaugrau wie auf der Anmeldeseite (Farbwelt 2026-10-06). */
   --neutral-0: #ffffff;
   --neutral-25: #f8fafc;
   --neutral-50: #f4f7f9;
@@ -62,7 +70,9 @@
   --teal-400: #2cc0ae;
   --teal-500: #14b8a6;
   --teal-600: #0e9384;
-  --teal-700: #0b7368;
+  --teal-700: #0b7368;  /* 5.7:1 auf Weiss – Hauptfarbe fuer Knoepfe und Links */
+  --teal-800: #095c54;  /* 7.9:1 – Hover, Text auf hellen Teal-Flaechen */
+  --teal-900: #073f3a;
 
   --green-50: #e6f5ef;
   --green-600: #12896b;
@@ -77,7 +87,8 @@
   --violet-600: #6b4fc0;
 
   /* ---------- Semantik: Flaechen, Text, Linien ---------- */
-  --color-bg: var(--neutral-50);
+  /* Mein Tag v2 (2026-10-09): eine Stufe dunkler, damit weisse Karten sich abheben (Nebentext bleibt 5.6:1) */
+  --color-bg: #edf1f5;
   --color-surface: var(--neutral-0);
   --color-surface-subtle: var(--neutral-25);
   --color-surface-muted: var(--neutral-100);
@@ -86,27 +97,32 @@
   --color-surface-inverse: var(--neutral-900);
 
   --color-text: var(--neutral-900);
-  --color-text-muted: var(--neutral-600);       /* 6.0:1 auf Weiss */
+  --color-text-muted: var(--neutral-600);       /* 5.9:1 auf Papier, 6.0:1 auf Weiss */
   --color-text-subtle: var(--neutral-500);      /* 4.6:1 – nur >= 14px */
   --color-text-inverse: var(--neutral-0);
   --color-text-accent: var(--blue-700);
   --color-link: var(--blue-700);
 
-  /* Hervorgehobener Seitenkopf: in hell und dunkel gleich dunkel (Markenbanner) */
-  --color-highlight-from: var(--neutral-900);
-  --color-highlight-to: var(--blue-800);
-  --color-highlight-text: var(--neutral-0);
-  --color-highlight-muted: var(--neutral-100);
-  --color-highlight-eyebrow: var(--teal-400);
+  /* Hervorgehobener Seitenkopf: hell mit Markenton (ruhiger als ein dunkles Banner) */
+  /* Sachlich-institutionell: flacher, weisser Seitenkopf mit Navy-Eyebrow */
+  --color-highlight-from: var(--neutral-0);
+  --color-highlight-to: var(--neutral-0);
+  --color-highlight-text: var(--neutral-900);
+  --color-highlight-muted: var(--neutral-600);
+  --color-highlight-eyebrow: var(--blue-700);
 
-  --color-border: var(--neutral-200);
+  /* Mein Tag v2: Kartenrand etwas kraeftiger auf dem dunkleren Grund */
+  --color-border: #cfd9e2;
   --color-border-subtle: var(--neutral-100);
-  --color-border-strong: var(--neutral-300);
+  /* Rahmen der Bedienelemente: Kontrast >= 3:1 gegen --color-surface (WCAG 1.4.11) */
+  --color-border-strong: #7d8c9b;
 
+  /* Farbwelt der Anmeldeseite: Navy fuer Hauptaktion, Links und aktive Navigation (8.9:1 auf Weiss),
+     Teal als Markenbegleiter (Logo, Lichtflecken, Banner). */
   --color-accent: var(--blue-700);
   --color-accent-hover: var(--blue-800);
   --color-accent-contrast: var(--neutral-0);
-  --color-brand: var(--teal-500);
+  --color-brand: var(--teal-500);               /* nur Flaechen/Logo, nie als Text */
   --color-brand-strong: var(--teal-700);
   --color-focus: var(--blue-500);
 
@@ -123,6 +139,7 @@
   --color-neutral-bg: var(--neutral-100);
   --color-ai: var(--violet-600);
   --color-ai-bg: var(--violet-50);
+  --color-ai-border: #d6cbf3;   /* Mein Tag v2: getoenter Rahmen fuer KI-Plaketten */
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
@@ -133,6 +150,11 @@
   --color-danger-border: #efc1bd;
   --color-info-border: #bcd3ef;
   --color-brand-border: #a9dfd7;
+
+  /* Weiche Lichtflecken wie auf der Anmeldeseite (Teal oben links, Navy unten rechts) */
+  /* Keine Lichtflecken: Seitenhintergrund ist eine flache Farbe */
+  --glow-teal: rgb(20 184 166 / 0);
+  --glow-navy: rgb(15 76 129 / 0);
 
   /* ---------- Abstaende (4px-Raster) ---------- */
   --space-0: 0;
@@ -153,6 +175,7 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
+  /* Mein Tag v2: Karten bekommen wieder einen sehr leichten Schatten */
   --shadow-sm: 0 1px 2px rgb(11 19 28 / 0.06), 0 1px 1px rgb(11 19 28 / 0.04);
   --shadow-md: 0 4px 12px rgb(11 19 28 / 0.08), 0 1px 3px rgb(11 19 28 / 0.06);
   --shadow-lg: 0 16px 40px rgb(11 19 28 / 0.14), 0 4px 12px rgb(11 19 28 / 0.08);
@@ -183,9 +206,10 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* ---------- Layout ---------- */
-  --content-max: 1680px;
+  --content-max: 1440px;       /* Mein Tag v2: ruhigere Zeilenlaenge auf breiten Bildschirmen (war 1680px) */
   --content-narrow: 900px;
   --sidebar-width: 248px;
+  --color-sidebar: var(--neutral-25);  /* Mein Tag v2: Seitenleiste heller als der Seitengrund */
   --sidebar-rail: 64px;
   --header-height: 60px;
 
@@ -213,7 +237,7 @@
     --color-link: #8cc0f2;
     --color-border: #2a3846;
     --color-border-subtle: #212d39;
-    --color-border-strong: #3a4a5a;
+    --color-border-strong: #64768a;
     --color-accent: #4a90d9;
     --color-accent-hover: #6aa6e6;
     --color-accent-contrast: #0b131c;
@@ -232,6 +256,7 @@
     --color-neutral-bg: #1f2b37;
     --color-ai: #b9a6f2;
     --color-ai-bg: #2a2340;
+    --color-ai-border: #4a3d73;
     --color-success-fill: #3fae86;
     --color-warning-fill: #d99a2b;
     --color-danger-fill: #d9605a;
@@ -241,7 +266,15 @@
     --color-danger-border: #5c2b29;
     --color-info-border: #24496e;
     --color-brand-border: #1f5a52;
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --glow-teal: rgb(44 192 174 / 0);
+    --glow-navy: rgb(74 144 217 / 0);
+    --color-highlight-from: #151e28;
+    --color-highlight-to: #151e28;
+    --color-highlight-text: #e8eef3;
+    --color-highlight-muted: #a9b6c2;
+    --color-highlight-eyebrow: #8cc0f2;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);  /* Mein Tag v2 */
+    --color-sidebar: #121a23;
     --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
     --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
     --viz-series-1: #3987e5;
@@ -266,7 +299,7 @@
   --color-link: #8cc0f2;
   --color-border: #2a3846;
   --color-border-subtle: #212d39;
-  --color-border-strong: #3a4a5a;
+  --color-border-strong: #64768a;
   --color-accent: #4a90d9;
   --color-accent-hover: #6aa6e6;
   --color-accent-contrast: #0b131c;
@@ -285,6 +318,7 @@
   --color-neutral-bg: #1f2b37;
   --color-ai: #b9a6f2;
   --color-ai-bg: #2a2340;
+  --color-ai-border: #4a3d73;
   --color-success-fill: #3fae86;
   --color-warning-fill: #d99a2b;
   --color-danger-fill: #d9605a;
@@ -294,7 +328,15 @@
   --color-danger-border: #5c2b29;
   --color-info-border: #24496e;
   --color-brand-border: #1f5a52;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --glow-teal: rgb(44 192 174 / 0);
+  --glow-navy: rgb(74 144 217 / 0);
+  --color-highlight-from: #151e28;
+  --color-highlight-to: #151e28;
+  --color-highlight-text: #e8eef3;
+  --color-highlight-muted: #a9b6c2;
+  --color-highlight-eyebrow: #8cc0f2;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);  /* Mein Tag v2 */
+  --color-sidebar: #121a23;
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
   --viz-series-1: #3987e5;

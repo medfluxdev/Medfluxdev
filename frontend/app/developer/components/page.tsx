@@ -127,13 +127,15 @@ export default function ComponentReferencePage() {
           <div className="sg-grid">
             <Skeleton lines={3} label="Beispiel lädt…" />
             <EmptyState title="Noch keine Einträge" action={<Button size="sm">Ersten Eintrag anlegen</Button>}>Leere Zustände nennen den nächsten Schritt.</EmptyState>
+            <EmptyState variant="compact" title="Alles erledigt">Kompakte Variante für Übersichtskarten.</EmptyState>
           </div>
         </SectionCard>
 
         <SectionCard title="Kennzahlen">
           <div className="sg-grid">
             <KpiTile label="Kennzahl" value="42" hint="Hinweis zur Herkunft" href="/developer/components" linkLabel="Ziel öffnen" />
-            <KpiTile label="Ohne Link" value="–" hint="Fehlender Wert bleibt leer" />
+            <KpiTile label="Ohne Daten" value={null} />
+            <KpiTile label="Mit Status" value="3" tone="warning" hint="Wert färbt sich nur bei Handlungsbedarf" />
           </div>
         </SectionCard>
 

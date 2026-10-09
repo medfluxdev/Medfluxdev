@@ -8,6 +8,14 @@
 
 The board above is the approved visual identity reference (version 1.0). The written rules below make its decisions implementable and accessible in the product.
 
+> **Current decision 2026-10-09 (product owner): „Mein Tag v2“, refines „Sachlich-institutionell“.** Same calm character, but a clear order of importance and colour only where it carries meaning: the page ground is one step darker (`--color-bg: #edf1f5`, secondary text stays ≥ 5.6:1) with a slightly stronger card border (`--color-border: #cfd9e2`); cards, panels and KPI tiles carry a very light shadow again (`--shadow-sm`; dark: `0 1px 2px rgb(0 0 0 / 0.4)`); the sidebar uses `--color-sidebar` (lighter than the ground); content width is capped at 1440px. KPI tiles are coloured by state (`KpiTile tone`: warning/danger colour the value, info/success only the icon square) and are links as a whole. On „Mein Tag“ the header sits directly on the ground without a card, „Handlungsbedarf im Portfolio“ comes first and stands out (count badge, whole rows as links with tinted count pills: AI review violet, missing computable contract end red, other gaps amber), and empty states are compact (`EmptyState variant="compact"`). Links inside cards and lists are not underlined until hover/focus; links in running text stay underlined. Reference: `Claude outputs/Mein-Tag-Entwurf-v2.html` (static mock, not part of the app).
+>
+> *Decision 2026-10-06, evening (superseded by the line above for ground, border, card shadow and sidebar): direction „Sachlich-institutionell“.* Calmer and flatter for the working environment of a public hospital: the page ground is the flat cool light grey `--color-bg` with **no light spots and no gradients** (`--glow-teal`/`--glow-navy` are transparent); cards and panels are flat (1px `--color-border`, `--shadow-sm: none`; only menus, popovers, dialogs and drawers carry a shadow); the highlighted page header is a plain white `--color-surface` panel with a hairline border, `--radius-md`, a navy eyebrow (`--color-highlight-eyebrow`) and a 24px title; navy `#0f4c81` is the only action colour; **teal appears only in the logo**; control borders `--color-border-strong` are `#7d8c9b` (light, 3.4:1) and `#64768a` (dark, 3.6:1), meeting the 3:1 floor. The sign-in page uses the same flat ground with one surface card. Source: design-system package „MedFlux-Sachlich“.
+>
+> *Earlier the same day (superseded by the line above for background, header and teal):* **The colour world of the login page applies to all pages.** Primary actions, links and the active navigation use **institutional navy `#0f4c81`** (hover `#0b3d68`) – as in version 1.0. Backgrounds are the cool light blue-grey of the login page (`#f4f7f9`, `#eaf0f4`, `#f8fafc`) with the same soft light spots: teal top left, navy bottom right (`--glow-teal`, `--glow-navy`). Teal remains the brand companion (logo, light spots, highlighted page header). Kept from the earlier update the same day: serif page titles (*Source Serif 4*), flat cards, light highlighted header.
+>
+> *Earlier the same day (superseded for colours):* After comparing ten leading contract-management products, the product UI uses **one brand colour**. Primary actions, links and the active navigation use **brand teal `#0b7368`** (hover `#095c54`; 5.7:1 and 7.9:1 on white) instead of institutional blue. Blue (`#1d64c2`, `#17509c`) remains for **information** states and the **focus ring**, so it keeps one clear meaning. The bright teal `#14b8a6` is used only for areas and the logo, never as text (2.5:1). Light surfaces use a warm "paper" tone (`#f6f6f2`); page titles use the self-hosted serif *Source Serif 4* (`--font-display`), all other text stays Inter. The highlighted page header is light (teal-tinted) instead of dark navy. Implementation: `frontend/app/styles/tokens.css`. Sections 3 and 4 below describe version 1.0; where they differ, this update applies to the product UI. The logo and its teal-to-navy gradient are unchanged.
+
 ---
 
 ## 1. Brand foundation
@@ -119,7 +127,7 @@ Do not:
 
 ## 3. Color system
 
-Color has a functional hierarchy. Institutional blue drives primary actions, teal supports the brand and healthy system states, and amber/red are reserved for warnings and critical events.
+Color has a functional hierarchy. (Product UI since 2026-10-06: brand teal drives primary actions and blue means information – see the update at the top.) In version 1.0, institutional blue drives primary actions, teal supports the brand and healthy system states, and amber/red are reserved for warnings and critical events.
 
 ### Core brand colors
 
@@ -171,7 +179,7 @@ Do not use the brand gradient for operational buttons, status badges, tables, or
 ### Color rules
 
 - Color must never be the only indicator of status; pair it with a text label and, where useful, an icon.
-- Teal must not replace primary blue indiscriminately.
+- Teal must not replace primary blue indiscriminately. *(Superseded for the product UI on 2026-10-06: teal `#0b7368` is the single action colour; blue is reserved for information and focus.)*
 - Green indicates success or healthy state, not generic emphasis.
 - Red is reserved for critical, error, or destructive contexts.
 - Maintain WCAG 2.1 AA contrast for all text and essential controls.
