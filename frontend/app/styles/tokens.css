@@ -428,9 +428,7 @@
   --text-primary: var(--color-text);
   --text-secondary: var(--color-text-muted);
   --text-muted: var(--color-text-muted);
-  --muted: var(--color-text-muted);
   --muted2: var(--color-text-muted);
-  --accent: var(--color-accent);
   --accent-strong: var(--color-accent-hover);
   --accent-soft: var(--color-surface-accent);
   --interactive: var(--color-accent);

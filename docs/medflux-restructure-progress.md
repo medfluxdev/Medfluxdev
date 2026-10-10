@@ -221,7 +221,7 @@ mit einem Partnerdatensatz. (2) „0 Benutzer“ – gezählt werden Mitgliedsch
 - Tote Stile entfernt (nachweislich ohne Verwendung): `.severity-*`, `.badge-active/-expiring_soon/-expired/-terminated`, `.risk-*`,
   `.sb-dot`, `.state-icon`, `.fr-status-dot`, `.rg-row-overdue`, `.rg-deadline-overdue`, `.source-link-btn` u. a.; `.audit-set/-void/-confirm`
   bleiben (dynamisch genutzt). Alias-Tokens `--sev-*`/`--status-*` durch semantische Tokens ersetzt und gelöscht.
-- `SourceLink.tsx` entfernt (nur von der früheren Nachweise-Seite genutzt). `SettingsNavigation.tsx` war schon vor dieser Arbeit ungenutzt (nur Test) – bleibt.
+- `SourceLink.tsx` entfernt (nur von der früheren Nachweise-Seite genutzt). `SettingsNavigation.tsx` (schon vor dieser Arbeit ungenutzt, nur Test) samt Test und `.settings-navigation`-CSS im Nachgang entfernt; Legacy-Aliase `--accent`/`--muted` durch `--color-accent`/`--color-text-muted` ersetzt und aus `tokens.css` entfernt.
 - Vertragstermine im Vertrag mit Signal „Überfällig“ statt rotem Rahmen.
 - Mobil: `.shell-main` mit Spalte `minmax(0, 1fr)`, damit breite Tabellen die Seite nicht verbreitern (gefunden durch das Layout-Raster bei 390 px).
 - Mein Tag: ohne laufende Verträge zeigt „Jährliche Kosten“ „Keine laufenden Verträge“ statt „Noch keine Daten“.
