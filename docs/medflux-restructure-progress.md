@@ -12,7 +12,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | C | Glocke, Benachrichtigungen, Rahmen | erledigt | siehe git log |
 | D | Vertragsregister mit Reitern | erledigt | siehe git log |
 | E | Vertragsakte, Import, Prüfung | erledigt | siehe git log |
-| F | Fristen & Aufgaben | offen | |
+| F | Fristen & Aufgaben | erledigt | siehe git log |
 | G | Mein Tag v3, Analysen | offen | |
 | H | Stammdaten, Verwaltung, Geräte, Verlauf | offen | |
 | I | Aufräumen, Kompatibilität, Abschluss | offen | |
@@ -152,3 +152,20 @@ angepasst: `shell.test.tsx`, `register-grid.test.tsx`, `rules-and-contract-help.
 **Tests**: `backend/tests/test_restructure_review_idempotency.py` (T14), `frontend/test/review-queue.test.tsx`, `nachweise-redirect.test.ts` (T13/T20);
 angepasst: `contracts-detail`, `contract-detail-reload-scroll`, `fact-confirm-reviewer`, `evidence-pane-presentation`, `interaction-audit`.
 **Verifikation**: Backend 1590 passed / 7 umgebungsbedingt; `npm run verify` grün.
+
+## Phase F – Fristen & Aufgaben (2026-10-10)
+
+**Umgesetzt**
+- Termine: Überfälliges als eigener Abschnitt vor „Anstehend“, mit Signal „Überfällig“ statt eingefärbter Zeile; „Heute“ als warning.
+  Herkunft je Termin ausgeschrieben („Berechnet aus den Vertragsdaten“ / „Manuelle Wiedervorlage“) plus ai-Signal bei ungeprüften KI-Werten.
+- „Nur meine“ und Zeitraum (`nur=meine`, `zeitraum=7|30|90|180|alle`) in der Adresse – Mein Tag kann gezielt verlinken; Reiterwechsel räumt beides ab.
+- Hinweis „N Verträge – Kündigungsfrist nicht berechenbar“ in Termine und Kündigungsentscheidungen (aus `not_evaluable`, Phase A), mit Link in die Liste.
+- Leere Zustände ruhig und ehrlich: „Keine Termine für diese Auswahl“ mit „Alle offenen Termine anzeigen“ vs. „Keine offenen Termine“; Aufgaben ebenso (kein grüner Haken).
+- Fehler beim Laden zeigen „Erneut versuchen“ statt einer leeren Liste.
+
+**Geprüft, unverändert gültig** (bestehende Tests `test_deadlines_api.py`): Neuberechnung behält dieselbe Termin-ID (T07), berechnete Termine
+sind nur über die Vertragsdaten änderbar (422/409), der Tageslauf erzeugt am selben Tag keine zweite Erinnerung (Dedupe-Schlüssel), Erledigen,
+Entscheidung, Kündigung und Lesen bleiben getrennte Vorgänge (T09).
+
+**Tests**: `frontend/test/restructure-deadlines.test.tsx` (T08, T24).
+**Verifikation**: `npm run verify` grün (53 Testdateien); Backend unverändert seit Phase E (1590 passed).

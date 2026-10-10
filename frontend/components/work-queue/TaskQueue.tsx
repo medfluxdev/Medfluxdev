@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import EmptyState from "@/components/ui/EmptyState";
 import Link from "next/link";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
@@ -154,12 +155,9 @@ export default function TaskQueue() {
       {loading && <LoadingState>Aufgaben werden geladen…</LoadingState>}
 
       {!loading && !error && items.length === 0 && (
-        <div className="state-box">
-          <div className="state-icon">✓</div>
-          <h3>{activeFilterCount ? "Keine passenden Aufgaben" : "Keine offenen Aufgaben"}</h3>
-          <p>{activeFilterCount ? "Für die gewählten Filter wurden keine aktiven Aufgaben gefunden." : "Aktuell sind keine offenen Aufgaben vorhanden."}</p>
-          {activeFilterCount > 0 && <Button size="sm" onClick={resetFilters}>Alle offenen Aufgaben anzeigen</Button>}
-        </div>
+        <EmptyState variant="calm" title={activeFilterCount ? "Keine passenden Aufgaben" : "Keine offenen Aufgaben"} action={activeFilterCount > 0 ? <Button size="sm" onClick={resetFilters}>Alle offenen Aufgaben anzeigen</Button> : undefined}>
+          {activeFilterCount ? "Für die gewählten Filter wurden keine aktiven Aufgaben gefunden." : "Aktuell sind keine offenen Aufgaben vorhanden."}
+        </EmptyState>
       )}
 
       {!loading && !error && items.length > 0 && (

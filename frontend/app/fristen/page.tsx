@@ -42,7 +42,7 @@ export default function DeadlinesAndTasksPage() {
     try {
       const params = new URLSearchParams(window.location.search);
       if (next === "termine") params.delete("ansicht"); else params.set("ansicht", next);
-      if (next !== "termine") params.delete("nur");
+      if (next !== "termine") { params.delete("nur"); params.delete("zeitraum"); }
       const query = params.toString();
       window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     } catch {
