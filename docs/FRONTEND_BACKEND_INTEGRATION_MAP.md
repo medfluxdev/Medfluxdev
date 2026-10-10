@@ -36,6 +36,9 @@ This is the canonical map between backend capabilities and frontend consumers on
 | Partner linking | `/api/catalogs/partners/unlinked`, `/partners/link-supplier` | Stammdaten → Vertragspartner „Lieferanten zuordnen“ | Suggestions only; linking via the register update path (manual origin, history per contract) |
 | Payment reminders | `/api/contracts/{id}/finance/entries` (`payment_timing`, `payment_reminder`) | Vertrag → Finanzen, column „Zahlung“ and create form | System deadline `payment_due` only with maintained timing; finance writes re-sync deadlines |
 | Maintenance reminders | `/api/contracts/{id}/register` (`maintenance_next_date`, `maintenance_interval_months`) | Vertrag → Vertragsdaten „Wartung“ | System deadline `maintenance_due`, next one after completion |
+| Import wizard | `/api/documents/import` (`intake_mode`, `same_destination_confirmed`), `/api/processing-jobs?status=failed`, `/api/documents/{id}/retry` | `/import` steps incl. „Erfassung“, „Fehlgeschlagene Importe“ | Mode enforced server-side, stored as `contract.intake_mode`; raw processing errors only for admins/developer |
+| Analytics drill-down | `/api/register/reports/drilldown` | Analysen „Kosten nach Bereich“ | Running contracts, coverage per level, link to the register with the same filter |
+| Developer area | `/api/system/organizations`, `/api/processing-jobs` | `/developer` tabs (account menu, developer only) | Organisation-wide, not part of Verwaltung |
 | Review mode | `/api/review-settings` (GET all members, PUT `review.settings`) | Verwaltung → Allgemein „Prüfung der KI-Angaben“; Prüfung shows „Automatisch übernommen“ (info signal) | Derived read state, critical facts always manual, change is audited |
 | Reporting | `/api/reports/portfolio` | domain API / reporting consumer | Connected + scoped |
 | Operations | contract CSV export | Admin Dashboard export | Connected + role/scope protected + audited |

@@ -9,7 +9,7 @@ from typing import Any, Optional
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -26,7 +26,7 @@ from app.database.models.organization import Organization
 from app.database.scope_queries import intersect_ids, scoped_contract_ids
 from app.database.session import create_session
 from app.demo.workspace import workspace_contract_ids
-from app.reports.exports import cover_html, grid_xlsx, html_to_pdf, portfolio, portfolio_xlsx
+from app.reports.exports import cover_html, drilldown, grid_xlsx, html_to_pdf, portfolio, portfolio_xlsx
 from app.reports.grid import (
     COLUMN_BY_KEY,
     GridError,
@@ -218,6 +218,27 @@ def export_grid(request: Request, organization_slug: str, spec: Optional[str] = 
 
 def _report_years(as_of: date) -> range:
     return range(as_of.year - 2, as_of.year + 4)
+
+
+@router.get("/api/register/reports/drilldown")
+def get_drilldown(
+    request: Request,
+    organization_slug: str,
+    hospital: Optional[str] = Query(default=None, max_length=255),
+    department: Optional[str] = Query(default=None, max_length=255),
+):
+    """Analysen-Drilldown: Krankenhaus -> Abteilung -> Verträge (sichtbarer Bereich, laufende Verträge)."""
+    actor = current_actor(request, organization_slug)
+    as_of = today_local()
+    session = create_session()
+    try:
+        rows, _ = _rows(session, actor, GridSpec(), as_of, years=_report_years(as_of))
+        try:
+            return drilldown(rows, as_of, hospital, department)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        session.close()
 
 
 @router.get("/api/register/reports/portfolio")

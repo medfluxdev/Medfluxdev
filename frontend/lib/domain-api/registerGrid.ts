@@ -190,6 +190,48 @@ export function getPortfolioReport(organizationSlug: string) {
   return apiGet<PortfolioReport>(`/api/register/reports/portfolio?${org(organizationSlug)}`);
 }
 
+export type DrilldownLevel = "hospital" | "department" | "contract";
+
+export interface DrilldownBucket {
+  label: string;
+  value: string;
+  count: number;
+  annual_cost: string | null;
+  cost_current_year: string | null;
+  known: number;
+  missing: number;
+}
+
+export interface DrilldownContract {
+  contract_id: string;
+  register_number: string | null;
+  short_description: string | null;
+  partner: string | null;
+  currency: string;
+  annual_cost: string | null;
+  cost_current_year: string | null;
+  term_status: string | null;
+}
+
+export interface DrilldownReport {
+  as_of: string;
+  level: DrilldownLevel;
+  path: { level: "hospital" | "department"; label: string; value: string; name: string }[];
+  items: (DrilldownBucket | DrilldownContract)[];
+  count: number;
+  truncated: boolean;
+  totals: { value: string | null; currency: string; known: number; missing: number; other_currencies: Record<string, string> };
+  register_filter: { column: string; op: string; value: string[] }[];
+}
+
+export function getDrilldown(organizationSlug: string, hospital?: string, department?: string) {
+  const params = new URLSearchParams();
+  if (hospital !== undefined) params.set("hospital", hospital);
+  if (department !== undefined) params.set("department", department);
+  const extra = params.toString();
+  return apiGet<DrilldownReport>(`/api/register/reports/drilldown?${org(organizationSlug)}${extra ? `&${extra}` : ""}`);
+}
+
 export function downloadPortfolioXlsx(organizationSlug: string) {
   return apiDownload(`/api/register/reports/portfolio.xlsx?${org(organizationSlug)}`, 120000);
 }

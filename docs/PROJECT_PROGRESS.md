@@ -5417,3 +5417,15 @@ Branch `feature/finance-reminders-review-mode` (auf `design/ruhe-signal`). Abgle
 **Migration:** `o6d8e0f12007` (additiv; upgrade/downgrade/upgrade auf Wegwerf-DB geprüft, ORM gegen migriertes Schema abgeglichen).
 **Tests:** neu `backend/tests/test_reminders_review_mode.py`, Vitest `review-mode`, Erweiterungen in `contract-finance` und `fact-confirm-display`. Ergebnisse der Gesamtläufe im Commit.
 **Nächster Schritt:** Import-Assistent; danach WP5-Drilldown und Leistungstest.
+
+### Nachtrag 2026-10-10 – Entwicklung gebündelt, Import-Assistent, Analysen-Drilldown
+
+Branch `feature/developer-hub-import-wizard` (auf `feature/finance-reminders-review-mode`).
+
+- **Entwicklung:** eine Seite `/developer` mit Reitern (Übersicht inkl. Organisationen, Dokumentverarbeitung, UI-Bausteine); Eintrag im Kontomenü statt in der Seitenleiste; alte Adressen leiten weiter.
+- **Import-Assistent:** Schritt „Erfassung“ (KI mit manueller Prüfung / KI mit automatischer Übernahme nur nach Freigabe / manuelle Eingabe mit gespeichertem Original), serverseitige Prüfung, Bestätigung bei mehreren Dateien, `contract.intake_mode`; automatische Übernahme gilt nie für Verträge mit ausdrücklich manueller Prüfung.
+- **Fehlgeschlagene Importe** auf der Importseite (verständliche Meldung, erneute Analyse, Vertrag); technische Rohtexte der Verarbeitungsläufe nur noch für Administration/Entwicklung.
+- **Analysen:** „Kosten nach Bereich“ – Krankenhaus → Abteilung → Verträge mit Abdeckung, Link in die Vertragsliste; Leistungstest mit 1.000 Verträgen.
+
+**Migration:** `p7e9f1a23008` (additiv). **Tests:** `test_import_wizard.py`, `test_analytics_drilldown.py`, Vitest `import`, `portfolio-drilldown`. Gesamtläufe im Commit.
+**Offen:** Betrag einer Vorauszahlung, Extraktions-Benchmark (WP2.4).

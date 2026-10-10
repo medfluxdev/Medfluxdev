@@ -1,6 +1,6 @@
 # Contract Import Wizard — user-selected ownership and approval path
 
-**Status:** implementation-ready UX/domain specification, NOT implemented. Owner requirement on 2026-09-26. Work on isolated architecture branch; reconcile against currently uncommitted local Visual-First experiment prior to code edits.
+**Status (2026-10-10):** implemented on `feature/developer-hub-import-wizard` – wizard step „Erfassung“, server-side mode validation, `contract.intake_mode`, manual capture with stored original, batch confirmation, failed-imports list. Deviation: no separate import-intent endpoint; the existing import route validates destination and mode atomically (allowed by this spec). Duplicate protection is the existing SHA-256 dedupe per organisation. The per-field AI/manual/both display and evidence review reuse the existing Prüfung and provenance. Original text: Owner requirement on 2026-09-26. Work on isolated architecture branch; reconcile against currently uncommitted local Visual-First experiment prior to code edits.
 
 ## Product decision
 **The import screen must ask these questions BEFORE creating an import/processing run:**

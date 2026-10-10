@@ -188,6 +188,70 @@ def _bucket_item(label: str, value: Optional[str], data: MoneyTotals) -> dict:
     }
 
 
+NONE_VALUE = "__none__"
+_DRILL_LEVELS = (("hospital", "Krankenhaus"), ("department", "Abteilung"))
+DRILL_CONTRACT_LIMIT = 200
+
+
+def _drill_match(value: Optional[str], wanted: str) -> bool:
+    return (value or None) == (None if wanted == NONE_VALUE else wanted)
+
+
+def drilldown(rows: list[GridRow], as_of: date, hospital: Optional[str] = None, department: Optional[str] = None) -> dict:
+    """Analysen: Organisation -> Krankenhaus -> Abteilung -> Verträge (laufende Verträge, Summen mit Abdeckung).
+
+    `hospital`/`department` sind die angezeigten Namen; NONE_VALUE steht für „ohne Zuordnung“.
+    """
+    if department is not None and hospital is None:
+        raise ValueError("Abteilung nur innerhalb eines Krankenhauses.")
+    running = running_rows([row for row in rows if row.values["business_status"] != "geloescht"], as_of)
+    path: list[dict] = []
+    register_filter: list[dict] = []
+    for (key, label), wanted in zip(_DRILL_LEVELS, (hospital, department)):
+        if wanted is None:
+            break
+        running = [row for row in running if _drill_match(row.values[key], wanted)]
+        path.append({"level": key, "label": label, "value": wanted, "name": "Ohne Zuordnung" if wanted == NONE_VALUE else wanted})
+        register_filter.append({"column": key, "op": "in", "value": ["" if wanted == NONE_VALUE else wanted]})
+
+    level = _DRILL_LEVELS[len(path)][0] if len(path) < len(_DRILL_LEVELS) else "contract"
+    if level == "contract":
+        ordered = sorted(
+            running,
+            key=lambda row: (row.values["cost_current_year"] is None, -(row.values["cost_current_year"] or 0), row.values["register_number"] or ""),
+        )
+        items = [{
+            "contract_id": str(row.contract_id),
+            "register_number": row.values["register_number"],
+            "short_description": row.values["short_description"],
+            "partner": row.values["partner"],
+            "currency": row.values.get("_currency") or "EUR",
+            "annual_cost": _money(row.values["annual_cost"]),
+            "cost_current_year": _money(row.values["cost_current_year"]),
+            "term_status": row.values["term_status"],
+        } for row in ordered[:DRILL_CONTRACT_LIMIT]]
+    else:
+        buckets: dict[Optional[str], MoneyTotals] = defaultdict(MoneyTotals)
+        for row in running:
+            buckets[row.values[level] or None].add(row)
+        ordered_buckets = sorted(
+            buckets.items(),
+            key=lambda item: (-(item[1].sum("cost_current_year") or Decimal("-1")), item[0] is None, item[0] or ""),
+        )
+        items = [_bucket_item(name or "Ohne Zuordnung", name or NONE_VALUE, data) for name, data in ordered_buckets]
+
+    return {
+        "as_of": as_of.isoformat(),
+        "level": level,
+        "path": path,
+        "items": items,
+        "count": len(running),
+        "truncated": level == "contract" and len(running) > DRILL_CONTRACT_LIMIT,
+        "totals": _amount(money_totals(running), "cost_current_year"),
+        "register_filter": register_filter,
+    }
+
+
 def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
     active = [row for row in rows if row.values["business_status"] != "geloescht"]
     running = running_rows(active, as_of)
