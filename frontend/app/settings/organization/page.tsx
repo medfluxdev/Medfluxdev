@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { withParams } from "@/lib/redirect-params";
 
-// Krankenhaeuser, Abteilungen und Kostenstellen liegen jetzt in den Stammdaten.
-export default function OrganizationSettingsRedirect() {
-  redirect("/stammdaten/abteilungen?ansicht=struktur");
+// Organisationsstruktur wird in den Stammdaten gepflegt.
+export default function Redirect({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  redirect(withParams("/stammdaten/abteilungen", searchParams, { ansicht: "struktur" }));
 }

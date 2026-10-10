@@ -1,14 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
+import { withParams } from "@/lib/redirect-params";
 
-import { useAuth } from "@/components/auth/AuthProvider";
-import RegisterGrid from "@/components/register/RegisterGrid";
-import PageHeader from "@/components/ui/PageHeader";
-
-// Zu prüfende Verträge: dieselbe Vertragsliste mit der Ansicht „Zu prüfen“ und „Prüfen“ je Zeile.
-export default function ReviewPage() {
-  const { organizationSlug } = useAuth();
-  return <div className="page">
-    <PageHeader title="Prüfungen" description="Verträge, deren KI-Analyse noch nicht geprüft ist. „Prüfen“ öffnet die Prüfung mit Belegen." />
-    {organizationSlug ? <RegisterGrid organizationSlug={organizationSlug} initialViewKey="review" /> : <p>Bitte zuerst eine Organisation auswählen.</p>}
-  </div>;
+// „Prüfungen“ ist der Reiter „Zu prüfen“ der Vertragsliste.
+export default function ReviewRedirect({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  redirect(withParams("/register", searchParams, { ansicht: "review" }));
 }

@@ -31,8 +31,8 @@ export default function AddContractMenu() {
       Vertrag hinzufügen <span aria-hidden="true">▾</span>
     </button>
     {open ? <ul id={menuId} className="add-contract-menu">
-      <li><Link href="/import" onClick={() => setOpen(false)}><strong>Dokument importieren</strong><span>PDF oder DOCX – die lokale KI liest die Angaben aus</span></Link></li>
-      <li><Link href="/contracts/new" onClick={() => setOpen(false)}><strong>Ohne Dokument anlegen</strong><span>Angaben von Hand erfassen, Dokument später ergänzen</span></Link></li>
+      <li><Link href="/import" onClick={() => setOpen(false)}><strong>Aus Dokument</strong><span>PDF oder DOCX – die lokale KI liest die Angaben aus</span></Link></li>
+      <li><Link href="/contracts/new" onClick={() => setOpen(false)}><strong>Manuell erfassen</strong><span>Angaben von Hand erfassen, Dokument später ergänzen</span></Link></li>
     </ul> : null}
   </div>;
 }

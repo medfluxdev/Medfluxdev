@@ -143,6 +143,11 @@ export function getGrid(organizationSlug: string, spec: Partial<GridSpec>, page:
   return apiGet<GridResponse>(`/api/register/grid?${org(organizationSlug)}&${specParam(spec)}&offset=${page.offset}&limit=${page.limit}${tree}`);
 }
 
+/** Zahlen für die Reiter der Vertragsliste (sichtbarer Bereich, ohne gelöschte). */
+export function getGridCounts(organizationSlug: string) {
+  return apiGet<{ bestand: number; review: number; archive: number }>(`/api/register/grid/counts?${org(organizationSlug)}`);
+}
+
 export function getGridValues(organizationSlug: string, column: string, spec: Partial<GridSpec>) {
   return apiGet<{ column: string; values: { value: string; label: string; count: number }[] }>(
     `/api/register/grid/values?${org(organizationSlug)}&column=${encodeURIComponent(column)}&${specParam(spec)}`,

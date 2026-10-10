@@ -234,7 +234,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     try {
       await archiveContract(data.contract_id, orgSlug);
       setArchiveDialogOpen(false);
-      router.push("/archiv");
+      router.push("/register?ansicht=archive");
       router.refresh();
     } catch (error) {
       setArchiveError(error instanceof Error ? error.message : "Archivierung fehlgeschlagen.");

@@ -47,7 +47,7 @@ export default function AiPortfolioNotes({ report, suppliers }: { report: Portfo
         <h3>Offen</h3>
         <ul className="ai-notes-list">
           <li><span className="ai-notes-count">{openTasks}</span><Link href="/fristen?ansicht=aufgaben">{openTasks === 1 ? "offene Aufgabe" : "offene Aufgaben"} aus der Analyse</Link></li>
-          <li><span className="ai-notes-count">{report.contracts.archived}</span><Link href="/archiv">{report.contracts.archived === 1 ? "archivierter Vertrag" : "archivierte Verträge"}</Link></li>
+          <li><span className="ai-notes-count">{report.contracts.archived}</span><Link href="/register?ansicht=archive">{report.contracts.archived === 1 ? "archivierter Vertrag" : "archivierte Verträge"}</Link></li>
         </ul>
       </div>
     </div>

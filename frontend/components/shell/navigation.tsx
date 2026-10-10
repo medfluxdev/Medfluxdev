@@ -52,27 +52,20 @@ export interface NavGroup {
 const EDITORS: AccountRole[] = ["admin", "contract_manager"];
 const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
 
+// Restructure (Plan §5): Arbeit zuerst, Daten und Verwaltung nach Rechten. Prüfung, Archiv und Import sind
+// Reiter bzw. Aktionen der Vertragsliste; Benachrichtigungen erreicht man über die Glocke.
 export const NAV_GROUPS: NavGroup[] = [
-  { label: "Start", items: [
+  { label: "Arbeit", items: [
     { label: "Mein Tag", href: "/", icon: "home", keywords: "übersicht dashboard start", shortcut: "g s" },
-  ] },
-  { label: "Verträge", items: [
-    { label: "Vertragsliste", href: "/register", icon: "contracts", keywords: "verträge register liste", shortcut: "g v" },
+    { label: "Verträge", href: "/register", icon: "contracts", keywords: "verträge register liste bestand zu prüfen prüfungen archiv", shortcut: "g v" },
     { label: "Fristen & Aufgaben", href: "/fristen", icon: "deadlines", keywords: "termine fristen wiedervorlage kündigung verlängerung entscheidung aufgaben to-dos", shortcut: "g t" },
-    { label: "Archiv", href: "/archiv", icon: "archive", roles: EDITORS, keywords: "archiviert wiederherstellen" },
     { label: "Geräte", href: "/equipment", icon: "equipment", keywords: "medizintechnik anlagen" },
-  ] },
-  { label: "Prüfung", items: [
-    { label: "Import", href: "/import", icon: "import", roles: EDITORS, keywords: "hochladen pdf docx" },
-    { label: "Prüfungen", href: "/review", icon: "review", roles: REVIEWERS, keywords: "ki werte bestätigen" },
+    { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio" },
     { label: "Nachweise", href: "/nachweise", icon: "evidence", keywords: "quellen belege" },
   ] },
-  { label: "Auswertungen", items: [
-    { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio" },
-    { label: "Historie", href: "/audit", icon: "history", roles: EDITORS, keywords: "audit protokoll änderungen" },
-  ] },
-  { label: "Verwaltung", items: [
+  { label: "Daten & Verwaltung", items: [
     { label: "Stammdaten", href: "/stammdaten", icon: "masterdata", keywords: "vertragspartner lieferanten abteilungen kostenstellen krankenhäuser kataloge auswahllisten", shortcut: "g d" },
+    { label: "Historie", href: "/audit", icon: "history", roles: EDITORS, keywords: "audit protokoll änderungen" },
     { label: "Verwaltung", href: "/admin", icon: "admin", roles: ["admin"], keywords: "admin benutzer rollen einstellungen nummernkreis löschung" },
     { label: "Entwicklung", href: "/developer", icon: "developer", developerOnly: true, keywords: "developer diagnose" },
   ] },
@@ -80,6 +73,9 @@ export const NAV_GROUPS: NavGroup[] = [
 
 // Seiten, die nicht in der Seitenleiste stehen (fuer Titel, Brotkrumen und Suche).
 export const EXTRA_PAGES: NavItem[] = [
+  { label: "Verträge – Zu prüfen", href: "/register?ansicht=review", icon: "review", roles: REVIEWERS, keywords: "prüfungen ki werte bestätigen" },
+  { label: "Verträge – Archiv", href: "/register?ansicht=archive", icon: "archive", roles: EDITORS, keywords: "archiviert wiederherstellen" },
+  { label: "Vertrag importieren", href: "/import", icon: "import", roles: EDITORS, keywords: "import hochladen pdf docx dokument" },
   { label: "Benachrichtigungen", href: "/postfach", icon: "inbox", keywords: "postfach erinnerungen eskalationen glocke" },
   { label: "Inhaltssuche", href: "/suche", icon: "search", keywords: "volltext dokumente klausel" },
   { label: "Vertrag anlegen", href: "/contracts/new", icon: "contracts", roles: EDITORS },
@@ -112,8 +108,16 @@ export function allowed(item: NavItem, role: AccountRole | null | undefined, isD
   return isDeveloper || (role ? item.roles.includes(role) : false);
 }
 
+// Seiten, die zu einem Menüpunkt gehören, ohne unter dessen Pfad zu liegen (Vertragsakte, Import, alte Adressen).
+const ACTIVE_ALIASES: Record<string, string[]> = {
+  "/register": ["/contracts", "/import", "/review", "/archiv"],
+  "/fristen": ["/termine", "/verlaengerungen", "/work-queue", "/postfach"],
+};
+
 export function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  if (href === "/") return pathname === "/";
+  const prefixes = [href, ...(ACTIVE_ALIASES[href] ?? [])];
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export interface PageInfo {
@@ -124,7 +128,8 @@ export interface PageInfo {
 
 export function pageFor(pathname: string): PageInfo {
   if (pathname.startsWith("/contracts/") && pathname !== "/contracts/new") {
-    return { title: "Vertrag", group: NAV_GROUPS[1], item: NAV_GROUPS[1].items[0] };
+    const group = NAV_GROUPS.find((entry) => entry.items.some((item) => item.href === "/register"));
+    return { title: "Vertrag", group, item: group?.items.find((item) => item.href === "/register") };
   }
   const all = [...NAV_GROUPS.flatMap((group) => group.items.map((item) => ({ group, item }))), ...EXTRA_PAGES.map((item) => ({ group: undefined, item }))];
   const exact = all.find(({ item }) => item.href === pathname);

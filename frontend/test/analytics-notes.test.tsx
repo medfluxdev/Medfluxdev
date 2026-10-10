@@ -27,7 +27,7 @@ describe("Analysen – KI-Hinweise", () => {
     expect(screen.getByRole("link", { name: "2 Verträge" })).toHaveAttribute("href", expect.stringContaining("/register?filter="));
     expect(screen.getByRole("link", { name: "offene Aufgaben aus der Analyse" })).toHaveAttribute("href", "/fristen?ansicht=aufgaben");
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "archivierter Vertrag" })).toHaveAttribute("href", "/archiv");
+    expect(screen.getByRole("link", { name: "archivierter Vertrag" })).toHaveAttribute("href", "/register?ansicht=archive");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
 

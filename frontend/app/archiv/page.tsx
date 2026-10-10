@@ -1,14 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
+import { withParams } from "@/lib/redirect-params";
 
-import { useAuth } from "@/components/auth/AuthProvider";
-import RegisterGrid from "@/components/register/RegisterGrid";
-import PageHeader from "@/components/ui/PageHeader";
-
-// Archiv: dieselbe Vertragsliste mit der Ansicht „Archiv“ und „Wiederherstellen“ je Zeile.
-export default function ArchivePage() {
-  const { organizationSlug } = useAuth();
-  return <div className="page">
-    <PageHeader title="Archiv" description="Abgelegte Verträge. Archivieren ist umkehrbar – es wird nichts gelöscht." />
-    {organizationSlug ? <RegisterGrid organizationSlug={organizationSlug} initialViewKey="archive" /> : <p>Bitte zuerst eine Organisation auswählen.</p>}
-  </div>;
+// Das Archiv ist der Reiter „Archiv“ der Vertragsliste.
+export default function ArchiveRedirect({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  redirect(withParams("/register", searchParams, { ansicht: "archive" }));
 }

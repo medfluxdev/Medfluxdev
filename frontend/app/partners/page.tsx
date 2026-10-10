@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { withParams } from "@/lib/redirect-params";
 
-// Frueherer Ort der Vertragspartner; Suchbegriff wird mitgenommen.
-export default function PartnersRedirect({ searchParams }: { searchParams: { q?: string } }) {
-  redirect(searchParams.q ? `/stammdaten/vertragspartner?q=${encodeURIComponent(searchParams.q)}` : "/stammdaten/vertragspartner");
+// Vertragspartner werden in den Stammdaten gepflegt.
+export default function Redirect({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  redirect(withParams("/stammdaten/vertragspartner", searchParams));
 }

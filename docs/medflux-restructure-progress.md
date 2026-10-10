@@ -10,7 +10,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | A | Datenwahrheit (Summen mit Abdeckung, Laufend-Definition, nicht bewertbare Fristen, Stichtag Europe/Berlin) | erledigt | siehe git log |
 | B | Signal-Grundlage (R&S Phase 1) | erledigt | siehe git log |
 | C | Glocke, Benachrichtigungen, Rahmen | erledigt | siehe git log |
-| D | Vertragsregister mit Reitern | offen | |
+| D | Vertragsregister mit Reitern | erledigt | siehe git log |
 | E | Vertragsakte, Import, Prüfung | offen | |
 | F | Fristen & Aufgaben | offen | |
 | G | Mein Tag v3, Analysen | offen | |
@@ -101,3 +101,28 @@ Kein WSL-Testcluster. Backend-Tests laufen in Wegwerf-Containern (`medflux-pytes
 **Tests**: `backend/tests/test_restructure_notifications.py` (T17, T29, T08-Teil), `frontend/test/deadlines.test.tsx` erweitert;
 `test_notifications_actor_scope.py` Mock um `scalar` ergänzt.
 **Verifikation**: Backend 1586 passed / 7 umgebungsbedingt; `npm run verify` grün (51 Testdateien).
+
+## Phase D – Vertragsliste mit Reitern (2026-10-10)
+
+**Befund**: `/register`, `/review` und `/archiv` waren drei Seiten und drei Menüpunkte um dieselbe Komponente; nur `?ansicht=`
+stand in der Adresse, Filter/Sortierung gingen beim Zurückkehren verloren, eine gespeicherte Reiter-Ansicht konnte die Liste
+unbemerkt ins Archiv umschalten.
+
+**Umgesetzt**
+- `/register` „Verträge“ mit Reitern **Bestand · Zu prüfen · Archiv** und Zahlen (`GET /api/register/grid/counts`, gleiche Sichtbarkeit
+  wie die Liste, ohne gelöschte). Zu prüfen nur für Prüfrollen, Archiv nur für Bearbeiter (wie vorher die Menüpunkte).
+- `/review` und `/archiv` leiten mit allen Parametern auf `/register?ansicht=review|archive` weiter.
+- Listenzustand vollständig in der Adresse (U4): `sicht` (gespeicherte Ansicht), `q`, `filter`, `sort`, `gruppe`, `seite`; beim Laden
+  gelesen, bei jeder Änderung zurückgeschrieben. Reiter-Ansichten erscheinen nicht in der Auswahl „Ansicht“ und werden im Bestand nie
+  aus dem lokalen Speicher geöffnet.
+- Eigener Leerzustand bei Filtern ohne Treffer mit „Filter und Suche zurücksetzen“ (U13); Text je Reiter bei echter Leere.
+- „Prüfen“ merkt sich die Reihenfolge der aktuellen Seite (`sessionStorage medflux.reviewQueue`) für „Weiter zum nächsten Vertrag“ (Phase E).
+- Alle Weiterleitungen behalten ihre Parameter (`lib/redirect-params.withParams`): `/contracts`, `/review`, `/archiv`, `/termine`,
+  `/verlaengerungen`, `/work-queue`, `/partners`, `/settings/catalogs`, `/settings/organization` (U12).
+- Seitenleiste nach Plan §5: **Arbeit** (Mein Tag, Verträge, Fristen & Aufgaben, Geräte, Analysen, Nachweise*) und **Daten & Verwaltung**
+  (Stammdaten, Historie*, Verwaltung, Entwicklung); *Nachweise und Historie wandern in E bzw. H. Prüfungen, Archiv, Import, Postfach sind
+  über Reiter, „Vertrag hinzufügen“ (Aus Dokument / Manuell erfassen), Glocke und Strg+K erreichbar. Vertragsakte und Import markieren „Verträge“.
+
+**Tests**: `frontend/test/restructure-register.test.tsx` (T15, T20, T30, U13), `backend/tests/test_restructure_data_truth.py::test_register_tab_counts`;
+angepasst: `shell.test.tsx`, `register-grid.test.tsx`, `rules-and-contract-help.test.tsx`, `analytics-notes.test.tsx`, e2e-Seitenlisten.
+**Verifikation**: Backend 1587 passed / 7 umgebungsbedingt; `npm run verify` grün (52 Testdateien).

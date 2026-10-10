@@ -117,3 +117,24 @@ def test_grid_totals_and_renewals_are_honest(monkeypatch):
     renewals = admin.get("/api/register/renewals", params=query).json()
     assert [item["contract_id"] for item in renewals["not_evaluable"]] == [incomplete]
     assert renewals["not_evaluable"][0]["reason"] == "Laufzeitangaben unvollständig"
+
+
+def test_register_tab_counts(monkeypatch):
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    admin = _as(monkeypatch, ids, "admin", "admin")
+    a, b, _ = _populate(admin, slug, ids)
+    session = create_session()
+    try:
+        archived = session.get(Contract, UUID(a))
+        archived.is_archived = True
+        archived.archived_at = datetime(2026, 9, 30, tzinfo=timezone.utc)
+        session.commit()
+    finally:
+        session.close()
+    counts = admin.get("/api/register/grid/counts", params=query).json()
+    grid = admin.get("/api/register/grid", params={**query, "spec": json.dumps({})}).json()
+    archive = admin.get("/api/register/grid", params={**query, "spec": json.dumps({"archived": True})}).json()
+    # Gelöschte (c) zählen nicht; Bestand und Archiv stimmen mit den Listen überein.
+    assert counts == {"bestand": grid["total"], "review": 0, "archive": archive["total"]}
+    assert counts["bestand"] == 1 and counts["archive"] == 1

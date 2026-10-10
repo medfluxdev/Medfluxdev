@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { withParams } from "@/lib/redirect-params";
 
-// Kataloge liegen jetzt in den Stammdaten; der Nummernkreis unter /settings/nummernkreis.
-export default function CatalogSettingsRedirect() {
-  redirect("/stammdaten/vertragstypen");
+// Kataloge werden in den Stammdaten gepflegt.
+export default function Redirect({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  redirect(withParams("/stammdaten/vertragstypen", searchParams));
 }

@@ -56,12 +56,15 @@ beforeEach(() => {
 });
 
 describe("App-Shell", () => {
-  it("zeigt fünf Bereiche mit den wichtigsten Zielen", () => {
+  it("zeigt Arbeit zuerst und Daten & Verwaltung danach, ohne doppelte Listen", () => {
     render(<ClientNav>Inhalt</ClientNav>);
     const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
-    expect(within(nav).getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Start", "Verträge", "Prüfung", "Auswertungen", "Verwaltung"]);
+    expect(within(nav).getAllByRole("heading").map((heading) => heading.textContent)).toEqual(["Arbeit", "Daten & Verwaltung"]);
     expect(within(nav).getByRole("link", { name: "Mein Tag" })).toHaveAttribute("href", "/");
-    expect(within(nav).getByRole("link", { name: "Vertragsliste" })).toHaveAttribute("href", "/register");
+    expect(within(nav).getByRole("link", { name: "Verträge" })).toHaveAttribute("href", "/register");
+    for (const gone of ["Postfach", "Prüfungen", "Archiv", "Import", "Vertragsliste"]) {
+      expect(within(nav).queryByRole("link", { name: gone })).not.toBeInTheDocument();
+    }
     expect(within(nav).getByRole("link", { name: "Fristen & Aufgaben" })).toHaveAttribute("href", "/fristen");
     expect(within(nav).getByRole("link", { name: "Stammdaten" })).toHaveAttribute("href", "/stammdaten");
     expect(within(nav).getByRole("link", { name: "Verwaltung" })).toHaveAttribute("href", "/admin");
@@ -72,8 +75,8 @@ describe("App-Shell", () => {
     navPath = "/contracts/c-1";
     render(<ClientNav>Inhalt</ClientNav>);
     const nav = screen.getByRole("navigation", { name: "Hauptnavigation" });
-    expect(within(nav).getByRole("link", { name: "Vertragsliste" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("navigation", { name: "Brotkrümelnavigation" })).toHaveTextContent("VerträgeVertragslisteVertrag");
+    expect(within(nav).getByRole("link", { name: "Verträge" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("navigation", { name: "Brotkrümelnavigation" })).toHaveTextContent("ArbeitVerträgeVertrag");
   });
 
   it("öffnet die Befehlspalette mit Strg+K und springt zu einem Vertrag", async () => {

@@ -38,20 +38,70 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-// Standardansicht aus der Adresse (?ansicht=archive), z. B. aus dem Menü oder einer alten Seite.
+// Standardansicht aus der Adresse (?ansicht=review), z. B. aus einem alten Link.
 function linkedViewKey(): string | null {
-  try { return new URLSearchParams(window.location.search).get("ansicht"); } catch { return null; }
+  try {
+    const key = new URLSearchParams(window.location.search).get("ansicht");
+    return key && !TAB_VIEW_KEYS.has(key) ? key : null;
+  } catch { return null; }
 }
 
-function writeViewKey(key: string | null) {
+// Reiter-Ansichten (Zu prüfen, Archiv) gehören zu ihren Reitern und erscheinen nicht in der Auswahl „Ansicht“.
+const TAB_VIEW_KEYS = new Set(["review", "archive"]);
+
+interface UrlState {
+  viewId: string | null;
+  filters: GridFilter[] | null;
+  q: string | null;
+  sort: GridSpec["sort"] | null;
+  groupBy: string[] | null;
+  page: number;
+}
+
+// Zustand der Liste aus der Adresse: Ansicht, Filter, Suche, Sortierung, Gruppierung, Seite (U4).
+function readUrlState(): UrlState {
+  const empty: UrlState = { viewId: null, filters: null, q: null, sort: null, groupBy: null, page: 0 };
   try {
     const params = new URLSearchParams(window.location.search);
-    if (key) params.set("ansicht", key); else params.delete("ansicht");
+    const sortRaw = params.get("sort");
+    const [column, dir] = sortRaw ? sortRaw.split(":") : [];
+    const page = Number(params.get("seite") ?? "1");
+    return {
+      viewId: params.get("sicht"),
+      filters: linkedFilters(),
+      q: linkedQuery(),
+      sort: column ? { column, dir: dir === "desc" ? "desc" : "asc" } : null,
+      groupBy: params.get("gruppe") ? params.get("gruppe")!.split(",").filter(Boolean).slice(0, 2) : null,
+      page: Number.isFinite(page) && page > 1 ? Math.floor(page) - 1 : 0,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function writeUrlState(tab: string | undefined, viewId: string | null, spec: GridSpec, page: number) {
+  try {
+    const params = new URLSearchParams();
+    if (tab && tab !== "bestand") params.set("ansicht", tab);
+    if (viewId) params.set("sicht", viewId);
+    if (spec.q) params.set("q", spec.q);
+    if (spec.filters.length) params.set("filter", JSON.stringify(spec.filters));
+    if (spec.sort) params.set("sort", `${spec.sort.column}:${spec.sort.dir}`);
+    if (spec.group_by.length) params.set("gruppe", spec.group_by.join(","));
+    if (page > 0) params.set("seite", String(page + 1));
     const query = params.toString();
-    window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    const next = `${window.location.pathname}${query ? `?${query}` : ""}`;
+    if (next !== `${window.location.pathname}${window.location.search}`) window.history.replaceState(window.history.state, "", next);
   } catch {
     // Adresse ist nur Komfort.
   }
+}
+
+/** Reihenfolge der Verträge der aktuellen Ansicht für „Weiter zum nächsten Vertrag“ in der Prüfung. */
+export const REVIEW_QUEUE_KEY = "medflux.reviewQueue";
+
+function rememberQueue(ids: string[]) {
+  try { window.sessionStorage.setItem(REVIEW_QUEUE_KEY, JSON.stringify(ids)); } catch { /* nur Komfort */ }
 }
 
 function readLastView(): string | null {
@@ -122,7 +172,13 @@ function formatCell(column: GridColumn | undefined, value: unknown): string {
   }
 }
 
-export default function RegisterGrid({ organizationSlug, initialViewKey }: { organizationSlug: string; /** Standardansicht dieser Seite (z. B. "review" unter /review). */ initialViewKey?: string }) {
+export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: {
+  organizationSlug: string;
+  /** Standardansicht dieses Reiters (z. B. "review" für „Zu prüfen“). */
+  initialViewKey?: string;
+  /** Reiter der Vertragsliste; bestimmt ?ansicht= in der Adresse. */
+  tab?: string;
+}) {
   const { role, account } = useAuth();
   const canExport = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const [columns, setColumns] = useState<GridColumn[]>([]);
@@ -162,7 +218,6 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
     setOffset(0);
     if (presetPage.current) return;
     writeLastView(next?.id ?? null);
-    writeViewKey(next?.system_key ?? null);
   }, []);
 
   useEffect(() => {
@@ -176,22 +231,38 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
         setColumns(columnResult.columns);
         setViews(viewResult.items);
         setCanManageGlobal(viewResult.can_manage_global);
-        const linked = linkedFilters();
-        const linkedQ = linkedQuery();
-        if (linked || linkedQ) {
-          applyView(null, columnResult.columns);
-          setSpec((current) => current && ({ ...current, filters: linked ?? [], q: linkedQ }));
-          setSearch(linkedQ ?? "");
+        const url = readUrlState();
+        const overlay = (state: UrlState) => {
+          setSpec((current) => current && ({
+            ...current,
+            ...(state.filters ? { filters: state.filters } : {}),
+            ...(state.q !== null ? { q: state.q } : {}),
+            ...(state.sort ? { sort: state.sort } : {}),
+            ...(state.groupBy ? { group_by: state.groupBy } : {}),
+          }));
+          if (state.q !== null) setSearch(state.q);
+          setOffset(state.page * PAGE_SIZE);
+        };
+        // Reiter mit fester Ansicht (Zu prüfen, Archiv): Ansicht des Reiters plus Zustand aus der Adresse.
+        const presetKey = initialViewKey ?? linkedViewKey();
+        const preset = presetKey ? viewResult.items.find((item) => item.system_key === presetKey) : undefined;
+        if (preset) {
+          applyView(preset, columnResult.columns);
+          overlay(url);
           return;
         }
-        const key = linkedViewKey() ?? initialViewKey ?? null;
-        const keyed = key ? viewResult.items.find((item) => item.system_key === key) : undefined;
-        if (keyed) {
-          applyView(keyed, columnResult.columns);
+        // Bestand: gespeicherte Ansicht aus der Adresse, sonst bei verlinkten Filtern „Alle Verträge“,
+        // sonst die zuletzt genutzte Ansicht – aber nie eine Reiter-Ansicht (die gehört zu ihrem Reiter).
+        const named = url.viewId ? viewResult.items.find((item) => item.id === url.viewId && !TAB_VIEW_KEYS.has(item.system_key ?? "")) : undefined;
+        if (named || url.filters || url.q) {
+          applyView(named ?? null, columnResult.columns);
+          overlay(url);
           return;
         }
         const remembered = readLastView();
-        applyView(viewResult.items.find((item) => item.id === remembered) ?? null, columnResult.columns);
+        const last = viewResult.items.find((item) => item.id === remembered && !TAB_VIEW_KEYS.has(item.system_key ?? ""));
+        applyView(last ?? null, columnResult.columns);
+        overlay(url);
       })
       .catch((error) => { if (!cancelled) setMessage({ tone: "error", text: errorText(error, "Das Vertragsregister konnte nicht geladen werden.") }); });
     return () => { cancelled = true; };
@@ -211,6 +282,11 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [offset, organizationSlug, spec]);
+
+  useEffect(() => {
+    if (!spec) return;
+    writeUrlState(tab, presetPage.current ? null : viewId, spec, Math.floor(offset / PAGE_SIZE));
+  }, [offset, spec, tab, viewId]);
 
   useEffect(() => {
     if (!spec) return;
@@ -310,6 +386,17 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
   const archiveMode = Boolean(spec.archived);
   const reviewMode = spec.filters.some((item) => item.column === "review_pending" && item.op === "is" && item.value === true);
   const actionColumn = (archiveMode && canExport) || reviewMode;
+  const baseFilters = view?.config.filters ?? [];
+  const narrowed = Boolean(spec.q) || spec.filters.length > baseFilters.length
+    || spec.filters.some((item) => !baseFilters.some((base) => JSON.stringify(base) === JSON.stringify(item)));
+  const emptyText = archiveMode ? "Das Archiv ist leer." : reviewMode ? "Keine Verträge mit offener KI-Prüfung." : "Noch keine Verträge in diesem Bereich.";
+
+  function resetNarrowing() {
+    if (!spec) return;
+    setSearch("");
+    setSpec({ ...spec, q: null, filters: view?.config.filters ?? [] });
+    setOffset(0);
+  }
 
   async function restore(contractId: string) {
     if (!spec) return;
@@ -318,6 +405,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
       await unarchiveContract(contractId, organizationSlug);
       toast("Vertrag wieder ins aktive Portfolio verschoben.", "success");
       setSpec({ ...spec });
+      window.dispatchEvent(new Event("medflux:register-changed"));
     } catch (error) {
       toast(errorText(error, "Wiederherstellung fehlgeschlagen."), "error");
     } finally {
@@ -341,7 +429,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
 
     <div className="reg-main">
       <div className="cw-section reg-toolbar">
-        <label>Ansicht<select value={viewId ?? ""} onChange={(event) => {
+        {presetPage.current ? null : <label>Ansicht<select value={viewId ?? ""} onChange={(event) => {
           const legacy = legacyViews.find((item) => `legacy:${item.id}` === event.target.value);
           if (legacy) {
             applyView(null, columns);
@@ -353,10 +441,10 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
           applyView(views.find((item) => item.id === event.target.value) ?? null, columns);
         }}>
           <option value="">Alle Verträge</option>
-          <optgroup label="Standard und global">{views.filter((item) => item.is_global).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>
+          <optgroup label="Standard und global">{views.filter((item) => item.is_global && !TAB_VIEW_KEYS.has(item.system_key ?? "")).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>
           <optgroup label="Meine Ansichten">{views.filter((item) => !item.is_global).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</optgroup>
           {legacyViews.length > 0 ? <optgroup label="Aus der früheren Vertragsliste">{legacyViews.map((item) => <option key={item.id} value={`legacy:${item.id}`}>{item.name}</option>)}</optgroup> : null}
-        </select></label>
+        </select></label>}
         <label>Suche<input type="search" value={search} placeholder="Nummer, Beschreibung, Partner" onChange={(event) => setSearch(event.target.value)} /></label>
         <div className="rg-actions">
           {editableView ? <button type="button" className="btn" onClick={() => void saveView(false)}>Ansicht speichern</button> : null}
@@ -405,10 +493,11 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
 
       <section className="cw-section reg-table-wrap" aria-labelledby="reg-heading" aria-busy={loading}>
         <div className="cw-section-head"><div>
-          <h2 id="reg-heading">{view?.name ?? "Alle Verträge"}</h2>
+          <h2 id="reg-heading">{presetPage.current ? (view?.name ?? "Verträge") : view?.name ?? "Alle Verträge"}</h2>
           {archiveMode ? <p>Archivierte Verträge sind aus Vertragsliste und Fristen ausgeblendet; „Wiederherstellen“ holt sie zurück. Es wird nichts gelöscht.</p> : null}
-          <p>{total === 0 ? "Keine Verträge für diese Auswahl." : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} von ${total} · Jährliche Kosten gesamt ${sumText(data?.totals, "annual_cost")} · Kosten lfd. Jahr ${sumText(data?.totals, "cost_current_year")}`}</p>
+          <p>{total === 0 ? (narrowed ? "Keine Treffer für diese Filter." : emptyText) : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} von ${total} · Jährliche Kosten gesamt ${sumText(data?.totals, "annual_cost")} · Kosten lfd. Jahr ${sumText(data?.totals, "cost_current_year")}`}</p>
         </div></div>
+        {data && total === 0 && narrowed && !loading ? <p className="reg-filtered-empty">Die Filter oder die Suche blenden alle Verträge aus. <button type="button" className="rg-link" onClick={resetNarrowing}>Filter und Suche zurücksetzen</button></p> : null}
         {data && data.items.length > 0 ? <div className="reg-scroll"><table className="rg-table reg-table">
           <thead><tr>{shown.map((column) => {
             const sorted = spec.sort?.column === column.key ? (spec.sort.dir === "asc" ? "ascending" : "descending") : "none";
@@ -441,7 +530,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
                 return <td key={column.key} className={column.type === "money" || column.type === "number" ? "num" : undefined}>{text}</td>;
               })}{archiveMode && canExport
                 ? <td><button type="button" className="btn btn-sm" disabled={busyRow === row.contract_id} onClick={() => void restore(row.contract_id)} aria-label={`Vertrag ${row.values.register_number ?? ""} wiederherstellen`}>Wiederherstellen</button></td>
-                : reviewMode ? <td><Link className="btn btn-sm btn-primary" href={`/contracts/${row.contract_id}?tab=documents&subtab=review`} aria-label={`Vertrag ${row.values.register_number ?? ""} prüfen`}>Prüfen</Link></td> : null}</tr>
+                : reviewMode ? <td><Link className="btn btn-sm btn-primary" href={`/contracts/${row.contract_id}?tab=documents&subtab=review`} onClick={() => rememberQueue(data.items.map((item) => item.contract_id))} aria-label={`Vertrag ${row.values.register_number ?? ""} prüfen`}>Prüfen</Link></td> : null}</tr>
             </Fragment>;
           })}</tbody>
         </table></div> : null}

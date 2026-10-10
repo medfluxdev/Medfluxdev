@@ -4,7 +4,7 @@ import { checkA11y } from "./helpers";
 // U6: jede Seite der Navigation ohne schwere axe-Verstoesse, hell und dunkel.
 const PAGES = [
   "/", "/postfach", "/register", "/equipment", "/fristen", "/fristen?ansicht=entscheidungen", "/fristen?ansicht=aufgaben",
-  "/import", "/review", "/nachweise", "/archiv", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
+  "/import", "/register?ansicht=review", "/nachweise", "/register?ansicht=archive", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
   "/settings", "/profile", "/settings/users", "/stammdaten", "/stammdaten/vertragspartner", "/stammdaten/abteilungen", "/stammdaten/kostenstellen", "/stammdaten/vertragstypen", "/stammdaten/vertragsregeln", "/stammdaten/auswahllisten/storage_location", "/sicherheit", "/settings/nummernkreis", "/settings/roles",
   "/developer", "/developer/components",
 ];

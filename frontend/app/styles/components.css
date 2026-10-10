@@ -763,3 +763,4 @@ body { background: var(--color-bg); }
 .toast--success .toast-icon { color: var(--color-success); }
 .toast--error .toast-icon { color: var(--color-danger); }
 .toast--info .toast-icon { color: var(--color-info); }
+.reg-filtered-empty { margin: var(--space-3) 0; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-subtle); color: var(--color-text-muted); }

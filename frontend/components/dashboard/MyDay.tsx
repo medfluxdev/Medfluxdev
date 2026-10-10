@@ -91,7 +91,7 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
   const openDecisions = (state.renewals ?? []).filter((item) => !item.decision);
   const overdue = (state.deadlines ?? []).filter((item) => item.overdue);
   const attention: AttentionItem[] = [
-    ...(reviewer && state.reviewCount ? [{ key: "review", label: "Verträge mit offener KI-Prüfung", count: state.reviewCount, href: "/review", tone: "ai" as const }] : []),
+    ...(reviewer && state.reviewCount ? [{ key: "review", label: "Verträge mit offener KI-Prüfung", count: state.reviewCount, href: "/register?ansicht=review", tone: "ai" as const }] : []),
     ...(state.portfolio?.insights ?? []).filter((item) => item.count > 0).map((item) => ({
       key: item.key,
       label: item.label,

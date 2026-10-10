@@ -144,6 +144,31 @@ def get_grid(
         session.close()
 
 
+@router.get("/api/register/grid/counts")
+def get_counts(request: Request, organization_slug: str):
+    """Zahlen für die Reiter der Vertragsliste: Bestand, Zu prüfen, Archiv (sichtbarer Bereich, ohne gelöschte)."""
+    actor = current_actor(request, organization_slug)
+    as_of = today_local()
+    session = create_session()
+    try:
+        visible = _visible(session, actor)
+        active = [
+            row for row in visible_rows(cached_rows(session, actor.organization_id, as_of), visible)
+            if row.values["business_status"] != "geloescht"
+        ]
+        archived = [
+            row for row in visible_rows(cached_rows(session, actor.organization_id, as_of, archived=True), visible)
+            if row.values["business_status"] != "geloescht"
+        ]
+        return {
+            "bestand": len(active),
+            "review": sum(1 for row in active if row.values["review_pending"]),
+            "archive": len(archived),
+        }
+    finally:
+        session.close()
+
+
 @router.get("/api/register/grid/values")
 def get_values(request: Request, organization_slug: str, column: str, spec: Optional[str] = None):
     actor = current_actor(request, organization_slug)

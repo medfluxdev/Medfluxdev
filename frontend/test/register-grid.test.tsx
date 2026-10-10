@@ -61,6 +61,8 @@ describe("Vertragsregister – Raster", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     try { window.localStorage.clear(); } catch { /* ignore */ }
+    // Die Liste schreibt ihren Zustand in die Adresse; jeder Test beginnt ohne.
+    window.history.replaceState(null, "", "/register");
     api.getGridColumns.mockResolvedValue({ columns: COLUMNS });
     api.listSavedViews.mockResolvedValue({
       can_manage_global: false,
@@ -166,12 +168,18 @@ describe("Vertragsliste – Übernahme der früheren Liste", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("Prüfungen: Ansicht über ?ansicht=review mit „Prüfen“ je Zeile", async () => {
+  it("Reiter „Zu prüfen“: feste Ansicht mit „Prüfen“ je Zeile, ohne Ansichtsauswahl; merkt sich die Reihenfolge", async () => {
     window.history.replaceState(null, "", "/register?ansicht=review");
     api.listSavedViews.mockResolvedValue({ can_manage_global: false, items: SYSTEM_VIEWS });
-    render(<RegisterGrid organizationSlug="test-klinik" />);
+    render(<RegisterGrid organizationSlug="test-klinik" initialViewKey="review" tab="review" />);
     expect(await screen.findByRole("heading", { name: "Zu prüfen" })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "Vertrag 000002 prüfen" })).toHaveAttribute("href", "/contracts/c-2?tab=documents&subtab=review");
+    expect(screen.queryByLabelText("Ansicht")).not.toBeInTheDocument();
+    expect(window.location.search).toContain("ansicht=review");
+    const check = await screen.findByRole("link", { name: "Vertrag 000002 prüfen" });
+    expect(check).toHaveAttribute("href", "/contracts/c-2?tab=documents&subtab=review");
+    check.addEventListener("click", (event) => event.preventDefault());
+    check.click();
+    expect(JSON.parse(window.sessionStorage.getItem("medflux.reviewQueue") ?? "[]")).toContain("c-2");
     window.history.replaceState(null, "", "/");
   });
 });

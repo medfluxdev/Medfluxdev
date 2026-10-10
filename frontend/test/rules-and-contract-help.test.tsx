@@ -149,10 +149,10 @@ describe("Vertrag hinzufügen", () => {
     render(<AddContractMenu />);
     const button = await screen.findByRole("button", { name: /Vertrag hinzufügen/ });
     await user.click(button);
-    expect(screen.getByRole("link", { name: /Dokument importieren/ })).toHaveAttribute("href", "/import");
-    expect(screen.getByRole("link", { name: /Ohne Dokument anlegen/ })).toHaveAttribute("href", "/contracts/new");
+    expect(screen.getByRole("link", { name: /Aus Dokument/ })).toHaveAttribute("href", "/import");
+    expect(screen.getByRole("link", { name: /Manuell erfassen/ })).toHaveAttribute("href", "/contracts/new");
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("link", { name: /Dokument importieren/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Aus Dokument/ })).not.toBeInTheDocument();
     expect(button).toHaveFocus();
   });
 

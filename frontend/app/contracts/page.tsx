@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
+import { withParams } from "@/lib/redirect-params";
 
-// Die klassische Vertragsliste ist im Vertragsregister aufgegangen (UX-Plan U4).
+// Die klassische Vertragsliste ist in der Vertragsliste (Register) aufgegangen.
 export default function ContractsRedirect({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
-  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
-  redirect(q ? `/register?q=${encodeURIComponent(q)}` : "/register");
+  redirect(withParams("/register", searchParams));
 }
