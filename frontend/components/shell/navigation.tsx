@@ -66,7 +66,6 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "Aktivitäten & Protokoll", href: "/audit", icon: "history", roles: EDITORS, keywords: "historie audit protokoll änderungen verlauf" },
     { label: "Stammdaten", href: "/stammdaten", icon: "masterdata", keywords: "vertragspartner lieferanten abteilungen kostenstellen krankenhäuser kataloge auswahllisten", shortcut: "g d" },
     { label: "Verwaltung", href: "/admin", icon: "admin", roles: ["admin"], keywords: "admin benutzer rollen einstellungen nummernkreis löschung" },
-    { label: "Entwicklung", href: "/developer", icon: "developer", developerOnly: true, keywords: "developer diagnose" },
   ] },
 ];
 
@@ -85,8 +84,10 @@ export const EXTRA_PAGES: NavItem[] = [
   { label: "Nummernkreis", href: "/settings/nummernkreis", icon: "admin", roles: ["admin"], keywords: "vertragsnummer nummern" },
   { label: "Rollen & Rechte", href: "/settings/roles", icon: "admin" },
   { label: "Vertragslöschung", href: "/admin/deletion", icon: "admin", roles: ["admin"] },
-  { label: "UI-Komponenten", href: "/developer/components", icon: "developer", developerOnly: true },
-  { label: "Organisationen", href: "/system/organizations", icon: "developer", developerOnly: true },
+  // Entwicklung steht im Kontomenü (nur Developer), nicht in der Seitenleiste.
+  { label: "Entwicklung", href: "/developer", icon: "developer", developerOnly: true, keywords: "developer diagnose system status organisationen mandanten" },
+  { label: "Dokumentverarbeitung (Entwicklung)", href: "/developer?tab=verarbeitung", icon: "developer", developerOnly: true, keywords: "processing runs ocr fehler" },
+  { label: "UI-Bausteine", href: "/developer?tab=bausteine", icon: "developer", developerOnly: true, keywords: "komponenten tokens styleguide" },
   ...MASTER_DATA_SECTIONS.map((section): NavItem => ({
     label: section.label,
     href: section.href,

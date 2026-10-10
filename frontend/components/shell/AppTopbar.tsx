@@ -83,6 +83,7 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
               <div className="shell-menu-head"><strong>{account.display_name}</strong><small>{account.email}</small></div>
               <Link href="/profile">Mein Profil</Link>
               {role === "admin" || account.is_developer ? <Link href="/admin">Verwaltung</Link> : null}
+              {account.is_developer ? <Link href="/developer">Entwicklung</Link> : null}
               {previewOf || role === "admin" ? (
                 <label className="shell-preview-role">Ansicht als Rolle
                   <select value={previewOf ? role ?? "" : ""} onChange={(event) => setPreviewRole((event.target.value || null) as AccountRole | null)}>

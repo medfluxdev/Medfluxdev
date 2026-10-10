@@ -6,7 +6,7 @@ const PAGES = [
   "/", "/postfach", "/register", "/equipment", "/fristen", "/fristen?ansicht=entscheidungen", "/fristen?ansicht=aufgaben",
   "/import", "/register?ansicht=review", "/register?ansicht=archive", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
   "/settings", "/profile", "/settings/users", "/stammdaten", "/stammdaten/vertragspartner", "/stammdaten/abteilungen", "/stammdaten/kostenstellen", "/stammdaten/vertragstypen", "/stammdaten/vertragsregeln", "/stammdaten/auswahllisten/storage_location", "/sicherheit", "/settings/nummernkreis", "/settings/roles",
-  "/developer", "/developer/components",
+  "/developer", "/developer?tab=bausteine",
 ];
 
 for (const theme of ["light", "dark"] as const) {
