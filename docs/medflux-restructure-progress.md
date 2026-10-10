@@ -13,7 +13,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | D | Vertragsregister mit Reitern | erledigt | siehe git log |
 | E | Vertragsakte, Import, Prüfung | erledigt | siehe git log |
 | F | Fristen & Aufgaben | erledigt | siehe git log |
-| G | Mein Tag v3, Analysen | offen | |
+| G | Mein Tag v3, Analysen | erledigt | siehe git log |
 | H | Stammdaten, Verwaltung, Geräte, Verlauf | offen | |
 | I | Aufräumen, Kompatibilität, Abschluss | offen | |
 
@@ -169,3 +169,24 @@ Entscheidung, Kündigung und Lesen bleiben getrennte Vorgänge (T09).
 
 **Tests**: `frontend/test/restructure-deadlines.test.tsx` (T08, T24).
 **Verifikation**: `npm run verify` grün (53 Testdateien); Backend unverändert seit Phase E (1590 passed).
+
+## Phase G – Mein Tag v3 und Analysen (2026-10-10)
+
+**Mein Tag** (= R&S Phase 3; Entwurf `Claude outputs/Mein-Tag-Entwurf-v3.html` nur als Bildvorlage)
+- Kopf ohne Karte und ohne Eyebrow (Serifentitel + Datum, „Vertrag anlegen“ rechts).
+- **Lagebild**: ein Satz („Heute brauchen N Themen Ihre Aufmerksamkeit“ mit warning-Form bzw. „Heute ist nichts dringend“ neutral).
+  N zählt Themen, nicht Verträge: kritische Portfolio-Hinweise, überfällige eigene Termine, offene KI-Prüfung, Entscheidungen ≤ 30 Tage.
+  Bis zu drei Signale, ruhige Zustände als neutrale Signale („Keine Termine diese Woche“).
+- **Drei Kennzahlen**, neutral: Laufende Verträge (mit „N in Arbeit“), Jährliche Kosten (Abdeckung bzw. Signal „Kosten fehlen bei N Verträgen“
+  statt „0,00 €“), Kündigungsfristen in 90 Tagen. Die Kachel „Ungelesene Erinnerungen“ entfällt (Glocke).
+- **Zu erledigen – nach Dringlichkeit** (Portfolio): ganze Zeile als Link, Signal mit Wort (Kritisch · KI-Prüfung · Prüfen), Zahl, Text und
+  Erläuterung; Überschrift nennt „N Problemarten“ (keine Summe von Zeilen als Vertragszahl). Kritisch = Laufzeitangaben unvollständig
+  (Ende/Frist unberechenbar); Prüfen = ohne Verantwortliche, Frist ohne Erinnerungsempfänger, ohne Kosten, Löschprüfung.
+- Rechts **persönlich**: Meine Termine (Überfälliges zuerst mit Signal; Links `nur=meine&zeitraum=7` bzw. `zeitraum=alle`) und Entscheidungen
+  (ehrlicher Leerzustand bei unbewertbaren Verträgen). Ab 1100 px zwei Spalten 1,5 : 1.
+
+**Analysen** (= R&S Phase 7): Kennzahlen mit Abdeckung und Definitionen (Phase A); keine Jahreskurve aus Nullen; der doppelte Block
+„Handlungsbedarf im Portfolio“ ist jetzt eine kurze „Datenqualität des Berichts“ mit Signalen und Links (die Arbeitsliste steht auf Mein Tag).
+
+**Tests**: `frontend/test/my-day.test.tsx` neu geschrieben (T01/T02/T24 auf der Oberfläche, axe).
+**Verifikation**: `npm run verify` grün (53 Testdateien).

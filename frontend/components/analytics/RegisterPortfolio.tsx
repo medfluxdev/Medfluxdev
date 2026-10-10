@@ -11,6 +11,7 @@ import {
   type PortfolioReport,
 } from "@/lib/domain-api/registerGrid";
 import CoverageValue from "@/components/ui/CoverageValue";
+import Signal from "@/components/ui/Signal";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { ColumnChart, HorizontalBarChart } from "./RegisterCharts";
 
@@ -93,12 +94,14 @@ export default function RegisterPortfolio({ organizationSlug }: { organizationSl
     </div>
 
     <section className="cw-section" aria-labelledby="insights-heading">
-      <h3 id="insights-heading">Handlungsbedarf im Portfolio</h3>
+      <h3 id="insights-heading">Datenqualität des Berichts</h3>
+      <p className="cw-muted">Wie vollständig die Grundlage dieser Auswertung ist. Die Arbeitsliste dazu steht auf „Mein Tag“.</p>
       <ul className="viz-insights">
-        {report.insights.map((item) => <li key={item.key}>
-          <strong>{item.count}</strong>
-          {item.count > 0 ? <Link href={registerLink([item.filter])}>{item.label}</Link> : <span>{item.label}</span>}
+        {report.insights.filter((item) => item.count > 0).map((item) => <li key={item.key}>
+          <Signal tone={item.severity === "critical" ? "critical" : "warning"}>{item.count}</Signal>
+          <Link href={registerLink([item.filter])}>{item.label}</Link>
         </li>)}
+        {report.insights.every((item) => item.count === 0) ? <li><Signal tone="neutral">0</Signal><span>Keine Lücken in den gepflegten Daten</span></li> : null}
         {report.supplier_concentration ? <li><strong>{report.supplier_concentration.share_percent.replace(".", ",")} %</strong><span>der Kosten {new Date(report.as_of).getFullYear()} entfallen auf den größten Partner ({report.supplier_concentration.partner})</span></li> : null}
       </ul>
     </section>
