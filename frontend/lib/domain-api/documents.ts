@@ -11,6 +11,13 @@ export interface DocumentProcessResult {
   contract_id: string | null;
 }
 
+export type IntakeMode = "ai_human_review" | "ai_direct" | "manual";
+
+export interface ImportOptions {
+  intake_mode?: IntakeMode;
+  same_destination_confirmed?: boolean;
+}
+
 export interface ImportAssignment {
   hospital_id?: string;
   responsible_department_id?: string;
@@ -18,12 +25,14 @@ export interface ImportAssignment {
   cost_center_id?: string;
 }
 
-export function importDocuments(files: File[], organizationSlug: string, assignment?: ImportAssignment) {
+export function importDocuments(files: File[], organizationSlug: string, assignment?: ImportAssignment, options: ImportOptions = {}) {
   return apiUpload<ImportBatchResponse>("/api/documents/import", files, organizationSlug, undefined, {
     assignment_hospital_id: assignment?.hospital_id,
     responsible_department_id: assignment?.responsible_department_id,
     beneficiary_department_ids: assignment?.beneficiary_department_ids,
     cost_center_id: assignment?.cost_center_id,
+    intake_mode: options.intake_mode,
+    same_destination_confirmed: options.same_destination_confirmed ? "true" : undefined,
   });
 }
 

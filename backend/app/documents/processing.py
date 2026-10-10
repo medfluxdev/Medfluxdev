@@ -326,6 +326,47 @@ class DocumentProcessingService:
             attachment=AttachmentTarget(contract_id=contract_id, attachment_type=attachment_type, label=label),
         )
 
+    def import_for_manual_capture(
+        self,
+        *,
+        organization_slug: str,
+        original_filename: str,
+        content_type: str,
+        content: bytes,
+        create_contract,
+        added_by_name: Optional[str],
+    ) -> ProcessedDocument:
+        """Import-Assistent „Manuelle Eingabe“: Original unveraendert ablegen, keine KI-Analyse.
+
+        `create_contract(session)` legt den Vertrag im selben Ablagepfad an; eine Dublette
+        legt keinen neuen Vertrag an.
+        """
+        stored, organization_id, _storage_key = self._persist_document(
+            organization_slug, original_filename, content_type, content
+        )
+        if stored.status in {"rejected", "failed", "duplicate"}:
+            return stored
+        with create_session() as session:
+            contract = create_contract(session)
+            link_attachment(
+                session,
+                contract=contract,
+                document_version_id=uuid.UUID(stored.document_version_id),
+                attachment_type="vertrag",
+                title=None,
+                added_by_name=added_by_name,
+            )
+            session.commit()
+            contract_id = str(contract.id)
+        return self._copy_result(
+            stored,
+            status="imported",
+            contract_id=contract_id,
+            analysis_status=None,
+            requires_review=False,
+            message="Original gespeichert – die Vertragsdaten werden manuell erfasst (keine KI-Analyse).",
+        )
+
     def _finalize_visibility(self, result, organization_id) -> ProcessedDocument:
         """Stellt ausschließlich die normale Produkt-Sichtbarkeit sicher.
 

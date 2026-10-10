@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
 
+from app.auth.dependencies import current_actor
+from app.auth.permissions import is_admin
 from app.core.scope_context import current_scope_context
-from app.database.models import ContractDocument, ProcessingRun, ProcessingSummary
+from app.database.models import ContractDocument, DocumentFile, DocumentVersion, ProcessingRun, ProcessingSummary
 from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
@@ -63,7 +65,13 @@ def _result_label_de(row: ProcessingRun, summary: ProcessingSummary | None) -> s
     return safe_failure_message(message=row.message, error=row.error)
 
 
-def _serialize(row: ProcessingRun, summary: ProcessingSummary | None = None) -> dict:
+def _serialize(
+    row: ProcessingRun,
+    summary: ProcessingSummary | None = None,
+    *,
+    diagnostics: bool = True,
+    origin: tuple[str | None, str | None] = (None, None),
+) -> dict:
     return {
         "id": str(row.id),
         "document_version_id": str(row.document_version_id),
@@ -77,9 +85,12 @@ def _serialize(row: ProcessingRun, summary: ProcessingSummary | None = None) -> 
         "do_table_structure": row.do_table_structure,
         "geometry_provider": row.geometry_provider,
         "processing_duration": row.processing_duration,
-        "message": row.message,
-        "error": row.error,
+        # Technische Rohtexte nur fuer Administration/Entwicklung; sonst gilt result_label_de.
+        "message": row.message if diagnostics else None,
+        "error": row.error if diagnostics else None,
         "created_at": row.created_at,
+        "contract_id": origin[0],
+        "original_filename": origin[1],
         "page_count": summary.page_count if summary else None,
         "doc_type": summary.doc_type if summary else None,
         "processed_at": summary.processed_at if summary else None,
@@ -88,6 +99,34 @@ def _serialize(row: ProcessingRun, summary: ProcessingSummary | None = None) -> 
         "status_label_de": _status_label_de(row.status),
         "result_label_de": _result_label_de(row, summary),
     }
+
+
+def _diagnostics_allowed(request: Request, organization_slug: str) -> bool:
+    try:
+        actor = current_actor(request, organization_slug)
+    except HTTPException:
+        return False
+    return bool(getattr(actor, "is_developer", False)) or is_admin(actor)
+
+
+def _origins(session, organization_id: UUID, version_ids: list[UUID]) -> dict[UUID, tuple[str | None, str | None]]:
+    """Vertrag und Dateiname je Dokumentversion (fuer „Fehlgeschlagene Importe“)."""
+    if not version_ids:
+        return {}
+    contracts: dict[UUID, str] = {}
+    for version_id, contract_id in session.execute(
+        select(ContractDocument.document_version_id, ContractDocument.contract_id).where(
+            ContractDocument.organization_id == organization_id,
+            ContractDocument.document_version_id.in_(version_ids),
+        )
+    ).all():
+        contracts.setdefault(version_id, str(contract_id))
+    names = dict(session.execute(
+        select(DocumentVersion.id, DocumentFile.original_filename)
+        .join(DocumentFile, DocumentFile.id == DocumentVersion.document_file_id)
+        .where(DocumentVersion.organization_id == organization_id, DocumentVersion.id.in_(version_ids))
+    ).all())
+    return {version_id: (contracts.get(version_id), names.get(version_id)) for version_id in version_ids}
 
 
 def _allowed_document_versions(session, organization_id: UUID) -> set[UUID] | None:
@@ -111,6 +150,7 @@ def _allowed_document_versions(session, organization_id: UUID) -> set[UUID] | No
 
 @router.get("")
 def list_processing_jobs(
+    request: Request,
     organization_slug: str,
     status: list[str] = Query(default=[]),
     limit: int = Query(default=100, ge=1, le=500),
@@ -136,13 +176,22 @@ def list_processing_jobs(
                 )
             ).all()
         } if rows else {}
-        return {"items": [_serialize(row, summaries.get(row.document_version_id)) for row in rows], "total": len(rows)}
+        diagnostics = _diagnostics_allowed(request, organization_slug)
+        origins = _origins(session, org.id, list({row.document_version_id for row in rows}))
+        return {
+            "items": [
+                _serialize(row, summaries.get(row.document_version_id), diagnostics=diagnostics,
+                           origin=origins.get(row.document_version_id, (None, None)))
+                for row in rows
+            ],
+            "total": len(rows),
+        }
     finally:
         session.close()
 
 
 @router.get("/{job_id}")
-def get_processing_job(organization_slug: str, job_id: UUID):
+def get_processing_job(request: Request, organization_slug: str, job_id: UUID):
     session = create_session()
     try:
         org = get_organization(session, organization_slug)
@@ -160,6 +209,9 @@ def get_processing_job(organization_slug: str, job_id: UUID):
                 ProcessingSummary.document_version_id == row.document_version_id,
             )
         ).first()
-        return _serialize(row, summary)
+        return _serialize(
+            row, summary, diagnostics=_diagnostics_allowed(request, organization_slug),
+            origin=_origins(session, org.id, [row.document_version_id]).get(row.document_version_id, (None, None)),
+        )
     finally:
         session.close()

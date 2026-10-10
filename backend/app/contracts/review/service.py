@@ -399,13 +399,22 @@ def review_mode(session, organization_id) -> str:
     return getattr(organization, "review_mode", None) or "manual"
 
 
+def auto_accept_allowed(session, organization_id, contract_id) -> bool:
+    """Organisation erlaubt die automatische Übernahme UND der Vertrag wurde nicht ausdrücklich
+    mit „KI-gestützt mit manueller Prüfung“ importiert (NULL = vor dem Import-Assistenten)."""
+    if review_mode(session, organization_id) != "auto_noncritical":
+        return False
+    contract = session.get(Contract, contract_id) if contract_id is not None else None
+    return getattr(contract, "intake_mode", None) in (None, "ai_direct")
+
+
 def build_fact_review_states(
     session, *, organization_id, contract_id, data: dict
 ) -> list[dict]:
     """Je materialen Fakt: Präsenz, Zustand, Original-/effektiver Wert, Prüfer."""
     report = material_report(data)
     latest = _latest_fact_reviews(session, contract_id)
-    auto_mode = review_mode(session, organization_id) == "auto_noncritical"
+    auto_mode = auto_accept_allowed(session, organization_id, contract_id)
 
     evidence_by_ref: dict[str, list[dict]] = {}
     for ev in data.get("evidence") or []:

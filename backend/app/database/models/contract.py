@@ -66,6 +66,9 @@ SEARCH_VECTOR_EXPRESSION = (
     "setweight(to_tsvector('simple', coalesce(status, '')), 'C'))"
 )
 
+# Erfassungsart aus dem Import-Assistenten (NULL = vor dem Assistenten importiert).
+INTAKE_MODE_ALLOWED = ("ai_human_review", "ai_direct", "manual")
+
 CONTRACT_DOCUMENT_ROLE_ALLOWED = {
     "main",
     "amendment",
@@ -211,6 +214,7 @@ class Contract(OrgOwnedMixin, Base):
     # Wartungstermine (Systemtermin "maintenance_due", Folgetermine im Intervall).
     maintenance_interval_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     maintenance_next_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    intake_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Zwischenspeicher der gepflegten Jahreskosten (netto) fuer Sortierung/Filter
     # der Vertragsliste; Quelle bleibt die Finanz-Engine.
     maintained_annual_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
@@ -252,6 +256,10 @@ class Contract(OrgOwnedMixin, Base):
         CheckConstraint(
             "maintenance_interval_months IS NULL OR (maintenance_interval_months >= 1 AND maintenance_interval_months <= 120)",
             name="maintenance_interval_months",
+        ),
+        CheckConstraint(
+            f"intake_mode IS NULL OR intake_mode IN ({', '.join(repr(v) for v in INTAKE_MODE_ALLOWED)})",
+            name="intake_mode",
         ),
         Index(
             "uq_contract_org_register_number",

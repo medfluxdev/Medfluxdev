@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/review-settings", tags=["review-settings"])
 
 MODE_LABELS = {
     "manual": "Jede Angabe prüft ein Mensch",
-    "auto_noncritical": "Nicht-kritische Angaben mit eindeutigem Beleg automatisch übernehmen",
+    "auto_noncritical": "Automatische Übernahme erlauben (nicht-kritische Angaben mit eindeutigem Beleg)",
 }
 
 

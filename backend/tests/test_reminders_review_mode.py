@@ -110,7 +110,7 @@ _REVIEW_DATA = {
 
 def _states(monkeypatch, mode):
     monkeypatch.setattr(review_service, "_latest_fact_reviews", lambda session, contract_id: {})
-    monkeypatch.setattr(review_service, "review_mode", lambda session, organization_id: mode)
+    monkeypatch.setattr(review_service, "auto_accept_allowed", lambda session, organization_id, contract_id: mode == "auto_noncritical")
     states = review_service.build_fact_review_states(None, organization_id=None, contract_id=None, data=_REVIEW_DATA)
     return {state["fact_key"]: state for state in states}
 

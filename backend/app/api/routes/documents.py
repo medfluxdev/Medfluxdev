@@ -13,6 +13,8 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
 from app.auth.dependencies import current_actor
+from app.auth.permissions import can
+from app.database.models.organization import Organization
 
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
@@ -215,6 +217,67 @@ def _validate_import_assignment(organization_slug, assignment, actor):
             raise HTTPException(status_code=422, detail="Die Kostenstelle gehört nicht zum verantwortlichen Bereich.")
 
 
+_INTAKE_MODES = ("ai_human_review", "ai_direct", "manual")
+
+
+def _validate_intake(request: Request, organization_slug: str, intake_mode: str, file_count: int, assignment, same_destination_confirmed: bool) -> None:
+    """Import-Assistent: Erfassungsart und Sammelziel serverseitig pruefen (nie dem Client vertrauen)."""
+    if intake_mode not in _INTAKE_MODES:
+        raise HTTPException(status_code=422, detail="Unbekannte Erfassungsart.")
+    actor = current_actor(request, organization_slug)
+    if intake_mode == "manual" and not can(actor, "contract.create"):
+        raise HTTPException(status_code=403, detail="Für die manuelle Erfassung fehlt die Berechtigung.")
+    if intake_mode == "ai_direct":
+        with create_session() as session:
+            organization = session.get(Organization, actor.organization_id)
+            if organization is None or organization.review_mode != "auto_noncritical":
+                raise HTTPException(
+                    status_code=422,
+                    detail="Die automatische Übernahme ist für diese Organisation nicht freigegeben (Verwaltung → Allgemein).",
+                )
+    if file_count > 1 and assignment is not None and not same_destination_confirmed:
+        raise HTTPException(
+            status_code=422,
+            detail="Bitte bestätigen Sie, dass alle Dateien zu diesem Ziel gehören, oder importieren Sie sie einzeln.",
+        )
+
+
+def _manual_capture(request: Request, organization_slug: str, filename: str, content_type: str, raw: bytes, assignment):
+    from pathlib import PurePath
+
+    from app.api.routes.contract_register import _register_actor
+    from app.register.service import create_manual_contract
+
+    actor = _register_actor(request, organization_slug)
+    hospital_id = assignment[0] if assignment is not None else current_scope_context().hospital_id
+    label = (PurePath(filename).stem or "Vertrag").strip()[:500]
+
+    def create(session):
+        return create_manual_contract(session, actor=actor, values={"short_description": label}, hospital_id=hospital_id)
+
+    return _processing_service.import_for_manual_capture(
+        organization_slug=organization_slug,
+        original_filename=filename,
+        content_type=content_type,
+        content=raw,
+        create_contract=create,
+        added_by_name=actor.display_name,
+    )
+
+
+def _record_intake_mode(organization_slug: str, contract_id: str | None, status: str, intake_mode: str) -> None:
+    """Erfassungsart nur bei neu angelegten Vertraegen speichern (Dubletten bleiben unveraendert)."""
+    if not contract_id or status not in {"imported", "analysis_failed"}:
+        return
+    with create_session() as session:
+        org = get_organization(session, organization_slug)
+        contract = session.get(Contract, UUID(contract_id))
+        if org is None or contract is None or contract.organization_id != org.id or contract.intake_mode is not None:
+            return
+        contract.intake_mode = intake_mode
+        session.commit()
+
+
 def _assign_import_scope(organization_slug: str, contract_id: str | None, status: str, assignment=None) -> None:
     """Persist explicit import assignment, or the current scope, on new contracts."""
     if not contract_id or status not in {"imported", "analysis_failed"}:
@@ -331,6 +394,8 @@ async def import_documents(
     responsible_department_id: str | None = Form(default=None),
     beneficiary_department_ids: list[str] = Form(default=[]),
     cost_center_id: str | None = Form(default=None),
+    intake_mode: str | None = Form(default=None),
+    same_destination_confirmed: bool = Form(default=False),
 ) -> ImportBatchResponse:
     if not files:
         return ImportBatchResponse(total=0, successful=0, failed=0, duplicates=0, documents=[])
@@ -342,19 +407,28 @@ async def import_documents(
         if actor.role not in {"admin", "contract_manager"} and not actor.is_developer:
             raise HTTPException(status_code=403, detail="Nur Administratoren und Vertragsmanager dürfen Verträge zuordnen.")
         _validate_import_assignment(organization_slug, assignment, actor)
+    if intake_mode is not None:
+        _validate_intake(request, organization_slug, intake_mode, len(files), assignment, same_destination_confirmed)
 
     results: list[ImportFileResult] = []
     for uploaded in files:
         raw = await _read_upload_bounded(uploaded)
-        processed = await run_in_threadpool(
-            _processing_service.process,
-            organization_slug=organization_slug,
-            original_filename=uploaded.filename or "",
-            content_type=uploaded.content_type or "",
-            content=raw,
-        )
+        if intake_mode == "manual":
+            processed = await run_in_threadpool(
+                _manual_capture, request, organization_slug, uploaded.filename or "", uploaded.content_type or "", raw, assignment,
+            )
+        else:
+            processed = await run_in_threadpool(
+                _processing_service.process,
+                organization_slug=organization_slug,
+                original_filename=uploaded.filename or "",
+                content_type=uploaded.content_type or "",
+                content=raw,
+            )
         processed_status = str(processed.status)
         _assign_import_scope(organization_slug, processed.contract_id, processed_status, assignment)
+        if intake_mode is not None:
+            _record_intake_mode(organization_slug, processed.contract_id, processed_status, intake_mode)
         results.append(
             ImportFileResult(
                 document_id=processed.document_id or None,

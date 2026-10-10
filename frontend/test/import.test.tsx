@@ -14,12 +14,21 @@ vi.mock("@/lib/api", () => ({
   apiGet: (...args: unknown[]) => apiGetMock(...args),
 }));
 
+let reviewMode = "manual";
+let failedJobs: Record<string, unknown>[] = [];
+
 beforeEach(() => {
+  reviewMode = "manual";
+  failedJobs = [];
   vi.clearAllMocks();
   apiUploadMock.mockReset();
   apiPostMock.mockReset();
   apiGetMock.mockReset();
-  apiGetMock.mockImplementation((path: string) => path.startsWith("/api/organization-structure")
+  apiGetMock.mockImplementation((path: string) => path.startsWith("/api/review-settings")
+    ? Promise.resolve({ review_mode: reviewMode, review_mode_label: "", options: [], can_edit: false })
+    : path.startsWith("/api/processing-jobs")
+    ? Promise.resolve({ items: failedJobs, total: failedJobs.length })
+    : path.startsWith("/api/organization-structure")
     ? Promise.resolve({ hospitals: [{ id: "hospital-1", name: "Klinikum Mitte", code: "KM", is_active: true }], departments: [
       { id: "dept-resp", hospital_id: "hospital-1", parent_id: null, name: "Radiologie", code: "RAD", is_active: true },
       { id: "dept-use", hospital_id: "hospital-1", parent_id: null, name: "Neurochirurgie", code: "NC", is_active: true },
@@ -32,8 +41,12 @@ async function toFiles() {
   await waitFor(() => expect(screen.getByRole("heading", { name: "Dateien auswählen" })).toBeInTheDocument());
 }
 
-async function toConfirmAndStart() {
+async function toConfirmAndStart(mode?: RegExp) {
+  await userEvent.click(screen.getByRole("button", { name: /Weiter zur Erfassungsart/ }));
+  if (mode) await userEvent.click(screen.getByRole("radio", { name: mode }));
   await userEvent.click(screen.getByRole("button", { name: /Weiter zur Prüfung/ }));
+  const same = screen.queryByRole("checkbox", { name: /Dateien gehören zu diesem Ziel/ });
+  if (same) await userEvent.click(same);
   await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
 }
 
@@ -50,7 +63,7 @@ describe("Import (FE-08)", () => {
     expect(screen.getByRole("link", { name: /Ohne Dokument manuell erfassen/ })).toHaveAttribute("href", "/contracts/new");
     await toFiles();
     expect(screen.getByText(/Noch keine Dateien ausgewählt/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Weiter zur Prüfung/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Weiter zur Erfassungsart/ })).toBeDisabled();
   });
 
   it("erlaubt PDF/DOCX und weist nicht unterstützte Dateien vor dem Upload ab", async () => {
@@ -113,7 +126,72 @@ describe("Import (FE-08)", () => {
       responsible_department_id: "dept-resp",
       beneficiary_department_ids: ["dept-use"],
       cost_center_id: "center-1",
+      intake_mode: "ai_human_review",
+      same_destination_confirmed: undefined,
     });
+  });
+
+  it("fragt die Erfassungsart ab und speichert bei manueller Eingabe ohne KI-Analyse", async () => {
+    apiUploadMock.mockResolvedValue({ total: 1, successful: 1, failed: 0, duplicates: 0, documents: [
+      { original_filename: "wartung.pdf", status: "imported", size: 1024, analysis_status: null, contract_id: "c-9", requires_review: false, message: "Original gespeichert" },
+    ] });
+    const utils = render(<ImportPage />);
+    await toFiles();
+    await userEvent.upload(utils.container.querySelector('input[type="file"]') as HTMLInputElement, await selectedFile());
+    await userEvent.click(screen.getByRole("button", { name: /Weiter zur Erfassungsart/ }));
+    expect(screen.getByRole("radio", { name: /mit manueller Prüfung \(empfohlen\)/ })).toBeChecked();
+    // Automatische Übernahme ist ohne Freigabe der Organisation gesperrt.
+    expect(screen.getByRole("radio", { name: /automatische Übernahme nur verifizierter Angaben/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("radio", { name: /Manuelle Eingabe/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Weiter zur Prüfung/ }));
+    expect(screen.getByText("Manuelle Eingabe", { selector: "dd" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Import starten/ }));
+    await waitFor(() => expect(apiUploadMock).toHaveBeenCalled());
+    expect(apiUploadMock.mock.calls[0][4]).toMatchObject({ intake_mode: "manual" });
+    expect(await screen.findByText("Keine Analyse (manuelle Erfassung)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Vertragsdaten erfassen" })).toHaveAttribute("href", "/contracts/c-9?tab=register");
+  });
+
+  it("erlaubt die automatische Übernahme nur nach Freigabe", async () => {
+    reviewMode = "auto_noncritical";
+    const utils = render(<ImportPage />);
+    await toFiles();
+    await userEvent.upload(utils.container.querySelector('input[type="file"]') as HTMLInputElement, await selectedFile());
+    await userEvent.click(screen.getByRole("button", { name: /Weiter zur Erfassungsart/ }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: /automatische Übernahme nur verifizierter Angaben/ })).toBeEnabled());
+  });
+
+  it("verlangt bei mehreren Dateien die Bestätigung des gemeinsamen Ziels", async () => {
+    apiUploadMock.mockResolvedValue({ total: 2, successful: 2, failed: 0, duplicates: 0, documents: [] });
+    const utils = render(<ImportPage />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Krankenhaus für Import" })).toHaveValue("hospital-1"));
+    await toFiles();
+    await userEvent.upload(utils.container.querySelector('input[type="file"]') as HTMLInputElement, [await selectedFile("a.pdf"), await selectedFile("b.pdf")]);
+    await userEvent.click(screen.getByRole("button", { name: /Weiter zur Erfassungsart/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Weiter zur Prüfung/ }));
+    const start = screen.getByRole("button", { name: /Import starten/ });
+    expect(start).toBeDisabled();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Alle 2 Dateien gehören zu diesem Ziel (Klinikum Mitte)." }));
+    expect(start).toBeEnabled();
+    await userEvent.click(start);
+    await waitFor(() => expect(apiUploadMock).toHaveBeenCalled());
+    expect(apiUploadMock.mock.calls[0][4]).toMatchObject({ same_destination_confirmed: "true" });
+  });
+
+  it("listet fehlgeschlagene Importe mit verständlicher Meldung und erneuter Analyse", async () => {
+    failedJobs = [
+      { id: "run-2", document_version_id: "dv-1", status: "failed", result_label_de: "Lokale KI nicht verfügbar.", original_filename: "impella.pdf", contract_id: "c-1", created_at: "2026-10-09T10:00:00Z", error: null, message: null },
+      { id: "run-1", document_version_id: "dv-1", status: "failed", result_label_de: "Älterer Lauf", original_filename: "impella.pdf", contract_id: "c-1", created_at: "2026-10-08T10:00:00Z", error: null, message: null },
+    ];
+    apiPostMock.mockResolvedValue({ status: "imported", analysis_status: "success" });
+    render(<ImportPage />);
+    const section = await screen.findByRole("region", { name: "Fehlgeschlagene Importe (1)" });
+    expect(within(section).getByText("impella.pdf")).toBeInTheDocument();
+    expect(within(section).getByText("Lokale KI nicht verfügbar.")).toBeInTheDocument();
+    expect(within(section).queryByText("Älterer Lauf")).not.toBeInTheDocument();
+    expect(within(section).getByRole("link", { name: "Vertrag ansehen" })).toHaveAttribute("href", "/contracts/c-1");
+    await userEvent.click(within(section).getByRole("button", { name: "Analyse erneut starten" }));
+    await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith(expect.stringContaining("/api/documents/dv-1/retry"), {}, expect.any(Number)));
   });
 
   it("zeigt Teilanalyse ehrlich und verlinkt direkt auf die manuelle Prüfung", async () => {

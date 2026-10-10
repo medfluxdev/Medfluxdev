@@ -16,6 +16,8 @@ export interface ProcessingJob {
   message: string | null;
   error: string | null;
   created_at: string | null;
+  contract_id?: string | null;
+  original_filename?: string | null;
   page_count: number | null;
   doc_type: string | null;
   processed_at: string | null;

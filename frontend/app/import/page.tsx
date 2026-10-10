@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { importDocuments, retryDocument } from "@/lib/domain-api/documents";
+import { importDocuments, retryDocument, type IntakeMode } from "@/lib/domain-api/documents";
+import { getReviewSettings } from "@/lib/domain-api/reviewSettings";
+import FailedImports from "@/components/import/FailedImports";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { ImportFileResult, ImportStatus } from "@/lib/types";
 import Button from "@/components/ui/Button";
@@ -36,7 +38,19 @@ function supportedFile(file: File) {
   return name.endsWith(".pdf") || name.endsWith(".docx");
 }
 
-function analysisLabel(result: ImportFileResult): string {
+const INTAKE_OPTIONS: { value: IntakeMode; title: string; text: string }[] = [
+  { value: "ai_human_review", title: "KI-gestützt mit manueller Prüfung (empfohlen)", text: "Die lokale KI schlägt die Vertragsdaten vor; Sie bestätigen, korrigieren oder verwerfen jede wichtige Angabe neben dem Originaldokument." },
+  { value: "ai_direct", title: "KI-gestützt (automatische Übernahme nur verifizierter Angaben)", text: "Nicht-kritische Angaben mit eindeutigem Quellbeleg gelten als übernommen. Kritische, unklare oder widersprüchliche Angaben werden nicht automatisch bestätigt." },
+  { value: "manual", title: "Manuelle Eingabe", text: "Das Original wird unverändert gespeichert, es läuft keine KI-Analyse. Sie erfassen die Vertragsdaten selbst." },
+];
+const INTAKE_LABEL: Record<IntakeMode, string> = {
+  ai_human_review: "KI-gestützt mit manueller Prüfung",
+  ai_direct: "KI-gestützt mit automatischer Übernahme",
+  manual: "Manuelle Eingabe",
+};
+
+function analysisLabel(result: ImportFileResult, intake: IntakeMode): string {
+  if (intake === "manual" && result.status === "imported") return "Keine Analyse (manuelle Erfassung)";
   if (result.status === "duplicate") return "Nicht erneut analysiert";
   if (result.status === "rejected" || result.status === "failed") return "Nicht gestartet";
   if (result.status === "analysis_failed" || result.analysis_status === "failed") return "Fehlgeschlagen";
@@ -64,6 +78,9 @@ export default function ImportPage() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [destination, setDestination] = useState<"new" | "existing">("new");
   const [step, setStep] = useState(1);
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>("ai_human_review");
+  const [autoAllowed, setAutoAllowed] = useState(false);
+  const [sameDestination, setSameDestination] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const effectiveOrgSlug = organizationSlug ?? membership?.organization_slug ?? "krankenhaus";
@@ -88,6 +105,12 @@ export default function ImportPage() {
       .finally(() => { if (active) setAssignmentLoading(false); });
     return () => { active = false; };
   }, [canAssign, effectiveOrgSlug, membership?.department_id, membership?.hospital_id]);
+
+  useEffect(() => {
+    getReviewSettings(effectiveOrgSlug)
+      .then((settings) => setAutoAllowed(settings.review_mode === "auto_noncritical"))
+      .catch(() => setAutoAllowed(false));
+  }, [effectiveOrgSlug]);
 
   const availableDepartments = useMemo(
     () => organizationStructure.departments.filter((item) => item.is_active && item.hospital_id === hospitalId),
@@ -145,7 +168,7 @@ export default function ImportPage() {
         responsible_department_id: responsibleDepartmentId || undefined,
         beneficiary_department_ids: beneficiaryDepartmentIds,
         cost_center_id: costCenterId || undefined,
-      } : undefined);
+      } : undefined, { intake_mode: intakeMode, same_destination_confirmed: sameDestination });
       setResults(res.documents);
       setSelected([]);
       setRejectedSelection([]);
@@ -154,7 +177,7 @@ export default function ImportPage() {
     } finally {
       setLoading(false);
     }
-  }, [selected, loading, effectiveOrgSlug, canAssign, assignmentLoading, assignmentError, hospitalId, responsibleDepartmentId, beneficiaryDepartmentIds, costCenterId]);
+  }, [selected, loading, effectiveOrgSlug, canAssign, assignmentLoading, assignmentError, hospitalId, responsibleDepartmentId, beneficiaryDepartmentIds, costCenterId, intakeMode, sameDestination]);
 
   const importAcceptedCount = useMemo(
     () => results?.filter((r) => r.status === "imported" || r.status === "analysis_failed").length ?? 0,
@@ -205,7 +228,9 @@ export default function ImportPage() {
     }
   }, [effectiveOrgSlug, retryingId, toast]);
 
-  const STEPS = ["Ziel", "Dateien", "Prüfen & starten", "Ergebnis"];
+  const STEPS = ["Ziel", "Dateien", "Erfassung", "Prüfen & starten", "Ergebnis"];
+  // Mehrere Dateien mit einem Ziel: ausdrücklich bestätigen, dass alle dorthin gehören.
+  const needsSameDestination = canAssign && Boolean(hospitalId) && selected.length > 1;
   const hospitalName = organizationStructure.hospitals.find((item) => item.id === hospitalId)?.name;
   // Neue Verträge brauchen ein konkretes Krankenhaus, sobald welche eingerichtet sind.
   const needsHospital = canAssign && !assignmentLoading && !hospitalId && organizationStructure.hospitals.some((item) => item.is_active);
@@ -218,8 +243,12 @@ export default function ImportPage() {
       setError("Bitte legen Sie zuerst den verantwortlichen Bereich fest.");
       return;
     }
+    if (needsSameDestination && !sameDestination) {
+      setError("Bitte bestätigen Sie, dass alle Dateien zu diesem Ziel gehören, oder importieren Sie sie einzeln.");
+      return;
+    }
     await handleUpload();
-    setStep(4);
+    setStep(5);
   }
 
   return (
@@ -329,33 +358,57 @@ export default function ImportPage() {
               ) : <p className="state-empty">Noch keine Dateien ausgewählt. Wählen Sie eine oder mehrere Wartungs- oder Serviceverträge aus.</p>}
               <div className="form-actions">
                 <Button onClick={() => goTo(1)}>Zurück</Button>
-                <Button variant="primary" disabled={selected.length === 0} onClick={() => goTo(3)}>Weiter zur Prüfung ({selected.length})</Button>
+                <Button variant="primary" disabled={selected.length === 0} onClick={() => goTo(3)}>Weiter zur Erfassungsart ({selected.length})</Button>
               </div>
             </section>
           ) : null}
 
           {step === 3 ? (
+            <section className="card card-pad stack-4" aria-labelledby="wizard-intake">
+              <h2 id="wizard-intake">Wie möchten Sie die Vertragsdaten erfassen?</h2>
+              <fieldset className="wizard-choices">
+                <legend className="visually-hidden">Erfassungsart</legend>
+                {INTAKE_OPTIONS.map((option) => {
+                  const disabled = option.value === "ai_direct" && !autoAllowed;
+                  return <label key={option.value} className="wizard-choice">
+                    <input type="radio" name="import-intake" value={option.value} checked={intakeMode === option.value} disabled={disabled} onChange={() => setIntakeMode(option.value)} />
+                    <span><strong>{option.title}</strong><small>{option.text}{disabled ? " Nicht freigegeben – eine Administratorin oder ein Administrator kann das unter Verwaltung → Allgemein erlauben." : ""}</small></span>
+                  </label>;
+                })}
+              </fieldset>
+              <div className="form-actions">
+                <Button onClick={() => goTo(2)}>Zurück</Button>
+                <Button variant="primary" onClick={() => goTo(4)}>Weiter zur Prüfung</Button>
+              </div>
+            </section>
+          ) : null}
+
+          {step === 4 ? (
             <section className="card card-pad stack-4" aria-labelledby="wizard-confirm">
               <h2 id="wizard-confirm">Angaben prüfen und Import starten</h2>
               <dl className="quick-facts">
                 <div><dt>Ziel</dt><dd>Neuer Vertrag je Datei</dd></div>
                 <div><dt>Dateien</dt><dd>{selected.length}</dd></div>
+                <div><dt>Erfassung</dt><dd>{INTAKE_LABEL[intakeMode]}</dd></div>
                 {canAssign ? <div><dt>Krankenhaus</dt><dd>{hospitalName ?? "Nicht festgelegt"}</dd></div> : null}
                 {canAssign ? <div><dt>Verantwortliche Abteilung</dt><dd>{departmentName ? departmentFullPath(departmentName, availableDepartments) : "Nicht festgelegt"}</dd></div> : null}
                 {canAssign ? <div><dt>Nutzende Abteilungen</dt><dd>{beneficiaryDepartmentIds.length || "Keine"}</dd></div> : null}
                 {canAssign ? <div><dt>Kostenstelle</dt><dd>{costCenterName ? `${costCenterName.code} – ${costCenterName.name}` : "Nicht festgelegt"}</dd></div> : null}
               </dl>
-              <InlineAlert tone="info">Die Analyse läuft lokal auf diesem Rechner. Unklare oder widersprüchliche Angaben werden nicht automatisch bestätigt, sondern zur Prüfung markiert.</InlineAlert>
+              {intakeMode === "manual"
+                ? <InlineAlert tone="info">Das Original wird gespeichert, es läuft keine KI-Analyse. Danach öffnen Sie den Vertrag und erfassen die Daten.</InlineAlert>
+                : <InlineAlert tone="info">Die Analyse läuft lokal auf diesem Rechner. Unklare oder widersprüchliche Angaben werden nicht automatisch bestätigt, sondern zur Prüfung markiert.</InlineAlert>}
+              {needsSameDestination ? <label className="rg-check"><input type="checkbox" checked={sameDestination} onChange={(event) => setSameDestination(event.target.checked)} />Alle {selected.length} Dateien gehören zu diesem Ziel ({hospitalName ?? "Krankenhaus"}).</label> : null}
               {error && <InlineAlert tone="critical" role="alert">{error}</InlineAlert>}
               <div className="form-actions">
-                <Button onClick={() => goTo(2)} disabled={loading}>Zurück</Button>
-                <Button variant="primary" loading={loading} loadingLabel="Wird importiert…" onClick={() => void startImport()}>Import starten ({selected.length})</Button>
+                <Button onClick={() => goTo(3)} disabled={loading}>Zurück</Button>
+                <Button variant="primary" disabled={needsSameDestination && !sameDestination} loading={loading} loadingLabel="Wird importiert…" onClick={() => void startImport()}>Import starten ({selected.length})</Button>
               </div>
               {loading && (
                 <div role="status" aria-live="polite">
                   <p><strong>Dateien werden übertragen und lokal verarbeitet.</strong></p>
                   <ul className="import-processing-steps" aria-label="Verarbeitungsschritte">
-                    <li>Übertragung</li><li>Lesen/OCR bei Bedarf</li><li>Extraktion</li><li>Analyse</li><li>Fristen/Kosten</li>
+                    {intakeMode === "manual" ? <><li>Übertragung</li><li>Ablage des Originals</li><li>Vertrag anlegen</li></> : <><li>Übertragung</li><li>Lesen/OCR bei Bedarf</li><li>Extraktion</li><li>Analyse</li><li>Fristen/Kosten</li></>}
                   </ul>
                   <div className="import-progress" aria-hidden="true"><div className="import-progress-bar import-progress-active" /></div>
                 </div>
@@ -363,7 +416,7 @@ export default function ImportPage() {
             </section>
           ) : null}
 
-          {step === 4 ? (
+          {step === 5 ? (
             <section className="card card-pad stack-4" aria-label="Import-Ergebnis" aria-live="polite">
               <h2 className="card-title">Import-Ergebnis</h2>
               {error && <InlineAlert tone="critical" role="alert">{error}</InlineAlert>}
@@ -381,12 +434,14 @@ export default function ImportPage() {
                       <span className="result-file">{r.original_filename}</span>
                       <div className="result-state-stack">
                         <div className="result-state-line"><span className="result-state-label">Import</span><StatusBadge tone={statusTone[r.status]} label={statusLabel[r.status]} /></div>
-                        <div className="result-state-line"><span className="result-state-label">Analyse</span><span className="result-state-value">{analysisLabel(r)}</span></div>
+                        <div className="result-state-line"><span className="result-state-label">Analyse</span><span className="result-state-value">{analysisLabel(r, intakeMode)}</span></div>
                         {r.requires_review && <div className="result-state-line"><span className="result-state-label">Prüfung</span><span className="result-state-value">Erforderlich</span></div>}
                       </div>
                       {r.message && <span className="result-msg">{r.message}</span>}
                       {canRetry(r) && <Button size="sm" disabled={retryingId === r.document_version_id} onClick={() => void retryAnalysis(r)}>{retryingId === r.document_version_id ? "Wird erneut verarbeitet…" : "Analyse erneut starten"}</Button>}
-                      {r.contract_id && r.requires_review ? (
+                      {r.contract_id && intakeMode === "manual" && r.status === "imported" ? (
+                        <Link href={`/contracts/${r.contract_id}?tab=register`} className="result-link">Vertragsdaten erfassen</Link>
+                      ) : r.contract_id && r.requires_review ? (
                         <Link href={`/contracts/${r.contract_id}?tab=documents&subtab=review`} className="result-link">Zur manuellen Prüfung</Link>
                       ) : r.contract_id ? (
                         <Link href={`/contracts/${r.contract_id}`} className="result-link">Vertrag ansehen</Link>
@@ -396,11 +451,12 @@ export default function ImportPage() {
                 </div>
               </> : null}
               <div className="form-actions">
-                <Button onClick={() => { setResults(null); goTo(2); }}>Weitere Dateien importieren</Button>
+                <Button onClick={() => { setResults(null); setSameDestination(false); goTo(2); }}>Weitere Dateien importieren</Button>
                 <Link href="/register" className="btn btn-primary">Zur Vertragsliste</Link>
               </div>
             </section>
           ) : null}
+          {canAssign ? <FailedImports organizationSlug={effectiveOrgSlug} /> : null}
         </div>
 
         <aside className="card card-pad side-note">

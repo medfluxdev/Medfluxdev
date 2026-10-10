@@ -48,7 +48,7 @@ export default function ReviewModeSetting() {
       <input type="radio" name="review-mode" value={option.value} checked={settings.review_mode === option.value} onChange={() => void change(option.value)} />
       {option.label}
     </label>)}
-    <p className="field-hint">Kritische Angaben (z. B. Vertragspartner, Laufzeit, Kündigungsfrist) prüft immer ein Mensch. Automatisch übernommen werden nur nicht-kritische Angaben mit eindeutigem Quellbeleg; sie bleiben als „Automatisch übernommen“ gekennzeichnet und können jederzeit korrigiert werden.</p>
+    <p className="field-hint">Kritische Angaben (z. B. Vertragspartner, Laufzeit, Kündigungsfrist) prüft immer ein Mensch. Automatisch übernommen werden nur nicht-kritische Angaben mit eindeutigem Quellbeleg; sie bleiben als „Automatisch übernommen“ gekennzeichnet und können jederzeit korrigiert werden. Die Freigabe gilt für Verträge, die beim Import mit „KI-gestützt (automatische Übernahme)“ erfasst werden, und für Verträge aus der Zeit vor dem Import-Assistenten – nicht für Verträge, die ausdrücklich mit manueller Prüfung importiert wurden.</p>
     {!settings.can_edit ? <p className="field-hint">Nur Administratoren können den Prüfmodus ändern.</p> : null}
   </fieldset>;
 }
