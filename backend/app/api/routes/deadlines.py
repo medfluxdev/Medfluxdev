@@ -34,11 +34,14 @@ from app.deadlines.service import (
     log_activity_account,
     mark_read,
     notification_settings,
+    owned_deadline_condition,
+    unread_count,
     update_deadline,
     update_notification_settings,
 )
 from app.deadlines.system import sync_system_deadlines
 from app.register.service import RegisterActor
+from app.api.routes.notifications import work_queue_count
 
 router = APIRouter(prefix="/api", tags=["deadlines"])
 
@@ -214,7 +217,9 @@ def list_deadlines(
         if status != "all":
             stmt = stmt.where(ContractDeadline.status == status)
         if mine:
-            stmt = stmt.where(ContractDeadline.assignee_account_id == actor.account_id)
+            # Gleiche Definition wie das Postfach: zugewiesen oder verantwortlich, inkl. Vertretung.
+            owned, _ = owned_deadline_condition(session, actor, today)
+            stmt = stmt.where(owned)
         if due_before is not None:
             stmt = stmt.where(ContractDeadline.due_date <= due_before)
         allowed = _allowed(session, actor)
@@ -233,11 +238,37 @@ def list_deadlines(
 
 
 @router.get("/inbox")
-def get_inbox(request: Request, organization_slug: str, limit: int = Query(default=100, ge=1, le=500)):
+def get_inbox(
+    request: Request,
+    organization_slug: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    unread_only: bool = False,
+):
     actor = _actor(request, organization_slug)
     session = create_session()
     try:
-        return inbox(session, actor=actor, as_of=today_local(), allowed_contract_ids=_allowed(session, actor), limit=limit)
+        return inbox(
+            session, actor=actor, as_of=today_local(), allowed_contract_ids=_allowed(session, actor),
+            limit=limit, offset=offset, unread_only=unread_only,
+        )
+    finally:
+        session.close()
+
+
+@router.get("/inbox/summary")
+def get_inbox_summary(request: Request, organization_slug: str):
+    """Zähler für die Glocke: ungelesene Benachrichtigungen (Abzeichen) und offener
+    Arbeitsvorrat – jeweils mit derselben Abfrage und demselben Bereich wie die Listen."""
+    actor = _actor(request, organization_slug)
+    session = create_session()
+    try:
+        scope = current_scope_context()
+        feed_scope = scoped_contract_ids(session, actor.organization_id, scope.hospital_id, scope.department_id)
+        return {
+            "unread_for_me": unread_count(session, actor=actor, allowed_contract_ids=_allowed(session, actor)),
+            "work_queue_open": work_queue_count(session, actor.organization_id, feed_scope),
+        }
     finally:
         session.close()
 
@@ -247,7 +278,7 @@ def read_all(request: Request, organization_slug: str):
     actor = _actor(request, organization_slug)
     session = create_session()
     try:
-        count = mark_read(session, actor=actor, notification_id=None)
+        count = mark_read(session, actor=actor, notification_id=None, allowed_contract_ids=_allowed(session, actor))
         session.commit()
         return {"marked": count}
     finally:

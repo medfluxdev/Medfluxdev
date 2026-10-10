@@ -262,17 +262,45 @@ def change_deadline_status(
 # --------------------------------------------------------------------------- inbox
 
 
-def inbox(
-    session: Session, *, actor: RegisterActor, as_of: date, allowed_contract_ids: Optional[set[uuid.UUID]], limit: int = 100
-) -> dict:
-    notes = session.scalars(
-        select(Notification)
-        .where(Notification.account_id == actor.account_id, Notification.organization_id == actor.organization_id)
-        .order_by(Notification.created_at.desc(), Notification.id.desc())
-        .limit(limit)
-    ).all()
+def owned_deadline_condition(session: Session, actor: RegisterActor, as_of: date):
+    """"Meine" Termine: mir oder einer von mir vertretenen Person zugewiesen, oder
+    ohne Zuweisung bei einem Vertrag, für den ich (oder die vertretene Person)
+    verantwortlich bin. Eine Definition für Postfach, Termine "Nur meine" und Mein Tag.
+    Erwartet einen Join auf `Contract`."""
     represented = deputized_account_ids(session, actor.account_id, actor.organization_id, as_of)
     owners = [actor.account_id, *represented]
+    return or_(
+        ContractDeadline.assignee_account_id.in_(owners),
+        (ContractDeadline.assignee_account_id.is_(None) & Contract.responsible_account_id.in_(owners)),
+    ), represented
+
+
+def _note_scope(stmt, actor: RegisterActor, allowed_contract_ids: Optional[set[uuid.UUID]]):
+    stmt = stmt.where(Notification.account_id == actor.account_id, Notification.organization_id == actor.organization_id)
+    if allowed_contract_ids is not None:
+        stmt = stmt.where(Notification.contract_id.is_(None) | Notification.contract_id.in_(allowed_contract_ids))
+    return stmt
+
+
+def unread_count(session: Session, *, actor: RegisterActor, allowed_contract_ids: Optional[set[uuid.UUID]]) -> int:
+    """Ungelesene Benachrichtigungen – dieselbe Definition wie die Liste im Postfach und in der Glocke."""
+    stmt = _note_scope(select(func.count(Notification.id)), actor, allowed_contract_ids).where(Notification.read_at.is_(None))
+    return session.scalar(stmt) or 0
+
+
+def inbox(
+    session: Session, *, actor: RegisterActor, as_of: date, allowed_contract_ids: Optional[set[uuid.UUID]], limit: int = 100,
+    offset: int = 0, unread_only: bool = False,
+) -> dict:
+    note_stmt = _note_scope(select(Notification), actor, allowed_contract_ids)
+    total_stmt = _note_scope(select(func.count(Notification.id)), actor, allowed_contract_ids)
+    if unread_only:
+        note_stmt = note_stmt.where(Notification.read_at.is_(None))
+        total_stmt = total_stmt.where(Notification.read_at.is_(None))
+    notes = session.scalars(
+        note_stmt.order_by(Notification.created_at.desc(), Notification.id.desc()).offset(offset).limit(limit)
+    ).all()
+    owned, represented = owned_deadline_condition(session, actor, as_of)
     stmt = (
         select(ContractDeadline)
         .join(Contract, Contract.id == ContractDeadline.contract_id)
@@ -280,10 +308,7 @@ def inbox(
             ContractDeadline.organization_id == actor.organization_id,
             ContractDeadline.status == "open",
             Contract.lifecycle_state == "active",
-            or_(
-                ContractDeadline.assignee_account_id.in_(owners),
-                (ContractDeadline.assignee_account_id.is_(None) & Contract.responsible_account_id.in_(owners)),
-            ),
+            owned,
         )
         .order_by(ContractDeadline.due_date)
     )
@@ -293,21 +318,10 @@ def inbox(
     contracts = {
         row.id: row for row in session.scalars(select(Contract).where(Contract.id.in_({r.contract_id for r in rows}))).all()
     } if rows else {}
-    visible_notes = [
-        note for note in notes
-        if allowed_contract_ids is None or note.contract_id is None or note.contract_id in allowed_contract_ids
-    ]
-    unread_stmt = select(func.count(Notification.id)).where(
-        Notification.account_id == actor.account_id,
-        Notification.organization_id == actor.organization_id,
-        Notification.read_at.is_(None),
-    )
-    if allowed_contract_ids is not None:
-        unread_stmt = unread_stmt.where(
-            Notification.contract_id.is_(None) | Notification.contract_id.in_(allowed_contract_ids)
-        )
     return {
-        "unread_count": session.scalar(unread_stmt) or 0,
+        "unread_count": unread_count(session, actor=actor, allowed_contract_ids=allowed_contract_ids),
+        "total": session.scalar(total_stmt) or 0,
+        "offset": offset,
         "notifications": [
             {
                 "id": str(note.id),
@@ -320,7 +334,7 @@ def inbox(
                 "created_at": note.created_at.isoformat() if note.created_at else None,
                 "read_at": note.read_at.isoformat() if note.read_at else None,
             }
-            for note in visible_notes
+            for note in notes
         ],
         "deadlines": deadline_payloads(session, rows, as_of, contracts),
         "representing": [
@@ -330,12 +344,12 @@ def inbox(
     }
 
 
-def mark_read(session: Session, *, actor: RegisterActor, notification_id: Optional[uuid.UUID]) -> int:
-    stmt = select(Notification).where(
-        Notification.account_id == actor.account_id,
-        Notification.organization_id == actor.organization_id,
-        Notification.read_at.is_(None),
-    )
+def mark_read(
+    session: Session, *, actor: RegisterActor, notification_id: Optional[uuid.UUID],
+    allowed_contract_ids: Optional[set[uuid.UUID]] = None,
+) -> int:
+    """Markiert als gelesen. "Alle" gilt nur für den sichtbaren Bereich (wie Liste und Zähler)."""
+    stmt = _note_scope(select(Notification), actor, allowed_contract_ids).where(Notification.read_at.is_(None))
     if notification_id is not None:
         stmt = stmt.where(Notification.id == notification_id)
     rows = session.scalars(stmt).all()

@@ -9,7 +9,7 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: "g dann s", label: "Mein Tag" },
   { keys: "g dann v", label: "Vertragsliste" },
   { keys: "g dann t", label: "Fristen & Aufgaben" },
-  { keys: "g dann p", label: "Postfach" },
+  { keys: "g dann p", label: "Benachrichtigungen" },
   { keys: "g dann d", label: "Stammdaten" },
   { keys: "Strg + S", label: "Formular speichern (wo verfügbar)" },
   { keys: "?", label: "Diese Übersicht" },

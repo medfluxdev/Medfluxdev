@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SignalIcon } from "@/components/ui/Signal";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/api";
@@ -44,7 +45,8 @@ export default function AppSidebar({ collapsed, mobileOpen, onToggleCollapsed, o
   const groups = useMemo(() => visibleGroups(role, Boolean(account?.is_developer)), [account?.is_developer, role]);
   const aiReady = Boolean(aiStatus?.available && aiStatus?.model_available);
   const statusText = apiHealthy === false ? "Server nicht erreichbar" : aiReady ? `Lokale KI bereit (${aiStatus?.model})` : aiStatus ? "Lokale KI nicht bereit" : "Status wird geprüft…";
-  const statusTone = apiHealthy === false ? "danger" : aiReady ? "success" : "warning";
+  // Ruhe & Signal: Normalbetrieb ist grau; nur Ausfall (kritisch) bzw. fehlendes Modell (prüfen) färbt.
+  const statusTone = apiHealthy === false ? "critical" : aiReady ? "neutral" : aiStatus ? "warning" : "neutral";
 
   return (
     <>
@@ -82,7 +84,7 @@ export default function AppSidebar({ collapsed, mobileOpen, onToggleCollapsed, o
 
         <div className="shell-sidebar-foot">
           <p className={`shell-status shell-status--${statusTone}`} role="status" title={statusText}>
-            <span className="shell-status-dot" aria-hidden="true" />
+            <SignalIcon tone={statusTone} className="shell-status-icon" />
             <span className="shell-nav-text">{statusText}</span>
           </p>
           <p className="shell-org shell-nav-text">{membership?.organization_name ?? (account?.is_developer ? "Systemverwaltung" : "Krankenhaus")}</p>

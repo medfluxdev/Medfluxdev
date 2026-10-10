@@ -67,7 +67,9 @@
   font-weight: var(--weight-medium);
   text-decoration: none;
 }
+.shell-nav-item .shell-icon { color: var(--color-icon); }
 .shell-nav-item:hover { background: var(--color-surface-muted); color: var(--color-text); }
+.shell-nav-item.is-active .shell-icon { color: var(--color-accent); }
 .shell-nav-item.is-active {
   background: var(--color-surface-accent);
   color: var(--color-text-accent);
@@ -76,9 +78,10 @@
 }
 .shell-sidebar-foot { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); }
 .shell-status { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--color-text-muted); font-size: var(--text-caption); }
-.shell-status-dot { width: 0.5rem; height: 0.5rem; flex: none; border-radius: 50%; background: var(--color-warning-fill); }
-.shell-status--success .shell-status-dot { background: var(--color-success-fill); }
-.shell-status--danger .shell-status-dot { background: var(--color-danger-fill); }
+.shell-status-icon { width: 14px; height: 14px; color: var(--color-icon); }
+.shell-status--warning .shell-status-icon { color: var(--color-warning); }
+.shell-status--critical .shell-status-icon { color: var(--color-danger); }
+.shell-status--critical { color: var(--color-danger); }
 .shell-org { margin: 0; color: var(--color-text); font-size: var(--text-small); font-weight: var(--weight-semibold); }
 
 /* eingeklappt: nur Symbole */
@@ -204,6 +207,12 @@ kbd {
   text-decoration: none;
 }
 .shell-menu-panel > a:not(.btn-link):hover { background: var(--color-surface-muted); }
+.notification-panel section { display: grid; gap: var(--space-1); }
+.notification-panel .notification-item { width: 100%; border: 0; background: none; text-align: left; font: inherit; font-size: var(--text-small); cursor: pointer; }
+.notification-panel .notification-item:hover, .notification-panel .notification-item:focus-visible { background: var(--color-surface-muted); }
+.notification-work { margin-top: var(--space-2); border-top: 1px solid var(--color-border-subtle); padding-top: var(--space-2); }
+.notification-severity { display: inline-flex; align-items: center; gap: var(--space-1); }
+.notification-severity .signal-icon { width: 14px; height: 14px; }
 .shell-menu-panel .notification-item small,
 .shell-menu-panel .notification-item span { color: var(--color-text-muted); font-size: var(--text-caption); }
 .shell-menu-head { display: grid; gap: 2px; padding: var(--space-1) var(--space-2) var(--space-2); border-bottom: 1px solid var(--color-border-subtle); }

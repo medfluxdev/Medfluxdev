@@ -125,7 +125,7 @@ export default function ContractDeadlinesPanel({ contractId, orgSlug }: { contra
 
   return <section className="cw-section" aria-labelledby="rg-deadlines-heading">
     <div className="cw-section-head">
-      <div><h2 id="rg-deadlines-heading">Termine & Wiedervorlagen</h2><p>Fristen aus den Stammdaten werden automatisch angelegt und nachgeführt. Erinnerungen erscheinen im Postfach und auf Wunsch per E-Mail.</p></div>
+      <div><h2 id="rg-deadlines-heading">Termine & Wiedervorlagen</h2><p>Fristen aus den Stammdaten werden automatisch angelegt und nachgeführt. Erinnerungen erscheinen unter der Glocke (Benachrichtigungen) und auf Wunsch per E-Mail.</p></div>
       {editable && !showForm ? <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>Termin hinzufügen</button> : null}
     </div>
     {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}

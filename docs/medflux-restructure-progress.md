@@ -9,7 +9,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | 0 | Baseline | erledigt | (mit Phase A) |
 | A | Datenwahrheit (Summen mit Abdeckung, Laufend-Definition, nicht bewertbare Fristen, Stichtag Europe/Berlin) | erledigt | siehe git log |
 | B | Signal-Grundlage (R&S Phase 1) | erledigt | siehe git log |
-| C | Glocke, Benachrichtigungen, Rahmen | offen | |
+| C | Glocke, Benachrichtigungen, Rahmen | erledigt | siehe git log |
 | D | Vertragsregister mit Reitern | offen | |
 | E | Vertragsakte, Import, Prüfung | offen | |
 | F | Fristen & Aufgaben | offen | |
@@ -77,3 +77,27 @@ Kein WSL-Testcluster. Backend-Tests laufen in Wegwerf-Containern (`medflux-pytes
 
 **Tests**: `test/signal.test.tsx` (neu), `test/kpi-tile.test.tsx` und `test/my-day.test.tsx` an die neutralen Kacheln angepasst.
 **Verifikation**: `npm run verify` grün (51 Testdateien).
+
+## Phase C – Glocke, Benachrichtigungen, Rahmen (2026-10-10)
+
+**Ursache des Befunds „Glocke 1, Postfach 0“**: Das Abzeichen addierte offene Aufgaben/Freigaben der Organisation
+(ohne Lesestatus) und persönliche ungelesene Benachrichtigungen; das Postfach zeigte nur Letztere.
+
+**Umgesetzt**
+- Backend: `GET /api/inbox/summary` liefert `unread_for_me` und `work_queue_open` mit denselben Abfragen wie die Listen
+  (`deadlines.service.unread_count`, `notifications.work_queue_count`). `GET /api/inbox` mit `offset`, `unread_only`, `total`;
+  Bereichsfilter jetzt in der Abfrage statt nachträglich. „Alle als gelesen“ gilt nur für den sichtbaren Bereich.
+  Feed liefert die echte Gesamtzahl und verlinkt Aufgaben auf den Vertrag (`?tab=deadlines`) statt auf `/work-queue`.
+- „Meine“ Termine: eine Definition (`owned_deadline_condition`: zugewiesen oder – ohne Zuweisung – verantwortlich, inkl.
+  Vertretung) für Postfach-Wiedervorlage und `/api/deadlines?mine=true` (vorher nur Zuweisung).
+- Glocke: zwei Bereiche „Für mich“ (zählt im Abzeichen) und „Arbeitsvorrat“ (eigene Zahl, kein Abzeichen); Ladefehler zeigt
+  keine 0; Klick auf eine Benachrichtigung markiert nur diese als gelesen und öffnet das Ziel (keine Aufgabe wird erledigt).
+- `/postfach` ist das vollständige Protokoll „Benachrichtigungen“ (seitenweise, Filter „Nur ungelesene“); die Wiedervorlage
+  steht unter Fristen & Aufgaben → Termine → „Nur meine“ (`/postfach#wiedervorlage` leitet dorthin). Postfach nicht mehr in der
+  Seitenleiste, aber über Strg+K („Benachrichtigungen“) und `g p` erreichbar.
+- Rahmen (R&S Phase 2): Navigationssymbole `--color-icon`, aktiv in Akzentfarbe; Status „Lokale KI“ als ruhige Form (neutral),
+  nur bei Ausfall kritisch bzw. ohne Modell „prüfen“.
+
+**Tests**: `backend/tests/test_restructure_notifications.py` (T17, T29, T08-Teil), `frontend/test/deadlines.test.tsx` erweitert;
+`test_notifications_actor_scope.py` Mock um `scalar` ergänzt.
+**Verifikation**: Backend 1586 passed / 7 umgebungsbedingt; `npm run verify` grün (51 Testdateien).

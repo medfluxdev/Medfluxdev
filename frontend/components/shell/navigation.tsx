@@ -55,7 +55,6 @@ const REVIEWERS: AccountRole[] = ["admin", "contract_manager", "reviewer"];
 export const NAV_GROUPS: NavGroup[] = [
   { label: "Start", items: [
     { label: "Mein Tag", href: "/", icon: "home", keywords: "übersicht dashboard start", shortcut: "g s" },
-    { label: "Postfach", href: "/postfach", icon: "inbox", keywords: "erinnerungen benachrichtigungen" },
   ] },
   { label: "Verträge", items: [
     { label: "Vertragsliste", href: "/register", icon: "contracts", keywords: "verträge register liste", shortcut: "g v" },
@@ -81,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 // Seiten, die nicht in der Seitenleiste stehen (fuer Titel, Brotkrumen und Suche).
 export const EXTRA_PAGES: NavItem[] = [
+  { label: "Benachrichtigungen", href: "/postfach", icon: "inbox", keywords: "postfach erinnerungen eskalationen glocke" },
   { label: "Inhaltssuche", href: "/suche", icon: "search", keywords: "volltext dokumente klausel" },
   { label: "Vertrag anlegen", href: "/contracts/new", icon: "contracts", roles: EDITORS },
   { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },

@@ -57,7 +57,7 @@ export default function NotificationSettingsPanel() {
 
   return <section className="card card-pad" aria-labelledby="notification-settings-heading">
     <h2 className="card-title" id="notification-settings-heading">Benachrichtigungen & Vertretung</h2>
-    <p className="muted">E-Mails gehen an {settings.email}. Im Postfach erscheinen Erinnerungen immer.</p>
+    <p className="muted">E-Mails gehen an {settings.email}. Unter Benachrichtigungen (Glocke) erscheinen Erinnerungen immer.</p>
     {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}
     <div className="rg-period my-3">
       <label className="rg-check"><input type="checkbox" checked={settings.receives_reminders} disabled={busy} onChange={(event) => void run(() => updateNotificationSettings(organizationSlug, { receives_reminders: event.target.checked }), setSettings, "Gespeichert.")} />Erinnerungen per E-Mail</label>

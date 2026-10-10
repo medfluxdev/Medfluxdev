@@ -56,6 +56,9 @@ export interface InboxNotification {
 
 export interface InboxDto {
   unread_count: number;
+  /** Anzahl Benachrichtigungen für die Seitenansicht (mit unread_only nur ungelesene). */
+  total?: number;
+  offset?: number;
   notifications: InboxNotification[];
   deadlines: DeadlineDto[];
   representing: { account_id: string; display_name: string }[];
@@ -141,8 +144,18 @@ export function listDeadlines(organizationSlug: string, options: { status?: Dead
   return apiGet<{ items: DeadlineDto[] }>(`/api/deadlines?${params.toString()}`);
 }
 
-export function getInbox(organizationSlug: string) {
-  return apiGet<InboxDto>(`/api/inbox?${orgQuery(organizationSlug)}`);
+export function getInbox(organizationSlug: string, options: { limit?: number; offset?: number; unreadOnly?: boolean } = {}) {
+  const extra = [
+    options.limit ? `limit=${options.limit}` : "",
+    options.offset ? `offset=${options.offset}` : "",
+    options.unreadOnly ? "unread_only=true" : "",
+  ].filter(Boolean).join("&");
+  return apiGet<InboxDto>(`/api/inbox?${orgQuery(organizationSlug)}${extra ? `&${extra}` : ""}`);
+}
+
+/** Zähler der Glocke: ungelesene Benachrichtigungen und offener Arbeitsvorrat (gleiche Abfragen wie die Listen). */
+export function getInboxSummary(organizationSlug: string) {
+  return apiGet<{ unread_for_me: number; work_queue_open: number }>(`/api/inbox/summary?${orgQuery(organizationSlug)}`);
 }
 
 export function markNotificationRead(organizationSlug: string, notificationId: string) {

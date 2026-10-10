@@ -24,6 +24,7 @@ def test_notification_feed_actor_scope_before_queries(monkeypatch, auth_enabled,
     monkeypatch.setattr(notifications, "current_scope_context", lambda: SimpleNamespace(hospital_id=None, department_id=None))
     monkeypatch.setattr(notifications, "scoped_contract_ids", lambda *_: None)
     session.scalars.return_value.all.return_value = []
+    session.scalar.return_value = 0
     actor = None if actor_kind == "missing" else SimpleNamespace(organization_id=uuid4())
     request = SimpleNamespace(state=SimpleNamespace(actor=actor))
     if denied:

@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   updateDeadline: vi.fn(),
   deadlineAction: vi.fn(),
   getInbox: vi.fn(),
+  getInboxSummary: vi.fn(),
   markNotificationRead: vi.fn(),
   markAllNotificationsRead: vi.fn(),
 }));
@@ -28,8 +29,13 @@ vi.mock("@/lib/domain-api/ownership", () => ({
   listOwnershipAssignees: vi.fn().mockResolvedValue({ items: [{ id: "u-2", display_name: "Vertretung", email: "v@x", role: "contract_manager", hospital_id: null, department_id: null }] }),
 }));
 vi.mock("@/lib/domain-api/notifications", () => ({
-  listNotifications: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  listNotifications: vi.fn().mockResolvedValue({
+    items: [{ id: "work:1", kind: "work_item", severity: "high", title: "Kosten prüfen", message: null, contract_id: "c-1", target_date: null, href: "/contracts/c-1?tab=deadlines" }],
+    total: 1,
+  }),
 }));
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/" }));
 
 function deadline(overrides: Partial<DeadlineDto> = {}): DeadlineDto {
   return {
@@ -94,26 +100,40 @@ describe("Termine eines Vertrags", () => {
 describe("Postfach", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.getInbox.mockResolvedValue(INBOX);
+    api.getInbox.mockResolvedValue({ ...INBOX, total: 2 });
+    api.getInboxSummary.mockResolvedValue({ unread_for_me: 1, work_queue_open: 1 });
     api.markNotificationRead.mockResolvedValue({ marked: 1 });
     api.markAllNotificationsRead.mockResolvedValue({ marked: 1 });
   });
 
-  it("zeigt Wiedervorlage, Vertretung und markiert als gelesen", async () => {
+  it("zeigt das Benachrichtigungsprotokoll mit Vertretung, verweist für Termine auf „Nur meine“ und markiert als gelesen", async () => {
     const user = userEvent.setup();
     render(<InboxView organizationSlug="test-klinik" />);
     expect(await screen.findByText(/Sie vertreten derzeit: Manager/)).toBeInTheDocument();
-    expect(screen.getByText(/überfällig/)).toBeInTheDocument();
-    expect(screen.getByText("Erinnerung · Vertretung für Manager")).toBeInTheDocument();
+    expect(screen.queryByText("Meine Wiedervorlage")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Termine → Nur meine/ })).toHaveAttribute("href", "/fristen?ansicht=termine&nur=meine");
+    expect(screen.getByText("Erinnerung · Vertretung für Manager · ungelesen")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Als gelesen markieren" }));
     expect(api.markNotificationRead).toHaveBeenCalledWith("test-klinik", "n-1");
     await user.click(screen.getByRole("button", { name: "Alle als gelesen markieren" }));
     expect(api.markAllNotificationsRead).toHaveBeenCalledWith("test-klinik");
   });
 
-  it("zählt ungelesene Erinnerungen in der Glocke", async () => {
+  it("zählt in der Glocke nur ungelesene Benachrichtigungen und zeigt den Arbeitsvorrat getrennt", async () => {
+    const user = userEvent.setup();
+    api.getInbox.mockResolvedValue({ ...INBOX, notifications: [INBOX.notifications[0]], total: 1 });
     render(<NotificationCenter />);
-    expect(await screen.findByLabelText("1 offene Hinweise")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Postfach öffnen (1 ungelesen)" })).toHaveAttribute("href", "/postfach");
+    expect(await screen.findByLabelText("1 ungelesene Benachrichtigungen")).toBeInTheDocument();
+    expect(screen.getByText("1 offene Aufgaben und Freigaben im Bereich")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Alle Benachrichtigungen" })).toHaveAttribute("href", "/postfach");
+    await user.click(screen.getByRole("button", { name: /Erinnerung: Kündigungsfrist/ }));
+    expect(api.markNotificationRead).toHaveBeenCalledWith("test-klinik", "n-1");
+    expect(router.push).toHaveBeenCalledWith("/contracts/c-1?tab=deadlines");
+  });
+
+  it("zeigt bei Ladefehler keine erfundene 0 in der Glocke", async () => {
+    api.getInboxSummary.mockRejectedValue(new Error("offline"));
+    render(<NotificationCenter />);
+    expect(await screen.findByLabelText("Benachrichtigungen (Zähler nicht verfügbar)")).toBeInTheDocument();
   });
 });
