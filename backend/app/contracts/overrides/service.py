@@ -13,6 +13,7 @@ zu kennzeichnen – es wird NIE eine Mitarbeiter-Identität erfunden.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -22,6 +23,7 @@ from app.database.models import Contract, ContractOverride
 from app.contracts.overrides.keys import ALLOWED_KEYS, OVERRIDE_VALUE_KEYS
 
 OVERRIDE_ACTIONS = frozenset({"set", "void", "confirm"})
+DUPLICATE_WINDOW_SECONDS = 30
 
 
 class OverrideError(Exception):
@@ -50,9 +52,29 @@ def record_override(
 ) -> ContractOverride:
     """Schreibt eine append-only Override-/Audit-Zeile (org-gebunden)."""
     _assert_allowed(key, action)
-    contract = session.get(Contract, contract_id)
+    # Zeilensperre: gleichzeitige Overrides desselben Vertrags laufen nacheinander.
+    contract = session.get(Contract, contract_id, with_for_update=True)
     if contract is None or contract.organization_id != organization_id:
         raise OverrideError("Vertrag nicht gefunden.")
+
+    # Doppelt gesendet (Doppelklick, erneuter Request): identische jüngste Zeile kurz zuvor → keine zweite.
+    latest = session.scalars(
+        select(ContractOverride)
+        .where(ContractOverride.contract_id == contract_id, ContractOverride.key == key)
+        .order_by(ContractOverride.created_at.desc(), ContractOverride.id.desc())
+        .limit(1)
+    ).first()
+    stored_value = value if action == "set" else None
+    if (
+        latest is not None
+        and latest.action == action
+        and latest.value == stored_value
+        and (latest.fact_ref or None) == (fact_ref or None)
+        and (latest.note or None) == (note or None)
+        and latest.created_at is not None
+        and (datetime.now(timezone.utc) - latest.created_at).total_seconds() < DUPLICATE_WINDOW_SECONDS
+    ):
+        return latest
 
     row = ContractOverride(
         organization_id=organization_id,

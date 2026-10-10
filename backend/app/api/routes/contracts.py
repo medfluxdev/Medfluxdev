@@ -51,6 +51,7 @@ from app.contracts.detail.models import ContractDetailResponse
 from app.contracts.detail.service import DetailError, build_contract_detail
 from app.contracts.review.material import material_report
 from app.contracts.review.service import (
+    ReviewConflict,
     ReviewError,
     build_fact_review_states,
     build_review_summary,
@@ -100,6 +101,9 @@ class FactReviewRequest(BaseModel):
     reviewer_display_name: Optional[str] = None
     note: Optional[str] = None
     evidence_ref: Optional[str] = None
+    # Optionaler Versionsstand (reviewed_at der Angabe beim Laden; null = noch ungeprüft).
+    # Weicht der aktuelle Stand ab, antwortet der Server mit 409 statt still zu überschreiben.
+    expected_reviewed_at: Optional[str] = None
 
 
 class ReviewLifecycleRequest(BaseModel):
@@ -453,6 +457,8 @@ def contract_fact_review(
                 system_value=system_value,
                 corrected_value=payload.corrected_value,
                 evidence_ref=payload.evidence_ref,
+                **({"expected_reviewed_at": payload.expected_reviewed_at}
+                   if "expected_reviewed_at" in payload.model_fields_set else {}),
             )
             _record_account_activity(
                 session,
@@ -462,6 +468,9 @@ def contract_fact_review(
                 {"fact_key": payload.fact_key},
             )
             session.commit()
+        except ReviewConflict as exc:
+            session.rollback()
+            raise HTTPException(status_code=409, detail=exc.detail_de)
         except ReviewError as exc:
             session.rollback()
             raise HTTPException(status_code=422, detail=exc.detail_de)

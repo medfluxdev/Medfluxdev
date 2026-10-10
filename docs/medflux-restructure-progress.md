@@ -11,7 +11,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | B | Signal-Grundlage (R&S Phase 1) | erledigt | siehe git log |
 | C | Glocke, Benachrichtigungen, Rahmen | erledigt | siehe git log |
 | D | Vertragsregister mit Reitern | erledigt | siehe git log |
-| E | Vertragsakte, Import, Prüfung | offen | |
+| E | Vertragsakte, Import, Prüfung | erledigt | siehe git log |
 | F | Fristen & Aufgaben | offen | |
 | G | Mein Tag v3, Analysen | offen | |
 | H | Stammdaten, Verwaltung, Geräte, Verlauf | offen | |
@@ -126,3 +126,29 @@ unbemerkt ins Archiv umschalten.
 **Tests**: `frontend/test/restructure-register.test.tsx` (T15, T20, T30, U13), `backend/tests/test_restructure_data_truth.py::test_register_tab_counts`;
 angepasst: `shell.test.tsx`, `register-grid.test.tsx`, `rules-and-contract-help.test.tsx`, `analytics-notes.test.tsx`, e2e-Seitenlisten.
 **Verifikation**: Backend 1587 passed / 7 umgebungsbedingt; `npm run verify` grün (52 Testdateien).
+
+## Phase E – Vertragsakte, Import, Prüfung (2026-10-10)
+
+**Umgesetzt**
+- Reiter der Vertragsakte (Schlüssel unverändert, Links bleiben gültig): Übersicht · **Vertragsdaten** · **Fristen & Aufgaben** · Finanzen ·
+  **Dokumente** (Dokument · Nachweise · Prüfung · Anlagen · **Korrekturen**) · **Verknüpfungen** · Verlauf (U11).
+- „Fristen & Aufgaben“ im Vertrag zeigt zusätzlich die offenen Aufgaben dieses Vertrags (dieselben WorkItems wie im Reiter Aufgaben).
+- Kopf: Geschäftsstatus neutral (D1/D4), „KI-Prüfung offen“ als ai-Signal, KI-Risiko hoch/mittel als warning (D6); Löschantrag führt zu `/register`.
+- Prüfreihenfolge (U5): „Prüfen“ in „Zu prüfen“ merkt die Reihenfolge; in der Prüfung „Vertrag N von M“, Zurück, „Weiter zum nächsten Vertrag“,
+  am Ende „Zurück zur Liste“ (`ReviewQueueNav`, `lib/review-queue.ts`).
+- `/nachweise` ist eine Weiterleitung: mit `?contract=<uuid>` in Dokumente → Nachweise des Vertrags (weitere Parameter bleiben), sonst in „Zu prüfen“.
+  Die frühere Auswahlseite war eine Kopie der Vertragsakte; ihre Tests (Seitenauswahl, Detailfehler) entfallen mit ihr, die Belegdarstellung
+  bleibt über `contracts-detail.test.tsx` und `evidence-pane-presentation.test.tsx` abgedeckt. Menüpunkt entfernt.
+- Faktprüfung: Status als Signal (Bestätigt/Korrigiert = done, offen = „KI-Vorschlag“ ai) statt Farbpunkt; Icon-Knöpfe ✓/✎/◷ mit sprechendem Namen;
+  ein sichtbares „
+“ im Prüfkopf entfernt.
+- Nachweise: drei Dimensionen getrennt benannt – Lage, „KI-Konfidenz“ (kein Prüfergebnis), menschliche Prüfung im Reiter „Prüfung“.
+- Doppelte Prüfaktionen (T14): `record_fact_action` und `record_override` sperren den Vertrag (`FOR UPDATE`) und speichern eine identische Aktion
+  derselben Person innerhalb von 30 s nicht erneut. Optionaler Versionsstand `expected_reviewed_at`: weicht er ab, antwortet der Server 409
+  (`ReviewConflict`) statt still zu überschreiben; die Oberfläche sendet ihn mit und lädt bei 409 neu. Keine Schemaänderung nötig.
+- Import: ohne gewähltes Krankenhaus kein Weiter, sobald Krankenhäuser eingerichtet sind („Alle Krankenhäuser“ ist kein Ablageort); Dublette als Hinweis (info).
+- Signale statt Farbe in Kündigungs-Dringlichkeit (verstrichen kritisch, ≤ 30 Tage prüfen, sonst ruhig), Terminliste, Tageslauf, Anhänge, Rechtematrix.
+
+**Tests**: `backend/tests/test_restructure_review_idempotency.py` (T14), `frontend/test/review-queue.test.tsx`, `nachweise-redirect.test.ts` (T13/T20);
+angepasst: `contracts-detail`, `contract-detail-reload-scroll`, `fact-confirm-reviewer`, `evidence-pane-presentation`, `interaction-audit`.
+**Verifikation**: Backend 1590 passed / 7 umgebungsbedingt; `npm run verify` grün.

@@ -764,3 +764,13 @@ body { background: var(--color-bg); }
 .toast--error .toast-icon { color: var(--color-danger); }
 .toast--info .toast-icon { color: var(--color-info); }
 .reg-filtered-empty { margin: var(--space-3) 0; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-subtle); color: var(--color-text-muted); }
+.review-queue { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-subtle); color: var(--color-text-muted); font-size: var(--text-small); }
+.review-queue span { margin-right: auto; }
+.signal-button { padding: 0; border: 0; background: none; }
+/* Faktprüfung: Status in der Liste als Form (Ruhe & Signal) statt Farbpunkt */
+.fr-fact-nav > button { grid-template-columns: 28px minmax(0, 1fr) 16px; }
+.fr-status-icon--done { color: var(--color-success); }
+.fr-status-icon--ai { color: var(--color-ai); }
+.fr-status-icon--neutral { color: var(--color-icon); }
+.fr-confirm .signal-icon { vertical-align: -3px; }
+.evidence-dimensions { display: block; margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--text-caption); }

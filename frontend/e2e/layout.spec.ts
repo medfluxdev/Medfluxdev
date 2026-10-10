@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // U9: keine waagerechte Seitenverschiebung – breite Tabellen scrollen in ihrem eigenen Rahmen.
 const PAGES = [
   "/", "/postfach", "/register", "/equipment", "/fristen", "/fristen?ansicht=entscheidungen", "/fristen?ansicht=aufgaben",
-  "/import", "/register?ansicht=review", "/nachweise", "/register?ansicht=archive", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
+  "/import", "/register?ansicht=review", "/register?ansicht=archive", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
   "/settings", "/profile", "/settings/users", "/stammdaten", "/stammdaten/vertragspartner", "/stammdaten/abteilungen", "/stammdaten/kostenstellen", "/stammdaten/vertragstypen", "/stammdaten/vertragsregeln", "/stammdaten/auswahllisten/storage_location", "/sicherheit", "/settings/nummernkreis", "/settings/roles",
 ];
 

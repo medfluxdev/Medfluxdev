@@ -24,7 +24,8 @@ const statusLabel: Record<ImportStatus, string> = {
 
 const statusTone: Record<ImportStatus, StatusTone> = {
   imported: "success",
-  duplicate: "warning",
+  // Dublette erkannt und nicht erneut importiert: ein Hinweis, kein Fehler (Ruhe & Signal D6).
+  duplicate: "information",
   rejected: "critical",
   failed: "critical",
   analysis_failed: "critical",
@@ -206,6 +207,8 @@ export default function ImportPage() {
 
   const STEPS = ["Ziel", "Dateien", "Prüfen & starten", "Ergebnis"];
   const hospitalName = organizationStructure.hospitals.find((item) => item.id === hospitalId)?.name;
+  // Neue Verträge brauchen ein konkretes Krankenhaus, sobald welche eingerichtet sind.
+  const needsHospital = canAssign && !assignmentLoading && !hospitalId && organizationStructure.hospitals.some((item) => item.is_active);
   const departmentName = availableDepartments.find((item) => item.id === responsibleDepartmentId);
   const costCenterName = availableCostCenters.find((item) => item.id === costCenterId);
   const goTo = (next: number) => { setError(null); setStep(next); };
@@ -286,7 +289,7 @@ export default function ImportPage() {
                     </div>
                   </fieldset>
                 )}
-                <div className="form-actions"><Button variant="primary" onClick={() => goTo(2)} disabled={canAssign && assignmentLoading}>Weiter zu den Dateien</Button></div>
+                <div className="form-actions">{needsHospital ? <p className="field-hint" role="status">Bitte ein Krankenhaus wählen – „Alle Krankenhäuser“ ist kein Ablageort für neue Verträge.</p> : null}<Button variant="primary" onClick={() => goTo(2)} disabled={(canAssign && assignmentLoading) || needsHospital}>Weiter zu den Dateien</Button></div>
               </>}
             </section>
           ) : null}

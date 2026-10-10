@@ -1,5 +1,6 @@
 "use client";
 
+import Signal from "@/components/ui/Signal";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { formatDate } from "@/lib/format";
@@ -63,7 +64,7 @@ export default function DeadlineList({ organizationSlug }: { organizationSlug: s
         <label className="rg-check"><input type="checkbox" checked={mine} onChange={(event) => { setMine(event.target.checked); writeMine(event.target.checked); }} />Nur meine</label>
         <label>Zeitraum <select value={horizon} onChange={(event) => setHorizon(event.target.value)}>{HORIZONS.map((item) => <option key={item.label} value={item.value}>{item.label}</option>)}</select></label>
         <label>Status <select value={status} onChange={(event) => setStatus(event.target.value as DeadlineStatus | "all")}><option value="open">Offen</option><option value="done">Erledigt</option><option value="cancelled">Abgebrochen</option><option value="all">Alle</option></select></label>
-        {overdue > 0 ? <span className="cw-badge cw-badge-red">{overdue} überfällig</span> : null}
+        {overdue > 0 ? <Signal tone="critical">{overdue} überfällig</Signal> : null}
       </div>
     </section>
     {error ? <p role="alert" className="rg-error">{error}</p> : null}

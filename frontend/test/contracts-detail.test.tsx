@@ -205,7 +205,7 @@ async function openTab(name: string) {
 }
 
 async function openDocuments(subtab?: "Dokument" | "Nachweise" | "Prüfung" | "Historie") {
-  await openTab("Dokumente & Nachweise");
+  await openTab("Dokumente");
   if (subtab && subtab !== "Dokument") {
     await userEvent.click(screen.getByRole("button", { name: subtab }));
   }
@@ -219,10 +219,10 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getAllByText("42.500,00 €").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
 
-    await openTab("Fristen & Entscheidung");
+    await openTab("Fristen & Aufgaben");
     expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
 
-    await openTab("Beziehungen");
+    await openTab("Verknüpfungen");
     expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -231,7 +231,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture({
       equipment: [{ ...equipment[0], device_name: null, system_name: "Impella AIC System", model: null }],
     }));
-    await openTab("Beziehungen");
+    await openTab("Verknüpfungen");
     expect(screen.getByText("Impella AIC System")).toBeInTheDocument();
   });
 
@@ -240,7 +240,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture({
       equipment: [{ ...equipment[0], device_name: null, system_name: null, model: "Accutron MR" }],
     }));
-    await openTab("Beziehungen");
+    await openTab("Verknüpfungen");
     expect(screen.getAllByText("Accutron MR").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -257,7 +257,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await openDocuments("Nachweise");
     expect(screen.getByText("Positionsbestimmt")).toBeInTheDocument();
     expect(screen.getByText("Ohne Positionsangabe")).toBeInTheDocument();
-    expect(screen.getByText(/Konfidenz 98%/)).toBeInTheDocument();
+    expect(screen.getAllByText(/KI-Konfidenz 98 %/).length).toBeGreaterThan(0);
   });
 
   it("markiert eine ausgewählte Quelle und öffnet das Original im PDF-Viewer", async () => {

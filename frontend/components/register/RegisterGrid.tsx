@@ -25,6 +25,7 @@ import {
 import { unarchiveContract } from "@/lib/domain-api/contracts";
 import { coverageNote, formatCurrency, formatDate } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
+import { rememberReviewQueue } from "@/lib/review-queue";
 import ContractQuickView from "./ContractQuickView";
 import FilterEditor from "./FilterEditor";
 import { describeFilter } from "./filters";
@@ -97,12 +98,6 @@ function writeUrlState(tab: string | undefined, viewId: string | null, spec: Gri
   }
 }
 
-/** Reihenfolge der Verträge der aktuellen Ansicht für „Weiter zum nächsten Vertrag“ in der Prüfung. */
-export const REVIEW_QUEUE_KEY = "medflux.reviewQueue";
-
-function rememberQueue(ids: string[]) {
-  try { window.sessionStorage.setItem(REVIEW_QUEUE_KEY, JSON.stringify(ids)); } catch { /* nur Komfort */ }
-}
 
 function readLastView(): string | null {
   try { return window.localStorage.getItem(LAST_VIEW_KEY); } catch { return null; }
@@ -530,7 +525,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
                 return <td key={column.key} className={column.type === "money" || column.type === "number" ? "num" : undefined}>{text}</td>;
               })}{archiveMode && canExport
                 ? <td><button type="button" className="btn btn-sm" disabled={busyRow === row.contract_id} onClick={() => void restore(row.contract_id)} aria-label={`Vertrag ${row.values.register_number ?? ""} wiederherstellen`}>Wiederherstellen</button></td>
-                : reviewMode ? <td><Link className="btn btn-sm btn-primary" href={`/contracts/${row.contract_id}?tab=documents&subtab=review`} onClick={() => rememberQueue(data.items.map((item) => item.contract_id))} aria-label={`Vertrag ${row.values.register_number ?? ""} prüfen`}>Prüfen</Link></td> : null}</tr>
+                : reviewMode ? <td><Link className="btn btn-sm btn-primary" href={`/contracts/${row.contract_id}?tab=documents&subtab=review`} onClick={() => rememberReviewQueue(data.items.map((item) => item.contract_id))} aria-label={`Vertrag ${row.values.register_number ?? ""} prüfen`}>Prüfen</Link></td> : null}</tr>
             </Fragment>;
           })}</tbody>
         </table></div> : null}

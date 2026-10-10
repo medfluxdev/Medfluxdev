@@ -6,14 +6,16 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { createContractLifecycleDecision, type ContractLifecycleDecisionKind } from "@/lib/domain-api/lifecycle";
 import { getRenewalBrief, getRenewalSummary, type RenewalBrief, type RenewalUrgency } from "@/lib/domain-api/registerGrid";
 import { formatCurrency, formatDate } from "@/lib/format";
+import Signal, { type SignalTone } from "@/components/ui/Signal";
 
-export const URGENCY: Record<RenewalUrgency, { label: string; tone: string }> = {
-  missed: { label: "Frist verstrichen", tone: "cw-badge-red" },
-  critical: { label: "Dringend (≤ 30 Tage)", tone: "cw-badge-red" },
-  soon: { label: "Bald (≤ 90 Tage)", tone: "cw-badge-amber" },
-  planned: { label: "Geplant", tone: "" },
-  unknown: { label: "Frist unbekannt", tone: "" },
-  none: { label: "Keine offene Frist", tone: "" },
+// Ruhe & Signal: verstrichen = kritisch, ≤ 30 Tage = prüfen, alles andere ruhig.
+export const URGENCY: Record<RenewalUrgency, { label: string; tone: SignalTone }> = {
+  missed: { label: "Frist verstrichen", tone: "critical" },
+  critical: { label: "Dringend (≤ 30 Tage)", tone: "warning" },
+  soon: { label: "Bald (≤ 90 Tage)", tone: "neutral" },
+  planned: { label: "Geplant", tone: "neutral" },
+  unknown: { label: "Frist unbekannt", tone: "neutral" },
+  none: { label: "Keine offene Frist", tone: "neutral" },
 };
 
 const DECISIONS: { key: ContractLifecycleDecisionKind; label: string }[] = [
@@ -81,7 +83,7 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
     <div className="cw-section-head"><div>
       <h2 id="renewal-heading">Entscheidungsvorlage zur Kündigungsfrist</h2>
       <p>Fakten und Beträge sind aus Stammdaten und Finanzdaten berechnet. Die Hinweise sind Beratung – entschieden wird von Ihnen.</p>
-    </div><span className={`cw-badge ${urgency.tone}`}>{urgency.label}</span></div>
+    </div><Signal tone={urgency.tone}>{urgency.label}</Signal></div>
 
     <div className="rg-terms">
       <div><span>Kündbar bis</span><strong>{formatDate(brief.cancel_by)}</strong>{brief.days_left != null ? <small className="cw-muted">{brief.days_left >= 0 ? `noch ${brief.days_left} Tage` : `seit ${-brief.days_left} Tagen verstrichen`}</small> : null}</div>

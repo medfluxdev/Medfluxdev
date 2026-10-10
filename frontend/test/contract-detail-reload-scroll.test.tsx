@@ -94,7 +94,7 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
     const { container } = render(<ContractDetailPage />);
     await screen.findByRole("heading", { name: "MEDTRON Guard Servicevereinbarung Accutron MR" });
 
-    await user.click(screen.getByRole("tab", { name: "Dokumente & Nachweise" }));
+    await user.click(screen.getByRole("tab", { name: "Dokumente" }));
     await user.click(screen.getByRole("button", { name: "Prüfung" }));
 
     const reviewRegion = await screen.findByRole("region", { name: "Faktprüfung" });

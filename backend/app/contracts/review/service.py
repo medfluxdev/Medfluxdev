@@ -125,6 +125,16 @@ def _require_reviewer(reviewer_display_name: Optional[str]) -> str:
     return name
 
 
+class ReviewConflict(ReviewError):
+    """Die Angabe wurde seit dem Laden von jemand anderem geprüft (409)."""
+
+
+# Gleiche Aktion derselben Person auf denselben Fakt innerhalb dieses Fensters gilt als
+# doppelt gesendet (Doppelklick, erneuter Request) und erzeugt keinen zweiten Eintrag.
+DUPLICATE_WINDOW_SECONDS = 30
+_NOT_GIVEN = object()
+
+
 def record_fact_action(
     session: Session,
     *,
@@ -137,6 +147,7 @@ def record_fact_action(
     system_value=None,
     corrected_value=None,
     evidence_ref: Optional[str] = None,
+    expected_reviewed_at=_NOT_GIVEN,
 ) -> FactReview:
     """Append-only Prüf-Aktion zu einem materialen Fakt (org-gebunden).
 
@@ -155,11 +166,18 @@ def record_fact_action(
             "(`corrected_value`). Bestätigen ändert den Wert nicht."
         )
 
-    contract = session.get(Contract, contract_id)
+    # Zeilensperre: gleichzeitige Prüfungen desselben Vertrags laufen nacheinander.
+    contract = session.get(Contract, contract_id, with_for_update=True)
     if contract is None or contract.organization_id != organization_id:
         raise ReviewError("Vertrag nicht gefunden.")
 
     latest = _latest_fact_reviews(session, contract_id).get(fact_key)
+    current_stamp = latest.created_at.isoformat() if latest is not None and latest.created_at else None
+    if expected_reviewed_at is not _NOT_GIVEN and (expected_reviewed_at or None) != current_stamp:
+        raise ReviewConflict(
+            f"Die Angabe wurde inzwischen von {latest.reviewer_display_name or 'einer anderen Person'} geprüft. "
+            "Bitte neu laden und erneut entscheiden."
+        )
     if latest is not None and latest.action == "corrected":  # effektiv korrigiert
         previous_effective = latest.new_effective_value
     else:
@@ -169,6 +187,17 @@ def record_fact_action(
         new_effective = _effective_write(value=corrected_value)
     else:
         new_effective = previous_effective
+
+    if (
+        latest is not None
+        and latest.action == action
+        and latest.reviewer_display_name == reviewer
+        and latest.new_effective_value == new_effective
+        and (latest.note or None) == (note or None)
+        and latest.created_at is not None
+        and (datetime.now(timezone.utc) - latest.created_at).total_seconds() < DUPLICATE_WINDOW_SECONDS
+    ):
+        return latest
 
     row = FactReview(
         contract_id=contract_id,

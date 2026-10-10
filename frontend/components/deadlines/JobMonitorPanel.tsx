@@ -1,5 +1,6 @@
 "use client";
 
+import Signal from "@/components/ui/Signal";
 import { useCallback, useEffect, useState } from "react";
 import { getJobStatus, runDailyJob, type JobStatusDto } from "@/lib/domain-api/deadlines";
 
@@ -55,7 +56,7 @@ export default function JobMonitorPanel({ organizationSlug }: { organizationSlug
     {status ? <>
       <dl className="rg-fields">
         <div className="rg-field"><dt>Zeitplan</dt><dd>{status.scheduler_enabled ? `täglich ab ${status.run_hour} Uhr` : "Im Server ausgeschaltet – über die Aufgabenplanung starten (python -m app.jobs.daily)"}</dd></div>
-        <div className="rg-field"><dt>Letzter erfolgreicher Lauf</dt><dd>{status.last_success_at ? timestamp.format(new Date(status.last_success_at)) : "Noch keiner"}{status.stale ? <span className="cw-badge cw-badge-red">Prüfen</span> : null}</dd></div>
+        <div className="rg-field"><dt>Letzter erfolgreicher Lauf</dt><dd>{status.last_success_at ? timestamp.format(new Date(status.last_success_at)) : "Noch keiner"}{status.stale ? <Signal tone="warning">Prüfen</Signal> : null}</dd></div>
         <div className="rg-field"><dt>E-Mail-Versand</dt><dd>{status.smtp_configured ? "SMTP eingerichtet" : "Kein SMTP – Erinnerungen nur unter Benachrichtigungen"}</dd></div>
         <div className="rg-field"><dt>E-Mail-Warteschlange</dt><dd>{status.emails_pending} wartend · {status.emails_failed} fehlgeschlagen</dd></div>
       </dl>

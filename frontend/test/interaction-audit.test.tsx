@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClientNav from "@/components/ClientNav";
 import SettingsPage from "@/app/settings/page";
-import NachweisePage from "@/app/nachweise/page";
 import type { AISnapshot, AITestResponse } from "@/lib/ai-types";
 import type { ContractListResponse } from "@/lib/contract-types";
 
@@ -98,28 +97,5 @@ describe("Einstellungen: KI-Test error-path ehrlich und terminiert", () => {
     await user.click(screen.getByRole("button", { name: "KI-Verbindung testen" }));
     await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith("/api/ai/test", expect.objectContaining({ text: expect.any(String) }), 120000));
     expect(screen.getByText(/Verbindung erfolgreich/)).toBeInTheDocument();
-  });
-});
-
-describe("Nachweise: Detailfehler trennt sich von der Auswahlliste", () => {
-  function listFixture(): ContractListResponse {
-    return { items: [{ contract_id: "c1", contract_number: "4001", contract_title: "Wartungsvertrag", supplier: "ABIOMED" } as ContractListResponse["items"][number]], total_count: 1, page: 1, page_size: 100 };
-  }
-
-  it("bleibt nach fehlgeschlagenem Detail-Load bedienbar und bietet Retry", async () => {
-    apiGetMock.mockResolvedValueOnce(listFixture());
-    apiGetMock.mockRejectedValueOnce(new Error("detail gone"));
-    apiGetMock.mockResolvedValueOnce({ contract_id: "c1", documents: [], evidence: [], overrides: [], audit_log: [], fact_reviews: [] });
-    const user = userEvent.setup();
-    render(<NachweisePage />);
-    await waitFor(() => expect(screen.getByText("Vertragsdetail konnte nicht geladen werden.")).toBeInTheDocument());
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    expect(select).toBeEnabled();
-    expect(select.options.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("button", { name: "Erneut laden" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Erneut laden" }));
-    await waitFor(() => expect(screen.getByText("Quellen")).toBeInTheDocument());
-    expect(screen.getByText("Belege")).toBeInTheDocument();
-    expect(screen.queryByText("Vertragsdetail konnte nicht geladen werden.")).not.toBeInTheDocument();
   });
 });

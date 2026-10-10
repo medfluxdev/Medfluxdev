@@ -38,7 +38,8 @@ function sourceLabel(ref: EvidenceRef): string {
 
 function confidenceLabel(value: number | null): string | null {
   if (value == null || !Number.isFinite(value) || value < 0 || value > 1) return null;
-  return `Konfidenz ${Math.round(value * 100)}%`;
+  // Sicherheit der KI beim Auslesen – kein Prüfergebnis (das steht unter „Prüfung“).
+  return `KI-Konfidenz ${Math.round(value * 100)} %`;
 }
 
 export default function EvidencePane({ evidence, activeEvidenceId, onNavigate }: Props) {
@@ -80,6 +81,7 @@ export default function EvidencePane({ evidence, activeEvidenceId, onNavigate }:
               )}
               {ref.snippet && <span className="evidence-snippet">„{ref.snippet}“</span>}
               {ref.requires_review && <span className="evidence-review">Manuelle Prüfung empfohlen</span>}
+              <span className="evidence-dimensions">Lage: {precisionLabel(ref)}{confidence ? ` · ${confidence}` : ""} · Menschliche Prüfung: siehe Reiter „Prüfung“</span>
               {!exactPosition && ref.page != null && !isCoarseBbox(ref) && (
                 <span className="evidence-note">
                   Quelle auf Seite {ref.page}, aber ohne exakte Position (keine Wort-Hervorhebung).

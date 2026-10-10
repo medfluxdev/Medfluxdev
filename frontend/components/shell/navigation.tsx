@@ -61,7 +61,6 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "Fristen & Aufgaben", href: "/fristen", icon: "deadlines", keywords: "termine fristen wiedervorlage kündigung verlängerung entscheidung aufgaben to-dos", shortcut: "g t" },
     { label: "Geräte", href: "/equipment", icon: "equipment", keywords: "medizintechnik anlagen" },
     { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio" },
-    { label: "Nachweise", href: "/nachweise", icon: "evidence", keywords: "quellen belege" },
   ] },
   { label: "Daten & Verwaltung", items: [
     { label: "Stammdaten", href: "/stammdaten", icon: "masterdata", keywords: "vertragspartner lieferanten abteilungen kostenstellen krankenhäuser kataloge auswahllisten", shortcut: "g d" },

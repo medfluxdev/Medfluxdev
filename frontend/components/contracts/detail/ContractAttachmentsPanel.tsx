@@ -1,5 +1,6 @@
 "use client";
 
+import Signal from "@/components/ui/Signal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
@@ -95,7 +96,7 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
         <th scope="row">{item.title}{item.title !== item.original_filename ? <span className="contract-business-status">{item.original_filename}</span> : null}</th>
         <td>{editable ? <select aria-label={`Dokumentart von ${item.title}`} value={item.attachment_type ?? ""} disabled={busy} onChange={(event) => void update(item, { attachment_type: event.target.value })}><option value="" disabled>Ohne Art</option>{types.map((type) => <option key={type.id} value={type.code}>{type.label}</option>)}</select> : label(item.attachment_type)}</td>
         <td>{item.added_at ? timestamp.format(new Date(item.added_at)) : "–"}{item.added_by_name ? ` · ${item.added_by_name}` : ""}</td>
-        <td>{item.is_main ? <span className="cw-badge cw-badge-green">Hauptdokument</span> : null}{!item.is_valid ? <span className="cw-badge">Ungültig</span> : null}</td>
+        <td>{item.is_main ? <span className="cw-badge">Hauptdokument</span> : null}{!item.is_valid ? <Signal tone="warning">Ungültig</Signal> : null}</td>
         {editable ? <td><span className="rg-actions">
           {!item.is_main && item.is_valid ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_main: true })}>Als Hauptdokument</button> : null}
           {!item.is_main ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_valid: !item.is_valid })}>{item.is_valid ? "Ungültig setzen" : "Wieder gültig"}</button> : null}

@@ -38,7 +38,7 @@ const RELATIONS: ContractRelationsDto = {
   framework_options: [{ contract_id: "f-2", register_number: "000011", short_description: "Rahmenvertrag IT" }],
 };
 
-describe("Anlagen verwalten", () => {
+describe("Anlagen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.listContractDocuments.mockResolvedValue({ items: [doc(), doc({ link_id: "l-2", title: "1. Nachtrag", original_filename: "n.pdf", attachment_type: "nachtrag", role: "amendment", is_main: false })], attachment_types: [] });

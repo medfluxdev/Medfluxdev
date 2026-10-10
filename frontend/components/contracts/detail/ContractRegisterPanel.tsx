@@ -145,13 +145,8 @@ const TERM_FIELDS: Record<TermModel, string[]> = {
   perpetual: ["term_model", "term_start_date"],
 };
 
-const STATUS_TONE: Record<BusinessStatus, string> = {
-  in_arbeit: "cw-badge-amber",
-  gueltig: "cw-badge-green",
-  gekuendigt: "cw-badge-red",
-  beendet: "cw-badge-red",
-  geloescht: "",
-};
+// Ruhe & Signal: Geschäftsstatus ist ein normaler Zustand, neutral (das Wort trägt die Bedeutung).
+const STATUS_TONE: Record<BusinessStatus, string> = { in_arbeit: "", gueltig: "", gekuendigt: "", beendet: "", geloescht: "" };
 
 const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
   initial_term: "Laufzeit",

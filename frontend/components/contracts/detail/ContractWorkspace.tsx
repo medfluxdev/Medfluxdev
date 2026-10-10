@@ -25,9 +25,12 @@ import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPa
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
 import Tabs from "@/components/ui/Tabs";
+import Signal from "@/components/ui/Signal";
+import ReviewQueueNav from "./ReviewQueueNav";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 
-const BUSINESS_STATUS_TONE: Record<string, string> = { in_arbeit: "badge--warning", gueltig: "badge--success", gekuendigt: "badge--danger", beendet: "", geloescht: "" };
+// Ruhe & Signal: der Geschäftsstatus ist ein normaler Zustand und wird neutral gezeigt (das Wort trägt die Bedeutung).
+const BUSINESS_STATUS_TONE: Record<string, string> = { in_arbeit: "", gueltig: "", gekuendigt: "", beendet: "", geloescht: "" };
 import Dialog from "@/components/ui/Dialog";
 import ContractHistoryPanel from "./ContractHistoryPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
@@ -53,22 +56,23 @@ const TAB_ALIASES: Record<string, TabKey> = { term: "deadlines", services: "over
 type DocumentTab = "document" | "attachments" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
+// Schlüssel bleiben (Links, Lesezeichen); die Beschriftung folgt dem Plan (U11).
 const TABS: { key: TabKey; label: string }[] = [
   { key: "overview", label: "Übersicht" },
-  { key: "register", label: "Stammdaten" },
-  { key: "deadlines", label: "Fristen & Entscheidung" },
+  { key: "register", label: "Vertragsdaten" },
+  { key: "deadlines", label: "Fristen & Aufgaben" },
   { key: "finance", label: "Finanzen" },
-  { key: "documents", label: "Dokumente & Nachweise" },
-  { key: "relations", label: "Beziehungen" },
+  { key: "documents", label: "Dokumente" },
+  { key: "relations", label: "Verknüpfungen" },
   { key: "history", label: "Verlauf" },
 ];
 
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
   { key: "document", label: "Dokument" },
-  { key: "attachments", label: "Anlagen verwalten" },
   { key: "evidence", label: "Nachweise" },
   { key: "review", label: "Prüfung" },
-  { key: "history", label: "Historie" },
+  { key: "attachments", label: "Anlagen" },
+  { key: "history", label: "Korrekturen" },
 ];
 
 const ORIGIN_LABEL: Record<OriginKind, string> = {
@@ -216,7 +220,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     try {
       await requestContractDeletion(data.contract_id, orgSlug);
       setDeleteDialogOpen(false);
-      router.push("/contracts");
+      router.push("/register");
       router.refresh();
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : "Löschanfrage fehlgeschlagen.");
@@ -386,8 +390,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <div className="object-header-meta">
             {data.business_status ? <button type="button" className={`badge badge-button ${BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? ""}`} onClick={() => setRoute("register")} title="Status in den Stammdaten ändern">{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}
             {data.supplier ? <span className="object-header-partner">{data.supplier}</span> : null}
-            {data.review.requires_manual_review ? <button type="button" className="badge badge--warning badge-button" onClick={() => setRoute("documents", "review")}>KI-Werte prüfen</button> : null}
-            {data.risk_level === "high" || data.risk_level === "medium" ? <span className={`badge ${data.risk_level === "high" ? "badge--danger" : "badge--warning"}`}>Risiko {riskLabel(data.risk_level).toLowerCase()}</span> : null}
+            {data.review.requires_manual_review ? <button type="button" className="badge-button signal-button" onClick={() => setRoute("documents", "review")}><Signal tone="ai">KI-Prüfung offen</Signal></button> : null}
+            {data.risk_level === "high" || data.risk_level === "medium" ? <Signal tone="warning">Risiko {riskLabel(data.risk_level).toLowerCase()}</Signal> : null}
           </div>
         </div>
         <dl className="object-header-facts">
@@ -450,7 +454,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 
-        {activeTab === "deadlines" && <><ContractRenewalBrief contractId={data.contract_id} orgSlug={orgSlug} /><ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} /></>}
+        {activeTab === "deadlines" && <><ContractRenewalBrief contractId={data.contract_id} orgSlug={orgSlug} /><ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />
+          <Section title="Aufgaben zu diesem Vertrag" description="Dieselben Aufgaben wie unter Fristen & Aufgaben → Aufgaben, hier nur für diesen Vertrag.">
+            {openTasks.length === 0 ? <p className="cw-muted">Keine offenen Aufgaben.</p> : <ul className="cw-task-list">{openTasks.map((item) => <li key={item.work_item_id} className="cw-task"><Signal tone={item.requires_review ? "ai" : item.severity === "critical" ? "critical" : item.severity === "high" || item.severity === "medium" ? "warning" : "neutral"}>{item.requires_review ? "KI-Prüfung" : severityLabel(item.severity)}</Signal><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : "Keine Frist"}</span>{item.requires_review ? <button type="button" className="btn btn-sm" onClick={() => setRoute("documents", "review")}>Prüfen</button> : null}</li>)}</ul>}
+          </Section></>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
@@ -487,6 +494,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div>}
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
           {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
+          {documentTab === "review" && <ReviewQueueNav contractId={data.contract_id} />}
           {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}

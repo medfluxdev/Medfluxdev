@@ -28,7 +28,7 @@ function evidence(overrides: Partial<EvidenceRef> = {}): EvidenceRef {
 describe("Nachweise – ehrliche Präsentation", () => {
   it("zeigt gültige Konfidenz, aber keine erfundene exakte Position", () => {
     render(<EvidencePane evidence={[evidence()]} activeEvidenceId={null} onNavigate={vi.fn()} />);
-    expect(screen.getByText(/Konfidenz 83%/)).toBeInTheDocument();
+    expect(screen.getAllByText(/KI-Konfidenz 83 %/).length).toBeGreaterThan(0);
     expect(screen.getByText("Seite, ohne Position")).toBeInTheDocument();
     expect(screen.getByText(/ohne exakte Position/)).toBeInTheDocument();
   });

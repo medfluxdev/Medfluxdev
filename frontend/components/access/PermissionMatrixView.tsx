@@ -30,7 +30,7 @@ export default function PermissionMatrixView({ organizationSlug }: { organizatio
         {areas.map((area) => <tbody key={area}>
           <tr><th scope="colgroup" colSpan={data.roles.length + 1}>{area}</th></tr>
           {data.permissions.filter((item) => item.area === area).map((item) => <tr key={item.key}>
-            <th scope="row">{item.label}{data.granted.includes(item.key) ? <span className="cw-badge cw-badge-green rg-own">Ihr Recht</span> : null}</th>
+            <th scope="row">{item.label}{data.granted.includes(item.key) ? <span className="cw-badge badge--info rg-own">Ihr Recht</span> : null}</th>
             {data.roles.map((role) => <td key={role.key}>{item.roles.includes(role.key) ? <span aria-label="erlaubt">✓</span> : <span aria-label="nicht erlaubt" className="cw-muted">–</span>}</td>)}
           </tr>)}
         </tbody>)}

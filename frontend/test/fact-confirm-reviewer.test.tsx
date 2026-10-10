@@ -62,7 +62,7 @@ describe("Faktprüfung – Bestätigen (authentifizierter Benutzer)", () => {
     expect(apiPostMock).toHaveBeenCalledTimes(1);
     expect(apiPostMock).toHaveBeenCalledWith(
       `/api/contracts/${CONTRACT_ID}/fact-reviews?organization_slug=${ORG}`,
-      { fact_key: "equipment.serial", action: "confirmed" }
+      { fact_key: "equipment.serial", action: "confirmed", expected_reviewed_at: null }
     );
     const body = apiPostMock.mock.calls[0][1];
     expect(body).not.toHaveProperty("corrected_value");
@@ -96,6 +96,7 @@ describe("Faktprüfung – Bestätigen (authentifizierter Benutzer)", () => {
         action: "corrected",
         corrected_value: "88024308",
         note: "Seriennummer im Dokument geprüft",
+        expected_reviewed_at: null,
       }
     );
     expect(reload).toHaveBeenCalledTimes(1);
