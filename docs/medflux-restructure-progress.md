@@ -8,7 +8,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 |---|---|---|---|
 | 0 | Baseline | erledigt | (mit Phase A) |
 | A | Datenwahrheit (Summen mit Abdeckung, Laufend-Definition, nicht bewertbare Fristen, Stichtag Europe/Berlin) | erledigt | siehe git log |
-| B | Signal-Grundlage (R&S Phase 1) | offen | |
+| B | Signal-Grundlage (R&S Phase 1) | erledigt | siehe git log |
 | C | Glocke, Benachrichtigungen, Rahmen | offen | |
 | D | Vertragsregister mit Reitern | offen | |
 | E | Vertragsakte, Import, Prüfung | offen | |
@@ -61,3 +61,19 @@ Kein WSL-Testcluster. Backend-Tests laufen in Wegwerf-Containern (`medflux-pytes
 - Zusätzlich angepasst: `test_register_gaps.py::test_cost_centre_split_in_grid_and_portfolio` (Vertrag vor dem Portfolio auf „gültig“).
 
 **Verifikation**: Backend 1583 passed / 8 umgebungsbedingt (wie Baseline); Frontend `npm run verify` grün (50 Testdateien).
+
+## Phase B – Signal-Grundlage (2026-10-10)
+
+**Umgesetzt** (= Ruhe & Signal Phase 1; Antworten D4–D11 wie im Plan vorgeschlagen)
+- Tokens v3 hell und in beiden dunklen Blöcken (`tokens.css`), neu `--color-icon`, `--color-ai-border`, `--color-neutral-border`.
+  Kontraste nachgerechnet: alle Signaltexte ≥ 5,6:1 auf ihrem Grund (dunkel ≥ 6,9:1), `--color-border-strong` 3,5:1 / 3,6:1.
+- `components/ui/Signal.tsx` (+ `SignalIcon`): sechs Stufen, jede mit eigener Form, Symbol `aria-hidden`, Wort trägt die Bedeutung.
+- `Badge`, `StatusBadge` (Form statt Punkt), `InlineAlert`, `Toast` mit den Formen der Stufen; API unverändert.
+- `KpiTile` immer neutral (graues Symbol vor der Beschriftung), neue Eigenschaft `signal`; `tone` bleibt nur zur Kompatibilität.
+- `EmptyState variant="calm"` (grau, kein Grün); `compact` zeigt dasselbe.
+- Alte Alias-Tokens (`--sev-*`, `--status-*`) entsprachen bereits der Zuordnung aus dem Inventar §5.
+- Stilrichtlinie `/developer/components` zeigt die sechs Signale; `docs/VISUAL_IDENTITY.md` (Entscheidung 2026-10-10) und
+  `docs/FRONTEND_CONVENTIONS.md` aktualisiert.
+
+**Tests**: `test/signal.test.tsx` (neu), `test/kpi-tile.test.tsx` und `test/my-day.test.tsx` an die neutralen Kacheln angepasst.
+**Verifikation**: `npm run verify` grün (51 Testdateien).

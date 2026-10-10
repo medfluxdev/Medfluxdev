@@ -1,21 +1,21 @@
 import type { ReactNode } from "react";
+import { SignalIcon } from "./Signal";
 
 interface Props {
   title?: string;
   children?: ReactNode;
   action?: ReactNode;
-  /** "compact": kurze Zeile mit Haken fuer "nichts zu tun" in Uebersichtskarten. */
-  variant?: "block" | "compact";
+  /** "calm": ruhige graue Zeile fuer "nichts zu tun" in Uebersichtskarten (kein Gruen, Ruhe & Signal).
+   *  "compact" ist der fruehere Name und zeigt dasselbe. */
+  variant?: "block" | "calm" | "compact";
 }
 
 // Leerer Zustand mit einer klaren naechsten Handlung.
 export default function EmptyState({ title, children, action, variant = "block" }: Props) {
-  if (variant === "compact") {
+  if (variant === "calm" || variant === "compact") {
     return (
-      <div className="empty-state-compact">
-        <span className="empty-state-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>
-        </span>
+      <div className="empty-state-calm">
+        <span className="empty-state-icon" aria-hidden="true"><SignalIcon tone="neutral" /></span>
         <div>
           {title ? <strong>{title}</strong> : null}
           {children ? <p>{children}</p> : null}

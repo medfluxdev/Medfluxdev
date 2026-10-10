@@ -133,12 +133,36 @@
   white-space: nowrap;
 }
 .sb-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentcolor; }
+.badge .signal-icon, .status-badge .signal-icon { width: 14px; height: 14px; }
 .badge--success, .status-badge--success, .cw-badge-green { border-color: var(--color-success-border); background: var(--color-success-bg); color: var(--color-success); }
 .badge--warning, .status-badge--warning, .status-badge--review, .cw-badge-amber { border-color: var(--color-warning-border); background: var(--color-warning-bg); color: var(--color-warning); }
 .badge--danger, .status-badge--critical, .cw-badge-red { border-color: var(--color-danger-border); background: var(--color-danger-bg); color: var(--color-danger); }
 .badge--info, .status-badge--information { border-color: var(--color-info-border); background: var(--color-info-bg); color: var(--color-info); }
-.badge--ai { border-color: var(--color-ai-bg); background: var(--color-ai-bg); color: var(--color-ai); }
-.status-badge--stale, .status-badge--unknown, .status-badge--neutral { color: var(--color-text-muted); }
+.badge--ai { border-color: var(--color-ai-border); background: var(--color-ai-bg); color: var(--color-ai); }
+.status-badge--stale, .status-badge--unknown, .status-badge--neutral { border-color: var(--color-neutral-border); color: var(--color-text-muted); }
+
+/* ---------- Signal (Ruhe & Signal: Farbe + Form + Wort) ---------- */
+.signal-icon { flex: none; width: 16px; height: 16px; fill: none; stroke: currentcolor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-neutral-border);
+  border-radius: 6px;
+  background: var(--color-neutral-bg);
+  color: var(--color-neutral);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.signal--critical { border-color: var(--color-danger-border); background: var(--color-danger-bg); color: var(--color-danger); }
+.signal--warning { border-color: var(--color-warning-border); background: var(--color-warning-bg); color: var(--color-warning); }
+.signal--info { border-color: var(--color-info-border); background: var(--color-info-bg); color: var(--color-info); }
+.signal--done { border-color: var(--color-success-border); background: var(--color-success-bg); color: var(--color-success); }
+.signal--ai { border-color: var(--color-ai-border); background: var(--color-ai-bg); color: var(--color-ai); }
 
 /* ---------- Hinweise ---------- */
 .alert {
@@ -155,6 +179,13 @@
   color: var(--color-text);
   font-size: var(--text-small);
 }
+.alert-body { display: inline-flex; align-items: flex-start; gap: var(--space-2); }
+.alert-icon { margin-top: 0.1em; }
+.alert--neutral .alert-icon { color: var(--color-neutral); }
+.alert--info .alert-icon { color: var(--color-info); }
+.alert--success .alert-icon { color: var(--color-success); }
+.alert--warning .alert-icon { color: var(--color-warning); }
+.alert--critical .alert-icon { color: var(--color-danger); }
 .alert--info { border-color: var(--color-info-border); border-left-color: var(--color-info); background: var(--color-info-bg); }
 .alert--success { border-color: var(--color-success-border); border-left-color: var(--color-success); background: var(--color-success-bg); }
 .alert--warning { border-color: var(--color-warning-border); border-left-color: var(--color-warning); background: var(--color-warning-bg); }
@@ -174,12 +205,11 @@
 }
 .empty-state h3 { font-size: var(--text-title-s); color: var(--color-text); }
 .empty-state p { margin: 0; max-width: 46ch; }
-/* Kompakter leerer Zustand (EmptyState variant="compact"): eine Zeile mit Haken, ohne gestrichelten Rahmen */
-.empty-state-compact { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-subtle); text-align: left; }
-.empty-state-compact strong { display: block; color: var(--color-text); font-size: var(--text-ui); font-weight: var(--weight-semibold); }
-.empty-state-compact p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); }
-.empty-state-icon { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; border-radius: var(--radius-sm); background: var(--color-success-bg); color: var(--color-success); }
-.empty-state-icon svg { width: 18px; height: 18px; fill: none; stroke: currentcolor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* Ruhiger leerer Zustand (EmptyState variant="calm"): eine graue Zeile, kein Gruen, kein gestrichelter Rahmen */
+.empty-state-calm { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-subtle); text-align: left; }
+.empty-state-calm strong { display: block; color: var(--color-text); font-size: var(--text-ui); font-weight: var(--weight-semibold); }
+.empty-state-calm p { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); }
+.empty-state-icon { display: grid; flex: none; place-items: center; width: 1.5rem; height: 1.5rem; color: var(--color-icon); }
 .state-loading { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-muted); }
 .loading-spinner {
   width: 1rem;
@@ -360,9 +390,9 @@
   text-decoration: none;
   transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
 }
-.kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.kpi-top { display: flex; align-items: center; gap: var(--space-2); }
 .kpi-label { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-medium); }
-.kpi-icon { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; border-radius: var(--radius-sm); background: var(--color-neutral-bg); color: var(--color-neutral); }
+.kpi-icon { display: grid; flex: none; place-items: center; width: 1.25rem; height: 1.25rem; color: var(--color-icon); }
 .kpi-icon svg { width: 18px; height: 18px; fill: none; stroke: currentcolor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .kpi-value { margin: 0; color: var(--color-text); font-size: var(--text-kpi); font-weight: var(--weight-semibold); line-height: 1.15; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .kpi-hint { display: flex; align-items: center; gap: var(--space-1); color: var(--color-text-muted); font-size: var(--text-small); }
@@ -371,14 +401,8 @@
 a.kpi:hover { border-color: var(--color-border-strong); }
 a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underline; }
 /* Farbe nur mit Bedeutung: info/success toenen das Symbol, warning/danger auch den Wert */
-.kpi--info .kpi-icon { background: var(--color-info-bg); color: var(--color-info); }
-.kpi--success .kpi-icon { background: var(--color-success-bg); color: var(--color-success); }
-.kpi--warning .kpi-icon { background: var(--color-warning-bg); color: var(--color-warning); }
-.kpi--warning .kpi-value { color: var(--color-warning); }
-.kpi--danger .kpi-icon { background: var(--color-danger-bg); color: var(--color-danger); }
-.kpi--danger .kpi-value { color: var(--color-danger); }
 .kpi--empty .kpi-value { color: var(--color-text-subtle); }
-.kpi-ok { color: var(--color-success); font-weight: var(--weight-semibold); }
+
 
 /* ---------- Zeitleiste ---------- */
 .timeline { margin: 0; padding: 0; list-style: none; }
@@ -524,6 +548,7 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 .sg-swatches li { display: flex; align-items: center; gap: var(--space-2); }
 .sg-swatch { width: 2rem; height: 2rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 .sg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--space-4); }
+.sg-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* U9 Telefon: nichts verschiebt die Seite waagerecht */
 :where(input, select, textarea) { max-width: 100%; }
@@ -734,3 +759,7 @@ body { background: var(--color-bg); }
 .coverage-other { font-size: var(--text-small); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 .coverage-note { font-size: var(--text-small); font-weight: var(--weight-regular); color: var(--color-text-muted); }
 .coverage--partial .coverage-note { color: var(--color-text); font-weight: var(--weight-medium); }
+.toast-icon { margin-top: 0.1em; }
+.toast--success .toast-icon { color: var(--color-success); }
+.toast--error .toast-icon { color: var(--color-danger); }
+.toast--info .toast-icon { color: var(--color-info); }

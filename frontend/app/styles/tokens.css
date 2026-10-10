@@ -88,17 +88,17 @@
 
   /* ---------- Semantik: Flaechen, Text, Linien ---------- */
   /* Mein Tag v2 (2026-10-09): eine Stufe dunkler, damit weisse Karten sich abheben (Nebentext bleibt 5.6:1) */
-  --color-bg: #edf1f5;
-  --color-surface: var(--neutral-0);
-  --color-surface-subtle: var(--neutral-25);
+  --color-bg: #eef1f4;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f6f8fa;
   --color-surface-muted: var(--neutral-100);
   --color-surface-accent: var(--blue-50);
   --color-surface-brand: var(--teal-50);
   --color-surface-inverse: var(--neutral-900);
 
-  --color-text: var(--neutral-900);
-  --color-text-muted: var(--neutral-600);       /* 5.9:1 auf Papier, 6.0:1 auf Weiss */
-  --color-text-subtle: var(--neutral-500);      /* 4.6:1 – nur >= 14px */
+  --color-text: #1b2430;
+  --color-text-muted: #4b5867;       /* 5.9:1 auf Papier, 6.0:1 auf Weiss */
+  --color-text-subtle: #5d6977;      /* 4.6:1 – nur >= 14px */
   --color-text-inverse: var(--neutral-0);
   --color-text-accent: var(--blue-700);
   --color-link: var(--blue-700);
@@ -112,10 +112,10 @@
   --color-highlight-eyebrow: var(--blue-700);
 
   /* Mein Tag v2: Kartenrand etwas kraeftiger auf dem dunkleren Grund */
-  --color-border: #cfd9e2;
-  --color-border-subtle: var(--neutral-100);
+  --color-border: #d3d9e0;
+  --color-border-subtle: #e4e8ed;
   /* Rahmen der Bedienelemente: Kontrast >= 3:1 gegen --color-surface (WCAG 1.4.11) */
-  --color-border-strong: #7d8c9b;
+  --color-border-strong: #7d8a98;
 
   /* Farbwelt der Anmeldeseite: Navy fuer Hauptaktion, Links und aktive Navigation (8.9:1 auf Weiss),
      Teal als Markenbegleiter (Logo, Lichtflecken, Banner). */
@@ -127,28 +127,28 @@
   --color-focus: var(--blue-500);
 
   /* Status: Text >= 4.5:1 auf eigenem Hintergrund */
-  --color-success: var(--green-700);
-  --color-success-bg: var(--green-50);
-  --color-warning: var(--amber-700);
-  --color-warning-bg: var(--amber-50);
-  --color-danger: var(--red-700);
-  --color-danger-bg: var(--red-50);
-  --color-info: var(--blue-600);
-  --color-info-bg: var(--blue-50);
-  --color-neutral: var(--neutral-600);
-  --color-neutral-bg: var(--neutral-100);
-  --color-ai: var(--violet-600);
-  --color-ai-bg: var(--violet-50);
-  --color-ai-border: #d6cbf3;   /* Mein Tag v2: getoenter Rahmen fuer KI-Plaketten */
+  --color-success: #0b6b57;
+  --color-success-bg: #e3f4ef;
+  --color-warning: #8a4b00;
+  --color-warning-bg: #fff1db;
+  --color-danger: #b42318;
+  --color-danger-bg: #fdecea;
+  --color-info: #1d5bb8;
+  --color-info-bg: #eaf2fe;
+  --color-neutral: #4b5867;
+  --color-neutral-bg: #eef1f4;
+  --color-ai: #6941c6;
+  --color-ai-bg: #f2edfd;
+  --color-ai-border: #d4c6f5;   /* Ruhe & Signal: Rahmen fuer KI-Plaketten */
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
   --color-danger-fill: var(--red-600);
   --color-info-fill: var(--blue-500);
-  --color-success-border: #b5ddcd;
-  --color-warning-border: #ecd09b;
-  --color-danger-border: #efc1bd;
-  --color-info-border: #bcd3ef;
+  --color-success-border: #a9dccd;
+  --color-warning-border: #f0cf94;
+  --color-danger-border: #f2b8b1;
+  --color-info-border: #b9d0f3;
   --color-brand-border: #a9dfd7;
 
   /* Weiche Lichtflecken wie auf der Anmeldeseite (Teal oben links, Navy unten rechts) */
@@ -176,7 +176,7 @@
   --radius-pill: 999px;
 
   /* Mein Tag v2: Karten bekommen wieder einen sehr leichten Schatten */
-  --shadow-sm: 0 1px 2px rgb(11 19 28 / 0.06), 0 1px 1px rgb(11 19 28 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.05);
   --shadow-md: 0 4px 12px rgb(11 19 28 / 0.08), 0 1px 3px rgb(11 19 28 / 0.06);
   --shadow-lg: 0 16px 40px rgb(11 19 28 / 0.14), 0 4px 12px rgb(11 19 28 / 0.08);
   --shadow-focus: 0 0 0 3px rgb(29 100 194 / 0.35);
@@ -206,37 +206,40 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* ---------- Layout ---------- */
-  --content-max: 1440px;       /* Mein Tag v2: ruhigere Zeilenlaenge auf breiten Bildschirmen (war 1680px) */
+  --content-max: 1360px;       /* Mein Tag v2: ruhigere Zeilenlaenge auf breiten Bildschirmen (war 1680px) */
   --content-narrow: 900px;
   --sidebar-width: 248px;
-  --color-sidebar: var(--neutral-25);  /* Mein Tag v2: Seitenleiste heller als der Seitengrund */
+  --color-sidebar: #f6f8fa;  /* Mein Tag v2: Seitenleiste heller als der Seitengrund */
   --sidebar-rail: 64px;
   --header-height: 60px;
 
   /* ---------- Diagramme (validierte Palette, s. contract-register.css) ---------- */
   --viz-series-1: #2a78d6;
   --viz-series-2: #eb6834;
+  /* Ruhe & Signal (2026-10-10) */
+  --color-icon: #5d6977;
+  --color-neutral-border: #d3d9e0;
 }
 
 /* ---------- Dunkles Design (U8): nur semantische Werte ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --color-bg: #0e151d;
-    --color-surface: #151e28;
-    --color-surface-subtle: #18222d;
+    --color-bg: #0e141b;
+    --color-surface: #161e27;
+    --color-surface-subtle: #1b2530;
     --color-surface-muted: #1f2b37;
     --color-surface-accent: #13283d;
     --color-surface-brand: #10302d;
     --color-surface-inverse: #eaf0f4;
-    --color-text: #e8eef3;
-    --color-text-muted: #a9b6c2;
-    --color-text-subtle: #8f9dab;
+    --color-text: #e6ebf0;
+    --color-text-muted: #a8b3be;
+    --color-text-subtle: #929eaa;
     --color-text-inverse: #0b131c;
     --color-text-accent: #8cc0f2;
     --color-link: #8cc0f2;
-    --color-border: #2a3846;
-    --color-border-subtle: #212d39;
+    --color-border: #2b3846;
+    --color-border-subtle: #222d39;
     --color-border-strong: #64768a;
     --color-accent: #4a90d9;
     --color-accent-hover: #6aa6e6;
@@ -246,15 +249,15 @@
     --color-focus: #6aa6e6;
     --color-success: #5cc9a1;
     --color-success-bg: #12302a;
-    --color-warning: #f0b55a;
+    --color-warning: #f5b94f;
     --color-warning-bg: #352812;
-    --color-danger: #f08a84;
-    --color-danger-bg: #3a1a19;
+    --color-danger: #ff9b8f;
+    --color-danger-bg: #3b1a17;
     --color-info: #8cc0f2;
     --color-info-bg: #13283d;
-    --color-neutral: #a9b6c2;
-    --color-neutral-bg: #1f2b37;
-    --color-ai: #b9a6f2;
+    --color-neutral: #a8b3be;
+    --color-neutral-bg: #1f2933;
+    --color-ai: #c4b2f7;
     --color-ai-bg: #2a2340;
     --color-ai-border: #4a3d73;
     --color-success-fill: #3fae86;
@@ -262,8 +265,8 @@
     --color-danger-fill: #d9605a;
     --color-info-fill: #4a90d9;
     --color-success-border: #24564a;
-    --color-warning-border: #5a4420;
-    --color-danger-border: #5c2b29;
+    --color-warning-border: #5e4519;
+    --color-danger-border: #6b2b25;
     --color-info-border: #24496e;
     --color-brand-border: #1f5a52;
     --glow-teal: rgb(44 192 174 / 0);
@@ -274,31 +277,34 @@
     --color-highlight-muted: #a9b6c2;
     --color-highlight-eyebrow: #8cc0f2;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);  /* Mein Tag v2 */
-    --color-sidebar: #121a23;
+    --color-sidebar: #121921;
     --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
     --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
     --viz-series-1: #3987e5;
     --viz-series-2: #d95926;
+    /* Ruhe & Signal (2026-10-10) */
+    --color-icon: #929eaa;
+    --color-neutral-border: #2b3846;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-bg: #0e151d;
-  --color-surface: #151e28;
-  --color-surface-subtle: #18222d;
+  --color-bg: #0e141b;
+  --color-surface: #161e27;
+  --color-surface-subtle: #1b2530;
   --color-surface-muted: #1f2b37;
   --color-surface-accent: #13283d;
   --color-surface-brand: #10302d;
   --color-surface-inverse: #eaf0f4;
-  --color-text: #e8eef3;
-  --color-text-muted: #a9b6c2;
-  --color-text-subtle: #8f9dab;
+  --color-text: #e6ebf0;
+  --color-text-muted: #a8b3be;
+  --color-text-subtle: #929eaa;
   --color-text-inverse: #0b131c;
   --color-text-accent: #8cc0f2;
   --color-link: #8cc0f2;
-  --color-border: #2a3846;
-  --color-border-subtle: #212d39;
+  --color-border: #2b3846;
+  --color-border-subtle: #222d39;
   --color-border-strong: #64768a;
   --color-accent: #4a90d9;
   --color-accent-hover: #6aa6e6;
@@ -308,15 +314,15 @@
   --color-focus: #6aa6e6;
   --color-success: #5cc9a1;
   --color-success-bg: #12302a;
-  --color-warning: #f0b55a;
+  --color-warning: #f5b94f;
   --color-warning-bg: #352812;
-  --color-danger: #f08a84;
-  --color-danger-bg: #3a1a19;
+  --color-danger: #ff9b8f;
+  --color-danger-bg: #3b1a17;
   --color-info: #8cc0f2;
   --color-info-bg: #13283d;
-  --color-neutral: #a9b6c2;
-  --color-neutral-bg: #1f2b37;
-  --color-ai: #b9a6f2;
+  --color-neutral: #a8b3be;
+  --color-neutral-bg: #1f2933;
+  --color-ai: #c4b2f7;
   --color-ai-bg: #2a2340;
   --color-ai-border: #4a3d73;
   --color-success-fill: #3fae86;
@@ -324,8 +330,8 @@
   --color-danger-fill: #d9605a;
   --color-info-fill: #4a90d9;
   --color-success-border: #24564a;
-  --color-warning-border: #5a4420;
-  --color-danger-border: #5c2b29;
+  --color-warning-border: #5e4519;
+  --color-danger-border: #6b2b25;
   --color-info-border: #24496e;
   --color-brand-border: #1f5a52;
   --glow-teal: rgb(44 192 174 / 0);
@@ -336,11 +342,14 @@
   --color-highlight-muted: #a9b6c2;
   --color-highlight-eyebrow: #8cc0f2;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);  /* Mein Tag v2 */
-  --color-sidebar: #121a23;
+  --color-sidebar: #121921;
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.55);
   --viz-series-1: #3987e5;
   --viz-series-2: #d95926;
+  /* Ruhe & Signal (2026-10-10) */
+  --color-icon: #929eaa;
+  --color-neutral-border: #2b3846;
 }
 
 /* ---------- Benutzer-Einstellungen (U8) ---------- */

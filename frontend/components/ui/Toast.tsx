@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import { SignalIcon } from "./Signal";
 
 export type ToastKind = "success" | "error" | "info";
 
@@ -66,6 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             className={`toast toast--${t.kind}`}
             role={t.kind === "error" ? "alert" : "status"}
           >
+            <SignalIcon tone={t.kind === "error" ? "critical" : t.kind === "success" ? "done" : "info"} className="toast-icon" />
             <span className="toast-msg">{t.message}</span>
             <button
               type="button"

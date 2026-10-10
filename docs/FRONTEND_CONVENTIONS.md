@@ -33,15 +33,17 @@ Vor jedem neuen UI-Element in `components/ui/` nachsehen:
 |---|---|
 | Schaltfläche | `Button` bzw. Klassen `btn`, `btn-primary`, `btn-danger`, `btn-sm`, `btn-ghost` |
 | Formularfeld mit Label, Hilfe, Fehler | `Field` |
-| Status-Kennzeichen | `Badge` (Text trägt die Bedeutung, Farbe unterstützt) |
+| Signal / Status | `Signal tone="critical|warning|info|done|ai|neutral"` – immer Farbe + Form + Wort; `Badge`/`StatusBadge`/`InlineAlert`/`Toast` nutzen dieselben Formen. Grün (`done`) nur für Bestätigtes, nie für „nichts zu tun“ |
+| Status-Kennzeichen | `Badge` (Text trägt die Bedeutung, Form und Farbe unterstützen) |
+| Betrag mit Abdeckung | `CoverageValue`: unbekannt bleibt „—“, Teilsummen „bekannt für N von M“, andere Währungen getrennt |
 | Meldung | `InlineAlert` (`role="status"` für Erfolg/Info, `role="alert"` für Fehler) |
 | Kurzfeedback nach Speichern | `useToast()` |
 | Laden | `Skeleton` (Struktur) oder `LoadingState` (kurz) |
-| Leer | `EmptyState` mit Titel und nächstem Schritt; in Übersichtskarten „nichts zu tun“ als `variant="compact"` (Zeile mit Haken, ohne gestrichelten Rahmen) |
+| Leer | `EmptyState` mit Titel und nächstem Schritt; in Übersichtskarten „nichts zu tun“ als `variant="calm"` (graue Zeile, kein Grün, ohne gestrichelten Rahmen) |
 | Bestätigung, Unterbrechung | `Dialog` (Fokusfalle, Esc, Rückgabe des Fokus) |
 | Vorschau, Details ohne Seitenwechsel | `Drawer` |
 | Reiter | `Tabs` + `TabPanel` (Pfeiltasten, `aria-controls`) |
-| Kennzahl mit Ziel | `KpiTile`: mit `href` ist die ganze Kachel ein Link; `tone` (`neutral`/`info`/`success`/`warning`/`danger`) nur mit Bedeutung – `warning`/`danger` färben den Wert, `info`/`success` nur das Symbol; `icon` = Liniensymbol 18px im Stil der Navigation |
+| Kennzahl mit Ziel | `KpiTile`: mit `href` ist die ganze Kachel ein Link; die Kachel ist immer neutral; Aufmerksamkeit nur über `signal={{ tone, label }}`; `icon` = graues Liniensymbol vor der Beschriftung |
 | Einfache sortierbare Tabelle | `DataTable` |
 | Ungespeicherte Änderungen, Strg+S | `useUnsavedChanges`, `useSaveShortcut` |
 

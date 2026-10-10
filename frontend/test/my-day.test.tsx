@@ -45,10 +45,6 @@ describe("Mein Tag", () => {
     expect(within(decisions).queryByText(/PACS/)).not.toBeInTheDocument();
     expect(screen.getByText("Jährliche Kosten (netto)").closest(".kpi")!.querySelector(".kpi-value")).toHaveTextContent("74.400,00");
     expect(screen.getByText("1 ohne Entscheidung")).toBeInTheDocument();
-    // Offene Entscheidung mit Frist <= 30 Tage: rot; ungelesene Erinnerungen: gelb; Bestand: info
-    expect(screen.getByRole("link", { name: /Kündigungsfristen in 90 Tagen/ })).toHaveClass("kpi--danger");
-    expect(screen.getByRole("link", { name: /Ungelesene Erinnerungen/ })).toHaveClass("kpi--warning");
-    expect(screen.getByRole("link", { name: /Laufende Verträge.*von 3 Verträgen/ })).toHaveClass("kpi--info");
     // Handlungsbedarf steht vorn, mit Anzahl offener Punkte und ganzer Zeile als Link
     const attention = screen.getByRole("heading", { name: /Handlungsbedarf im Portfolio/ }).closest("section")!;
     expect(attention.parentElement!.firstElementChild).toBe(attention);
@@ -71,9 +67,8 @@ describe("Mein Tag", () => {
     const { container } = render(<MyDay organizationSlug="test-klinik" />);
     expect(await screen.findByText("Keine Termine diese Woche")).toBeInTheDocument();
     expect(screen.getByText("Alles entschieden")).toBeInTheDocument();
-    expect(container.querySelectorAll(".empty-state-compact")).toHaveLength(2);
+    expect(container.querySelectorAll(".empty-state-calm")).toHaveLength(2);
     expect(screen.getByText("Keine Entscheidung offen")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Kündigungsfristen in 90 Tagen/ })).toHaveClass("kpi--success");
     expect(screen.getByRole("link", { name: /ohne berechenbares Vertragsende/ }).querySelector(".my-day-pill")).toHaveClass("my-day-pill--danger");
     expect(await axe(container)).toHaveNoViolations();
   });

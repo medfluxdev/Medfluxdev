@@ -13,6 +13,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import Field from "@/components/ui/Field";
 import InlineAlert from "@/components/ui/InlineAlert";
 import KpiTile from "@/components/ui/KpiTile";
+import Signal from "@/components/ui/Signal";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import Skeleton from "@/components/ui/Skeleton";
@@ -123,11 +124,23 @@ export default function ComponentReferencePage() {
           </div>
         </SectionCard>
 
+        <SectionCard title="Signale (Ruhe & Signal)">
+          <p className="field-hint">Farbe + Form + Wort, nie Farbe allein. Normalzustand ist grau; Grün nur für Bestätigtes.</p>
+          <div className="sg-row">
+            <Signal tone="critical">Kritisch</Signal>
+            <Signal tone="warning">Prüfen</Signal>
+            <Signal tone="info">Hinweis</Signal>
+            <Signal tone="done">Bestätigt</Signal>
+            <Signal tone="ai">KI-Vorschlag</Signal>
+            <Signal tone="neutral">Ruhig</Signal>
+          </div>
+        </SectionCard>
+
         <SectionCard title="Zustände">
           <div className="sg-grid">
             <Skeleton lines={3} label="Beispiel lädt…" />
             <EmptyState title="Noch keine Einträge" action={<Button size="sm">Ersten Eintrag anlegen</Button>}>Leere Zustände nennen den nächsten Schritt.</EmptyState>
-            <EmptyState variant="compact" title="Alles erledigt">Kompakte Variante für Übersichtskarten.</EmptyState>
+            <EmptyState variant="calm" title="Alles erledigt">Ruhige Variante für Übersichtskarten (grau, kein Grün).</EmptyState>
           </div>
         </SectionCard>
 
@@ -135,7 +148,7 @@ export default function ComponentReferencePage() {
           <div className="sg-grid">
             <KpiTile label="Kennzahl" value="42" hint="Hinweis zur Herkunft" href="/developer/components" linkLabel="Ziel öffnen" />
             <KpiTile label="Ohne Daten" value={null} />
-            <KpiTile label="Mit Status" value="3" tone="warning" hint="Wert färbt sich nur bei Handlungsbedarf" />
+            <KpiTile label="Mit Signal" value={null} signal={{ tone: "warning", label: "Kosten fehlen bei 3 Verträgen" }} />
           </div>
         </SectionCard>
 
