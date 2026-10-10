@@ -132,7 +132,7 @@
   line-height: 1.4;
   white-space: nowrap;
 }
-.sb-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentcolor; }
+
 .badge .signal-icon, .status-badge .signal-icon { width: 14px; height: 14px; }
 .badge--success, .status-badge--success, .cw-badge-green { border-color: var(--color-success-border); background: var(--color-success-bg); color: var(--color-success); }
 .badge--warning, .status-badge--warning, .status-badge--review, .cw-badge-amber { border-color: var(--color-warning-border); background: var(--color-warning-bg); color: var(--color-warning); }
@@ -513,7 +513,7 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 
 .kpi a, .my-day-list a { text-decoration: none; }
 .kpi a:hover, .kpi a:focus-visible, .my-day-list a:hover, .my-day-list a:focus-visible { text-decoration: underline; }
-.my-day-list .my-day-todo a:hover, .my-day-list .my-day-todo a:focus-visible { text-decoration: none; }
+
 .empty-state h3,
 .empty-state p { font-style: normal; }
 
@@ -785,3 +785,5 @@ body { background: var(--color-bg); }
 .md-supplier-head { display: grid; gap: 2px; }
 .md-supplier-choice { display: grid; gap: var(--space-1); font-size: var(--text-small); }
 @media (max-width: 900px) { .md-supplier { grid-template-columns: minmax(0, 1fr); } }
+/* Reiterinhalt darf breite Tabellen nicht über die Seite schieben (Tabellen scrollen in ihrem Rahmen) */
+.tab-panel { min-width: 0; max-width: 100%; }

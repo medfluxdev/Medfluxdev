@@ -69,7 +69,7 @@ describe("Termine eines Vertrags", () => {
     const user = userEvent.setup();
     const { container } = render(<ContractDeadlinesPanel contractId="c-1" orgSlug="test-klinik" />);
     expect(await screen.findByText("Kündigungsfrist")).toBeInTheDocument();
-    expect(screen.getByText("Aus Stammdaten berechnet")).toBeInTheDocument();
+    expect(screen.getByText("Aus den Vertragsdaten berechnet")).toBeInTheDocument();
     expect(screen.getByText("Basiert auf ungeprüften KI-Werten")).toBeInTheDocument();
     expect(screen.getAllByText(/Eskalation: Chefin/)[0]).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();

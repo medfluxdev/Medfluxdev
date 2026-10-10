@@ -15,7 +15,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | F | Fristen & Aufgaben | erledigt | siehe git log |
 | G | Mein Tag v3, Analysen | erledigt | siehe git log |
 | H | Stammdaten, Verwaltung, Geräte, Verlauf | erledigt | siehe git log |
-| I | Aufräumen, Kompatibilität, Abschluss | offen | |
+| I | Aufräumen, Kompatibilität, Abschluss | erledigt | siehe git log |
 
 ## Testumgebung auf diesem Rechner
 
@@ -214,3 +214,25 @@ mit einem Partnerdatensatz. (2) „0 Benutzer“ – gezählt werden Mitgliedsch
 **Tests**: `backend/tests/test_restructure_supplier_link.py` (T23, U9); angepasst: `areas`, `contract-register`, `contract-ownership-roles`,
 `import`, `register-grid`, `register-portfolio`, `test_register_grid.py`.
 **Verifikation**: Backend 1592 passed / 7 umgebungsbedingt; `npm run verify` grün (53 Testdateien).
+
+## Phase I – Aufräumen, Kompatibilität, Abschluss (2026-10-10)
+
+**Umgesetzt**
+- Tote Stile entfernt (nachweislich ohne Verwendung): `.severity-*`, `.badge-active/-expiring_soon/-expired/-terminated`, `.risk-*`,
+  `.sb-dot`, `.state-icon`, `.fr-status-dot`, `.rg-row-overdue`, `.rg-deadline-overdue`, `.source-link-btn` u. a.; `.audit-set/-void/-confirm`
+  bleiben (dynamisch genutzt). Alias-Tokens `--sev-*`/`--status-*` durch semantische Tokens ersetzt und gelöscht.
+- `SourceLink.tsx` entfernt (nur von der früheren Nachweise-Seite genutzt). `SettingsNavigation.tsx` war schon vor dieser Arbeit ungenutzt (nur Test) – bleibt.
+- Vertragstermine im Vertrag mit Signal „Überfällig“ statt rotem Rahmen.
+- Mobil: `.shell-main` mit Spalte `minmax(0, 1fr)`, damit breite Tabellen die Seite nicht verbreitern (gefunden durch das Layout-Raster bei 390 px).
+- Mein Tag: ohne laufende Verträge zeigt „Jährliche Kosten“ „Keine laufenden Verträge“ statt „Noch keine Daten“.
+- `scripts/run_e2e.ps1` beendet den ganzen `next`-Prozessbaum (vorher blieb der Kindprozess auf dem Port).
+- Doku: `CLAUDE.md`, `docs/FRONTEND_BACKEND_INTEGRATION_MAP.md`, `docs/PROJECT_PROGRESS.md`, Abschlussbericht `docs/medflux-restructure-report.md`.
+
+**Verifikation (Endstand)**
+- Backend: **1603 passed, 3 skipped, 0 failed** (vollständige Suite; für die Tests, die Dateien außerhalb von `backend/` lesen, wurden
+  `.github` und `scripts` in den Wegwerf-Container kopiert).
+- Frontend: `npm run verify` grün (53 Testdateien).
+- Playwright (Wegwerf-DB `medflux-e2e-pg`, Port 55499): **174/174** – axe hell/dunkel/Windows-Kontrast, Layout 1440/900/390 px ohne
+  waagerechte Seitenverschiebung, Journeys, Bildvergleich (Referenzen bewusst erneuert). Journey 4 („Vertragsdaten bearbeiten“) und 11
+  (eindeutiger Knopf) an die neuen Beschriftungen angepasst.
+- Keine Migration; Alembic-Kopf unverändert `n5c7d9e01006`.

@@ -5384,3 +5384,21 @@ Ruhiger, flacher Auftritt für das Arbeitsumfeld eines öffentlichen Krankenhaus
 
 **Verifikation:** `npm run verify` grün (49 Testdateien); Playwright 179/179 inkl. axe hell/dunkel/forced-colors, visuelle Referenzen aktualisiert. Kein Commit (Arbeitsstand auf `feature/stammdaten-hub` noch uncommittet).
 - **Titelbild (Cover) aus dem Paket:** neue Komponente `components/brand/BrandCover.tsx` (flache Navy-Flächen, Blatt mit Haarlinien, eine Teal-Marke, Serifen-Schriftzug „MedFlux“, Token `--text-cover`). Auf der Anmeldeseite ab 900 px Breite und 700 px Höhe: Logo oben links, Design-Schalter oben rechts, darunter Titelbild und Anmeldekarte; auf dem Telefon nur Logo und Karte. Verify grün, Playwright 179/179.
+
+### Nachtrag 2026-10-10 – Restructure + „Ruhe & Signal“ (Plan v2.0, Phasen 0 und A–I)
+
+Plan `docs/architecture/MEDFLUX_RESTRUCTURE_PLAN_20261010.md`; Fortschritt je Phase `docs/medflux-restructure-progress.md`;
+Abschlussbericht `docs/medflux-restructure-report.md`. Branch `design/ruhe-signal`, ein Commit je Phase.
+
+- **A Datenwahrheit:** Summen mit Abdeckung (unbekannt nie 0, Währungen getrennt), eine Laufend-Definition, `term_status`, `not_evaluable`, Stichtag `Europe/Berlin`.
+- **B Signale:** `Signal` mit sechs Stufen (Farbe + Form + Wort), neue Tokens, neutrale Kennzahlen, `EmptyState calm`.
+- **C Glocke:** Abzeichen = ungelesene eigene Benachrichtigungen; Arbeitsvorrat getrennt; `/postfach` = Protokoll; Wiedervorlage → Termine „Nur meine“.
+- **D Verträge:** Reiter Bestand / Zu prüfen / Archiv mit Zahlen, Listenzustand in der Adresse, Weiterleitungen mit Parametern, neue Seitenleiste.
+- **E Vertragsakte:** neue Reiternamen, Prüfreihenfolge, `/nachweise` → Vertrag, Schutz vor doppelten Prüfaktionen (409 bei veraltetem Stand), Import nur mit Krankenhaus.
+- **F Fristen:** Überfälliges zuerst, Herkunft je Termin, ehrliche Leerzustände.
+- **G Mein Tag v3:** Lagebild, drei ruhige Kennzahlen, Arbeit nach Dringlichkeit; Analysen mit Datenqualität statt Doppelliste.
+- **H Stammdaten/Verwaltung:** „Lieferanten zuordnen“, Krankenhaus/Abteilung einheitlich, Mitgliederzahl erklärt, Protokoll mit deutschen Feldnamen, Geräte verlinkt.
+- **I Abschluss:** tote Stile und Alias-Tokens entfernt, `SourceLink` entfernt, Doku (CLAUDE.md, Integrationskarte, Konventionen, Visual Identity).
+
+**Verifikation:** Backend pytest (Docker-Postgres) grün bis auf 8 umgebungsbedingte Fälle wie in der Baseline; `npm run verify` grün; Playwright siehe Fortschrittsdatei. Keine Migration.
+**Nächster Schritt:** Review des Branches, kurzer Test mit 3–5 Anwendern (Lagebild, Signale), dann Merge nach `main`.

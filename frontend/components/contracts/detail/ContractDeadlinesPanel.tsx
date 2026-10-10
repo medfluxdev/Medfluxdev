@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Signal from "@/components/ui/Signal";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatDate } from "@/lib/format";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
@@ -99,14 +100,14 @@ export default function ContractDeadlinesPanel({ contractId, orgSlug }: { contra
   function renderItem(item: DeadlineDto) {
     return <li key={item.id} className={`rg-deadline${item.overdue ? " rg-deadline-overdue" : ""}${item.status !== "open" ? " rg-inactive" : ""}`}>
       <div className="rg-deadline-main">
-        <strong>{item.title}</strong>
+        <strong>{item.title}{item.overdue ? <> <Signal tone="critical">Überfällig</Signal></> : null}</strong>
         <span>Fällig {formatDate(item.due_date)}{dueLabel(item) ? ` · ${dueLabel(item)}` : ""} · Erinnerung {formatDate(item.remind_on)}</span>
         <span className="cw-muted">{kindLabel(item.kind)} · Zuständig: {item.assignee_name ?? "Verantwortliche Person des Vertrags"}{item.escalation_name ? ` · Eskalation: ${item.escalation_name}` : ""}</span>
         {item.todo_text ? <span>ToDo: {item.todo_text}</span> : null}
         {item.note ? <span className="cw-muted">Bemerkung: {item.note}</span> : null}
         <span className="rg-period">
-          {item.source === "system" ? <span className="rg-origin">Aus Stammdaten berechnet</span> : <span className="rg-origin rg-origin-manual">Manuell</span>}
-          {item.basis_unconfirmed ? <span className="rg-origin rg-origin-ai_corrected" title="Mindestens ein zugrunde liegender Wert stammt aus der KI und ist noch nicht bestätigt.">Basiert auf ungeprüften KI-Werten</span> : null}
+          {item.source === "system" ? <span className="rg-origin">Aus den Vertragsdaten berechnet</span> : <span className="rg-origin rg-origin-manual">Manuell</span>}
+          {item.basis_unconfirmed ? <span title="Mindestens ein zugrunde liegender Wert stammt aus der KI und ist noch nicht bestätigt."><Signal tone="ai">Basiert auf ungeprüften KI-Werten</Signal></span> : null}
           {item.send_email ? <span className="rg-origin">E-Mail</span> : null}
           {item.send_ics ? <span className="rg-origin">Kalender</span> : null}
           {item.status === "done" ? <span className="rg-origin rg-origin-ai_confirmed">Erledigt{item.done_by_name ? ` von ${item.done_by_name}` : ""}</span> : null}

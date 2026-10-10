@@ -25,16 +25,18 @@ This is the canonical map between backend capabilities and frontend consumers on
 | Processing diagnostics | `/api/processing-jobs*` | Developer processing page | Connected to canonical `ProcessingRun`, no second job truth |
 | Equipment | list/detail | `/equipment`, detail route, contract/work-queue links | Connected + dedicated master UI |
 | Equipment lifecycle | `/api/lifecycle/equipment/*` | equipment detail | Connected + audited operational state |
-| Work queue | list + status transition | `/work-queue` | Connected + scoped + audited transitions |
-| Work queue collaboration | collaboration/comments | `/work-queue` organize panel | Connected; assignment/reminder/escalation/comments survive reconcile |
+| Work queue | list + status transition | `/fristen?ansicht=aufgaben` (`/work-queue` redirects) and the contract tab „Fristen & Aufgaben“ | Connected + scoped + audited transitions |
+| Work queue collaboration | collaboration/comments | Aufgaben organize panel | Connected; assignment/reminder/escalation/comments survive reconcile |
 | AI runtime | status/snapshot/test/selection | settings/developer | Status readable; test/selection restricted to Admin/Developer |
 | Contract intelligence | graph/obligations/policies/action proposals/events | Contract Intelligence panel + Admin event feed | Connected |
 | Intelligence action lifecycle | `/api/intelligence/actions/{id}` | Contract Intelligence panel | Human approve/reject/cancel/execute confirmation + audit |
 | Intelligence evidence | canonical Contract Detail evidence | inline Intelligence source viewer | Resolved to canonical PDF provenance or fails closed |
-| Notifications | `/api/notifications` | topbar notification center | Connected projection of Work Queue + approval truth |
+| Notifications | `/api/notifications` (Arbeitsvorrat, true total), `/api/inbox` (+`offset`/`unread_only`/`total`), `/api/inbox/summary` | bell „Für mich“ / „Arbeitsvorrat“, `/postfach` = full log | Badge = unread personal notifications with the same query and scope as the list |
+| Register | `/api/register/grid` (`totals` with coverage), `/grid/counts`, `/reports/portfolio` (`amounts`, `definitions`), `/renewals` (`not_evaluable`) | `/register` tabs, Mein Tag, Analysen, Fristen | One running definition, unknown never summed as 0 |
+| Partner linking | `/api/catalogs/partners/unlinked`, `/partners/link-supplier` | Stammdaten → Vertragspartner „Lieferanten zuordnen“ | Suggestions only; linking via the register update path (manual origin, history per contract) |
 | Reporting | `/api/reports/portfolio` | domain API / reporting consumer | Connected + scoped |
 | Operations | contract CSV export | Admin Dashboard export | Connected + role/scope protected + audited |
-| Activity/Audit | `/api/activity` + contract audit/review history | `/audit`, Admin Dashboard | Connected + scope aware |
+| Activity/Audit | `/api/activity` + contract audit/review history (`field_labels`) | `/audit` „Aktivitäten & Protokoll“ (admin area), contract „Verlauf“, Admin Dashboard | Connected + scope aware |
 | Ownership | contract/equipment assignment + assignees | Contract Ownership panel | Connected + scope aware + audited |
 | Users/scopes | `/api/users`, `/api/user-scopes` | settings/users | Connected; non-admin creation is atomically scoped |
 | Organization structure | hospitals/departments/cost centers | scope picker + settings/organization | Connected + server-side read scoping |

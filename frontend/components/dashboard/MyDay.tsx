@@ -126,8 +126,13 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
   ];
 
   const annual = state.portfolio?.totals.amounts?.annual_cost;
-  const annualSignal = state.portfolio && !state.portfolio.totals.annual_cost && noFinance > 0
-    ? { tone: "warning" as const, label: `Kosten fehlen bei ${plural(noFinance, "Vertrag", "Verträgen")}` }
+  // Ohne laufende Verträge gibt es keine Jahreskosten – das ist etwas anderes als fehlende Daten.
+  const annualSignal = state.portfolio && !state.portfolio.totals.annual_cost
+    ? noFinance > 0
+      ? { tone: "warning" as const, label: `Kosten fehlen bei ${plural(noFinance, "Vertrag", "Verträgen")}` }
+      : state.portfolio.totals.running === 0
+        ? { tone: "neutral" as const, label: "Keine laufenden Verträge" }
+        : undefined
     : undefined;
   const annualHint = annual ? coverageNote(annual.known, annual.missing) || "aus den gepflegten Finanzdaten" : "aus den gepflegten Finanzdaten";
   const runningHint = state.portfolio

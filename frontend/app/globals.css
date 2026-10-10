@@ -110,41 +110,12 @@ a:focus-visible {
   font-size: var(--text-body);
 }
 
-/* Handlungsbedarf */
 
-/* Severity – Farbe immer mit Text-Label kombiniert */
-.severity-tag {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-caption);
-  font-weight: 700;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-  white-space: nowrap;
-}
-.severity-critical {
-  color: var(--color-text-inverse);
-  background: var(--sev-critical);
-  border-color: var(--sev-critical);
-}
-.severity-high {
-  color: var(--sev-high);
-  border-color: var(--sev-high);
-}
-.severity-medium {
-  color: var(--sev-medium);
-  border-color: var(--sev-medium);
-}
-.severity-low {
-  color: var(--sev-low);
-  border-color: var(--sev-low);
-}
-.severity-info {
-  color: var(--sev-info);
-  border-color: var(--sev-info);
-}
+
+
+
+
+
 
 /* Fristen-Verteilung */
 
@@ -169,8 +140,8 @@ a:focus-visible {
 }
 .notice.error {
   background: var(--color-surface-muted);
-  border-color: var(--sev-critical);
-  color: var(--sev-critical);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
 }
 .retry {
   margin-left: 0.75rem;
@@ -247,37 +218,14 @@ a:focus-visible {
   font-size: var(--text-caption);
 }
 
-.badge-active {
-  color: var(--sev-low);
-  border-color: var(--sev-low);
-}
-.badge-expiring_soon {
-  color: var(--sev-high);
-  border-color: var(--sev-high);
-}
-.badge-expired {
-  color: var(--sev-critical);
-  border-color: var(--sev-critical);
-}
-.badge-terminated {
-  color: var(--text-muted);
-}
-.risk-badge {
-  display: inline-block;
-  padding: 0.1rem 0.45rem;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-caption);
-  font-weight: 700;
-}
-.risk-low {
-  color: var(--sev-low);
-}
-.risk-medium {
-  color: var(--sev-medium);
-}
-.risk-high {
-  color: var(--sev-critical);
-}
+
+
+
+
+
+
+
+
 .cost {
   white-space: nowrap;
 }
@@ -380,17 +328,7 @@ a:focus-visible {
   border-color: var(--accent);
   box-shadow: var(--shadow-focus);
 }
-.source-link-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  padding: 0.5rem 0.65rem;
-  cursor: pointer;
-}
+
 .source-name {
   font-weight: 500;
 }
@@ -427,7 +365,7 @@ a:focus-visible {
 }
 .notice.warning {
   background: rgba(232, 121, 0, 0.1);
-  border-color: var(--sev-high);
+  border-color: var(--color-warning);
   color: var(--text);
 }
 .notice.info {
@@ -480,9 +418,9 @@ a:focus-visible {
 
 /* Evidence-first Wertzeilen: belegte Werte sind klickbar (Quelle öffnen). */
 .fact-review {
-  color: var(--sev-high);
+  color: var(--color-warning);
   font-size: var(--text-caption);
-  border: 1px solid var(--sev-high);
+  border: 1px solid var(--color-warning);
   border-radius: var(--radius-lg);
   padding: 0.02rem 0.4rem;
   white-space: nowrap;
@@ -561,8 +499,8 @@ a:focus-visible {
   white-space: nowrap;
 }
 .evidence-pill.ok {
-  color: var(--sev-low);
-  border-color: var(--sev-low);
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 .evidence-meta {
   font-size: var(--text-small);
@@ -575,11 +513,11 @@ a:focus-visible {
 }
 .evidence-note {
   font-size: var(--text-small);
-  color: var(--sev-high);
+  color: var(--color-warning);
 }
 .evidence-review {
   font-size: var(--text-small);
-  color: var(--sev-high);
+  color: var(--color-warning);
 }
 .evidence-empty {
   color: var(--text-muted);
@@ -760,16 +698,7 @@ a:focus-visible {
 
 
 
-/* --- Confirm-Dialog (nicht-destruktive Aktionen) --- */
 
-
-.status-badge .sb-dot {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-  flex: none;
-}
 
 
 
@@ -1218,10 +1147,10 @@ a:focus-visible {
   outline-offset: 2px;
 }
 .fact-review.ok {
-  color: var(--status-success);
+  color: var(--color-success);
 }
 .fact-review {
-  color: var(--sev-high);
+  color: var(--color-warning);
   font-size: var(--text-caption);
   font-weight: 600;
 }
@@ -1237,7 +1166,7 @@ a:focus-visible {
   color: var(--text-muted);
   text-decoration: line-through;
 }
-.form-ok { color: var(--status-success); font-size: var(--text-small); margin: 0.4rem 0; }
+.form-ok { color: var(--color-success); font-size: var(--text-small); margin: 0.4rem 0; }
 .form-error { color: var(--danger, var(--color-danger)); font-size: var(--text-small); margin: 0.4rem 0; }
 .override-group {
   margin-top: 0.8rem;
@@ -1298,7 +1227,7 @@ a:focus-visible {
 }
 .audit-set { background: var(--surface-2, var(--color-surface-muted)); color: var(--text); }
 .audit-void { background: var(--color-surface-muted); color: var(--color-danger); }
-.audit-confirm { background: var(--status-success-bg); color: var(--status-success); }
+.audit-confirm { background: var(--color-success-bg); color: var(--color-success); }
 .audit-key { font-weight: 600; }
 .audit-value { font-style: italic; }
 
@@ -1383,17 +1312,7 @@ a:focus-visible {
   margin: 8px auto 0;
   max-width: 520px;
 }
-.state-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: var(--radius-lg);
-  margin: 0 auto 14px;
-  display: grid;
-  place-items: center;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: var(--text-title-m);
-}
+
 
 /* --- Tags / Badges --- */
 
@@ -1537,12 +1456,12 @@ a:focus-visible {
   color: var(--text);
 }
 .audit-void {
-  background: var(--status-critical-bg);
-  color: var(--status-critical);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 .audit-confirm {
-  background: var(--status-success-bg);
-  color: var(--status-success);
+  background: var(--color-success-bg);
+  color: var(--color-success);
 }
 .breadcrumb a,
 .table-link {
@@ -1586,14 +1505,14 @@ a:focus-visible {
 .notice.error {
   border-color: var(--danger);
   color: var(--danger);
-  background: var(--status-critical-bg);
+  background: var(--color-danger-bg);
 }
 .source-row.active {
   border-color: var(--accent);
   box-shadow: var(--shadow-focus);
 }
 .fact-review.ok {
-  color: var(--status-success);
+  color: var(--color-success);
 }
 .retry {
   border: 1px solid var(--border);

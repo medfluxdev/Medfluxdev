@@ -67,7 +67,8 @@ try {
   & npx.cmd @args
   $code = $LASTEXITCODE
 } finally {
-  Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+  # Ganzen Prozessbaum beenden (npx startet next als Kindprozess, der sonst Port und Datei-Sperren behaelt).
+  & taskkill.exe /PID $web.Id /T /F 2>&1 | Out-Null
   Stop-Process -Id $api.Id -Force -ErrorAction SilentlyContinue
   Pop-Location
 }

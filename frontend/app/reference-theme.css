@@ -126,13 +126,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-.state-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  color: var(--color-text-subtle);
-}
+
 
 .state-box h3 {
   color: var(--color-text-subtle);

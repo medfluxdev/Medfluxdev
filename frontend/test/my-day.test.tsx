@@ -108,3 +108,17 @@ describe("Mein Tag (Ruhe & Signal v3)", () => {
     expect(screen.getByRole("button", { name: "Erneut laden" })).toBeInTheDocument();
   });
 });
+
+describe("Mein Tag – Kosten ohne laufende Verträge", () => {
+  it("sagt „Keine laufenden Verträge“ statt „Noch keine Daten“", async () => {
+    apiGetMock.mockImplementation((path: string) => {
+      if (path.startsWith("/api/deadlines") || path.startsWith("/api/register/renewals")) return Promise.resolve({ items: [], not_evaluable: [] });
+      if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({ totals: { contracts: 3, running: 0, in_progress: 3, annual_cost: null }, insights: [] });
+      return routes(path);
+    });
+    render(<MyDay organizationSlug="test-klinik" />);
+    const cost = (await screen.findByText("Jährliche Kosten (netto)")).closest(".kpi") as HTMLElement;
+    expect(await within(cost).findByText("Keine laufenden Verträge")).toBeInTheDocument();
+    expect(within(cost).queryByText("Noch keine Daten")).not.toBeInTheDocument();
+  });
+});

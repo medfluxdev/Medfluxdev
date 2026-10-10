@@ -95,7 +95,7 @@
 .shell--collapsed .shell-sidebar-foot { justify-items: center; padding-inline: var(--space-2); }
 
 /* ---------- Hauptbereich & Kopfzeile ---------- */
-.shell-main { display: grid; grid-template-rows: auto 1fr; min-width: 0; }
+.shell-main { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-width: 0; }
 .shell-topbar {
   position: sticky;
   top: 0;

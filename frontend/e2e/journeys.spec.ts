@@ -24,11 +24,11 @@ test("3 – Vertrag oeffnen: Kopf zeigt Nummer, Status und Kosten", async ({ pag
   await checkA11y(page, info, "vertrag");
 });
 
-test("4 – Stammdaten bearbeiten und speichern", async ({ page }, info) => {
+test("4 – Vertragsdaten bearbeiten und speichern", async ({ page }, info) => {
   await openContract(page, "Softwarepflege PACS");
-  await page.getByRole("tab", { name: "Stammdaten" }).or(page.getByRole("button", { name: "Stammdaten", exact: true })).first().click();
+  await page.getByRole("tab", { name: "Vertragsdaten" }).click();
   await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Stammdaten bearbeiten" }).click();
+  await page.getByRole("button", { name: "Vertragsdaten bearbeiten" }).click();
   const value = `INT-${Date.now() % 100000}`;
   await page.getByLabel("Interne Nummer").fill(value);
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
@@ -172,7 +172,7 @@ test("11 – Vertragsregel anlegen und in der Vertragsliste nutzen", async ({ pa
   await page.goto("/stammdaten/vertragsregeln");
   await expect(page.getByRole("heading", { level: 1, name: "Vertragsregeln" })).toBeVisible();
   const label = `E2E Kündigungsfrist ${Date.now() % 100000}`;
-  await page.getByRole("button", { name: "Vertragsregel anlegen" }).click();
+  await page.getByRole("button", { name: "Vertragsregel anlegen" }).first().click();
   const drawer = page.getByRole("dialog", { name: "Vertragsregel anlegen" });
   await drawer.getByLabel("Bezeichnung *", { exact: true }).fill(label);
   await drawer.getByLabel(/Grenzwert/).fill("3");

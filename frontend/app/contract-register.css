@@ -54,9 +54,9 @@
 .contract-business-status{display: block;margin-top: 4px;font-size: var(--text-caption);font-weight: 700;color: var(--color-text-subtle)}
 .rg-deadlines{list-style: none;margin: 0;padding: 0;display: grid;gap: 10px}
 .rg-deadline{display: flex;justify-content: space-between;gap: 12px;flex-wrap: wrap;padding: 12px 14px;border: 1px solid var(--color-border-subtle);border-radius: var(--radius-sm);background: var(--color-surface)}
-.rg-deadline-overdue{border-color: var(--color-danger-border);background: var(--color-surface-subtle)}
+
 .rg-deadline-main{display: grid;gap: 4px;min-width: 0}
-.rg-row-overdue td,.rg-row-overdue th{background: var(--color-surface-subtle)}
+
 .rg-origin-manual{border-color: var(--color-border-strong)}
 .cw-subheading{margin: 8px 0 0;font-size: var(--text-title-s);color: var(--color-text-muted)}
 .rg-narrow{width: 6rem}
@@ -92,7 +92,7 @@
 .reg-group th{background: var(--surface-2,var(--color-surface-muted));text-align: left}
 .reg-group-1 th{padding-left: 24px;background: transparent}
 .rg-values{max-height: 240px;overflow: auto}
-@media (max-width:960px){.reg-layout{grid-template-columns: 1fr}}
+@media (max-width:960px){.reg-layout{grid-template-columns: minmax(0,1fr)}}
 /* Diagramme (Dataviz-Referenzpalette, Slots 1–2, validiert: CVD ΔE 24,7 / normal 33,6). Die App hat kein Dark-Theme. */
 .viz{margin: 0;display: grid;gap: 6px;--viz-grid:var(--color-border);--viz-axis:var(--color-border-strong);--viz-text:var(--color-text-muted);--viz-ink:var(--color-text)}
 .viz svg{width: 100%;height: auto;max-width: 720px;font-family: inherit}
