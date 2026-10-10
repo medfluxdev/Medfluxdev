@@ -14,6 +14,7 @@ from typing import Iterable, Optional
 from sqlalchemy import func, select, union
 from sqlalchemy.orm import Session
 
+from app.core.clock import today_local
 from app.database.models import ActivityLog, Contract
 from app.database.models.finance import ContractCostAllocation
 from app.database.models.organization_structure import ContractDepartment, CostCenter, Department, Hospital
@@ -182,7 +183,7 @@ def usage(session: Session, organization_id: uuid.UUID, kind: str, visible: Opti
         from app.reports.grid import cached_rows, visible_rows
 
         violations: dict[str, int] = defaultdict(int)
-        for row in visible_rows(cached_rows(session, organization_id, date.today()), visible):
+        for row in visible_rows(cached_rows(session, organization_id, today_local()), visible):
             if row.values.get("business_status") == "geloescht":
                 continue
             for rule_id in row.values.get("_rule_failures") or []:

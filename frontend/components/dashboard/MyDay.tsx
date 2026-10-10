@@ -10,8 +10,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import { ICONS } from "@/components/shell/navigation";
 import { getInbox, listDeadlines, type DeadlineDto } from "@/lib/domain-api/deadlines";
-import { getGrid, getPortfolioReport, listRenewals, type PortfolioReport, type RenewalListItem } from "@/lib/domain-api/registerGrid";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { getGrid, getPortfolioReport, listRenewals, type NotEvaluableItem, type PortfolioReport, type RenewalListItem } from "@/lib/domain-api/registerGrid";
+import { coverageNote, formatCurrency, formatDate } from "@/lib/format";
 
 function isoInDays(days: number) {
   const date = new Date();
@@ -47,6 +47,7 @@ interface AttentionItem {
 interface State {
   deadlines: DeadlineDto[] | null;
   renewals: RenewalListItem[] | null;
+  notEvaluable: NotEvaluableItem[];
   portfolio: PortfolioReport | null;
   unread: number | null;
   reviewCount: number | null;
@@ -56,7 +57,7 @@ interface State {
 // wie die Vertragsliste (UX-Plan U4).
 export default function MyDay({ organizationSlug }: { organizationSlug: string }) {
   const { account, role } = useAuth();
-  const [state, setState] = useState<State>({ deadlines: null, renewals: null, portfolio: null, unread: null, reviewCount: null });
+  const [state, setState] = useState<State>({ deadlines: null, renewals: null, notEvaluable: [], portfolio: null, unread: null, reviewCount: null });
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const reviewer = Boolean(account?.is_developer || role === "admin" || role === "contract_manager" || role === "reviewer");
@@ -73,6 +74,7 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
       setState({
         deadlines: deadlines.status === "fulfilled" ? deadlines.value.items : [],
         renewals: renewals.status === "fulfilled" ? renewals.value.items : null,
+        notEvaluable: renewals.status === "fulfilled" ? renewals.value.not_evaluable ?? [] : [],
         portfolio: portfolio.status === "fulfilled" ? portfolio.value : null,
         unread: inbox.status === "fulfilled" ? inbox.value.unread_count : null,
         reviewCount: review.status === "fulfilled" && review.value ? review.value.total : null,
@@ -98,6 +100,9 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
       tone: DANGER_INSIGHTS.has(item.key) ? ("danger" as const) : ("warning" as const),
     })),
   ];
+  const annualAmount = state.portfolio?.totals.amounts?.annual_cost;
+  const annualHint = annualAmount ? coverageNote(annualAmount.known, annualAmount.missing) || "aus den gepflegten Finanzdaten" : "aus den gepflegten Finanzdaten";
+  const notEvaluableHref = `/register?filter=${encodeURIComponent(JSON.stringify([{ column: "term_status", op: "in", value: ["Unvollständig"] }]))}`;
   const noticeTone = state.renewals === null ? "neutral" : openDecisions.length === 0 ? "success" : openDecisions.some((item) => item.days_left <= 30) ? "danger" : "warning";
 
   return (
@@ -116,8 +121,8 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
 
       <section className="my-day-kpis" aria-label="Kennzahlen">
         <KpiTile label="Laufende Verträge" tone="info" icon={<TileIcon>{ICONS.contracts}</TileIcon>} loading={!loaded} value={state.portfolio?.totals.running} hint={state.portfolio ? `von ${state.portfolio.totals.contracts} Verträgen` : undefined} href="/register" linkLabel="Zur Vertragsliste" />
-        <KpiTile label="Jährliche Kosten (netto)" icon={<TileIcon>{EURO_ICON}</TileIcon>} loading={!loaded} value={state.portfolio && Number(state.portfolio.totals.annual_cost) !== 0 ? formatCurrency(state.portfolio.totals.annual_cost, "EUR") : null} hint="aus den gepflegten Finanzdaten" href="/analysen" linkLabel="Zu den Analysen" />
-        <KpiTile label="Kündigungsfristen in 90 Tagen" tone={noticeTone} icon={<TileIcon>{CLOCK_ICON}</TileIcon>} loading={!loaded} value={state.renewals?.length} hint={state.renewals === null ? undefined : openDecisions.length === 0 ? <><span className="kpi-ok" aria-hidden="true">✓</span> Keine Entscheidung offen</> : `${openDecisions.length} ohne Entscheidung`} href="/fristen?ansicht=entscheidungen" linkLabel="Zu den Kündigungsentscheidungen" />
+        <KpiTile label="Jährliche Kosten (netto)" icon={<TileIcon>{EURO_ICON}</TileIcon>} loading={!loaded} value={state.portfolio?.totals.annual_cost ? formatCurrency(state.portfolio.totals.annual_cost, "EUR") : null} hint={annualHint} href="/analysen" linkLabel="Zu den Analysen" />
+        <KpiTile label="Kündigungsfristen in 90 Tagen" tone={noticeTone} icon={<TileIcon>{CLOCK_ICON}</TileIcon>} loading={!loaded} value={state.renewals?.length} hint={state.renewals === null ? undefined : openDecisions.length === 0 ? (state.notEvaluable.length > 0 ? `${state.notEvaluable.length} nicht bewertbar` : "Keine Entscheidung offen") : `${openDecisions.length} ohne Entscheidung`} href="/fristen?ansicht=entscheidungen" linkLabel="Zu den Kündigungsentscheidungen" />
         <KpiTile label="Ungelesene Erinnerungen" tone={state.unread ? "warning" : "neutral"} icon={<TileIcon>{BELL_ICON}</TileIcon>} loading={!loaded} value={state.unread} hint="Erinnerungen und Eskalationen" href="/postfach" linkLabel="Zum Postfach" />
       </section>
 
@@ -156,7 +161,9 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
 
         <section className="card card-pad" aria-labelledby="my-decisions">
           <div className="section-head"><div><h2 id="my-decisions">Entscheidungen vor Kündigungsfrist</h2><p>Verträge mit Frist in 90 Tagen ohne erfasste Entscheidung</p></div><Link href="/fristen?ansicht=entscheidungen" className="btn btn-sm">Alle anzeigen</Link></div>
-          {!loaded ? <Skeleton lines={4} label="Fristen werden geladen…" /> : state.renewals === null ? <p className="field-hint">Die Kündigungsfristen konnten nicht geladen werden.</p> : openDecisions.length === 0 ? <EmptyState variant="compact" title="Alles entschieden">Für die nächsten 90 Tage sind keine Entscheidungen offen.</EmptyState> : (
+          {!loaded ? <Skeleton lines={4} label="Fristen werden geladen…" /> : state.renewals === null ? <p className="field-hint">Die Kündigungsfristen konnten nicht geladen werden.</p> : openDecisions.length === 0 ? (state.notEvaluable.length > 0
+            ? <EmptyState variant="compact" title="Keine offenen Entscheidungen bekannt"><>Für {state.notEvaluable.length} {state.notEvaluable.length === 1 ? "Vertrag" : "Verträge"} ist die Kündigungsfrist nicht berechenbar. <Link href={notEvaluableHref}>Laufzeitangaben ergänzen</Link></></EmptyState>
+            : <EmptyState variant="compact" title="Alles entschieden">Für die nächsten 90 Tage sind keine Entscheidungen offen.</EmptyState>) : (
             <ul className="my-day-list">
               {openDecisions.slice(0, 6).map((item) => (
                 <li key={item.contract_id}>

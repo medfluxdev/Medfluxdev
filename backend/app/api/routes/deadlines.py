@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from app.core.clock import today_local
 from app.auth.dependencies import current_actor
 from app.auth.permissions import is_admin, require
 from app.core.config import settings
@@ -122,7 +123,7 @@ def get_contract_deadlines(contract_id: UUID, request: Request, organization_slu
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id)
-        today = date.today()
+        today = today_local()
         sync_system_deadlines(session, contract, today)
         session.commit()
         return {"items": list_contract_deadlines(session, contract, today)}
@@ -137,7 +138,7 @@ def post_contract_deadline(contract_id: UUID, payload: DeadlineValues, request: 
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id)
-        today = date.today()
+        today = today_local()
         try:
             create_manual_deadline(session, contract=contract, actor=actor, values=payload.values, as_of=today)
         except DeadlineError as exc:
@@ -156,7 +157,7 @@ def patch_deadline(deadline_id: UUID, payload: DeadlineValues, request: Request,
     session = create_session()
     try:
         row, contract = _deadline(session, actor, deadline_id)
-        today = date.today()
+        today = today_local()
         try:
             update_deadline(session, row=row, contract=contract, actor=actor, values=payload.values, as_of=today)
         except DeadlineError as exc:
@@ -177,7 +178,7 @@ def deadline_action(deadline_id: UUID, action: str, payload: DeadlineAction, req
     session = create_session()
     try:
         row, contract = _deadline(session, actor, deadline_id)
-        today = date.today()
+        today = today_local()
         try:
             change_deadline_status(session, row=row, contract=contract, actor=actor, action=action, note=payload.note)
         except DeadlineError as exc:
@@ -204,7 +205,7 @@ def list_deadlines(
     actor = _actor(request, organization_slug)
     session = create_session()
     try:
-        today = date.today()
+        today = today_local()
         stmt = (
             select(ContractDeadline)
             .join(Contract, Contract.id == ContractDeadline.contract_id)
@@ -236,7 +237,7 @@ def get_inbox(request: Request, organization_slug: str, limit: int = Query(defau
     actor = _actor(request, organization_slug)
     session = create_session()
     try:
-        return inbox(session, actor=actor, as_of=date.today(), allowed_contract_ids=_allowed(session, actor), limit=limit)
+        return inbox(session, actor=actor, as_of=today_local(), allowed_contract_ids=_allowed(session, actor), limit=limit)
     finally:
         session.close()
 
@@ -276,7 +277,7 @@ def get_settings(request: Request, organization_slug: str):
         account = session.get(Account, actor.account_id)
         if account is None:
             raise HTTPException(status_code=404, detail="Konto nicht gefunden.")
-        return notification_settings(session, account, actor.organization_id, date.today())
+        return notification_settings(session, account, actor.organization_id, today_local())
     finally:
         session.close()
 
@@ -298,7 +299,7 @@ def put_settings(payload: SettingsUpdate, request: Request, organization_slug: s
             session.rollback()
             raise _http(exc)
         session.commit()
-        return notification_settings(session, account, actor.organization_id, date.today())
+        return notification_settings(session, account, actor.organization_id, today_local())
     finally:
         session.close()
 
@@ -310,7 +311,7 @@ def get_deputies(request: Request, organization_slug: str):
     try:
         return {"items": list_deputies(
             session, organization_id=actor.organization_id,
-            account_id=None if _is_admin(actor) else actor.account_id, as_of=date.today(),
+            account_id=None if _is_admin(actor) else actor.account_id, as_of=today_local(),
         )}
     finally:
         session.close()
@@ -336,7 +337,7 @@ def post_deputy(payload: DeputyCreate, request: Request, organization_slug: str)
         session.commit()
         return {"items": list_deputies(
             session, organization_id=actor.organization_id,
-            account_id=None if _is_admin(actor) else actor.account_id, as_of=date.today(),
+            account_id=None if _is_admin(actor) else actor.account_id, as_of=today_local(),
         )}
     finally:
         session.close()
@@ -358,7 +359,7 @@ def deactivate_deputy(deputy_id: UUID, request: Request, organization_slug: str)
         session.commit()
         return {"items": list_deputies(
             session, organization_id=actor.organization_id,
-            account_id=None if _is_admin(actor) else actor.account_id, as_of=date.today(),
+            account_id=None if _is_admin(actor) else actor.account_id, as_of=today_local(),
         )}
     finally:
         session.close()

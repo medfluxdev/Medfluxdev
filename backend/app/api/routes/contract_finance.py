@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from app.core.clock import today_local
 from app.api.routes.contract_register import _contract, _register_actor, _require_write
 from app.database.session import create_session
 from app.register.service import log_activity
@@ -138,7 +139,7 @@ def export(
         contract = _contract(session, actor, contract_id)
         directions = {name for name, wanted in (("expense", expenses), ("income", income)) if wanted}
         content = "﻿" + export_csv(session, contract, directions)
-        filename = f"finanzdaten-{contract.register_number or contract.id}-{date.today().isoformat()}.csv"
+        filename = f"finanzdaten-{contract.register_number or contract.id}-{today_local().isoformat()}.csv"
         log_activity(session, actor, contract.id, "finance.exported", {"directions": sorted(directions)})
         session.commit()
         return Response(

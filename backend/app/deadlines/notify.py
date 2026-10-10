@@ -19,6 +19,7 @@ from sqlalchemy import and_, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.clock import today_local
 from app.core.config import settings
 from app.database.models import Account, Contract
 from app.database.models.deadlines import (
@@ -268,7 +269,7 @@ def run_daily(
     organization_id: Optional[uuid.UUID] = None,
 ) -> DailyRunResult:
     """Tageslauf; ohne `organization_id` fuer alle Organisationen (Zeitplan)."""
-    as_of = as_of or date.today()
+    as_of = as_of or today_local()
     result = DailyRunResult(as_of=as_of)
     lock_session = create_session()
     try:

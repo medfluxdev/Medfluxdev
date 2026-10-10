@@ -18,11 +18,12 @@ import {
   type GridResponse,
   type GridSpec,
   type ListViewDto,
+  type MoneyTotals,
   type SavedViewDto,
   type TreeHospital,
 } from "@/lib/domain-api/registerGrid";
 import { unarchiveContract } from "@/lib/domain-api/contracts";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { coverageNote, formatCurrency, formatDate } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
 import ContractQuickView from "./ContractQuickView";
 import FilterEditor from "./FilterEditor";
@@ -98,6 +99,17 @@ function linkedFilters(): GridFilter[] | null {
   } catch {
     return null;
   }
+}
+
+// Summe mit Abdeckung: unbekannt bleibt „—“, Teilsummen sind gekennzeichnet.
+function sumText(totals: MoneyTotals | undefined, key: string): string {
+  if (!totals) return "—";
+  const value = totals.sums[key];
+  const coverage = totals.coverage?.[key];
+  const others = Object.entries(totals.other_currencies?.[key] ?? {}).map(([code, amount]) => ` + ${formatCurrency(amount, code)}`).join("");
+  if (value === null || value === undefined) return others ? others.slice(3) : "— (keine gepflegten Kosten)";
+  const note = coverageNote(coverage?.known, coverage?.missing);
+  return `${formatCurrency(value, totals.currency ?? "EUR")}${others}${note ? ` (${note})` : ""}`;
 }
 
 function formatCell(column: GridColumn | undefined, value: unknown): string {
@@ -395,7 +407,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
         <div className="cw-section-head"><div>
           <h2 id="reg-heading">{view?.name ?? "Alle Verträge"}</h2>
           {archiveMode ? <p>Archivierte Verträge sind aus Vertragsliste und Fristen ausgeblendet; „Wiederherstellen“ holt sie zurück. Es wird nichts gelöscht.</p> : null}
-          <p>{total === 0 ? "Keine Verträge für diese Auswahl." : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} von ${total} · Jährliche Kosten gesamt ${formatCurrency(data?.totals.sums.annual_cost ?? "0", "EUR")} · Kosten lfd. Jahr ${formatCurrency(data?.totals.sums.cost_current_year ?? "0", "EUR")}`}</p>
+          <p>{total === 0 ? "Keine Verträge für diese Auswahl." : `${offset + 1}–${Math.min(offset + PAGE_SIZE, total)} von ${total} · Jährliche Kosten gesamt ${sumText(data?.totals, "annual_cost")} · Kosten lfd. Jahr ${sumText(data?.totals, "cost_current_year")}`}</p>
         </div></div>
         {data && data.items.length > 0 ? <div className="reg-scroll"><table className="rg-table reg-table">
           <thead><tr>{shown.map((column) => {
@@ -410,7 +422,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey }: { org
               const group = groupIndex.get(JSON.stringify(path));
               return <tr key={`g-${depth}-${JSON.stringify(path)}`} className={`reg-group reg-group-${depth}`}>
                 <th scope="colgroup" colSpan={shown.length + (actionColumn ? 1 : 0)}>
-                  {columnByKey.get(spec.group_by[depth])?.label}: {group?.labels[depth] ?? "(ohne)"} <span className="cw-muted">· {group?.count ?? 0} Verträge · {formatCurrency(group?.sums.annual_cost ?? "0", "EUR")} jährlich</span>
+                  {columnByKey.get(spec.group_by[depth])?.label}: {group?.labels[depth] ?? "(ohne)"} <span className="cw-muted">· {group?.count ?? 0} Verträge · {sumText(group, "annual_cost")} jährlich</span>
                 </th>
               </tr>;
             });

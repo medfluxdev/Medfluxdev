@@ -28,6 +28,7 @@ from typing import Optional
 from sqlalchemy import Date, Numeric, and_, case, cast, exists, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import today_local
 from app.contracts.calculation.models import ContractCalculationResult
 from app.database.models.contract import BUSINESS_STATUS_ALLOWED
 from app.finance.calc import summarize
@@ -758,7 +759,7 @@ def _org_lookup(session: Session, organization_id) -> str:
 
 def _maintained_annual(contract, entries) -> Optional[dict]:
     """Jahreskosten aus gepflegten Finanzeintraegen (netto, Hauptwaehrung)."""
-    today = date.today()
+    today = today_local()
     adjustment, _ = price_adjustment(contract, today)
     summaries = summarize(entry_inputs(entries), as_of=today, contract_end=finance_contract_end(contract, today), adjustment=adjustment)
     main = max(summaries, key=lambda item: item.expense.annual_run_rate.net)
@@ -793,7 +794,7 @@ def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_na
     # wenn kein KI-Berechnungslauf vorliegt.
     register_terms: dict = {}
     if calc is None and contract.term_model is not None:
-        result = compute_terms(term_inputs(contract), date.today())
+        result = compute_terms(term_inputs(contract), today_local())
         register_terms = {"possible_end": result.actual_end or result.possible_end, "cancel_by": result.cancel_by}
 
     primary = _primary_warning(warnings)

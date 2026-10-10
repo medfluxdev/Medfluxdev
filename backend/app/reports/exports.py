@@ -26,8 +26,8 @@ from app.database.models.document import DocumentFile, DocumentVersion
 from app.database.models.register import ContractRemark
 from app.finance.calc import month_add
 from app.finance.service import finance_summary
-from app.register.status import STATUS_LABELS
-from app.reports.grid import COLUMN_BY_KEY, MONEY_KEYS, GridRow, GridSpec, groups, totals
+from app.register.status import STATUS_LABELS, is_running
+from app.reports.grid import COLUMN_BY_KEY, MONEY_KEYS, GridRow, GridSpec, MoneyTotals, groups, money_totals
 
 _HEADER_FILL = PatternFill("solid", fgColor="DCE6F0")
 _DATE_FORMAT = "DD.MM.YYYY"
@@ -72,6 +72,20 @@ def _write_sheet(sheet, headers: list[str], rows: list[list[Any]], formats: list
         sheet.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{len(rows) + 1}"
 
 
+def _float_or_none(value: Optional[str]) -> Optional[float]:
+    return float(Decimal(value)) if value is not None else None
+
+
+def _coverage_text(summary: dict, key: str) -> str:
+    coverage = summary["coverage"][key]
+    total = coverage["known"] + coverage["missing"]
+    if not total:
+        return ""
+    if coverage["missing"] == 0:
+        return f"vollständig ({total} Verträge)"
+    return f"bekannt für {coverage['known']} von {total} Verträgen"
+
+
 def _format_for(column_key: str) -> Optional[str]:
     kind = COLUMN_BY_KEY[column_key].type
     return _DATE_FORMAT if kind == "date" else _MONEY_FORMAT if kind == "money" else None
@@ -91,7 +105,7 @@ def grid_xlsx(rows: list[GridRow], spec: GridSpec, *, title: str, as_of: date) -
     if spec.group_by:
         group_sheet = workbook.create_sheet("Gruppen")
         group_rows = [
-            [" / ".join(item["labels"]), item["count"], *[float(Decimal(item["sums"][key])) for key in MONEY_KEYS]]
+            [" / ".join(item["labels"]), item["count"], *[_float_or_none(item["sums"][key]) for key in MONEY_KEYS]]
             for item in groups(rows, spec)
         ]
         _write_sheet(
@@ -101,14 +115,17 @@ def grid_xlsx(rows: list[GridRow], spec: GridSpec, *, title: str, as_of: date) -
             [None, None, *[_MONEY_FORMAT for _ in MONEY_KEYS]],
         )
     info = workbook.create_sheet("Info")
-    summary = totals(rows)
+    summary = money_totals(rows).payload()
     info.append(["Bericht", title])
     info.append(["Stand", as_of.strftime("%d.%m.%Y")])
     info.append(["Anzahl Verträge", summary["count"]])
     for key in MONEY_KEYS:
-        info.append([f"Summe {COLUMN_BY_KEY[key].label}", float(Decimal(summary["sums"][key]))])
+        info.append([f"Summe {COLUMN_BY_KEY[key].label}", _float_or_none(summary["sums"][key]), _coverage_text(summary, key)])
         info.cell(row=info.max_row, column=2).number_format = _MONEY_FORMAT
-    info.append(["Hinweis", "Werte deterministisch aus den Stammdaten und Finanzdaten berechnet (netto, EUR)."])
+        for currency, amount in summary["other_currencies"].get(key, {}).items():
+            info.append([f"Summe {COLUMN_BY_KEY[key].label} ({currency})", float(Decimal(amount))])
+    info.append(["Hinweis", "Werte deterministisch aus den Stammdaten und Finanzdaten berechnet (netto, EUR). "
+                 "Leere Summen bedeuten: keine gepflegten Werte, nicht 0."])
     info.column_dimensions["A"].width = 34
     info.column_dimensions["B"].width = 60
     buffer = io.BytesIO()
@@ -128,13 +145,54 @@ _DIMENSIONS = (
 TOP_N = 10
 
 
-def _money(value: Decimal) -> str:
-    return str(value.quantize(Decimal("0.01")))
+def _money(value: Optional[Decimal]) -> Optional[str]:
+    return str(value.quantize(Decimal("0.01"))) if value is not None else None
+
+
+def _amount(totals_: MoneyTotals, key: str) -> dict:
+    """Betrag mit Abdeckung fuer Kennzahlen (None = nichts bekannt, nicht 0)."""
+    payload = totals_.payload()
+    return {
+        "value": payload["sums"][key],
+        "currency": payload["currency"],
+        "known": payload["coverage"][key]["known"],
+        "missing": payload["coverage"][key]["missing"],
+        "other_currencies": payload["other_currencies"].get(key, {}),
+    }
+
+
+def running_rows(rows: list[GridRow], as_of: date) -> list[GridRow]:
+    return [
+        row for row in rows
+        if is_running(row.values["business_status"], row.values["term_start_date"], row.values["possible_end"], as_of)
+    ]
+
+
+def _merge(parts: list[MoneyTotals]) -> MoneyTotals:
+    merged = MoneyTotals()
+    for part in parts:
+        merged.count += part.count
+        for key in MONEY_KEYS:
+            merged.sums[key] += part.sums[key]
+            merged.main_known[key] += part.main_known[key]
+            merged.known[key] += part.known[key]
+            merged.missing[key] += part.missing[key]
+    return merged
+
+
+def _bucket_item(label: str, value: Optional[str], data: MoneyTotals) -> dict:
+    return {
+        "label": label, "value": value, "count": data.count,
+        "annual_cost": _money(data.sum("annual_cost")), "cost_current_year": _money(data.sum("cost_current_year")),
+        "known": data.known["cost_current_year"], "missing": data.missing["cost_current_year"],
+    }
 
 
 def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
     active = [row for row in rows if row.values["business_status"] != "geloescht"]
-    running = [row for row in active if row.values["business_status"] in ("in_arbeit", "gueltig", "gekuendigt")]
+    running = running_rows(active, as_of)
+    running_ids = {row.contract_id for row in running}
+    in_progress = [row for row in active if row.values["business_status"] == "in_arbeit"]
 
     by_status: dict[str, int] = defaultdict(int)
     for row in active:
@@ -142,7 +200,7 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
 
     cost_by: dict[str, list[dict]] = {}
     for key, _label in _DIMENSIONS:
-        buckets: dict[Optional[str], dict] = defaultdict(lambda: {"annual_cost": Decimal("0"), "cost_current_year": Decimal("0"), "count": 0})
+        buckets: dict[Optional[str], MoneyTotals] = defaultdict(MoneyTotals)
         for row in running:
             # Kostenstellen: Betraege anteilig nach der gepflegten Aufteilung.
             shares = (
@@ -150,28 +208,25 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
                 if key == "cost_center" and row.allocations else [(row.values[key], Decimal("1"))]
             )
             for name, share in shares:
-                bucket = buckets[name]
-                bucket["count"] += 1
-                for money_key in ("annual_cost", "cost_current_year"):
-                    if row.values[money_key] is not None:
-                        bucket[money_key] += row.values[money_key] * share
-        ordered = sorted(buckets.items(), key=lambda item: item[1]["cost_current_year"], reverse=True)
+                buckets[name].add(row, share)
+        ordered = sorted(
+            buckets.items(), key=lambda item: item[1].sum("cost_current_year") or Decimal("-1"), reverse=True
+        )
         head, tail = ordered[:TOP_N], ordered[TOP_N:]
-        items = [
-            {"label": name or "(ohne)", "value": name or "", "count": data["count"],
-             "annual_cost": _money(data["annual_cost"]), "cost_current_year": _money(data["cost_current_year"])}
-            for name, data in head
-        ]
+        items = [_bucket_item(name or "(ohne)", name or "", data) for name, data in head]
         if tail:
-            items.append({
-                "label": f"Übrige ({len(tail)})", "value": None, "count": sum(data["count"] for _, data in tail),
-                "annual_cost": _money(sum((data["annual_cost"] for _, data in tail), Decimal("0"))),
-                "cost_current_year": _money(sum((data["cost_current_year"] for _, data in tail), Decimal("0"))),
-            })
+            items.append(_bucket_item(f"Übrige ({len(tail)})", None, _merge([data for _, data in tail])))
         cost_by[key] = items
 
+    yearly_rows = running + [
+        row for row in active
+        if row.values["business_status"] in ("beendet", "gekuendigt") and row.contract_id not in running_ids
+    ]
     yearly = {year: {"expense": Decimal("0"), "income": Decimal("0")} for year in years}
-    for row in running + [row for row in active if row.values["business_status"] == "beendet"]:
+    with_finance = 0
+    for row in yearly_rows:
+        if row.yearly:
+            with_finance += 1
         for year, values in row.yearly.items():
             if year in yearly:
                 yearly[year]["expense"] += values["expense"]
@@ -181,7 +236,7 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
     months = [month_add(date(as_of.year, as_of.month, 1), offset) for offset in range(6)]
     upcoming = []
     monthly: dict[str, dict[str, int]] = {month.strftime("%Y-%m"): {"notice": 0, "other": 0} for month in months}
-    for row in running:
+    for row in running + in_progress:
         for due, title in row.upcoming:
             if as_of <= due < horizon:
                 kind = "notice" if title == "Kündigungsfrist" or "Kündigung" in title else "other"
@@ -193,38 +248,53 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
                 })
     upcoming.sort(key=lambda item: item["due_date"])
 
-    annual_total = sum((row.values["annual_cost"] or Decimal("0") for row in running), Decimal("0"))
+    running_totals = money_totals(running)
     partner_top = cost_by["partner"][0] if cost_by["partner"] else None
-    current_total = sum((row.values["cost_current_year"] or Decimal("0") for row in running), Decimal("0"))
+    current_total = running_totals.sum("cost_current_year")
     concentration = (
         (Decimal(partner_top["cost_current_year"]) / current_total * 100).quantize(Decimal("0.1"))
-        if partner_top and current_total > 0 and partner_top["value"] else None
+        if partner_top and partner_top["value"] and partner_top["cost_current_year"] and current_total and current_total > 0
+        else None
     )
     soon = [row for row in running if row.values["cancel_by"] and as_of <= row.values["cancel_by"] <= as_of.fromordinal(as_of.toordinal() + 90)]
+    considered = running + in_progress
     insights = [
+        {"key": "no_end", "label": "Laufzeitangaben unvollständig – Ende und Fristen nicht berechenbar",
+         "count": sum(1 for row in considered if row.values["term_status"] == "Unvollständig"),
+         "filter": {"column": "term_status", "op": "in", "value": ["Unvollständig"]}, "severity": "critical"},
         {"key": "no_responsible", "label": "Laufende Verträge ohne verantwortliche Person",
-         "count": sum(1 for row in running if not row.values["responsible"]), "filter": {"column": "responsible", "op": "empty"}},
+         "count": sum(1 for row in running if not row.values["responsible"]),
+         "filter": {"column": "responsible", "op": "empty"}, "severity": "warning"},
         {"key": "notice_no_reminder", "label": "Kündigungsfrist in 90 Tagen ohne Erinnerungsempfänger",
          "count": sum(1 for row in soon if not row.values["reminder_recipient"]),
-         "filter": {"column": "cancel_by", "op": "within_days", "value": 90}},
+         "filter": {"column": "cancel_by", "op": "within_days", "value": 90}, "severity": "warning"},
         {"key": "no_finance", "label": "Laufende Verträge ohne gepflegte Kosten",
          "count": sum(1 for row in running if row.values["annual_cost"] is None and row.values["cost_current_year"] is None),
-         "filter": {"column": "cost_current_year", "op": "empty"}},
-        {"key": "no_end", "label": "Laufende Verträge ohne berechenbares Vertragsende",
-         "count": sum(1 for row in running if row.values["possible_end"] is None), "filter": {"column": "possible_end", "op": "empty"}},
+         "filter": {"column": "cost_current_year", "op": "empty"}, "severity": "warning"},
         {"key": "deletion_due", "label": "Aufbewahrungsfrist abgelaufen (Löschprüfung)",
          "count": sum(1 for row in active if row.values["deletion_from"] and row.values["deletion_from"] <= as_of),
-         "filter": {"column": "deletion_from", "op": "overdue"}},
+         "filter": {"column": "deletion_from", "op": "overdue"}, "severity": "warning"},
     ]
 
     return {
         "as_of": as_of.isoformat(),
+        "definitions": {
+            "running": "Gültig oder gekündigt und am Stichtag innerhalb der Laufzeit (Beginn erreicht, Ende nicht überschritten). "
+                       "Verträge „In Arbeit“ zählen gesondert.",
+            "annual_cost": "Jährliche Kosten (aktueller Satz, netto) aus den gepflegten Finanzposten laufender Verträge. "
+                           "KI-Vorschläge sind nicht enthalten.",
+        },
         "totals": {
             "contracts": len(active),
             "running": len(running),
-            "annual_cost": _money(annual_total),
+            "in_progress": len(in_progress),
+            "perpetual": sum(1 for row in considered if row.values["term_status"] == "Unbefristet"),
+            "annual_cost": _money(running_totals.sum("annual_cost")),
             "cost_current_year": _money(current_total),
-            "income_current_year": _money(sum((row.values["income_current_year"] or Decimal("0") for row in running), Decimal("0"))),
+            "income_current_year": _money(running_totals.sum("income_current_year")),
+            "amounts": {
+                key: _amount(running_totals, key) for key in ("annual_cost", "cost_current_year", "income_current_year")
+            },
         },
         "by_status": [
             {"status": status, "label": STATUS_LABELS.get(status, status), "count": by_status.get(status, 0)}
@@ -233,9 +303,11 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
         "cost_by": cost_by,
         "dimensions": [{"key": key, "label": label} for key, label in _DIMENSIONS],
         "cost_by_year": [
-            {"year": year, "expense": _money(values["expense"]), "income": _money(values["income"]), "is_projection": year > as_of.year}
+            {"year": year, "expense": _money(values["expense"]) if with_finance else None,
+             "income": _money(values["income"]) if with_finance else None, "is_projection": year > as_of.year}
             for year, values in yearly.items()
         ],
+        "cost_by_year_coverage": {"known": with_finance, "total": len(yearly_rows)},
         "deadlines_by_month": [{"month": key, **values} for key, values in monthly.items()],
         "upcoming": upcoming[:100],
         "supplier_concentration": (
@@ -243,6 +315,15 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
         ),
         "insights": insights,
     }
+
+
+def _amount_coverage(amount: dict) -> str:
+    total = amount["known"] + amount["missing"]
+    if not total:
+        return "keine laufenden Verträge"
+    if amount["missing"] == 0:
+        return f"vollständig ({total} Verträge)"
+    return f"bekannt für {amount['known']} von {total} Verträgen"
 
 
 def portfolio_xlsx(report: dict) -> bytes:
@@ -256,9 +337,11 @@ def portfolio_xlsx(report: dict) -> bytes:
             ["Stand", date.fromisoformat(report["as_of"])],
             ["Verträge (ohne gelöschte)", totals_["contracts"]],
             ["Davon laufend", totals_["running"]],
-            ["Jährliche Kosten (netto)", float(Decimal(totals_["annual_cost"]))],
-            ["Kosten lfd. Jahr (netto)", float(Decimal(totals_["cost_current_year"]))],
-            ["Einnahmen lfd. Jahr (netto)", float(Decimal(totals_["income_current_year"]))],
+            ["Jährliche Kosten (netto)", _float_or_none(totals_["annual_cost"])],
+            ["Kosten lfd. Jahr (netto)", _float_or_none(totals_["cost_current_year"])],
+            ["Einnahmen lfd. Jahr (netto)", _float_or_none(totals_["income_current_year"])],
+            ["In Arbeit (nicht laufend)", totals_.get("in_progress", 0)],
+            ["Abdeckung jährliche Kosten", _amount_coverage(totals_["amounts"]["annual_cost"])],
             *[[item["label"], item["count"]] for item in report["by_status"]],
             *[[item["label"], item["count"]] for item in report["insights"]],
         ],
@@ -272,14 +355,14 @@ def portfolio_xlsx(report: dict) -> bytes:
         sheet = workbook.create_sheet(f"Kosten je {dimension['label']}"[:31])
         _write_sheet(
             sheet, [dimension["label"], "Anzahl", "Jährliche Kosten (netto)", "Kosten lfd. Jahr (netto)"],
-            [[item["label"], item["count"], float(Decimal(item["annual_cost"])), float(Decimal(item["cost_current_year"]))]
+            [[item["label"], item["count"], _float_or_none(item["annual_cost"]), _float_or_none(item["cost_current_year"])]
              for item in report["cost_by"][dimension["key"]]],
             [None, None, _MONEY_FORMAT, _MONEY_FORMAT],
         )
     years = workbook.create_sheet("Kosten je Jahr")
     _write_sheet(
         years, ["Jahr", "Ausgaben (netto)", "Einnahmen (netto)", "Hochrechnung"],
-        [[item["year"], float(Decimal(item["expense"])), float(Decimal(item["income"])), "Ja" if item["is_projection"] else "Nein"]
+        [[item["year"], _float_or_none(item["expense"]), _float_or_none(item["income"]), "Ja" if item["is_projection"] else "Nein"]
          for item in report["cost_by_year"]],
         [None, _MONEY_FORMAT, _MONEY_FORMAT, None],
     )

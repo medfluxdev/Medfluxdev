@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.core.scope_context import current_scope_context
 from app.core.config import settings
 from app.database.scope_queries import scoped_contract_ids
@@ -245,7 +246,7 @@ def contract_list(
     risk = _validate_list(risk, RISK_ALLOWLIST, "risk")
     warning_type = _validate_list(warning_type, WARNING_TYPE_ALLOWLIST, "warning_type")
 
-    today: date = date.today()
+    today: date = today_local()
     session = create_session()
     try:
         org = get_organization(session, organization_slug)

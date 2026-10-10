@@ -132,6 +132,17 @@ class Settings(BaseSettings):
     def _anchor_storage_paths(cls, value: str) -> str:
         return resolve_storage_path(value)
 
+    @field_validator("org_timezone")
+    @classmethod
+    def _valid_timezone(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"ORG_TIMEZONE ist keine gueltige Zeitzone: {value!r}") from exc
+        return value
+
     # STEP 16 + integriertes Ahmad-Accountmodell.
     app_secret_key: str = "change-me"
     # Fail-closed Default: Authentifizierung ist AKTIV, wenn sie nicht explizit
@@ -143,6 +154,9 @@ class Settings(BaseSettings):
     # H5: Tageslauf fuer Fristen/Erinnerungen. Im Prozess nur per Opt-in;
     # alternativ per Aufgabenplanung `python -m app.jobs.daily`.
     reminder_scheduler_enabled: bool = False
+    # Zeitzone der Organisation fuer "heute" (Stichtag von Fristen, Berichten,
+    # Tageslauf). Vertragsdaten sind reine Kalenderdaten und werden nicht umgerechnet.
+    org_timezone: str = "Europe/Berlin"
     reminder_run_hour: int = 5
     # E-Mail (SMTP). Ohne smtp_host bleiben Erinnerungen im Postfach und
     # E-Mails in der Warteschlange.

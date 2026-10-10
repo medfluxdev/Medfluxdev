@@ -59,6 +59,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("contract_category", "Kategorie", "enum", groupable=True),
     Column("internal_number", "Interne Nummer", "text"),
     Column("term_model", "Vertragsart", "enum", groupable=True),
+    Column("term_status", "Laufzeitangaben", "enum", groupable=True),
     Column("term_start_date", "Vertragsbeginn", "date"),
     Column("earliest_end", "Frühestes Ende", "date"),
     Column("cancel_by", "Kündbar bis", "date", default=True),
@@ -97,6 +98,9 @@ DEFAULT_COLUMNS = [column.key for column in COLUMNS if column.default]
 FILTER_OPS = {"empty", "not_empty", "in", "contains", "range", "within_days", "due_within_days", "overdue", "me", "is"}
 MAX_GROUP_LEVELS = 2
 RISK_LABELS = {"high": "Hoch", "medium": "Mittel", "low": "Niedrig"}
+TERM_STATUS_LABELS = {"complete": "Vollständig", "incomplete": "Unvollständig", "not_applicable": "Unbefristet"}
+# Summen werden je Waehrung gebildet; die Hauptwaehrung steht in `sums`.
+MAIN_CURRENCY = "EUR"
 
 
 class GridError(ValueError):
@@ -308,6 +312,7 @@ def build_rows(
             "contract_category": categories.get(contract.contract_category_id) if contract.contract_category_id else None,
             "internal_number": contract.internal_number,
             "term_model": TERM_MODEL_LABELS.get(contract.term_model) if contract.term_model else None,
+            "term_status": TERM_STATUS_LABELS.get(terms.status, terms.status),
             "term_start_date": contract.term_start_date,
             "earliest_end": terms.earliest_end,
             "cancel_by": terms.cancel_by,
@@ -339,6 +344,8 @@ def build_rows(
             "storage_location": storage.get(contract.storage_location_code, contract.storage_location_code) if contract.storage_location_code else None,
             "archived_at": contract.archived_at.date() if contract.archived_at else None,
             "deletion_from": deletion_from,
+            # Nicht als Spalte sichtbar: Waehrung der Betraege dieser Zeile.
+            "_currency": summary.currency if summary else None,
         }
         rule_results = evaluate_rules(contract_rules, contract, values.get("annual_cost"))
         failed = [item for item in rule_results if item.outcome == "fail"]
@@ -563,18 +570,70 @@ def display(column: Column, value: Any) -> Any:
     return value
 
 
+class MoneyTotals:
+    """Summe je Betragsspalte mit Abdeckung: unbekannte Werte werden nie zu 0.
+
+    `sums[key]` ist die Summe der bekannten Werte in der Hauptwaehrung (None, wenn
+    dort keiner bekannt ist), `coverage` zaehlt Zeilen mit bzw. ohne Wert (alle
+    Waehrungen), `other_currencies` haelt Summen anderer Waehrungen getrennt
+    (keine Umrechnung).
+    """
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.sums = {key: Decimal("0") for key in MONEY_KEYS}
+        self.main_known = {key: 0 for key in MONEY_KEYS}
+        self.known = {key: 0 for key in MONEY_KEYS}
+        self.missing = {key: 0 for key in MONEY_KEYS}
+        self.other: dict[str, dict[str, Decimal]] = {key: {} for key in MONEY_KEYS}
+
+    def add(self, row: "GridRow", share: Decimal = Decimal("1")) -> None:
+        self.count += 1
+        currency = row.values.get("_currency") or MAIN_CURRENCY
+        for key in MONEY_KEYS:
+            value = row.values[key]
+            if value is None:
+                self.missing[key] += 1
+                continue
+            self.known[key] += 1
+            if currency == MAIN_CURRENCY:
+                self.main_known[key] += 1
+                self.sums[key] += value * share
+            else:
+                bucket = self.other[key]
+                bucket[currency] = bucket.get(currency, Decimal("0")) + value * share
+
+    def sum(self, key: str) -> Optional[Decimal]:
+        return self.sums[key].quantize(Decimal("0.01")) if self.main_known[key] else None
+
+    def payload(self) -> dict:
+        return {
+            "count": self.count,
+            "currency": MAIN_CURRENCY,
+            "sums": {key: (str(value) if (value := self.sum(key)) is not None else None) for key in MONEY_KEYS},
+            "coverage": {key: {"known": self.known[key], "missing": self.missing[key]} for key in MONEY_KEYS},
+            "other_currencies": {
+                key: {currency: str(amount.quantize(Decimal("0.01"))) for currency, amount in sorted(self.other[key].items())}
+                for key in MONEY_KEYS if self.other[key]
+            },
+        }
+
+
+def money_totals(rows: Iterable["GridRow"]) -> MoneyTotals:
+    result = MoneyTotals()
+    for row in rows:
+        result.add(row)
+    return result
+
+
 def groups(rows: list[GridRow], spec: GridSpec) -> list[dict]:
     if not spec.group_by:
         return []
-    buckets: dict[tuple, dict] = {}
+    buckets: dict[tuple, MoneyTotals] = {}
     for row in rows:
         for depth in range(1, len(spec.group_by) + 1):
             path = tuple(row.values[key] for key in spec.group_by[:depth])
-            bucket = buckets.setdefault(path, {"count": 0, "sums": {key: Decimal("0") for key in MONEY_KEYS}})
-            bucket["count"] += 1
-            for key in MONEY_KEYS:
-                if row.values[key] is not None:
-                    bucket["sums"][key] += row.values[key]
+            buckets.setdefault(path, MoneyTotals()).add(row)
     out = []
     for path in sorted(buckets, key=lambda item: (len(item), [_sort_value(value) for value in item])):
         out.append({
@@ -583,19 +642,13 @@ def groups(rows: list[GridRow], spec: GridSpec) -> list[dict]:
                 display(COLUMN_BY_KEY[spec.group_by[index]], value) if value not in (None, "") else "(ohne)"
                 for index, value in enumerate(path)
             ],
-            "count": buckets[path]["count"],
-            "sums": {key: str(amount) for key, amount in buckets[path]["sums"].items()},
+            **buckets[path].payload(),
         })
     return out
 
 
 def totals(rows: list[GridRow]) -> dict:
-    sums = {key: Decimal("0") for key in MONEY_KEYS}
-    for row in rows:
-        for key in MONEY_KEYS:
-            if row.values[key] is not None:
-                sums[key] += row.values[key]
-    return {"count": len(rows), "sums": {key: str(amount) for key, amount in sums.items()}}
+    return money_totals(rows).payload()
 
 
 def row_payload(row: GridRow, columns: list[str]) -> dict:

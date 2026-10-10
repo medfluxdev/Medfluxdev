@@ -14,6 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.ai.service import AIService
 from app.auth.dependencies import current_actor
 from app.auth.permissions import can, is_admin, require
@@ -43,7 +44,7 @@ from app.reports.grid import (
     tree,
     visible_rows,
 )
-from app.reports.renewal import decision_summary, renewal_brief, upcoming_renewals, urgency
+from app.reports.renewal import decision_summary, not_evaluable, renewal_brief, upcoming_renewals, urgency
 from app.reports.renewal_ai import summarize_brief
 from app.reports.views import ViewError, create_view, delete_view, list_views, update_view, view_payload
 from app.search.content import ensure_index, index_status, search_contents
@@ -114,7 +115,7 @@ def get_grid(
 ):
     actor = current_actor(request, organization_slug)
     parsed = _spec(spec)
-    as_of = date.today()
+    as_of = today_local()
     session = create_session()
     try:
         all_rows, rows = _rows(session, actor, parsed, as_of)
@@ -152,7 +153,7 @@ def get_values(request: Request, organization_slug: str, column: str, spec: Opti
     parsed.filters = [item for item in parsed.filters if item["column"] != column]
     session = create_session()
     try:
-        _, rows = _rows(session, actor, parsed, date.today())
+        _, rows = _rows(session, actor, parsed, today_local())
         return {"column": column, "values": distinct_values(rows, column)[:500]}
     finally:
         session.close()
@@ -165,7 +166,7 @@ def get_tree(request: Request, organization_slug: str, spec: Optional[str] = Non
     parsed.filters = [item for item in parsed.filters if item["column"] not in ("hospital", "department")]
     session = create_session()
     try:
-        _, rows = _rows(session, actor, parsed, date.today())
+        _, rows = _rows(session, actor, parsed, today_local())
         return {"total": len(rows), "hospitals": tree(rows)}
     finally:
         session.close()
@@ -176,7 +177,7 @@ def export_grid(request: Request, organization_slug: str, spec: Optional[str] = 
     actor = current_actor(request, organization_slug)
     require(actor, "export")
     parsed = _spec(spec)
-    as_of = date.today()
+    as_of = today_local()
     session = create_session()
     try:
         _, rows = _rows(session, actor, parsed, as_of)
@@ -197,7 +198,7 @@ def _report_years(as_of: date) -> range:
 @router.get("/api/register/reports/portfolio")
 def get_portfolio(request: Request, organization_slug: str):
     actor = current_actor(request, organization_slug)
-    as_of = date.today()
+    as_of = today_local()
     session = create_session()
     try:
         rows, _ = _rows(session, actor, GridSpec(), as_of, years=_report_years(as_of))
@@ -210,7 +211,7 @@ def get_portfolio(request: Request, organization_slug: str):
 def export_portfolio(request: Request, organization_slug: str):
     actor = current_actor(request, organization_slug)
     require(actor, "export")
-    as_of = date.today()
+    as_of = today_local()
     session = create_session()
     try:
         rows, _ = _rows(session, actor, GridSpec(), as_of, years=_report_years(as_of))
@@ -225,7 +226,7 @@ def export_portfolio(request: Request, organization_slug: str):
 @router.get("/api/contracts/{contract_id}/cover.pdf")
 def get_cover(contract_id: UUID, request: Request, organization_slug: str):
     actor = current_actor(request, organization_slug)
-    as_of = date.today()
+    as_of = today_local()
     session = create_session()
     try:
         contract = session.scalars(
@@ -337,7 +338,7 @@ def remove_view(view_id: UUID, request: Request, organization_slug: str):
 @router.get("/api/register/renewals")
 def get_renewals(request: Request, organization_slug: str, days: int = 120):
     actor = current_actor(request, organization_slug)
-    as_of = date.today()
+    as_of = today_local()
     session = create_session()
     try:
         rows, _ = _rows(session, actor, GridSpec(), as_of)
@@ -362,6 +363,16 @@ def get_renewals(request: Request, organization_slug: str, days: int = 120):
                 }
                 for row in upcoming
             ],
+            # Ehrlich statt "alles entschieden": Verträge ohne berechenbare Frist.
+            "not_evaluable": [
+                {
+                    "contract_id": str(row.contract_id),
+                    "register_number": row.values["register_number"],
+                    "short_description": row.values["short_description"],
+                    "reason": "Laufzeitangaben unvollständig",
+                }
+                for row in not_evaluable(rows)
+            ],
         }
     finally:
         session.close()
@@ -380,7 +391,7 @@ def get_renewal_brief(contract_id: UUID, request: Request, organization_slug: st
             contract = None
         if contract is None:
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
-        return renewal_brief(session, contract, date.today(), visible)
+        return renewal_brief(session, contract, today_local(), visible)
     finally:
         session.close()
 
@@ -423,7 +434,7 @@ def _brief_for(request: Request, organization_slug: str, contract_id: UUID) -> d
             contract = None
         if contract is None:
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
-        return renewal_brief(session, contract, date.today(), visible)
+        return renewal_brief(session, contract, today_local(), visible)
     finally:
         session.close()
 

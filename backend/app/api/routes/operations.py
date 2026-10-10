@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.auth.context import enforce_org, optional_identity
 from app.auth.permissions import require
 from app.core.config import settings
@@ -135,7 +136,7 @@ def export_contracts_csv(
             )
             session.commit()
 
-        filename = f"medflux-vertraege-{organization_slug}-{date.today().isoformat()}.csv"
+        filename = f"medflux-vertraege-{organization_slug}-{today_local().isoformat()}.csv"
         return Response(
             content="\ufeff" + out.getvalue(),
             media_type="text/csv; charset=utf-8",

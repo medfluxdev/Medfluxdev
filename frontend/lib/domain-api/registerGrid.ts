@@ -29,18 +29,25 @@ export interface GridSpec {
   archived?: boolean;
 }
 
-export interface GridGroup {
+/** Summen mit Abdeckung: `sums[key]` ist null, wenn kein Wert bekannt ist (nicht 0). */
+export interface MoneyTotals {
+  count: number;
+  currency?: string;
+  sums: Record<string, string | null>;
+  coverage?: Record<string, { known: number; missing: number }>;
+  other_currencies?: Record<string, Record<string, string>>;
+}
+
+export interface GridGroup extends MoneyTotals {
   path: (string | number | boolean | null)[];
   labels: string[];
-  count: number;
-  sums: Record<string, string>;
 }
 
 export interface GridResponse {
   as_of: string;
   spec: GridSpec;
   total: number;
-  totals: { count: number; sums: Record<string, string> };
+  totals: MoneyTotals;
   groups: GridGroup[];
   items: { contract_id: string; values: Record<string, string | number | boolean | null>; group: (string | number | boolean | null)[] }[];
   tree?: TreeHospital[];
@@ -78,21 +85,43 @@ export interface PortfolioItem {
   label: string;
   value: string | null;
   count: number;
-  annual_cost: string;
-  cost_current_year: string;
+  annual_cost: string | null;
+  cost_current_year: string | null;
+  known?: number;
+  missing?: number;
+}
+
+/** Kennzahl-Betrag mit Abdeckung: value null = nichts bekannt (nicht 0). */
+export interface CoverageAmount {
+  value: string | null;
+  currency: string;
+  known: number;
+  missing: number;
+  other_currencies: Record<string, string>;
 }
 
 export interface PortfolioReport {
   as_of: string;
-  totals: { contracts: number; running: number; annual_cost: string; cost_current_year: string; income_current_year: string };
+  definitions?: { running: string; annual_cost: string };
+  totals: {
+    contracts: number;
+    running: number;
+    in_progress?: number;
+    perpetual?: number;
+    annual_cost: string | null;
+    cost_current_year: string | null;
+    income_current_year: string | null;
+    amounts?: Record<"annual_cost" | "cost_current_year" | "income_current_year", CoverageAmount>;
+  };
   by_status: { status: string; label: string; count: number }[];
   cost_by: Record<string, PortfolioItem[]>;
   dimensions: { key: string; label: string }[];
-  cost_by_year: { year: number; expense: string; income: string; is_projection: boolean }[];
+  cost_by_year: { year: number; expense: string | null; income: string | null; is_projection: boolean }[];
+  cost_by_year_coverage?: { known: number; total: number };
   deadlines_by_month: { month: string; notice: number; other: number }[];
   upcoming: { contract_id: string; register_number: string | null; short_description: string | null; due_date: string; title: string; kind: string }[];
   supplier_concentration: { partner: string; share_percent: string } | null;
-  insights: { key: string; label: string; count: number; filter: GridFilter }[];
+  insights: { key: string; label: string; count: number; filter: GridFilter; severity?: "critical" | "warning" }[];
 }
 
 export const EMPTY_SPEC: GridSpec = { columns: [], filters: [], sort: null, group_by: [], q: null, include_deleted: false, archived: false };
@@ -217,8 +246,15 @@ export interface RenewalBrief {
   explanation: string[];
 }
 
+export interface NotEvaluableItem {
+  contract_id: string;
+  register_number: string | null;
+  short_description: string | null;
+  reason: string;
+}
+
 export function listRenewals(organizationSlug: string, days = 120) {
-  return apiGet<{ as_of: string; days: number; items: RenewalListItem[] }>(`/api/register/renewals?${org(organizationSlug)}&days=${days}`);
+  return apiGet<{ as_of: string; days: number; items: RenewalListItem[]; not_evaluable?: NotEvaluableItem[] }>(`/api/register/renewals?${org(organizationSlug)}&days=${days}`);
 }
 
 export interface ContentSearchResult {

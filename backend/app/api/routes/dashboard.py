@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.core.clock import today_local
 from app.core.config import settings
 from app.core.scope_context import current_scope_context
 from app.dashboard.models import DashboardOverview
@@ -32,7 +33,7 @@ def dashboard_overview(
     organization_slug: str,
     as_of_date: Optional[date] = None,
 ) -> DashboardOverview:
-    today: date = as_of_date or date.today()
+    today: date = as_of_date or today_local()
     session = create_session()
     try:
         org = get_organization(session, organization_slug)

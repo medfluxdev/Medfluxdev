@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request, Response
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.auth.dependencies import current_actor
 from app.auth.permissions import is_admin, require
 from app.core.scope_context import current_scope_context
@@ -133,7 +134,7 @@ def export_history(
         return Response(
             content=history_csv(result["items"]),
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="medflux-historie-{date.today().isoformat()}.csv"'},
+            headers={"Content-Disposition": f'attachment; filename="medflux-historie-{today_local().isoformat()}.csv"'},
         )
     finally:
         session.close()

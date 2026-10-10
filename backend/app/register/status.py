@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Optional
 
+from app.core.clock import today_local
 from app.register.fields import REQUIRED_FOR_VALID, FIELDS
 
 STATUS_LABELS = {
@@ -29,6 +30,22 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     "beendet": ("geloescht", "gueltig"),
     "geloescht": (),
 }
+
+# Laufend = gueltig oder gekuendigt und am Stichtag innerhalb der Laufzeit.
+# "In Arbeit" ist ein Entwurf und zaehlt nicht als laufend; ein gekuendigter
+# Vertrag laeuft bis zu seinem Ende weiter.
+RUNNING_STATUSES = ("gueltig", "gekuendigt")
+
+
+def is_running(business_status: Optional[str], start: Optional[date], end: Optional[date], as_of: date) -> bool:
+    if business_status not in RUNNING_STATUSES:
+        return False
+    if start is not None and start > as_of:
+        return False
+    if end is not None and end < as_of:
+        return False
+    return True
+
 
 WRITE_ROLES = frozenset({"admin", "contract_manager"})
 DELETE_ROLES = frozenset({"admin"})
@@ -108,5 +125,5 @@ def plan_transition(
             raise TransitionError(422, "„Gekündigt zum“ liegt vor „Gekündigt am“.")
         updates.update({"terminated_on": notice_date, "terminated_effective": end_date})
     elif target == "beendet":
-        updates["ended_on"] = effective_date or values.get("terminated_effective") or date.today()
+        updates["ended_on"] = effective_date or values.get("terminated_effective") or today_local()
     return TransitionPlan(target=target, updates=updates)

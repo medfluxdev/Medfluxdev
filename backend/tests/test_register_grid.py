@@ -216,7 +216,23 @@ def test_excel_export_portfolio_and_cover(monkeypatch):
     assert workbook["Gruppen"]["A2"].value == "Klinikum A"
 
     report = admin.get("/api/register/reports/portfolio", params=query).json()
+    # Neu angelegte Verträge sind "In Arbeit" und zählen nicht als laufend.
+    assert report["totals"]["running"] == 0 and report["totals"]["in_progress"] == 2
+    assert report["totals"]["annual_cost"] is None
+    assert report["totals"]["amounts"]["annual_cost"] == {
+        "value": None, "currency": "EUR", "known": 0, "missing": 0, "other_currencies": {},
+    }
+    session = create_session()
+    try:
+        for cid in (a, b):
+            session.get(Contract, UUID(cid)).business_status = "gueltig"
+        session.commit()
+    finally:
+        session.close()
+    report = admin.get("/api/register/reports/portfolio", params=query).json()
     assert report["totals"]["running"] == 2 and report["totals"]["annual_cost"] == "18000.00"
+    assert report["totals"]["amounts"]["annual_cost"]["known"] == 2
+    assert report["totals"]["amounts"]["annual_cost"]["missing"] == 0
     assert report["cost_by"]["hospital"][0]["label"] == "Klinikum A"
     year = next(item for item in report["cost_by_year"] if item["year"] == date.today().year)
     assert Decimal(year["expense"]) > 0

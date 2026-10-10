@@ -233,6 +233,19 @@ def upcoming_renewals(rows: list[GridRow], as_of: date, days: int) -> list[GridR
     return sorted(out, key=lambda row: row.values["cancel_by"])
 
 
+def not_evaluable(rows: list[GridRow]) -> list[GridRow]:
+    """Verträge, deren Kündigungsfrist mangels Laufzeitangaben nicht berechenbar ist.
+
+    Unbefristete Verträge gehören nicht dazu (dort gibt es keine Frist).
+    """
+    out = [
+        row for row in rows
+        if row.values["business_status"] in RUNNING and row.values["cancel_by"] is None
+        and row.values["term_status"] == "Unvollständig"
+    ]
+    return sorted(out, key=lambda row: str(row.values["register_number"] or ""))
+
+
 def decision_summary(session: Session, contract_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict]:
     if not contract_ids:
         return {}

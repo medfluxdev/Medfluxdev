@@ -28,6 +28,7 @@ from typing import Any, Optional
 
 from sqlalchemy import select, update
 
+from app.core.clock import today_local
 from app.ai.contract_extractor import (
     ContractAnalysisOrchestrator,
     ContractAnalysisResult,
@@ -261,7 +262,7 @@ class DocumentProcessingService:
                 stored=stored,
                 organization_id=organization_id,
                 storage_key=storage_key,
-                as_of=as_of_date or date.today(),
+                as_of=as_of_date or today_local(),
             ),
             organization_id,
         )
@@ -321,7 +322,7 @@ class DocumentProcessingService:
             stored=stored,
             organization_id=organization_id,
             storage_key=storage_key,
-            as_of=as_of_date or date.today(),
+            as_of=as_of_date or today_local(),
             attachment=AttachmentTarget(contract_id=contract_id, attachment_type=attachment_type, label=label),
         )
 
@@ -410,7 +411,7 @@ class DocumentProcessingService:
                 stored=stored,
                 organization_id=organization_id,
                 storage_key=storage_key,
-                as_of=as_of_date or date.today(),
+                as_of=as_of_date or today_local(),
             ),
             organization_id,
         )
@@ -492,7 +493,7 @@ class DocumentProcessingService:
                 stored=stored,
                 organization_id=organization_id,
                 storage_key=storage_key,
-                as_of=as_of_date or date.today(),
+                as_of=as_of_date or today_local(),
                 reanalysis_contract_id=contract_id,
             ),
             organization_id,

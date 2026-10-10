@@ -11,6 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.api.routes.contract_register import _contract, _register_actor, _require_write
 from app.api.routes.documents import _read_upload_bounded
 from app.core.scope_context import current_scope_context
@@ -101,7 +102,7 @@ async def upload_documents(
             title=title if len(files) == 1 else None,
             added_by_name=actor.display_name,
             analyze=analyze,
-            as_of_date=date.today(),
+            as_of_date=today_local(),
         )
         results.append({
             "original_filename": uploaded.filename or "",

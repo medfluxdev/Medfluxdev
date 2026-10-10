@@ -49,6 +49,17 @@ export function formatCurrency(amount: string, currency: string): string {
   }).format(number);
 }
 
+// Abdeckung einer Summe: wie viele Verträge einen gepflegten Wert haben.
+// Leer, wenn alle bekannt sind oder es keine Verträge gibt.
+export function coverageNote(known: number | undefined, missing: number | undefined, valueUnknown = false): string {
+  const k = known ?? 0;
+  const m = missing ?? 0;
+  if (k + m === 0) return "";
+  if (valueUnknown && k === 0) return `Keine gepflegten Kostendaten (${m} ${m === 1 ? "Vertrag" : "Verträge"})`;
+  if (m === 0) return "";
+  return `bekannt für ${k} von ${k + m} Verträgen`;
+}
+
 // "in 14 Tagen" / "heute" / "seit 3 Tagen überfällig"
 export function formatDaysRemaining(days: number | null | undefined): string {
   if (days == null) return "Termin unbekannt";

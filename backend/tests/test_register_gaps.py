@@ -161,6 +161,14 @@ def test_cost_centre_split_in_grid_and_portfolio(monkeypatch):
     import json as _json
     grid = client.get("/api/register/grid", params={**query, "spec": _json.dumps({"columns": ["register_number", "cost_center", "cost_allocation"]})}).json()
     assert grid["items"][0]["values"]["cost_allocation"] == "Radiologie 60 %, IT 40 %"
+    # Nur laufende Verträge (gültig/gekündigt) gehen in die Kostenverteilung ein.
+    session = create_session()
+    try:
+        from app.database.models import Contract as _Contract
+        session.get(_Contract, UUID(cid)).business_status = "gueltig"
+        session.commit()
+    finally:
+        session.close()
     report = client.get("/api/register/reports/portfolio", params=query).json()
     by_cc = {item["label"]: item["annual_cost"] for item in report["cost_by"]["cost_center"]}
     assert by_cc == {"Radiologie": "7200.00", "IT": "4800.00"}

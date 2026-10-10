@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.auth.dependencies import current_actor
 from app.auth.permissions import is_admin, require
 from app.core.scope_context import current_scope_context
@@ -114,7 +115,7 @@ def contract_rules(contract_id: UUID, request: Request, organization_slug: str):
             allowed = scoped_contract_ids(session, actor.organization_id, scope.hospital_id, scope.department_id)
             if allowed is not None and contract.id not in allowed:
                 raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
-        rows = build_rows(session, actor.organization_id, {contract.id}, date.today(), archived=bool(contract.is_archived))
+        rows = build_rows(session, actor.organization_id, {contract.id}, today_local(), archived=bool(contract.is_archived))
         annual_cost = rows[0].values.get("annual_cost") if rows else None
         results = service.evaluate_all(service.active_rules(session, actor.organization_id), contract, annual_cost)
         return {

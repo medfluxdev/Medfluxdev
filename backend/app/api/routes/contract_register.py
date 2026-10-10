@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.auth.dependencies import current_actor
 from app.auth.permissions import require
 from app.core.scope_context import current_scope_context
@@ -158,7 +159,7 @@ def create_contract(payload: ContractCreate, request: Request, organization_slug
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
-        sync_system_deadlines(session, contract, date.today())
+        sync_system_deadlines(session, contract, today_local())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -172,7 +173,7 @@ def get_register(contract_id: UUID, request: Request, organization_slug: str):
     try:
         contract = _contract(session, actor, contract_id)
         if ensure_synced(session, contract):
-            sync_system_deadlines(session, contract, date.today())
+            sync_system_deadlines(session, contract, today_local())
             session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -191,7 +192,7 @@ def patch_register(contract_id: UUID, payload: RegisterUpdate, request: Request,
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
-        sync_system_deadlines(session, contract, date.today())
+        sync_system_deadlines(session, contract, today_local())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -210,7 +211,7 @@ def accept_proposal(contract_id: UUID, field_key: str, request: Request, organiz
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
-        sync_system_deadlines(session, contract, date.today())
+        sync_system_deadlines(session, contract, today_local())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:
@@ -238,7 +239,7 @@ def change_status(contract_id: UUID, payload: StatusTransition, request: Request
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
-        sync_system_deadlines(session, contract, date.today())
+        sync_system_deadlines(session, contract, today_local())
         session.commit()
         return _register_payload(session, contract, actor)
     finally:

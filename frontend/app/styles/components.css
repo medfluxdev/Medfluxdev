@@ -727,3 +727,10 @@ body { background: var(--color-bg); }
 .query-row input { flex: 1 1 280px; min-width: 0; min-height: var(--control-height-md); }
 .query-result { margin-top: var(--space-4); }
 .query-result h3 { margin: 0 0 var(--space-2); font-size: var(--text-body); }
+
+/* Betrag mit Abdeckung (CoverageValue) */
+.coverage { display: inline-flex; flex-direction: column; gap: var(--space-1); }
+.coverage-value { font-variant-numeric: tabular-nums; }
+.coverage-other { font-size: var(--text-small); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.coverage-note { font-size: var(--text-small); font-weight: var(--weight-regular); color: var(--color-text-muted); }
+.coverage--partial .coverage-note { color: var(--color-text); font-weight: var(--weight-medium); }

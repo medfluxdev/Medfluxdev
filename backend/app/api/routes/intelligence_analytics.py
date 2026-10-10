@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.core.clock import today_local
 from app.contract_intelligence.clauses import fingerprint_clause
 from app.contract_intelligence.invoice import (
     ContractCharge,
@@ -362,7 +363,7 @@ def portfolio_query(request: Request, payload: PortfolioQueryRequest, organizati
             supplier=payload.supplier,
             contract_ids=payload.contract_ids,
             equipment_id=payload.equipment_id,
-            as_of_date=payload.as_of_date or date.today(),
+            as_of_date=payload.as_of_date or today_local(),
         )
         result = answer_portfolio_question(question, rows)
         selected = set(result.contract_ids)

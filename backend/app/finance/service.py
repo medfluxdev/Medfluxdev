@@ -13,6 +13,7 @@ from typing import Any, Optional
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import today_local
 from app.contracts.calculation.calendar_ import month_add
 from app.database.models import Contract, CostCenter
 from app.database.models.finance import (
@@ -263,7 +264,7 @@ def annual_run_rate(session: Session, contract: Contract, as_of: date) -> Option
 
 def refresh_maintained_cost(session: Session, contract: Contract, as_of: Optional[date] = None) -> None:
     """Aktualisiert den Zwischenspeicher der gepflegten Jahreskosten am Vertrag."""
-    as_of = as_of or date.today()
+    as_of = as_of or today_local()
     rate = annual_run_rate(session, contract, as_of)
     contract.maintained_annual_cost = Decimal(rate["net"]) if rate else None
     contract.maintained_annual_currency = rate["currency"] if rate else None
@@ -324,7 +325,7 @@ def suggestions(session: Session, contract: Contract) -> dict[str, list[dict]]:
     extracted = accepted_extraction(session, contract)
     if extracted is None:
         return {"entries": [], "services": []}
-    start = contract.term_start_date or getattr(extracted.dates.start_date, "date", None) or date.today().replace(day=1)
+    start = contract.term_start_date or getattr(extracted.dates.start_date, "date", None) or today_local().replace(day=1)
     dismissed = _dismissed(session, contract.id)
     used_entries = {row.source_key for row in _entries(session, contract.id) if row.source_key}
     used_services = set(session.scalars(
@@ -345,7 +346,7 @@ def suggestions(session: Session, contract: Contract) -> dict[str, list[dict]]:
 
 
 def finance_payload(session: Session, contract: Contract, as_of: Optional[date] = None) -> dict:
-    as_of = as_of or date.today()
+    as_of = as_of or today_local()
     summaries = finance_summary(session, contract, as_of)
     services = session.scalars(
         select(ContractServiceItem).where(ContractServiceItem.contract_id == contract.id)

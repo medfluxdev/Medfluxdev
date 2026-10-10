@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.clock import today_local
 from app.database.models import (
     Account,
     AccountMembership,
@@ -532,7 +533,7 @@ def set_confidentiality(
 
 
 def build_register(session: Session, contract: Contract, actor: RegisterActor, as_of: Optional[date] = None) -> dict:
-    as_of = as_of or date.today()
+    as_of = as_of or today_local()
     provenance = _provenance(session, contract.id)
     labels = _reference_labels(session, contract)
     values = _values(contract)

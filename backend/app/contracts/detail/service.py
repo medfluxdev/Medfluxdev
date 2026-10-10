@@ -20,6 +20,7 @@ import re
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import today_local
 from app.contracts.calculation.costs import collect_price_development, derive_tax_breakdown
 from app.contracts.calculation.models import (
     CalculationStatus,
@@ -467,7 +468,7 @@ def build_contract_detail(
         "supplier": contract.supplier,
         "register_number": contract.register_number,
         "business_status": contract.business_status,
-        "register_facts": register_facts(contract, date.today()),
+        "register_facts": register_facts(contract, today_local()),
         "status": contract.status,
         "risk_level": contract.risk_level,
         "identity": _identity_section(
@@ -1666,7 +1667,7 @@ def _review_section(session, organization_id, contract_id, warnings):
     for w in warnings:
         if w.requires_review:
             reasons.append(_WARNING_TITLES.get(w.warning_type, w.warning_type))
-    freshness = "none" if as_of is None else ("stale" if as_of < date.today() else "current")
+    freshness = "none" if as_of is None else ("stale" if as_of < today_local() else "current")
     return {
         "requires_manual_review": any(w.requires_review for w in warnings),
         "review_reasons": reasons,
