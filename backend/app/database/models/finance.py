@@ -24,6 +24,8 @@ FINANCE_DIRECTION_ALLOWED = ("expense", "income")
 AMOUNT_BASIS_ALLOWED = ("net", "gross")
 FINANCE_INTERVAL_ALLOWED = ("monthly", "quarterly", "semi_annual", "annual", "once")
 FINANCE_ORIGIN_ALLOWED = ("manual", "ai_confirmed", "imported_legacy")
+# Zahlungszeitpunkt je Periode: vorschuessig (Periodenbeginn) oder nachschuessig (Periodenende).
+PAYMENT_TIMING_ALLOWED = ("in_advance", "in_arrears")
 
 
 def _in(values: tuple[str, ...]) -> str:
@@ -48,6 +50,8 @@ class ContractFinanceEntry(OrgOwnedMixin, Base):
     valid_from: Mapped[date] = mapped_column(Date, nullable=False)
     valid_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     apply_price_adjustment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    payment_timing: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    payment_reminder: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     origin: Mapped[str] = mapped_column(String(24), nullable=False, default="manual")
     source_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
@@ -61,6 +65,7 @@ class ContractFinanceEntry(OrgOwnedMixin, Base):
         CheckConstraint(f"amount_basis IN ({_in(AMOUNT_BASIS_ALLOWED)})", name="amount_basis"),
         CheckConstraint(f"interval IN ({_in(FINANCE_INTERVAL_ALLOWED)})", name="interval"),
         CheckConstraint(f"origin IN ({_in(FINANCE_ORIGIN_ALLOWED)})", name="origin"),
+        CheckConstraint(f"payment_timing IS NULL OR payment_timing IN ({_in(PAYMENT_TIMING_ALLOWED)})", name="payment_timing"),
         CheckConstraint("amount >= 0", name="amount_non_negative"),
         CheckConstraint("vat_rate >= 0 AND vat_rate <= 100", name="vat_rate_range"),
         CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="validity"),

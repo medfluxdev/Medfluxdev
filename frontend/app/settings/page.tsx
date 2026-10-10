@@ -8,6 +8,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import PageHeader from "@/components/ui/PageHeader";
 import DefinitionList from "@/components/ui/DefinitionList";
 import StatusBadge from "@/components/ui/StatusBadge";
+import ReviewModeSetting from "@/components/settings/ReviewModeSetting";
 import { useToast } from "@/components/ui/Toast";
 import { apiGet, apiPost, apiPut } from "@/lib/api";
 import type {
@@ -246,6 +247,7 @@ export default function SettingsPage() {
                 },
               ]}
             />
+            <ReviewModeSetting />
           </Section>
           )}
 

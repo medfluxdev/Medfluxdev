@@ -7,6 +7,7 @@ import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
 import { listCostCenters, type CostCenterDto } from "@/lib/domain-api/organizations";
 import {
   INTERVAL_LABEL,
+  PAYMENT_TIMING_LABEL,
   PRICE_ADJUSTMENT_LABEL,
   acceptFinanceSuggestion,
   createFinanceEntry,
@@ -17,14 +18,17 @@ import {
   downloadFinanceCsv,
   getFinance,
   setCostAllocations,
+  updateFinanceEntry,
   type DirectionSummaryDto,
   type FinanceDto,
+  type FinanceEntryDto,
   type FinanceInterval,
+  type PaymentTiming,
   type FinanceSummaryDto,
   type SuggestionDto,
 } from "@/lib/domain-api/finance";
 
-const EMPTY_ENTRY = { direction: "expense", label: "", cost_type_code: "", amount: "", amount_basis: "net", vat_rate: "19", interval: "monthly", valid_from: "", valid_to: "", apply_price_adjustment: true };
+const EMPTY_ENTRY = { direction: "expense", label: "", cost_type_code: "", amount: "", amount_basis: "net", vat_rate: "19", interval: "monthly", valid_from: "", valid_to: "", apply_price_adjustment: true, payment_timing: "", payment_reminder: false };
 const EMPTY_SERVICE = { label: "", service_kind: "", amount: "", unit: "", plus_vat: true, valid_from: "", valid_to: "" };
 const PERIODS: { key: keyof DirectionSummaryDto; label: string }[] = [
   { key: "current_year", label: "Laufendes Jahr" },
@@ -106,7 +110,13 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
   }
 
   async function addEntry() {
-    const values: Record<string, unknown> = { ...entryForm, cost_type_code: entryForm.cost_type_code || null, valid_to: entryForm.valid_to || null };
+    const values: Record<string, unknown> = {
+      ...entryForm,
+      cost_type_code: entryForm.cost_type_code || null,
+      valid_to: entryForm.valid_to || null,
+      payment_timing: entryForm.payment_timing || null,
+      payment_reminder: Boolean(entryForm.payment_timing) && entryForm.direction === "expense" && entryForm.payment_reminder,
+    };
     if (await run(() => createFinanceEntry(orgSlug, contractId, values), "Finanzeintrag angelegt.")) {
       setEntryForm(EMPTY_ENTRY);
       setShowEntryForm(false);
@@ -142,12 +152,33 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
     }
   }
 
+  // Zahlungserinnerung (Systemtermin "Zahlung fällig") nur mit gepflegtem Zahlungszeitpunkt.
+  function updatePayment(item: FinanceEntryDto, values: { payment_timing?: PaymentTiming | null; payment_reminder?: boolean }) {
+    const timing = values.payment_timing === undefined ? item.payment_timing : values.payment_timing;
+    const next = { ...values, ...(timing ? {} : { payment_reminder: false }) };
+    void run(() => updateFinanceEntry(orgSlug, contractId, item.id, next), "Zahlungsangaben gespeichert.");
+  }
+
+  function paymentCell(item: FinanceEntryDto) {
+    const timingText = item.payment_timing ? PAYMENT_TIMING_LABEL[item.payment_timing] : "nicht gepflegt";
+    if (!editable || item.direction !== "expense") {
+      return <>{timingText}{item.payment_reminder ? " · Erinnerung" : ""}</>;
+    }
+    return <span className="rg-payment">
+      <select aria-label={`Zahlungszeitpunkt ${item.label}`} value={item.payment_timing ?? ""} disabled={busy} onChange={(event) => updatePayment(item, { payment_timing: (event.target.value || null) as PaymentTiming | null })}>
+        <option value="">nicht gepflegt</option>
+        {(Object.keys(PAYMENT_TIMING_LABEL) as PaymentTiming[]).map((key) => <option key={key} value={key}>{PAYMENT_TIMING_LABEL[key]}</option>)}
+      </select>
+      <label className="rg-check" title={item.payment_timing ? "Erinnerung 14 Tage vor jeder Zahlung" : "Zuerst den Zahlungszeitpunkt pflegen"}><input type="checkbox" checked={item.payment_reminder} disabled={busy || !item.payment_timing} onChange={(event) => updatePayment(item, { payment_reminder: event.target.checked })} />Erinnern</label>
+    </span>;
+  }
+
   function suggestionRow(scope: "finance" | "service", item: SuggestionDto) {
     const values = item.values;
     const currency = String(values.currency ?? "EUR");
     return <li key={`${scope}-${item.key}`}>
       <span><strong>{String(values.label)}</strong>: {values.amount ? formatCurrency(String(values.amount), currency) : "–"}
-        {scope === "finance" ? ` ${values.amount_basis === "gross" ? "brutto" : "netto"}, ${INTERVAL_LABEL[values.interval as FinanceInterval] ?? values.interval}, ab ${formatDate(String(values.valid_from))}` : values.unit ? ` ${values.unit}` : ""}
+        {scope === "finance" ? ` ${values.amount_basis === "gross" ? "brutto" : "netto"}, ${INTERVAL_LABEL[values.interval as FinanceInterval] ?? values.interval}${values.payment_timing ? ` ${PAYMENT_TIMING_LABEL[values.payment_timing as PaymentTiming] ?? ""}` : ""}, ab ${formatDate(String(values.valid_from))}` : values.unit ? ` ${values.unit}` : ""}
       </span>
       {item.assumptions && item.assumptions.length > 0 ? <span className="rg-origin rg-origin-ai_corrected">{item.assumptions.join(" · ")}</span> : null}
       <span className="rg-origin rg-origin-ai" title={`Quelle: ${item.source_field}`}>KI-Vorschlag</span>
@@ -199,17 +230,20 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
           <label>Gültig ab *<input type="date" required value={entryForm.valid_from} onChange={(event) => setEntryForm((form) => ({ ...form, valid_from: event.target.value }))} /></label>
           <label>Gültig bis<input type="date" min={entryForm.valid_from || undefined} value={entryForm.valid_to} onChange={(event) => setEntryForm((form) => ({ ...form, valid_to: event.target.value }))} /></label>
           <label className="rg-check"><input type="checkbox" checked={entryForm.apply_price_adjustment} onChange={(event) => setEntryForm((form) => ({ ...form, apply_price_adjustment: event.target.checked }))} />Preisanpassung anwenden</label>
+          <label>Zahlungszeitpunkt<select value={entryForm.payment_timing} onChange={(event) => setEntryForm((form) => ({ ...form, payment_timing: event.target.value, payment_reminder: event.target.value ? form.payment_reminder : false }))}><option value="">nicht gepflegt</option>{(Object.keys(PAYMENT_TIMING_LABEL) as PaymentTiming[]).map((key) => <option key={key} value={key}>{PAYMENT_TIMING_LABEL[key]}</option>)}</select></label>
+          <label className="rg-check"><input type="checkbox" checked={entryForm.payment_reminder} disabled={!entryForm.payment_timing || entryForm.direction !== "expense"} onChange={(event) => setEntryForm((form) => ({ ...form, payment_reminder: event.target.checked }))} />An Zahlung erinnern (14 Tage vorher)</label>
         </div>
         <div className="rg-actions"><button type="button" className="btn" onClick={() => { setShowEntryForm(false); setEntryForm(EMPTY_ENTRY); }}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button></div>
       </form> : null}
       {data.entries.length === 0 ? <p className="cw-muted">Keine Einträge.</p> : <div className="table-scroll"><table className="rg-table">
-        <thead><tr><th scope="col">Typ</th><th scope="col">Bezeichnung</th><th scope="col">Kostenart</th><th scope="col">Betrag</th><th scope="col">Intervall</th><th scope="col">Gültig</th><th scope="col">Herkunft</th>{editable ? <th scope="col"><span className="sr-only">Aktionen</span></th> : null}</tr></thead>
+        <thead><tr><th scope="col">Typ</th><th scope="col">Bezeichnung</th><th scope="col">Kostenart</th><th scope="col">Betrag</th><th scope="col">Intervall</th><th scope="col">Zahlung</th><th scope="col">Gültig</th><th scope="col">Herkunft</th>{editable ? <th scope="col"><span className="sr-only">Aktionen</span></th> : null}</tr></thead>
         <tbody>{data.entries.map((item) => <tr key={item.id}>
           <td>{item.direction === "expense" ? "Ausgaben" : "Einnahmen"}</td>
           <th scope="row">{item.label}{item.note ? <span className="contract-business-status">{item.note}</span> : null}</th>
           <td>{costTypeLabel(item.cost_type_code)}</td>
           <td>{formatCurrency(item.amount, item.currency)} {item.amount_basis === "net" ? "netto" : "brutto"} · {Number(item.vat_rate).toLocaleString("de-DE")} %</td>
           <td>{INTERVAL_LABEL[item.interval]}</td>
+          <td>{paymentCell(item)}</td>
           <td>{item.interval === "once" ? formatDate(item.valid_from) : `${formatDate(item.valid_from)} – ${item.valid_to ? formatDate(item.valid_to) : "offen"}`}</td>
           <td>{item.origin === "ai_confirmed" ? <span className="rg-origin rg-origin-ai_confirmed">KI · bestätigt</span> : <span className="rg-origin">Manuell</span>}</td>
           {editable ? <td><button type="button" className="rg-link" disabled={busy} onClick={() => void run(() => deleteFinanceEntry(orgSlug, contractId, item.id), "Eintrag gelöscht.")}>Löschen</button></td> : null}

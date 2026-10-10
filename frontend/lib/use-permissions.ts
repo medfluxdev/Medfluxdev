@@ -8,6 +8,7 @@ export type PermissionKey =
   | "partner.edit"
   | "catalog.admin"
   | "organization.admin"
+  | "review.settings"
   | "audit.view"
   | "export"
   | "contract.create";

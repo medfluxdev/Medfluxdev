@@ -57,6 +57,7 @@ const RESULT_VERB: Record<string, string> = {
   confirmed: "Bestätigt",
   corrected: "Korrigiert",
   voided: "Verworfen",
+  auto_accepted: "Automatisch übernommen",
 };
 
 function identityHint(identity: string | null) {
@@ -65,9 +66,12 @@ function identityHint(identity: string | null) {
   return identity;
 }
 
-// Ruhe & Signal: bestätigt/korrigiert = done, verworfen = neutral, sonst ungeprüfter KI-Wert = ai.
+// Ruhe & Signal: bestätigt/korrigiert = done, verworfen = neutral, automatisch übernommen = info
+// (kein menschliches Ergebnis, daher nicht grün), sonst ungeprüfter KI-Wert = ai.
 function stateSignal(state: string): SignalTone {
-  return state === "confirmed" || state === "corrected" ? "done" : state === "voided" ? "neutral" : "ai";
+  if (state === "confirmed" || state === "corrected") return "done";
+  if (state === "voided") return "neutral";
+  return state === "auto_accepted" ? "info" : "ai";
 }
 
 function StateSignal({ state, label }: { state: string; label: string }) {
@@ -281,7 +285,7 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate }:
             </div>
             <div className="fr-source-block"><strong>Quellen-Beleg</strong><EvidenceButtons s={selected} /></div>
             {selected.reviewed_at && <p className="fr-reviewed"><strong>{RESULT_VERB[selected.state] ?? "Geprüft"}</strong> · {selected.reviewer_display_name ?? "–"} · {stampTime(selected.reviewed_at)}</p>}
-            {canReview ? <div className="fr-detail-actions"><button type="button" className="fr-confirm" onClick={() => void confirmFact(selected.fact_key)} disabled={busy}><SignalIcon tone="done" /> Bestätigen</button><button type="button" className="btn btn-sm" onClick={() => setEditFact(editFact === selected.fact_key ? null : selected.fact_key)} disabled={busy}>✎ Korrigieren</button>{selected.state !== "unreviewed" && <button type="button" className="btn-link" onClick={() => reopenFact(selected.fact_key)} disabled={busy}>Erneut öffnen</button>}<button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div> : <div className="fr-detail-actions"><button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div>}
+            {canReview ? <div className="fr-detail-actions"><button type="button" className="fr-confirm" onClick={() => void confirmFact(selected.fact_key)} disabled={busy}><SignalIcon tone="done" /> Bestätigen</button><button type="button" className="btn btn-sm" onClick={() => setEditFact(editFact === selected.fact_key ? null : selected.fact_key)} disabled={busy}>✎ Korrigieren</button>{selected.state !== "unreviewed" && selected.state !== "auto_accepted" && <button type="button" className="btn-link" onClick={() => reopenFact(selected.fact_key)} disabled={busy}>Erneut öffnen</button>}<button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div> : <div className="fr-detail-actions"><button type="button" className="btn-link" onClick={() => setHistoryFact(historyFact === selected.fact_key ? null : selected.fact_key)}>◷ Historie</button></div>}
             {editFact === selected.fact_key && canReview ? (
               <div className="fr-edit-row fr-edit-stack">
                 <label>Korrigierter Wert<input type="text" autoFocus placeholder="Korrigierter Wert" value={corrected[selected.fact_key] ?? ""} onChange={(e) => setCorrected((prev) => ({ ...prev, [selected.fact_key]: e.target.value }))} /></label>

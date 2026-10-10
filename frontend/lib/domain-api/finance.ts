@@ -2,6 +2,12 @@ import { apiDelete, apiDownload, apiGet, apiPatch, apiPost, apiPut } from "@/lib
 
 export type FinanceDirection = "expense" | "income";
 export type FinanceInterval = "monthly" | "quarterly" | "semi_annual" | "annual" | "once";
+export type PaymentTiming = "in_advance" | "in_arrears";
+
+export const PAYMENT_TIMING_LABEL: Record<PaymentTiming, string> = {
+  in_advance: "im Voraus",
+  in_arrears: "nachträglich",
+};
 
 export interface FinanceEntryDto {
   id: string;
@@ -16,6 +22,8 @@ export interface FinanceEntryDto {
   valid_from: string;
   valid_to: string | null;
   apply_price_adjustment: boolean;
+  payment_timing: PaymentTiming | null;
+  payment_reminder: boolean;
   note: string | null;
   origin: "manual" | "ai_confirmed" | "imported_legacy";
   source_key: string | null;

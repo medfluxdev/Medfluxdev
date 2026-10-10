@@ -114,6 +114,15 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
     ],
   },
   {
+    id: "maintenance",
+    title: "Wartung",
+    description: "Grundlage für die Erinnerung „Wartung fällig“",
+    fields: [
+      { key: "maintenance_next_date", kind: "date" },
+      { key: "maintenance_interval_months", kind: "int" },
+    ],
+  },
+  {
     id: "termination",
     title: "Kündigung & Aufbewahrung",
     description: "Dokumentierte Kündigung und Löschfrist",
@@ -134,6 +143,8 @@ const FIELD_HELP: Record<string, string> = {
   renewal_period: "Um wie viel sich der Vertrag ohne Kündigung jeweils verlängert.",
   reminder_lead_months: "Wie viele Monate vor der Kündigungsfrist die Erinnerung kommt.",
   retention_years_after_end: "Leer lassen, um die Aufbewahrungsfrist des Vertragstyps zu verwenden.",
+  maintenance_next_date: "Ein Monat vorher entsteht der Termin „Wartung fällig“ unter Fristen & Aufgaben.",
+  maintenance_interval_months: "Leer lassen für einen einmaligen Termin; sonst entsteht nach Erledigung der nächste Termin.",
   data_protection_relevant: "Ja, wenn der Vertragspartner personenbezogene Daten verarbeitet (Auftragsverarbeitung nach Art. 28 DSGVO).",
 };
 
@@ -340,7 +351,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       case "price_adjustment": return PRICE_ADJUSTMENT_LABEL[String(value)] ?? String(value);
       case "decimal": return `${Number(value).toLocaleString("de-DE")} %`;
       case "storage": return register.storage_location_label ?? storage.find((item) => item.code === value)?.label ?? String(value);
-      case "int": return def.key === "reminder_lead_months" ? `${value} Monat(e) vor der Frist` : def.key === "retention_years_after_end" ? `${value} Jahr(e) nach Vertragsende` : def.key === "price_adjustment_interval_months" ? `alle ${value} Monat(e)` : String(value);
+      case "int": return def.key === "reminder_lead_months" ? `${value} Monat(e) vor der Frist` : def.key === "retention_years_after_end" ? `${value} Jahr(e) nach Vertragsende` : def.key === "price_adjustment_interval_months" || def.key === "maintenance_interval_months" ? `alle ${value} Monat(e)` : String(value);
       case "partner":
       case "type":
       case "category":

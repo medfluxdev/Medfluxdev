@@ -70,6 +70,8 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("price_adjustment_index_name", "text", "Preisindex", "finance", max_length=120),
     FieldSpec("price_adjustment_next_date", "date", "Nächste Preisanpassung", "finance"),
     FieldSpec("price_adjustment_interval_months", "int", "Anpassung alle (Monate)", "finance"),
+    FieldSpec("maintenance_next_date", "date", "Nächste Wartung", "maintenance"),
+    FieldSpec("maintenance_interval_months", "int", "Wartung alle (Monate)", "maintenance"),
 )
 
 FIELDS: dict[str, FieldSpec] = {spec.key: spec for spec in FIELD_SPECS}
@@ -81,6 +83,7 @@ _INT_LIMITS = {
     "reminder_lead_months": (0, 60),
     "retention_years_after_end": (0, 100),
     "price_adjustment_interval_months": (1, 120),
+    "maintenance_interval_months": (1, 120),
 }
 
 

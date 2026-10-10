@@ -43,6 +43,20 @@ _SERVICE_FIELDS = (
 )
 
 
+_ADVANCE_PATTERN = re.compile(r"\bim\s+voraus\b|\bvorsch(?:ü|ue)ssig|\bim\s+vorhinein\b|\bpr(?:ä|ae)numerando\b", re.IGNORECASE)
+_ARREARS_PATTERN = re.compile(r"\bnachtr(?:ä|ae)glich\b|\bnachsch(?:ü|ue)ssig|\bim\s+nachhinein\b|\bpostnumerando\b", re.IGNORECASE)
+
+
+def payment_timing(extracted: ExtractedContract) -> Optional[str]:
+    """Zahlungszeitpunkt aus dem Wortlaut der Zahlungsbedingungen – nur bei eindeutigem Begriff."""
+    text = " ".join(part for part in (extracted.payment.payment_terms, extracted.payment.payment_notes) if part)
+    advance = bool(_ADVANCE_PATTERN.search(text))
+    arrears = bool(_ARREARS_PATTERN.search(text))
+    if advance == arrears:
+        return None
+    return "in_advance" if advance else "in_arrears"
+
+
 def _decimal(money: Optional[Money]) -> Optional[Decimal]:
     if money is None or money.amount is None:
         return None
@@ -74,6 +88,7 @@ def _currency(money: Money, extracted: ExtractedContract) -> str:
 def finance_suggestions(extracted: ExtractedContract, *, start: date) -> list[dict[str, Any]]:
     costs = extracted.costs
     basis, vat_rate, assumptions = _tax(extracted)
+    timing = payment_timing(extracted)
     out: list[dict[str, Any]] = []
 
     def add(key: str, label: str, money: Money, interval: str, valid_from: date, valid_to: Optional[date], adjust: bool) -> None:
@@ -93,6 +108,7 @@ def finance_suggestions(extracted: ExtractedContract, *, start: date) -> list[di
                 "valid_from": valid_from.isoformat(),
                 "valid_to": valid_to.isoformat() if valid_to else None,
                 "apply_price_adjustment": adjust,
+                **({"payment_timing": timing} if timing and interval != "once" else {}),
             },
             "assumptions": list(assumptions),
             "source_field": key,

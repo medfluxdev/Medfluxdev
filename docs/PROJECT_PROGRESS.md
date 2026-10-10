@@ -5402,3 +5402,18 @@ Abschlussbericht `docs/medflux-restructure-report.md`. Branch `design/ruhe-signa
 
 **Verifikation:** Backend pytest (Docker-Postgres) grün bis auf 8 umgebungsbedingte Fälle wie in der Baseline; `npm run verify` grün; Playwright siehe Fortschrittsdatei. Keine Migration.
 **Nächster Schritt:** Review des Branches, kurzer Test mit 3–5 Anwendern (Lagebild, Signale), dann Merge nach `main`.
+
+### Nachtrag 2026-10-10 – Zahlungs- und Wartungserinnerungen, Prüfmodus (Restpaket WP2–WP4)
+
+Branch `feature/finance-reminders-review-mode` (auf `design/ruhe-signal`). Abgleich des Arbeitsplans mit dem Code: WP2–WP4 waren bis auf diese Punkte durch H3–H7 erledigt (Status oben im Arbeitsplan).
+
+- **Zahlungszeitpunkt** je Finanzeintrag (`payment_timing`: im Voraus / nachträglich / nicht gepflegt); KI-Vorschlag nur bei eindeutigem Wortlaut der Zahlungsbedingungen.
+- **Zahlungserinnerung** (`payment_reminder`): Systemtermin „Zahlung fällig“ 14 Tage vorher, nur mit gepflegtem Zeitpunkt; Finanzänderungen gleichen die Termine sofort ab.
+- **Wartungserinnerung:** Registerfelder „Nächste Wartung“ und „Wartung alle (Monate)“, Systemtermin „Wartung fällig“ einen Monat vorher, Folgetermin nach Erledigung.
+- **Prüfmodus der Organisation** (Verwaltung → Allgemein): manuell oder nicht-kritische Angaben mit eindeutigem Beleg automatisch übernehmen (abgeleiteter Zustand „Automatisch übernommen“, kein Prüf-Eintrag, kritische Angaben immer manuell, Änderung protokolliert, Recht `review.settings`).
+- **Analysen:** Hinweis „Verträge ohne gepflegte Kosten“ zählt jetzt auch Verträge in Arbeit (vorher 0, solange kein Vertrag lief).
+- **Aufräumen:** ungenutzte `SettingsNavigation` und Alias-Tokens `--accent`/`--muted` entfernt.
+
+**Migration:** `o6d8e0f12007` (additiv; upgrade/downgrade/upgrade auf Wegwerf-DB geprüft, ORM gegen migriertes Schema abgeglichen).
+**Tests:** neu `backend/tests/test_reminders_review_mode.py`, Vitest `review-mode`, Erweiterungen in `contract-finance` und `fact-confirm-display`. Ergebnisse der Gesamtläufe im Commit.
+**Nächster Schritt:** Import-Assistent; danach WP5-Drilldown und Leistungstest.

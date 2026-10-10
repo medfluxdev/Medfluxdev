@@ -20,6 +20,7 @@ from app.database.models.finance import (
     AMOUNT_BASIS_ALLOWED,
     FINANCE_DIRECTION_ALLOWED,
     FINANCE_INTERVAL_ALLOWED,
+    PAYMENT_TIMING_ALLOWED,
     ContractCostAllocation,
     ContractFinanceEntry,
     ContractServiceItem,
@@ -32,7 +33,7 @@ from app.register.terms import compute_terms
 
 ENTRY_FIELDS = (
     "direction", "label", "cost_type_code", "amount", "amount_basis", "vat_rate", "currency", "interval",
-    "valid_from", "valid_to", "apply_price_adjustment", "note",
+    "valid_from", "valid_to", "apply_price_adjustment", "payment_timing", "payment_reminder", "note",
 )
 SERVICE_FIELDS = ("label", "service_kind", "amount", "unit", "plus_vat", "currency", "valid_from", "valid_to", "note")
 
@@ -129,6 +130,15 @@ def clean_entry(values: dict[str, Any], *, partial: bool) -> dict[str, Any]:
             out[key] = _date(value, "Gültig bis", required=False)
         elif key == "apply_price_adjustment":
             out[key] = _bool(value, "Preisanpassung anwenden")
+        elif key == "payment_timing":
+            if value in (None, ""):
+                out[key] = None
+            elif value in PAYMENT_TIMING_ALLOWED:
+                out[key] = value
+            else:
+                raise FinanceError(422, "Zahlungszeitpunkt: im Voraus oder nachträglich erwartet.")
+        elif key == "payment_reminder":
+            out[key] = _bool(value, "Zahlungserinnerung")
         elif key == "note":
             out[key] = _text(value, "Bemerkung", 5000)
     if not partial:
@@ -179,7 +189,8 @@ def _entry_payload(row: ContractFinanceEntry) -> dict:
         "amount": str(row.amount), "amount_basis": row.amount_basis, "vat_rate": str(row.vat_rate), "currency": row.currency,
         "interval": row.interval, "valid_from": row.valid_from.isoformat(),
         "valid_to": row.valid_to.isoformat() if row.valid_to else None,
-        "apply_price_adjustment": row.apply_price_adjustment, "note": row.note, "origin": row.origin,
+        "apply_price_adjustment": row.apply_price_adjustment, "payment_timing": row.payment_timing,
+        "payment_reminder": row.payment_reminder, "note": row.note, "origin": row.origin,
         "source_key": row.source_key, "created_by_name": row.created_by_name,
     }
 

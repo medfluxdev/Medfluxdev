@@ -22,6 +22,7 @@ from app.database.models.document import DocumentFile, DocumentVersion
 
 EVENT_LABELS: dict[str, str] = {
     "contract.created_manual": "Vertrag angelegt",
+    "organization.review_mode_changed": "Prüfmodus geändert",
     "contract.register_updated": "Stammdaten geändert",
     "contract.status_changed": "Status geändert",
     "contract.remark_added": "Bemerkung hinzugefügt",

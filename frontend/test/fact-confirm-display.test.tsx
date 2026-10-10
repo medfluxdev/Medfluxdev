@@ -46,4 +46,14 @@ describe("Faktprüfung – Anzeige Bestätigt vs Korrigiert",()=>{
   expect(p.queryByText("Wert übernommen")).not.toBeInTheDocument();
   expect(p.getAllByText(/MEDTRON AG/).length).toBeGreaterThan(0);
  });
+ it("automatisch übernommen: eigener Hinweis (nicht grün), kein Prüfer, kein Wieder-Öffnen",()=>{
+  const data=fixture();
+  data.fact_review_states=[{...fact("Serien- / Inventarnummer","equipment.serial","auto_accepted","88024307"),state_label_de:"Automatisch übernommen",reviewer_display_name:null,reviewed_at:null,has_history:false}];
+  data.fact_reviews=[];
+  render(<FactReviewPanel data={data} orgSlug={ORG} onReload={()=>{}}/>);
+  const p=panel();
+  expect(p.getAllByText("Automatisch übernommen").length).toBeGreaterThan(0);
+  expect(p.queryByText("Bestätigt")).not.toBeInTheDocument();
+  expect(p.queryByRole("button",{name:"Erneut öffnen"})).not.toBeInTheDocument();
+ });
 });

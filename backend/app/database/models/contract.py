@@ -208,6 +208,9 @@ class Contract(OrgOwnedMixin, Base):
     price_adjustment_index_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     price_adjustment_next_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     price_adjustment_interval_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Wartungstermine (Systemtermin "maintenance_due", Folgetermine im Intervall).
+    maintenance_interval_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    maintenance_next_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # Zwischenspeicher der gepflegten Jahreskosten (netto) fuer Sortierung/Filter
     # der Vertragsliste; Quelle bleibt die Finanz-Engine.
     maintained_annual_cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
@@ -245,6 +248,10 @@ class Contract(OrgOwnedMixin, Base):
         CheckConstraint(
             f"price_adjustment_kind IS NULL OR price_adjustment_kind IN ({', '.join(repr(v) for v in PRICE_ADJUSTMENT_ALLOWED)})",
             name="price_adjustment_kind",
+        ),
+        CheckConstraint(
+            "maintenance_interval_months IS NULL OR (maintenance_interval_months >= 1 AND maintenance_interval_months <= 120)",
+            name="maintenance_interval_months",
         ),
         Index(
             "uq_contract_org_register_number",

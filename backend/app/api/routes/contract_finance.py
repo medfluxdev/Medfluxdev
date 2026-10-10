@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.core.clock import today_local
 from app.api.routes.contract_register import _contract, _register_actor, _require_write
 from app.database.session import create_session
+from app.deadlines.system import sync_system_deadlines
 from app.register.service import log_activity
 from app.finance.service import (
     FinanceError,
@@ -55,6 +56,8 @@ def _write(request: Request, organization_slug: str, contract_id: UUID, action) 
         except FinanceError as exc:
             session.rollback()
             raise _http(exc)
+        # Zahlungserinnerungen haengen an den Finanzeintraegen.
+        sync_system_deadlines(session, contract, today_local())
         session.commit()
         return finance_payload(session, contract)
     finally:

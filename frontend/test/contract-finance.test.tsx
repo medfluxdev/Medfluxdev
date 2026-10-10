@@ -44,7 +44,7 @@ function finance(overrides: Partial<FinanceDto> = {}): FinanceDto {
     entries: [{
       id: "e-1", direction: "expense", label: "Wartungspauschale", cost_type_code: "wartung", amount: "3500.00", amount_basis: "net",
       vat_rate: "19.00", currency: "EUR", interval: "monthly", valid_from: "2026-01-01", valid_to: null, apply_price_adjustment: true,
-      note: null, origin: "ai_confirmed", source_key: "costs.monthly_cost", created_by_name: "Admin",
+      payment_timing: null, payment_reminder: false, note: null, origin: "ai_confirmed", source_key: "costs.monthly_cost", created_by_name: "Admin",
     }],
     summaries: [{
       currency: "EUR",
@@ -127,5 +127,25 @@ describe("Finanzdaten", () => {
       { cost_center_id: "cc1", share_percent: "70", recharge_mode: null },
       { cost_center_id: "cc2", share_percent: "30", recharge_mode: null },
     ]);
+  });
+
+  it("pflegt Zahlungszeitpunkt und Zahlungserinnerung je Eintrag", async () => {
+    const user = userEvent.setup();
+    const withTiming = finance();
+    withTiming.entries = [{ ...withTiming.entries[0], payment_timing: "in_advance" }];
+    api.updateFinanceEntry.mockResolvedValue(withTiming);
+    render(<ContractFinancePanel contractId="c-1" orgSlug="test-klinik" />);
+    const timing = await screen.findByLabelText("Zahlungszeitpunkt Wartungspauschale");
+    const remind = screen.getByRole("checkbox", { name: "Erinnern" });
+    // Ohne Zahlungszeitpunkt keine Erinnerung.
+    expect(remind).toBeDisabled();
+    await user.selectOptions(timing, "in_advance");
+    expect(api.updateFinanceEntry).toHaveBeenCalledWith("test-klinik", "c-1", "e-1", { payment_timing: "in_advance" });
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Erinnern" })).toBeEnabled());
+    await user.click(screen.getByRole("checkbox", { name: "Erinnern" }));
+    expect(api.updateFinanceEntry).toHaveBeenLastCalledWith("test-klinik", "c-1", "e-1", { payment_reminder: true });
+    // Zeitpunkt wieder entfernen schaltet die Erinnerung mit ab.
+    await user.selectOptions(screen.getByLabelText("Zahlungszeitpunkt Wartungspauschale"), "");
+    expect(api.updateFinanceEntry).toHaveBeenLastCalledWith("test-klinik", "c-1", "e-1", { payment_timing: null, payment_reminder: false });
   });
 });

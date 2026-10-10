@@ -38,6 +38,7 @@ from app.api.routes import (
     processing_jobs,
     profile,
     reports,
+    review_settings,
     security_sessions,
     system_organizations,
     user_scopes,
@@ -108,6 +109,7 @@ app.include_router(users.router)
 app.include_router(user_scopes.router)
 app.include_router(system_organizations.router)
 app.include_router(organization_structure.router)
+app.include_router(review_settings.router)
 app.include_router(cost_center_routes.router)
 app.include_router(ownership.router)
 app.include_router(activity.router)

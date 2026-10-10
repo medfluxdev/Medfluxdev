@@ -27,10 +27,16 @@ from app.contracts.review.material import (
     material_report,
 )
 from app.database.models import Contract, ContractReview, FactReview
+from app.database.models.organization import Organization
 
 REVIEW_ACTIONS = frozenset({"confirmed", "corrected", "voided", "reopened"})
 
 REVIEWED_ACTIONS = frozenset({"confirmed", "corrected"})
+# Pruefmodus "auto_noncritical": nicht-kritische, vorliegende Angaben mit eigenem,
+# nicht zu pruefendem Beleg gelten als erledigt. Abgeleiteter Lesezustand – es
+# entsteht kein Pruef-Eintrag, kritische Angaben bleiben immer manuell.
+AUTO_ACCEPTED_STATE = "auto_accepted"
+RESOLVED_STATES = REVIEWED_ACTIONS | {AUTO_ACCEPTED_STATE}
 MATERIAL_CHANGE_ACTIONS = frozenset({"corrected", "voided"})
 
 ACTION_LABELS = {
@@ -46,6 +52,7 @@ FACT_STATE_LABELS = {
     "confirmed": "Geprüft und bestätigt",
     "corrected": "Manuell korrigiert",
     "voided": "Manuell verworfen",
+    AUTO_ACCEPTED_STATE: "Automatisch übernommen",
 }
 
 CONTRACT_REVIEW_STATUS_LABELS = {
@@ -387,12 +394,18 @@ def _link_fact_evidence(fact_key: str, evidence_by_ref: dict[str, list[dict]]):
     return specific, ([] if specific else group_fallback)
 
 
+def review_mode(session, organization_id) -> str:
+    organization = session.get(Organization, organization_id) if organization_id is not None else None
+    return getattr(organization, "review_mode", None) or "manual"
+
+
 def build_fact_review_states(
     session, *, organization_id, contract_id, data: dict
 ) -> list[dict]:
     """Je materialen Fakt: Präsenz, Zustand, Original-/effektiver Wert, Prüfer."""
     report = material_report(data)
     latest = _latest_fact_reviews(session, contract_id)
+    auto_mode = review_mode(session, organization_id) == "auto_noncritical"
 
     evidence_by_ref: dict[str, list[dict]] = {}
     for ev in data.get("evidence") or []:
@@ -428,6 +441,17 @@ def build_fact_review_states(
             and (not evidence_list or any_requires_review)
         ):
             state = "needs_review"
+        # Nur ohne menschliche Pruef-Historie: ein wieder geoeffneter Fakt bleibt beim Menschen.
+        if (
+            auto_mode
+            and row is None
+            and state == "unreviewed"
+            and bool(info.get("present"))
+            and not info.get("critical")
+            and specific
+            and not any_requires_review
+        ):
+            state = AUTO_ACCEPTED_STATE
 
         original_value = row.original_value if row is not None else _effective_write(value=info.get("value"))
 
@@ -485,7 +509,7 @@ def _unwrap(payload) -> object:
 
 def build_review_summary(states: list[dict]) -> dict:
     relevant = [s for s in states if s["present"] and s["state"] != "voided"]
-    reviewed = [s for s in relevant if s["state"] in REVIEWED_ACTIONS]
+    reviewed = [s for s in relevant if s["state"] in RESOLVED_STATES]
     critical = [s for s in relevant if s.get("is_critical")]
     critical_reviewed = [s for s in critical if s["state"] in REVIEWED_ACTIONS]
     return {

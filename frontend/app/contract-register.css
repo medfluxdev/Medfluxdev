@@ -141,3 +141,8 @@
 .search-snippet{margin: 0;font-size: var(--text-small);line-height: 1.45}
 .renewal-summary{display: grid;gap: 6px;margin: 8px 0}
 .renewal-summary blockquote{margin: 0;padding: 8px 12px;border-left: 3px solid var(--viz-series-1,var(--color-focus));background: var(--surface-2,var(--color-bg))}
+.rg-payment{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2)}
+.rg-payment .rg-check{font-weight: var(--fw-normal)}
+.review-mode{border: 0;margin: var(--space-4) 0 0;padding: 0;display: grid;gap: var(--space-2)}
+.review-mode legend{font-weight: var(--fw-semibold);margin-bottom: var(--space-2);padding: 0}
+.review-mode .rg-check{font-weight: var(--fw-normal)}
