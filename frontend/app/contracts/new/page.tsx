@@ -143,7 +143,7 @@ export default function NewContractPage() {
     <form className="cw-section" aria-label="Neuer Vertrag" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <div className="rg-form-grid">
         <label className="span-full">Kurzbeschreibung *<input required maxLength={500} value={form.short_description} onChange={(event) => set("short_description", event.target.value)} /></label>
-        {hospitals.length > 0 ? <label>Krankenhaus / Gesellschaft<select value={hospitalId} onChange={(event) => setHospitalId(event.target.value)}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
+        {hospitals.length > 0 ? <label>Krankenhaus<select value={hospitalId} onChange={(event) => setHospitalId(event.target.value)}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
         <div className="md-select-with-action">
           <label>Vertragspartner<select value={form.partner_id} onChange={(event) => set("partner_id", event.target.value)}><option value="">Später auswählen</option>{partners.map((item) => <option key={item.id} value={item.id}>{item.short_name}{item.city ? ` · ${item.city}` : ""}</option>)}</select></label>
           {can("partner.edit") ? <button type="button" className="btn btn-sm" onClick={() => setQuick("partner")}>Neuer Partner</button> : null}

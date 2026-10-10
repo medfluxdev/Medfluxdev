@@ -209,7 +209,7 @@ def test_excel_export_portfolio_and_cover(monkeypatch):
     assert exported.status_code == 200, exported.text
     workbook = load_workbook(io.BytesIO(exported.content))
     sheet = workbook["Verträge"]
-    assert [cell.value for cell in sheet[1]] == ["Gesellschaft", "Nr.", "Kurzbeschreibung", "Jährliche Kosten (netto)", "Kündbar bis"]
+    assert [cell.value for cell in sheet[1]] == ["Krankenhaus", "Nr.", "Kurzbeschreibung", "Jährliche Kosten (netto)", "Kündbar bis"]
     injected = next(row for row in sheet.iter_rows(min_row=2) if row[2].value == "=SUM(1)")
     assert injected[2].data_type == "s"
     assert injected[4].number_format == "DD.MM.YYYY"

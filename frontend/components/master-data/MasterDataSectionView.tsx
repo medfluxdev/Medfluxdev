@@ -15,6 +15,7 @@ import EntityManager from "./EntityManager";
 // Nur auf ihren Seiten gebraucht: getrennt laden (Leistungsbudget der Stammdaten-Seiten).
 const OrganizationTree = dynamic(() => import("./OrganizationTree"), { ssr: false });
 const PartnerDuplicates = dynamic(() => import("./PartnerDuplicates"), { ssr: false });
+const SupplierWorklist = dynamic(() => import("./SupplierWorklist"), { ssr: false });
 
 function Manager({ section, organizationSlug }: { section: MasterDataSection; organizationSlug: string }) {
   const lookup = useMemo(() => (section.fieldKey ? lookupDefinition(section.fieldKey) : null), [section.fieldKey]);
@@ -24,7 +25,7 @@ function Manager({ section, organizationSlug }: { section: MasterDataSection; or
         definition={partnerDefinition}
         section={section}
         organizationSlug={organizationSlug}
-        beforeTable={(api, rows) => <PartnerDuplicates organizationSlug={organizationSlug} api={api} rows={rows} />}
+        beforeTable={(api, rows) => <><SupplierWorklist organizationSlug={organizationSlug} api={api} /><PartnerDuplicates organizationSlug={organizationSlug} api={api} rows={rows} /></>}
       />;
     case "hospital":
       return <EntityManager definition={hospitalDefinition} section={section} organizationSlug={organizationSlug} />;

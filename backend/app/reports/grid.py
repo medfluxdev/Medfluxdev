@@ -71,7 +71,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("escalation_recipient", "Eskalation an", "account", groupable=True),
     Column("responsible", "Verantwortlich", "account", groupable=True),
     Column("next_deadline", "Nächster Termin", "date"),
-    Column("hospital", "Gesellschaft", "enum", groupable=True),
+    Column("hospital", "Krankenhaus", "enum", groupable=True),
     Column("department", "Abteilung", "enum", groupable=True),
     Column("cost_center", "Kostenstelle", "enum", groupable=True),
     Column("cost_allocation", "Kostenstellen-Aufteilung", "text"),
@@ -693,7 +693,7 @@ def tree(rows: list[GridRow]) -> list[dict]:
         departments = hospitals[hospital]
         out.append({
             "hospital": hospital,
-            "label": hospital or "(ohne Gesellschaft)",
+            "label": hospital or "(ohne Krankenhaus)",
             "count": sum(departments.values()),
             "departments": [
                 {"department": department, "label": department or "(ohne Abteilung)", "count": departments[department]}

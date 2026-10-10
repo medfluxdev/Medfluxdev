@@ -776,3 +776,12 @@ body { background: var(--color-bg); }
 .fr-status-icon--neutral { color: var(--color-icon); }
 .fr-confirm .signal-icon { vertical-align: -3px; }
 .evidence-dimensions { display: block; margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--text-caption); }
+.hist-list time, .hist-table time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hist-technical { margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--text-small); }
+.hist-technical summary { cursor: pointer; }
+/* Lieferanten zuordnen (Stammdaten → Vertragspartner) */
+.md-suppliers ul { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.md-supplier { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto; align-items: end; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-surface); }
+.md-supplier-head { display: grid; gap: 2px; }
+.md-supplier-choice { display: grid; gap: var(--space-1); font-size: var(--text-small); }
+@media (max-width: 900px) { .md-supplier { grid-template-columns: minmax(0, 1fr); } }

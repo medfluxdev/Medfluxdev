@@ -409,9 +409,9 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
   }
 
   return <div className="reg-layout">
-    <nav className="cw-section reg-tree" aria-label="Verträge nach Gesellschaft und Abteilung">
+    <nav className="cw-section reg-tree" aria-label="Verträge nach Krankenhaus und Abteilung">
       <details open={treeOpen} onToggle={(event) => setTreeOpen((event.target as HTMLDetailsElement).open)}>
-      <summary><h2>Gesellschaft → Abteilung</h2></summary>
+      <summary><h2>Krankenhaus → Abteilung</h2></summary>
       <ul>
         <li><button type="button" className="rg-link" onClick={() => update({ filters: spec.filters.filter((item) => item.column !== "hospital" && item.column !== "department") })}>Alle</button></li>
         {tree.map((hospital) => <li key={hospital.label}>

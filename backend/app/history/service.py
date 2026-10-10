@@ -148,7 +148,18 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value else None
 
 
+def field_labels(details: Optional[dict]) -> dict[str, str]:
+    """Deutsche Feldnamen (eine Quelle: register.fields.FIELDS) für Felddiffs im Verlauf (U9)."""
+    from app.register.fields import FIELDS
+
+    fields = (details or {}).get("fields")
+    if not isinstance(fields, dict):
+        return {}
+    return {key: FIELDS[key].label_de for key in fields if key in FIELDS}
+
+
 def _activity_entry(row: ActivityLog) -> dict:
+    details = row.context_data or {}
     return {
         "id": f"activity:{row.id}",
         "kind": "activity",
@@ -157,7 +168,8 @@ def _activity_entry(row: ActivityLog) -> dict:
         "actor": row.display_name_snapshot,
         "event": row.event_name,
         "label": event_label(row.event_name),
-        "details": row.context_data or {},
+        "details": details,
+        "field_labels": field_labels(details),
     }
 
 
@@ -171,6 +183,7 @@ def _entry(kind: str, entry_id: Any, at: Optional[str], actor: Optional[str], ev
         "event": event,
         "label": label,
         "details": details,
+        "field_labels": field_labels(details),
     }
 
 

@@ -45,7 +45,7 @@ export default function ContractHistoryPanel({ contractId, orgSlug }: { contract
     {visible.length === 0 ? <p className="cw-muted">Keine Einträge.</p> : <ol className="hist-list">
       {visible.map((item) => <li key={item.id}>
         <time dateTime={item.at ?? undefined}>{item.at ? formatDateTime(item.at) : "–"}</time>
-        <div><strong>{item.label}</strong> <span className="cw-muted">· {item.actor ?? "System"}</span><HistoryDetails details={item.details} /></div>
+        <div><strong>{item.label}</strong> <span className="cw-muted">· {item.actor ?? "System"}</span><HistoryDetails details={item.details} fieldLabels={item.field_labels} /></div>
       </li>)}
     </ol>}
   </section>;

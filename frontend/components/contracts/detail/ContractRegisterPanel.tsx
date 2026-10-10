@@ -518,7 +518,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     /> : null}
 
     <div className="rg-toolbar">
-      {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Stammdaten bearbeiten</button> : null}
+      {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Vertragsdaten bearbeiten</button> : null}
       {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>{dirty ? <span className="field-hint">Ungespeicherte Änderungen · Strg+S speichert</span> : null}</> : null}
       <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
       <Link href="/stammdaten/vertragspartner" className="rg-link">Vertragspartner verwalten</Link>

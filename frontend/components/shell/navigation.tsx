@@ -63,8 +63,8 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio" },
   ] },
   { label: "Daten & Verwaltung", items: [
+    { label: "Aktivitäten & Protokoll", href: "/audit", icon: "history", roles: EDITORS, keywords: "historie audit protokoll änderungen verlauf" },
     { label: "Stammdaten", href: "/stammdaten", icon: "masterdata", keywords: "vertragspartner lieferanten abteilungen kostenstellen krankenhäuser kataloge auswahllisten", shortcut: "g d" },
-    { label: "Historie", href: "/audit", icon: "history", roles: EDITORS, keywords: "audit protokoll änderungen" },
     { label: "Verwaltung", href: "/admin", icon: "admin", roles: ["admin"], keywords: "admin benutzer rollen einstellungen nummernkreis löschung" },
     { label: "Entwicklung", href: "/developer", icon: "developer", developerOnly: true, keywords: "developer diagnose" },
   ] },
@@ -109,6 +109,7 @@ export function allowed(item: NavItem, role: AccountRole | null | undefined, isD
 
 // Seiten, die zu einem Menüpunkt gehören, ohne unter dessen Pfad zu liegen (Vertragsakte, Import, alte Adressen).
 const ACTIVE_ALIASES: Record<string, string[]> = {
+  "/admin": ["/settings", "/sicherheit"],
   "/register": ["/contracts", "/import", "/review", "/archiv"],
   "/fristen": ["/termine", "/verlaengerungen", "/work-queue", "/postfach"],
 };

@@ -9,6 +9,8 @@ export interface HistoryEntry {
   event: string;
   label: string;
   details: Record<string, unknown>;
+  /** Deutsche Feldnamen für Felddiffs (aus den Registerfeldern). */
+  field_labels?: Record<string, string>;
   role?: string;
   object_type?: string;
   object_id?: string | null;

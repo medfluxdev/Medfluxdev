@@ -99,8 +99,8 @@ describe("Import (FE-08)", () => {
     apiUploadMock.mockResolvedValue({ total: 1, successful: 1, failed: 0, duplicates: 0, documents: [] });
     const utils = render(<ImportPage />);
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Krankenhaus für Import" })).toHaveValue("hospital-1"));
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Verantwortlicher Bereich für Import" }), "dept-resp");
-    await userEvent.selectOptions(screen.getByRole("listbox", { name: "Nutzende Bereiche für Import" }), "dept-use");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Verantwortliche Abteilung für Import" }), "dept-resp");
+    await userEvent.selectOptions(screen.getByRole("listbox", { name: "Nutzende Abteilungen für Import" }), "dept-use");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Kostenstelle für Import" }), "center-1");
     await toFiles();
     const input = utils.container.querySelector('input[type="file"]') as HTMLInputElement;

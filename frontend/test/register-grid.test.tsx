@@ -33,7 +33,7 @@ const COLUMNS: GridColumn[] = [
   { key: "register_number", label: "Nr.", type: "text", default: true, groupable: false },
   { key: "short_description", label: "Kurzbeschreibung", type: "text", default: true, groupable: false },
   { key: "business_status", label: "Status", type: "status", default: true, groupable: true, options: [{ value: "in_arbeit", label: "In Arbeit" }, { value: "gueltig", label: "Gültig" }] },
-  { key: "hospital", label: "Gesellschaft", type: "enum", default: false, groupable: true },
+  { key: "hospital", label: "Krankenhaus", type: "enum", default: false, groupable: true },
   { key: "cancel_by", label: "Kündbar bis", type: "date", default: true, groupable: false },
   { key: "annual_cost", label: "Jährliche Kosten (netto)", type: "money", default: true, groupable: false },
 ];

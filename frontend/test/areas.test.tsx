@@ -80,6 +80,6 @@ describe("Verwaltung – Bereichsnavigation", () => {
     auth.role = "contract_manager";
     render(<AdminNav />);
     const nav = screen.getByRole("navigation", { name: "Verwaltung" });
-    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Rollen & Rechte", "Stammdaten", "Sicherheit & Datenschutz"]);
+    expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual(["Rollen & Rechte", "Stammdaten", "Vertragsregeln", "Aktivitäten & Protokoll", "Sicherheit & Datenschutz"]);
   });
 });

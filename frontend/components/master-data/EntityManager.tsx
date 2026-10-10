@@ -198,7 +198,7 @@ export default function EntityManager<T, C>({ definition, section, organizationS
       key: "status",
       label: "Status",
       sortValue: (row: T) => (definition.active(row) ? 0 : 1),
-      render: (row: T) => definition.active(row) ? <Badge tone="success">Aktiv</Badge> : <Badge>Deaktiviert</Badge>,
+      render: (row: T) => definition.active(row) ? <Badge>Aktiv</Badge> : <Badge>Deaktiviert</Badge>,
     },
     {
       key: "actions",

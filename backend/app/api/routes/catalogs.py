@@ -227,6 +227,78 @@ def create_partner(payload: PartnerCreate, request: Request, organization_slug: 
         session.close()
 
 
+class SupplierLink(BaseModel):
+    supplier: str = Field(min_length=1, max_length=500)
+    partner_id: UUID
+
+
+def _visible_contracts(session, actor):
+    scope = current_scope_context()
+    return scoped_contract_ids(session, actor.organization_id, scope.hospital_id, scope.department_id)
+
+
+@router.get("/partners/unlinked")
+def unlinked_partner_names(request: Request, organization_slug: str):
+    """Arbeitsliste „Lieferanten zuordnen“: Lieferantennamen ohne verknüpften Vertragspartner."""
+    actor = _actor(request, organization_slug)
+    _require_partner_write(actor)
+    session = create_session()
+    try:
+        items = catalogs.unlinked_suppliers(session, actor.organization_id, _visible_contracts(session, actor))
+        return {"items": items, "total_contracts": sum(item["contracts"] for item in items)}
+    finally:
+        session.close()
+
+
+@router.post("/partners/link-supplier")
+def link_supplier(payload: SupplierLink, request: Request, organization_slug: str):
+    """Verknüpft alle sichtbaren Verträge mit genau diesem Lieferantennamen (ohne Partner) mit einem Partner.
+
+    Läuft je Vertrag über die normale Registeränderung (Herkunft „manuell“, Verlauf je Vertrag).
+    """
+    from app.register.service import RegisterActor, update_register
+
+    actor = _actor(request, organization_slug)
+    _require_partner_write(actor)
+    require(actor, "contract.edit", "Keine Berechtigung zum Ändern von Verträgen.")
+    session = create_session()
+    try:
+        partner = _own(session, ContractPartner, payload.partner_id, actor.organization_id)
+        if not partner.is_active:
+            raise HTTPException(status_code=409, detail="Der Vertragspartner ist deaktiviert.")
+        visible = _visible_contracts(session, actor)
+        stmt = select(Contract).where(
+            Contract.organization_id == actor.organization_id,
+            Contract.partner_id.is_(None),
+            func.trim(Contract.supplier) == payload.supplier.strip(),
+            Contract.lifecycle_state == "active",
+            Contract.business_status != "geloescht",
+        )
+        if visible is not None:
+            stmt = stmt.where(Contract.id.in_(visible))
+        scope = current_scope_context()
+        register_actor = RegisterActor(
+            organization_id=actor.organization_id, account_id=actor.account_id, display_name=actor.display_name,
+            role=actor.role, is_developer=bool(getattr(actor, "is_developer", False)),
+            hospital_id=scope.hospital_id, department_id=scope.department_id,
+        )
+        linked = []
+        try:
+            for contract in session.scalars(stmt.with_for_update()).all():
+                update_register(session, contract=contract, actor=register_actor, changes={"partner_id": str(partner.id)}, confirm=[])
+                linked.append(contract.id)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        _log(session, actor, "partner.supplier_linked", "contract_partner", partner.id, {
+            "supplier": payload.supplier.strip(), "contracts": len(linked),
+        })
+        session.commit()
+        return {"linked": len(linked), "partner": catalogs.partner_payload(partner)}
+    finally:
+        session.close()
+
+
 @router.get("/partners/{partner_id}")
 def get_partner(partner_id: UUID, request: Request, organization_slug: str):
     actor = _actor(request, organization_slug)

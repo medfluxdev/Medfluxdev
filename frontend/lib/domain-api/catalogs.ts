@@ -110,6 +110,22 @@ export function findSimilarPartners(organizationSlug: string, name: string) {
   return apiGet<{ items: PartnerDto[] }>(`/api/catalogs/partners/similar?${params.toString()}`);
 }
 
+export interface UnlinkedSupplier {
+  supplier: string;
+  contracts: number;
+  contract_ids: string[];
+  suggestions: (PartnerDto & { score?: number })[];
+}
+
+/** Arbeitsliste „Lieferanten zuordnen“: Lieferantennamen aus Verträgen ohne Vertragspartner. */
+export function listUnlinkedSuppliers(organizationSlug: string) {
+  return apiGet<{ items: UnlinkedSupplier[]; total_contracts: number }>(`/api/catalogs/partners/unlinked?${orgQuery(organizationSlug)}`);
+}
+
+export function linkSupplierToPartner(organizationSlug: string, supplier: string, partnerId: string) {
+  return apiPost<{ linked: number; partner: PartnerDto }>(`/api/catalogs/partners/link-supplier?${orgQuery(organizationSlug)}`, { supplier, partner_id: partnerId });
+}
+
 export function listPartnerDuplicates(organizationSlug: string) {
   return apiGet<{ groups: PartnerDto[][] }>(`/api/catalogs/partners/duplicates?${orgQuery(organizationSlug)}`);
 }

@@ -7,6 +7,7 @@ import { AreaNav, type AreaNavItem } from "./AreaNav";
 export default function AdminNav() {
   const { role, account } = useAuth();
   const admin = Boolean(account?.is_developer || role === "admin");
+  const editor = admin || role === "contract_manager";
   const only = (allowed: boolean, item: AreaNavItem) => (allowed ? [item] : []);
   return <AreaNav
     label="Verwaltung"
@@ -18,13 +19,16 @@ export default function AdminNav() {
       ] },
       { title: "Verträge", items: [
         { href: "/stammdaten", label: "Stammdaten" },
+        { href: "/stammdaten/vertragsregeln", label: "Vertragsregeln" },
         ...only(admin, { href: "/settings/nummernkreis", label: "Nummernkreis" }),
         ...only(admin, { href: "/admin/deletion", label: "Vertragslöschung" }),
+      ] },
+      { title: "Protokoll", items: [
+        ...only(editor, { href: "/audit", label: "Aktivitäten & Protokoll" }),
       ] },
       { title: "System", items: [
         ...only(admin, { href: "/settings", label: "Einstellungen" }),
         { href: "/sicherheit", label: "Sicherheit & Datenschutz" },
-        ...only(Boolean(account?.is_developer), { href: "/developer", label: "Entwicklung" }),
       ] },
     ]}
   />;

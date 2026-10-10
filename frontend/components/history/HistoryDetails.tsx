@@ -28,12 +28,20 @@ function text(value: unknown): string {
   return String(value);
 }
 
-export default function HistoryDetails({ details }: { details: Record<string, unknown> }) {
+// Verständliche Angaben sofort (Feldname deutsch, vorher → nachher); technische Rohdaten nur auf Wunsch (U9).
+export default function HistoryDetails({ details, fieldLabels = {} }: { details: Record<string, unknown>; fieldLabels?: Record<string, string> }) {
   const entries = Object.entries(details ?? {}).filter(([key]) => !key.endsWith("_id") && key !== "deadline_id");
   if (entries.length === 0) return null;
-  return <ul className="hist-details">
-    {entries.flatMap(([key, value]) => key === "fields" && value && typeof value === "object" && !Array.isArray(value)
-      ? Object.entries(value as Record<string, unknown>).map(([field, change]) => <li key={`${key}.${field}`}><span>{field}</span> {text(change)}</li>)
-      : [<li key={key}><span>{KEY_LABEL[key] ?? key}</span> {text(value)}</li>])}
-  </ul>;
+  const readable = entries.filter(([key]) => key === "fields" || key in KEY_LABEL);
+  const technical = entries.filter(([key]) => !(key === "fields" || key in KEY_LABEL));
+  return <>
+    {readable.length > 0 ? <ul className="hist-details">
+      {readable.flatMap(([key, value]) => key === "fields" && value && typeof value === "object" && !Array.isArray(value)
+        ? Object.entries(value as Record<string, unknown>).map(([field, change]) => <li key={`${key}.${field}`}><span>{fieldLabels[field] ?? field}</span> {text(change)}</li>)
+        : [<li key={key}><span>{KEY_LABEL[key]}</span> {text(value)}</li>])}
+    </ul> : null}
+    {technical.length > 0 ? <details className="hist-technical"><summary>Technische Details</summary><ul className="hist-details">
+      {technical.map(([key, value]) => <li key={key}><span>{key}</span> {text(value)}</li>)}
+    </ul></details> : null}
+  </>;
 }

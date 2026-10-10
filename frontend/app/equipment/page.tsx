@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import EmptyState from "@/components/ui/EmptyState";
 import Link from "next/link";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
@@ -44,11 +45,9 @@ export default function EquipmentPage() {
       {loading && <LoadingState>Geräte werden geladen…</LoadingState>}
 
       {!loading && !error && items.length === 0 && (
-        <div className="state-box">
-          <div className="state-icon">∅</div>
-          <h3>Noch keine Geräte vorhanden</h3>
-          <p>Im aktuellen Krankenhaus-/Abteilungsbereich sind noch keine Geräte sichtbar.</p>
-        </div>
+        <EmptyState variant="calm" title="Noch keine Geräte vorhanden">
+          Geräte entstehen aus der KI-Analyse von Vertragsdokumenten, sobald die Analyse eines Vertrags übernommen ist. Im aktuellen Krankenhaus-/Abteilungsbereich ist noch keines sichtbar – ein anderer Bereich oben in der Kopfzeile kann weitere zeigen.
+        </EmptyState>
       )}
 
       {!loading && !error && items.length > 0 && (

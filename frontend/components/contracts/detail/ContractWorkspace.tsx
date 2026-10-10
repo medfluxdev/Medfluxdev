@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type {
   CalcBasis,
@@ -483,7 +484,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
         {activeTab === "overview" && hasAi && <><Section title="Leistungsumfang" description="Enthaltene, ausgeschlossene und ungeklärte Leistungen"><div className="cw-service-grid">{SCOPE_FIELDS.map(([key, label, prop]) => { const state = scopeState(key, data.scope[prop]); return <div className="cw-service-row" key={key}><span>{label}</span><strong className={`cw-service-state cw-service-${state.tone}`}>{state.label}</strong><SourceButton evidence={state.evidence} /></div>; })}</div></Section><Section title="SLA"><dl className="cw-definition-grid"><div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? "Nicht verfügbar"}</dd></div><div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? "Nicht verfügbar"}</dd></div><div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? "Nicht verfügbar"}</dd></div><div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? yesNo(data.sla.availability_24_7)}</dd></div></dl></Section></>}
 
-        {activeTab === "relations" && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
+        {activeTab === "relations" && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
 
         {activeTab === "overview" && slots.overview}
         {activeTab === "deadlines" && slots.deadlines}

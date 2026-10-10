@@ -542,3 +542,41 @@ def lookup_label(session: Session, organization_id: uuid.UUID, field_key: str, c
             LookupValue.code == code,
         )
     )
+
+
+# --------------------------------------------------------------------------- unlinked supplier names (U8)
+
+
+def unlinked_suppliers(
+    session: Session, organization_id: uuid.UUID, visible: Optional[set[uuid.UUID]], *, limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Lieferantennamen aus Verträgen ohne verknüpften Vertragspartner, gruppiert nach exaktem Text.
+
+    Nur Vorschläge (Ähnlichkeit) – es wird nichts automatisch verknüpft oder zusammengeführt.
+    """
+    from app.database.models import Contract
+
+    stmt = select(Contract.id, Contract.supplier).where(
+        Contract.organization_id == organization_id,
+        Contract.partner_id.is_(None),
+        Contract.supplier.is_not(None),
+        Contract.lifecycle_state == "active",
+        Contract.business_status != "geloescht",
+    )
+    if visible is not None:
+        stmt = stmt.where(Contract.id.in_(visible))
+    groups: dict[str, list[uuid.UUID]] = {}
+    for contract_id, supplier in session.execute(stmt).all():
+        text = (supplier or "").strip()
+        if text:
+            groups.setdefault(text, []).append(contract_id)
+    ordered = sorted(groups.items(), key=lambda item: (-len(item[1]), item[0].casefold()))[:limit]
+    return [
+        {
+            "supplier": text,
+            "contracts": len(ids),
+            "contract_ids": [str(value) for value in ids[:50]],
+            "suggestions": similar_partners(session, organization_id, text, limit=3, threshold=0.6),
+        }
+        for text, ids in ordered
+    ]

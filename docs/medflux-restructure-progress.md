@@ -14,7 +14,7 @@ hat am 2026-10-10 angewiesen, alle Phasen ohne Zwischenstopp umzusetzen (ersetzt
 | E | Vertragsakte, Import, Prüfung | erledigt | siehe git log |
 | F | Fristen & Aufgaben | erledigt | siehe git log |
 | G | Mein Tag v3, Analysen | erledigt | siehe git log |
-| H | Stammdaten, Verwaltung, Geräte, Verlauf | offen | |
+| H | Stammdaten, Verwaltung, Geräte, Verlauf | erledigt | siehe git log |
 | I | Aufräumen, Kompatibilität, Abschluss | offen | |
 
 ## Testumgebung auf diesem Rechner
@@ -190,3 +190,27 @@ Entscheidung, Kündigung und Lesen bleiben getrennte Vorgänge (T09).
 
 **Tests**: `frontend/test/my-day.test.tsx` neu geschrieben (T01/T02/T24 auf der Oberfläche, axe).
 **Verifikation**: `npm run verify` grün (53 Testdateien).
+
+## Phase H – Stammdaten, Verwaltung, Geräte, Verlauf (2026-10-10)
+
+**Befunde**: (1) 0 Vertragspartner trotz ABIOMED/GE – die KI schreibt den Lieferanten als Text (`contract.supplier`), nichts verknüpft ihn
+mit einem Partnerdatensatz. (2) „0 Benutzer“ – gezählt werden Mitgliedschaften; Entwicklerkonten haben keine. (3) Verlauf zeigte rohe Feldschlüssel.
+
+**Umgesetzt**
+- **Lieferanten zuordnen (U8)** in Stammdaten → Vertragspartner: Lieferantennamen ohne Partner gruppiert mit Vertragszahl und bis zu drei
+  Ähnlichkeitsvorschlägen; „Zuordnen“ oder „Neu anlegen“ verknüpft alle sichtbaren Verträge mit genau diesem Namen über die normale
+  Registeränderung (Herkunft „manuell“, Verlaufseintrag je Vertrag, Sperre je Zeile). Nichts wird automatisch verknüpft oder zusammengeführt.
+  API: `GET /api/catalogs/partners/unlinked`, `POST /api/catalogs/partners/link-supplier` (Rechte `partner.edit` + `contract.edit`).
+- **Begriffe vereinheitlicht**: „Krankenhaus“ (statt „Gesellschaft“) und „Abteilung“ (statt „Bereich“) in Liste, Baum, Bericht, Excel, Import,
+  Zuständigkeit und Neuanlage – wie in den Stammdaten.
+- **Verwaltung**: Kennzahl „Mitglieder dieser Organisation“ mit Hinweis, dass Entwicklerkonten nicht zählen; Bereichsnavigation mit
+  „Vertragsregeln“ (bleiben in Stammdaten, `catalog.admin`) und „Aktivitäten & Protokoll“; „Entwicklung“ nur noch einmal (Seitenleiste/Strg+K).
+- **Aktivitäten & Protokoll** (`/audit`, im Verwaltungslayout; Seitenleisteneintrag für Bearbeiter bleibt): deutsche Feldnamen aus
+  `register.fields` (`field_labels` je Eintrag, auch im Vertragsverlauf), technische Rohdaten aufklappbar, Zeit nicht umbrechend.
+  Der Vertragsverlauf bleibt „Protokoll dieses Vertrags + Prüfungen/Korrekturen/Dokumente/E-Mails“ mit Filter je Art.
+- **Geräte (U10)**: Gerätekarten im Vertrag verlinken auf `/equipment/{id}`; leere Geräteseite erklärt, woher Geräte kommen.
+- Signale: „Aktiv“ neutral, „Vertraulich“ info (D11).
+
+**Tests**: `backend/tests/test_restructure_supplier_link.py` (T23, U9); angepasst: `areas`, `contract-register`, `contract-ownership-roles`,
+`import`, `register-grid`, `register-portfolio`, `test_register_grid.py`.
+**Verifikation**: Backend 1592 passed / 7 umgebungsbedingt; `npm run verify` grün (53 Testdateien).

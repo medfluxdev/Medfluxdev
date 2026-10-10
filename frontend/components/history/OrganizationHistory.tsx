@@ -131,7 +131,7 @@ export default function OrganizationHistory({ organizationSlug }: { organization
         <tbody>{page.items.map((item) => <tr key={item.id}>
           <td>{item.at ? formatDateTime(item.at) : "–"}</td>
           <td>{item.actor ?? "System"}</td>
-          <th scope="row">{item.label}<HistoryDetails details={item.details} /></th>
+          <th scope="row">{item.label}<HistoryDetails details={item.details} fieldLabels={item.field_labels} /></th>
           <td>{item.object_type === "contract" && item.object_id ? <Link href={`/contracts/${item.object_id}?tab=history`}>{item.contract_number ?? "Vertrag"}{item.contract_title ? ` · ${item.contract_title}` : ""}</Link> : "–"}</td>
         </tr>)}</tbody>
       </table> : null}

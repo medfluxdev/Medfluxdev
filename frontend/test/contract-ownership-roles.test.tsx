@@ -51,7 +51,7 @@ describe("Contract360 Organisationszuordnung", () => {
     const user = userEvent.setup();
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
 
-    const responsible = await screen.findByLabelText("Verantwortlicher Bereich");
+    const responsible = await screen.findByLabelText("Verantwortliche Abteilung");
     expect(responsible).toHaveValue("dept-rad");
     expect(screen.getByRole("option", { name: "Medizintechnik › Radiologie" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Intensivmedizin" })).toBeChecked();

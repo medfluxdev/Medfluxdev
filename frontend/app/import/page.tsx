@@ -269,14 +269,14 @@ export default function ImportPage() {
                           {organizationStructure.hospitals.filter((item) => item.is_active).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                         </select>
                       </label>
-                      <label className="field">Verantwortlicher Bereich
-                        <select aria-label="Verantwortlicher Bereich für Import" value={responsibleDepartmentId} disabled={!hospitalId} onChange={(event) => { setResponsibleDepartmentId(event.target.value); setCostCenterId(""); }}>
+                      <label className="field">Verantwortliche Abteilung
+                        <select aria-label="Verantwortliche Abteilung für Import" value={responsibleDepartmentId} disabled={!hospitalId} onChange={(event) => { setResponsibleDepartmentId(event.target.value); setCostCenterId(""); }}>
                           <option value="">Nicht festgelegt</option>
                           {availableDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, availableDepartments)}</option>)}
                         </select>
                       </label>
-                      <label className="field">Nutzende Bereiche
-                        <select aria-label="Nutzende Bereiche für Import" multiple value={beneficiaryDepartmentIds} disabled={!hospitalId} onChange={(event) => setBeneficiaryDepartmentIds(Array.from(event.target.selectedOptions, (option) => option.value))}>
+                      <label className="field">Nutzende Abteilungen
+                        <select aria-label="Nutzende Abteilungen für Import" multiple value={beneficiaryDepartmentIds} disabled={!hospitalId} onChange={(event) => setBeneficiaryDepartmentIds(Array.from(event.target.selectedOptions, (option) => option.value))}>
                           {availableDepartments.filter((item) => item.id !== responsibleDepartmentId).map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, availableDepartments)}</option>)}
                         </select>
                       </label>
@@ -341,8 +341,8 @@ export default function ImportPage() {
                 <div><dt>Ziel</dt><dd>Neuer Vertrag je Datei</dd></div>
                 <div><dt>Dateien</dt><dd>{selected.length}</dd></div>
                 {canAssign ? <div><dt>Krankenhaus</dt><dd>{hospitalName ?? "Nicht festgelegt"}</dd></div> : null}
-                {canAssign ? <div><dt>Verantwortlicher Bereich</dt><dd>{departmentName ? departmentFullPath(departmentName, availableDepartments) : "Nicht festgelegt"}</dd></div> : null}
-                {canAssign ? <div><dt>Nutzende Bereiche</dt><dd>{beneficiaryDepartmentIds.length || "Keine"}</dd></div> : null}
+                {canAssign ? <div><dt>Verantwortliche Abteilung</dt><dd>{departmentName ? departmentFullPath(departmentName, availableDepartments) : "Nicht festgelegt"}</dd></div> : null}
+                {canAssign ? <div><dt>Nutzende Abteilungen</dt><dd>{beneficiaryDepartmentIds.length || "Keine"}</dd></div> : null}
                 {canAssign ? <div><dt>Kostenstelle</dt><dd>{costCenterName ? `${costCenterName.code} – ${costCenterName.name}` : "Nicht festgelegt"}</dd></div> : null}
               </dl>
               <InlineAlert tone="info">Die Analyse läuft lokal auf diesem Rechner. Unklare oder widersprüchliche Angaben werden nicht automatisch bestätigt, sondern zur Prüfung markiert.</InlineAlert>

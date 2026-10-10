@@ -120,7 +120,7 @@ export default function AdminPage() {
       <section className={styles.kpis} aria-label="Administrationskennzahlen">
         <article><span>Offene Aufgaben</span><strong>{overview?.total_action_items ?? 0}</strong><small>priorisierte Handlungspunkte</small></article>
         <article><span>Manuelle Prüfungen</span><strong>{reviews}</strong><small>Angaben mit Prüfbedarf</small></article>
-        <article><span>Benutzer</span><strong>{activeUsers}</strong><small>{users.length} Konten insgesamt</small></article>
+        <article title="Gezählt werden Mitgliedschaften in dieser Organisation. Entwicklerkonten haben keine Mitgliedschaft und erscheinen hier nicht."><span>Mitglieder dieser Organisation</span><strong>{activeUsers}</strong><small>{users.length} Konten insgesamt{account?.is_developer ? " · Ihr Entwicklerkonto zählt nicht mit" : ""}</small></article>
         <article><span>Analyse-Ereignisse</span><strong>{intelligenceEvents.length}</strong><small>zuletzt sichtbare Ereignisse</small></article>
       </section>
 
@@ -149,7 +149,7 @@ export default function AdminPage() {
         </section>
         <section className={styles.panel}>
           <div className={styles.panelHead}><div><h2>Benutzerübersicht</h2><p>Konten im aktuellen Arbeitsbereich</p></div><Link href="/settings/users">Verwalten</Link></div>
-          <div className={styles.userList}>{users.length === 0 ? <p className={styles.empty}>Noch keine Benutzer vorhanden.</p> : users.slice(0, 6).map((user) => <div className={styles.userRow} key={user.id}><span className={styles.userAvatar}>{user.display_name.slice(0, 1).toUpperCase()}</span><div><strong>{user.display_name}</strong><small>{user.email}</small></div><span className={styles.roleChip}>{ROLE_LABELS[user.role]}</span><span className={`${styles.userState}${user.is_active ? "" : ` ${styles.off}`}`}>{user.is_active ? "Aktiv" : "Inaktiv"}</span></div>)}</div>
+          <div className={styles.userList}>{users.length === 0 ? <p className={styles.empty}>Noch keine Mitglieder in dieser Organisation{account?.is_developer ? " – Entwicklerkonten werden nicht als Mitglieder gezählt" : ""}.</p> : users.slice(0, 6).map((user) => <div className={styles.userRow} key={user.id}><span className={styles.userAvatar}>{user.display_name.slice(0, 1).toUpperCase()}</span><div><strong>{user.display_name}</strong><small>{user.email}</small></div><span className={styles.roleChip}>{ROLE_LABELS[user.role]}</span><span className={`${styles.userState}${user.is_active ? "" : ` ${styles.off}`}`}>{user.is_active ? "Aktiv" : "Inaktiv"}</span></div>)}</div>
         </section>
       </div>
       {membership?.organization_slug ? <JobMonitorPanel organizationSlug={membership.organization_slug} /> : null}

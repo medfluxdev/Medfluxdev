@@ -10,8 +10,8 @@ export default function AuditPage() {
 
   return (
     <div className="page">
-      <PageHeader title="Historie" description="Wer hat wann was geändert – organisationsweit, filterbar nach Benutzer, Bereich, Vertrag und Zeitraum." />
-      {!allowed ? <p>Die Historie ist für Ihre Rolle nicht freigegeben.</p> : !organizationSlug ? <p>Bitte zuerst eine Organisation auswählen.</p> : <OrganizationHistory organizationSlug={organizationSlug} />}
+      <PageHeader title="Aktivitäten & Protokoll" description="Wer hat wann was geändert – organisationsweit, filterbar nach Benutzer, Bereich, Vertrag und Zeitraum. Technische Rohdaten lassen sich je Eintrag aufklappen." />
+      {!allowed ? <p>Das Protokoll ist für Ihre Rolle nicht freigegeben.</p> : !organizationSlug ? <p>Bitte zuerst eine Organisation auswählen.</p> : <OrganizationHistory organizationSlug={organizationSlug} />}
     </div>
   );
 }

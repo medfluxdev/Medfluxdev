@@ -124,7 +124,7 @@ describe("Vertragsregister – Stammdaten", () => {
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: "Stammdaten bearbeiten" }));
+    await user.click(screen.getByRole("button", { name: "Vertragsdaten bearbeiten" }));
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -148,7 +148,7 @@ describe("Vertragsregister – Stammdaten", () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(screen.getByRole("button", { name: "Stammdaten bearbeiten" }));
+    await user.click(screen.getByRole("button", { name: "Vertragsdaten bearbeiten" }));
     await user.type(screen.getByLabelText("Interne Nummer"), "INT-7");
     await user.click(screen.getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { internal_number: "INT-7" } }));
@@ -225,7 +225,7 @@ describe("Vertragsregister – Formularschutz", () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(screen.getByRole("button", { name: "Stammdaten bearbeiten" }));
+    await user.click(screen.getByRole("button", { name: "Vertragsdaten bearbeiten" }));
     await user.type(screen.getByLabelText("Interne Nummer"), "INT-9");
     expect(screen.getByText(/Ungespeicherte Änderungen/)).toBeInTheDocument();
     await user.keyboard("{Control>}s{/Control}");

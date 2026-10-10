@@ -47,7 +47,7 @@ export const contractTypeDefinition: EntityDefinition<ContractTypeDto, TypeConte
   searchText: (row) => `${row.label} ${row.code} ${row.description ?? ""}`,
   columns: (context) => [
     { key: "label", label: "Bezeichnung", rowHeader: true, sortValue: (row) => row.label.toLocaleLowerCase("de"), render: (row) => row.label },
-    { key: "confidential", label: "Vertraulich", sortValue: (row) => (row.is_confidential ? 0 : 1), render: (row) => (row.is_confidential ? <Badge tone="warning">Vertraulich</Badge> : "–") },
+    { key: "confidential", label: "Vertraulich", sortValue: (row) => (row.is_confidential ? 0 : 1), render: (row) => (row.is_confidential ? <Badge tone="info">Vertraulich</Badge> : "–") },
     { key: "retention", label: "Aufbewahrung", numeric: true, sortValue: (row) => row.retention_years ?? -1, render: (row) => (row.retention_years == null ? "Standard" : `${row.retention_years} Jahre`) },
     { key: "categories", label: "Kategorien", numeric: true, render: (row) => context.categories.filter((item) => item.contract_type_ids.includes(row.id) && item.is_active).length },
   ],

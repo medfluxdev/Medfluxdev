@@ -13,7 +13,7 @@ const report: PortfolioReport = vi.hoisted(() => ({
     hospital: [{ label: "Klinikum A", value: "Klinikum A", count: 1, annual_cost: "12000.00", cost_current_year: "9000.00" }],
     partner: [{ label: "Medtec", value: "Medtec", count: 2, annual_cost: "18000.00", cost_current_year: "15000.00" }],
   },
-  dimensions: [{ key: "hospital", label: "Gesellschaft" }, { key: "partner", label: "Vertragspartner" }],
+  dimensions: [{ key: "hospital", label: "Krankenhaus" }, { key: "partner", label: "Vertragspartner" }],
   cost_by_year: [{ year: 2026, expense: "15000.00", income: "0.00", is_projection: false }, { year: 2027, expense: "18000.00", income: "0.00", is_projection: true }],
   deadlines_by_month: [{ month: "2026-10", notice: 1, other: 0 }, { month: "2026-11", notice: 0, other: 2 }],
   upcoming: [{ contract_id: "c-2", register_number: "000002", short_description: "Reinigung", due_date: "2026-10-31", title: "Kündigungsfrist", kind: "notice" }],
@@ -40,7 +40,7 @@ describe("Vertragsportfolio", () => {
     expect(screen.queryByRole("link", { name: /ohne berechenbares Vertragsende/ })).not.toBeInTheDocument();
     expect(screen.getByText(/100,0 %/)).toBeInTheDocument();
 
-    expect(screen.getByRole("group", { name: /Gesellschaft: Klinikum A 9\.000,00/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /Krankenhaus: Klinikum A 9\.000,00/ })).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Aufteilen nach"), "partner");
     expect(screen.getByRole("group", { name: /Vertragspartner: Medtec 15\.000,00/ })).toBeInTheDocument();
 

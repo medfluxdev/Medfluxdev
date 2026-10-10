@@ -136,7 +136,7 @@ def grid_xlsx(rows: list[GridRow], spec: GridSpec, *, title: str, as_of: date) -
 # --------------------------------------------------------------------------- portfolio report
 
 _DIMENSIONS = (
-    ("hospital", "Gesellschaft"),
+    ("hospital", "Krankenhaus"),
     ("department", "Abteilung"),
     ("cost_center", "Kostenstelle"),
     ("contract_type", "Vertragstyp"),
