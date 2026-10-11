@@ -244,8 +244,3 @@
 .source-capture-form{display: grid;gap: var(--space-3);max-width: 40rem}
 .source-capture-form textarea{width: 100%}
 
-/* Übersicht: Organisation & Zuständigkeit */
-.contract-assignment-grid{display: grid;grid-template-columns: repeat(auto-fit,minmax(220px,1fr));gap: var(--space-3) var(--space-5);margin: 0}
-.contract-assignment-grid dt{font-size: var(--text-small);color: var(--color-text-muted)}
-.contract-assignment-grid dd{margin: var(--space-1) 0 0;font-weight: var(--weight-semibold);color: var(--color-text)}
-

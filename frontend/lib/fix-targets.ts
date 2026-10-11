@@ -82,6 +82,7 @@ const SECTION_ANCHORS: Record<string, string> = {
   renewal: "renewal-heading",
   deadlines: "rg-deadlines-heading",
   intelligence: "contract-intelligence-heading",
+  "offene-punkte": "open-points-heading",
 };
 
 export function sectionAnchor(section: string): string {

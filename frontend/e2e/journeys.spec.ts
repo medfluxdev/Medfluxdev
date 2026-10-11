@@ -235,8 +235,7 @@ test("14 – Direkt zur Stelle: Strg+K kennt, was dem offenen Vertrag fehlt", as
   const { contract_id: contractId } = await created.json();
   try {
     await page.goto(`/contracts/${contractId}`);
-    await page.getByRole("button", { name: /Was fehlt · / }).click();
-    const gaps = page.getByRole("group", { name: "Was fehlt noch?" });
+    const gaps = page.getByRole("region", { name: /Offene Punkte/ });
     await expect(gaps).toBeVisible();
     const first = (await gaps.getByRole("link").first().getAttribute("href"))!;
     await page.keyboard.press("Control+k");
@@ -290,9 +289,7 @@ test("15 – Erneut aus dem Dokument erfassen: fehlende Angaben suchen, vergleic
   });
 
   await openContract(page, "Softwarepflege PACS");
-  // Einstieg „Was fehlt noch?“ → Dialog mit den fehlenden Angaben.
-  const gapsButton = page.getByRole("button", { name: /Was fehlt · / });
-  if (await gapsButton.isVisible().catch(() => false)) await gapsButton.click();
+  // Einstieg „Offene Punkte“ → Dialog mit den fehlenden Angaben.
   const search = page.getByRole("link", { name: "Fehlende Angaben im Dokument suchen" });
   if (await search.isVisible().catch(() => false)) {
     await search.click();

@@ -8,13 +8,15 @@ const FULL = {
   other_departments: [], cost_center: { code: "950000", name: "Radiologie" }, responsible: "Maria Becker", further_responsible: ["Jonas Kurz", "Lea Wolf"],
 };
 
-describe("Übersicht: Organisation & Zuständigkeit", () => {
+describe("Übersicht: Zuständigkeit (Seitenleiste)", () => {
   it("zeigt Krankenhaus, Abteilungen, Kostenstelle und Verantwortliche", async () => {
     const { container } = render(<ContractAssignmentCard contractId="c-1" assignment={FULL} canEdit />);
-    expect(screen.getByRole("heading", { name: "Organisation & Zuständigkeit" })).toBeInTheDocument();
-    for (const text of ["Nordwest Krankenhaus", "Medizintechnik", "Haustechnik", "950000 · Radiologie", "Maria Becker", "Jonas Kurz, Lea Wolf"]) {
+    expect(screen.getByRole("heading", { name: "Zuständigkeit" })).toBeInTheDocument();
+    for (const text of ["Nordwest Krankenhaus", "Medizintechnik", "Haustechnik", "Maria Becker", "Jonas Kurz, Lea Wolf"]) {
       expect(screen.getByText(text)).toBeInTheDocument();
     }
+    expect(screen.getByText("950000")).toHaveClass("mono");
+    expect(screen.getByText("950000").closest("dd")).toHaveTextContent("950000 · Radiologie");
     expect(screen.getByRole("link", { name: "Zuordnung ändern" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=ownership");
     expect(await axe(container)).toHaveNoViolations();
   });

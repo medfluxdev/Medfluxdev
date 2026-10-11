@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ReextractionPanel, { ReextractionBanner, parsePages } from "@/components/contracts/detail/Reextraction";
-import ContractGaps from "@/components/contracts/detail/ContractGaps";
+import OpenPoints from "@/components/contracts/detail/OpenPoints";
 import type { FactRow, ReextractionRun, ReextractionState } from "@/lib/domain-api/reextraction";
 
 const api = vi.hoisted(() => ({
@@ -176,14 +176,11 @@ describe("Erneut aus dem Dokument erfassen", () => {
 });
 
 describe("Fehlende Angaben im Dokument suchen", () => {
-  it("die Karte „Was fehlt noch?“ bietet die Suche an, der Link öffnet den Dialog mit allen fehlenden Angaben", async () => {
-    const gaps = [{ key: "term_start_date", label: "Vertragsbeginn", reason: "nötig für „Gültig“", command: "Vertragsbeginn erfassen", target: { tab: "register" as const, field: "term_start_date" } }];
-    const { unmount } = render(<ContractGaps contractId="c-1" gaps={gaps} searchHref="/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende" />);
-    await userEvent.setup().click(screen.getByRole("button", { name: /Was fehlt · 1/ }));
+  it("„Offene Punkte“ bietet die Suche an, der Link öffnet den Dialog mit allen fehlenden Angaben", async () => {
+    const { unmount } = render(<OpenPoints contractId="c-1" points={[]} searchHref="/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende" onOpen={vi.fn()} />);
     expect(screen.getByRole("link", { name: "Fehlende Angaben im Dokument suchen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende");
     unmount();
-    render(<ContractGaps contractId="c-1" gaps={gaps} searchHref={null} />);
-    await userEvent.setup().click(screen.getByRole("button", { name: /Was fehlt · 1/ }));
+    render(<OpenPoints contractId="c-1" points={[]} searchHref={null} onOpen={vi.fn()} />);
     expect(screen.queryByRole("link", { name: "Fehlende Angaben im Dokument suchen" })).not.toBeInTheDocument();
 
     nav.params = new URLSearchParams("tab=documents&suchen=fehlende");

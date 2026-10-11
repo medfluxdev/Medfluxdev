@@ -217,7 +217,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getAllByText(/CN-9876/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Siemens/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("42.500,00 €").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
+    expect(await screen.findByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
 
     await openTab("Fristen & Aufgaben");
     expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
@@ -234,7 +234,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     }));
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
     expect(within(header).getByText("Vertragsbeginn")).toBeInTheDocument();
-    expect(within(header).getByText("01.04.2025")).toBeInTheDocument();
+    expect(within(header.querySelector("dl")!).getByText("01.04.2025")).toBeInTheDocument();
     expect(within(header).getByText("Gültig").closest(".status-badge")).toHaveClass("status-badge--success");
     expect(within(header).getByRole("link", { name: "ABIOMED Europe GmbH" })).toHaveAttribute("href", "/stammdaten/vertragspartner?id=p-1");
   });

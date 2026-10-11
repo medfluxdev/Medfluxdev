@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openContract } from "./helpers";
 
 // U9: keine waagerechte Seitenverschiebung – breite Tabellen scrollen in ihrem eigenen Rahmen.
 const PAGES = [
@@ -43,5 +44,21 @@ for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
     const box = await firstRow.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.y + box!.height).toBeLessThanOrEqual(height);
+  });
+}
+
+// Vertragsakte „Übersicht“: ab 1180 px Seitenleiste rechts neben der Arbeitsspalte, darunter untereinander; nie waagerecht scrollen.
+for (const [width, height, beside] of [[1920, 1080, true], [1366, 768, true], [1000, 900, false], [390, 844, false]] as const) {
+  test(`Vertragsakte ${width}px: Seitenleiste ${beside ? "daneben" : "darunter"}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openContract(page, "Softwarepflege PACS");
+    await page.getByRole("tab", { name: "Übersicht" }).click();
+    const main = page.locator(".cw-overview-main");
+    const aside = page.locator(".cw-overview-aside");
+    await expect(aside.getByRole("heading", { name: "Zuständigkeit" })).toBeVisible();
+    const [m, a] = [await main.boundingBox(), await aside.boundingBox()];
+    if (beside) expect(a!.x).toBeGreaterThan(m!.x + m!.width - 1);
+    else expect(a!.y).toBeGreaterThanOrEqual(m!.y + m!.height - 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   });
 }

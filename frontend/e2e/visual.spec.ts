@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openContract } from "./helpers";
 
 // Bildvergleich der Hauptseiten (Desktop 1440 px und Telefon). Dynamische
 // Inhalte (Datum, Begruessung nach Uhrzeit, verbleibende Tage) werden maskiert.
@@ -28,3 +29,15 @@ for (const [name, path] of PAGES) {
     });
   });
 }
+
+// Vertragsakte (Übersicht): Kopf mit Laufzeitleiste, Offene Punkte, Seitenleiste. „Heute“ und Restlaufzeit hängen vom Datum ab.
+test("Ansicht vertragsakte", async ({ page }) => {
+  await openContract(page, "Softwarepflege PACS");
+  await page.getByRole("tab", { name: "Übersicht" }).click();
+  await page.waitForLoadState("networkidle");
+  await expect(page).toHaveScreenshot("vertragsakte.png", {
+    fullPage: true,
+    mask: [page.locator("time"), page.locator(".term-bar"), page.locator(".badge"), page.getByText(/^\d+ Tage$|^in \d+ Tagen$|^vor \d+ Tagen?$/)],
+  });
+});
+

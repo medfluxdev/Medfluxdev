@@ -78,8 +78,10 @@ describe("KI-Prüfung im Kopf der Vertragsakte", () => {
     unmount();
 
     api.getContractRegister.mockResolvedValue(register({ short_description: field("Kurzbeschreibung", "ai_confirmed") }));
-    render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending canEdit />);
-    expect(await screen.findByRole("button", { name: /KI-Prüfung offen/ })).toBeInTheDocument();
+    // Nur eine Warnung verlangt eine Prüfung: kein Kopf-Knopf (sie steht unter „Offene Punkte“).
+    const { container } = render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending canEdit />);
+    await waitFor(() => expect(api.getContractRegister).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("verschwindet, wenn nichts mehr zu prüfen ist", async () => {

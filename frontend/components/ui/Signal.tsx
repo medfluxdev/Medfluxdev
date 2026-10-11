@@ -29,12 +29,14 @@ interface Props {
   /** Abweichendes Symbol; Standard ist die Form der Stufe. */
   icon?: ReactNode;
   title?: string;
+  /** Kleine Form (z. B. neben einem Wert oder in Listen). */
+  size?: "sm";
 }
 
 // Ruhe & Signal: Farbe + Form + Wort, nie Farbe allein. Grün (done) nur für Bestätigtes.
-export default function Signal({ tone, children, icon, title }: Props) {
+export default function Signal({ tone, children, icon, title, size }: Props) {
   return (
-    <span className={`signal signal--${tone}`} title={title}>
+    <span className={`signal signal--${tone}${size === "sm" ? " signal--sm" : ""}`} title={title}>
       {icon ?? <SignalIcon tone={tone} />}
       <span className="signal-label">{children}</span>
     </span>

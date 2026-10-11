@@ -1,5 +1,6 @@
 "use client";
 
+import EmptyState from "@/components/ui/EmptyState";
 import Link from "next/link";
 import { REVIEW_TARGET, contractHref } from "@/lib/fix-targets";
 import { useEffect, useMemo, useState } from "react";
@@ -138,12 +139,12 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
           <h2 id="contract-intelligence-heading">Vertragsanalyse</h2>
           <p>Beziehungen, Pflichten, Regelprüfungen und Handlungsvorschläge aus der Vertragsanalyse.</p>
         </div>
-        <button type="button" className="btn-ghost" onClick={() => void load()} disabled={loading}>Aktualisieren</button>
+        <button type="button" className="btn btn-sm" onClick={() => void load()} disabled={loading}>Aktualisieren</button>
       </div>
 
       {loading && <LoadingState>Vertragsanalyse wird geladen…</LoadingState>}
       {error && <InlineAlert tone="warning" role="status">{error}</InlineAlert>}
-      {!loading && total === 0 && !error && <p className="cw-muted">Für diesen Vertrag liegen noch keine zusätzlichen Analyseergebnisse vor.</p>}
+      {!loading && total === 0 && !error && <EmptyState variant="calm" title="Noch keine Ergebnisse.">Für diesen Vertrag liegen keine zusätzlichen Analyseergebnisse vor.</EmptyState>}
 
       {!loading && total > 0 && (
         <div className={styles.grid}>

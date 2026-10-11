@@ -37,7 +37,7 @@ export function openAiValues(register: ContractRegister | null): OpenItem[] {
  * KI-Prüfung im Kopf der Vertragsakte (auf jedem Reiter sichtbar): noch nicht bestätigte KI-Werte
  * direkt bestätigen oder zum Feld springen, und der Weg zur Prüfung im Dokument.
  */
-export default function AiReviewButton({ contractId, orgSlug, reviewPending, canEdit, version }: {
+export default function AiReviewButton({ contractId, orgSlug, reviewPending, canEdit, version, onCount }: {
   contractId: string;
   orgSlug: string;
   /** Prüfung der Werte am Dokument (Dokumente → Prüfung) noch offen. */
@@ -45,6 +45,8 @@ export default function AiReviewButton({ contractId, orgSlug, reviewPending, can
   canEdit: boolean;
   /** Neu laden, wenn sich die Vertragsakte ändert. */
   version?: unknown;
+  /** Meldet die Zahl offener KI-Werte (z. B. für das Symbol am Reiter „Vertragsdaten“). */
+  onCount?: (count: number) => void;
 }) {
   const toast = useToast();
   const [register, setRegister] = useState<ContractRegister | null>(null);
@@ -57,7 +59,9 @@ export default function AiReviewButton({ contractId, orgSlug, reviewPending, can
   useEffect(load, [load, version]);
 
   const open = useMemo(() => openAiValues(register), [register]);
-  if (open.length === 0 && !reviewPending) return null;
+  useEffect(() => { onCount?.(open.length); }, [onCount, open.length]);
+  // Nur unbestätigte KI-Werte; eine Warnung, die eine Prüfung verlangt, steht unter „Offene Punkte“.
+  if (open.length === 0) return null;
 
   async function confirm(keys: string[], success: string) {
     setBusy(true);
@@ -72,7 +76,7 @@ export default function AiReviewButton({ contractId, orgSlug, reviewPending, can
     }
   }
 
-  const label = open.length ? `KI-Werte prüfen · ${open.length}` : "KI-Prüfung offen";
+  const label = `KI-Werte prüfen · ${open.length}`;
   return <Popover
     className="ai-review"
     label={<><span aria-hidden="true">✦ </span>{label}</>}

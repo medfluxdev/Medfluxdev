@@ -40,12 +40,16 @@ import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, documentSearchHref, MISSING_SEARCH, fixLabel, sectionAnchor, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
-import ContractGaps, { useContractGaps } from "./ContractGaps";
+import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
 import SourceCapture from "./SourceCapture";
 import AiReviewButton from "./AiReviewButton";
 import RiskButton from "./RiskButton";
+import ValueOriginBadge from "./ValueOriginBadge";
+import ContractTermBar from "./ContractTermBar";
+import OpenPoints, { buildOpenPoints } from "./OpenPoints";
+import { SignalIcon } from "@/components/ui/Signal";
 import ContractAssignmentCard from "./ContractAssignmentCard";
 import { useAuth } from "@/components/auth/AuthProvider";
 
@@ -149,7 +153,7 @@ function evidenceTarget(ref: EvidenceRef): SourceNavigationTarget {
 }
 
 function OriginBadge({ origin }: { origin: OriginKind }) {
-  return <span className={`cw-origin-badge cw-origin-${origin}`}>{ORIGIN_LABEL[origin]}</span>;
+  return <ValueOriginBadge kind={origin} />;
 }
 
 function calculatedOrigin(value: unknown, basis: CalcBasis | null | undefined): OriginKind {
@@ -217,6 +221,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const canEditData = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   // „Angabe aus dem Text übernehmen“: Stelle auf der angezeigten PDF-Seite markieren.
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [aiOpenCount, setAiOpenCount] = useState(0);
   const [pdfPage, setPdfPage] = useState(1);
   const onPdfPage = useCallback((page: number) => setPdfPage(page), []);
   // „Fehlende Angaben im Dokument suchen“: nur mit Recht, ohne laufende Auswertung und wenn etwas fehlt.
@@ -234,7 +239,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     version: data,
   });
   useEffect(() => {
-    const commands = (gaps ?? []).map((gap) => ({ id: `gap:${gap.key}`, label: gap.command, hint: gap.reason, href: contractHref(data.contract_id, gap.target) }));
+    // Gleiche Reihenfolge wie „Offene Punkte“: fristrelevant zuerst, dann KI-Prüfung, dann der Rest.
+    const order = (gap: { key: string; blocksDeadline?: boolean }) => gap.blocksDeadline ? 0 : gap.key === "review" ? 1 : 2;
+    const commands = [...(gaps ?? [])].sort((x, y) => order(x) - order(y)).map((gap) => ({ id: `gap:${gap.key}`, label: gap.command, hint: gap.reason, href: contractHref(data.contract_id, gap.target) }));
     if (searchMissingHref) commands.push({ id: "reextract:missing", label: "Fehlende Angaben im Dokument suchen", hint: "Die KI liest das Vertragsdokument erneut", href: searchMissingHref });
     setPageCommands(commands);
     return () => setPageCommands([]);
@@ -472,40 +479,79 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const maintainedAnnual = data.register_facts?.annual_cost ?? null;
   // Gepflegter Vertragsbeginn vor dem Wert aus dem Dokument.
   const contractStart = data.register_facts?.contract_start ?? data.dates.start_date ?? null;
+  const headerEnd = data.register_facts?.contract_end ?? effectiveEnd ?? null;
+  const headerCancelBy = data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date ?? null;
   const aiAnnual = data.costs.annual_recurring.amount != null;
   const cancellationOrigin = calculatedOrigin(data.dates.latest_cancellation_date, data.dates.latest_cancellation_basis);
 
+  // Leistungsumfang: Zustand je Leistung und Zusammenfassung (nur mit analysiertem Dokument).
+  const scopeRows = SCOPE_FIELDS.map(([key, label, prop]) => ({ key, label, state: scopeState(key, data.scope[prop]) }));
+  const scopeCounts = {
+    included: scopeRows.filter((row) => row.state.tone === "yes").length,
+    excluded: scopeRows.filter((row) => row.state.tone === "no").length,
+    unknown: scopeRows.filter((row) => row.state.tone === "unknown").length,
+  };
+  const slaMissing = hasAi ? [data.sla.response_time ? null : "Reaktionszeit", data.sla.resolution_time ? null : "Lösungszeit"].filter((item): item is string => Boolean(item)) : [];
+  // Erst mit geladenen Lücken berechnen, sonst stünde kurz ein unvollständiges Bild da.
+  const openPoints = gaps === null ? null : buildOpenPoints({
+    gaps,
+    tasks: openTasks,
+    warnings: actionableWarnings,
+    scopeToCheck: hasAi ? scopeCounts.unknown : 0,
+    scopeTotal: scopeRows.length,
+    slaMissing,
+    cancelByUnknown: !headerCancelBy,
+  });
+  // Reiter zeigen, wo Arbeit wartet (Symbol mit Namen für Screenreader).
+  const deadlineCritical = (openPoints ?? []).some((point) => point.tone === "critical" && (point.target?.tab === "deadlines" || point.target?.tab === "register"));
+  const tabItems = TABS.map((tab) => ({
+    ...tab,
+    badge: tab.key === "deadlines" && deadlineCritical
+      ? <span className="tab-signal tab-signal--critical" role="img" aria-label="Kritischer offener Punkt"><SignalIcon tone="critical" /></span>
+      : tab.key === "register" && aiOpenCount > 0
+        ? <span className="tab-signal tab-signal--ai" role="img" aria-label={`${aiOpenCount} KI-Werte nicht bestätigt`}><SignalIcon tone="ai" /></span>
+        : tab.key === "documents" && data.documents.length > 0
+          ? <span className="tab-count" aria-hidden="true">{data.documents.length}</span>
+          : undefined,
+  }));
+
   return (
     <div className="contract-workspace">
+      <nav className="object-crumbs" aria-label="Brotkrümelnavigation"><Link href="/register">Vertragsliste</Link><span aria-hidden="true">›</span><span aria-current="page">{data.contract_title ?? data.contract_number ?? "Vertrag"}</span></nav>
       <header className="object-header">
         <div className="object-header-main">
-          <p className="object-header-eyebrow">{[data.register_number ? `Vertrag ${data.register_number}` : "Vertrag ohne Nummer", data.contract_number ? `Nr. lt. Dokument ${data.contract_number}` : null].filter(Boolean).join(" · ")}</p>
+          <p className="object-header-eyebrow">{data.register_number ? <>Vertrag <span className="mono">{data.register_number}</span></> : "Vertrag ohne Nummer"}{data.contract_number ? <> · Nr. lt. Dokument <span className="mono">{data.contract_number}</span></> : null}</p>
           <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
-          <div className="object-header-meta">
-            {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
+          <div className="object-header-meta object-header-who">
             {data.partner
               ? <Link className="partner-chip" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten">{data.partner.name}</Link>
               : data.supplier
                 ? <button type="button" className="partner-chip partner-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet">{data.supplier}<span className="partner-chip-hint">zuordnen</span></button>
                 : null}
-            <ContractGaps contractId={data.contract_id} gaps={gaps} searchHref={searchMissingHref} />
-            <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={data.review.requires_manual_review} canEdit={canEditData} version={data} />
+            {data.assignment?.responsible_department ? <><span className="meta-sep" aria-hidden="true" /><span>{data.assignment.responsible_department}</span></> : null}
+            {data.assignment?.cost_center ? <><span className="meta-sep" aria-hidden="true" /><span>Kostenstelle <span className="mono">{data.assignment.cost_center.code}</span> · {data.assignment.cost_center.name}</span></> : null}
+          </div>
+          <div className="object-header-meta object-header-signals">
+            {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
+            {openPoints?.length ? <Link className="open-points-link" href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><Signal tone={openPoints[0].tone === "critical" ? "critical" : "warning"}>Offene Punkte · {openPoints.length}</Signal></Link> : null}
+            <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={data.review.requires_manual_review} canEdit={canEditData} version={data} onCount={setAiOpenCount} />
             <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>
         <dl className="object-header-facts">
-          <div><dt>Vertragsbeginn</dt><dd>{contractStart ? formatDate(contractStart) : <>– <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></>}</dd></div>
-          <div><dt>Vertragsende</dt><dd>{data.register_facts?.contract_end ?? effectiveEnd ? formatDate(data.register_facts?.contract_end ?? effectiveEnd) : <>– <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Vertragsende: Laufzeit erfassen">Laufzeit erfassen</button></>}</dd></div>
-          <div><dt>Kündbar bis</dt><dd>{data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date ? formatDate(data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date) : <>– <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Kündbar bis: Laufzeit erfassen">Laufzeit erfassen</button></>}</dd></div>
+          <div><dt>Vertragsbeginn</dt><dd>{contractStart ? <span className="fact-value">{formatDate(contractStart)}<ValueOriginBadge kind={data.register_facts?.contract_start ? "system" : "extracted"} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></span>}</dd></div>
+          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value">{formatDate(headerEnd)}<ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} /><SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Vertragsende: Laufzeit erfassen">Laufzeit erfassen</button></span>}</dd></div>
+          <div className={headerCancelBy ? undefined : "fact--alert"}><dt>Kündbar bis</dt><dd>{headerCancelBy ? <span className="fact-value">{formatDate(headerCancelBy)}<ValueOriginBadge kind="calculated" /><SourceButton evidence={data.register_facts?.cancel_by ? null : cancellationEvidence} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Nicht berechenbar</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Kündbar bis: Laufzeit erfassen">Laufzeit erfassen</button></span>}</dd></div>
           <div><dt>Jährliche Kosten</dt><dd className="num">{maintainedAnnual
-            ? <span className="cw-value-origin">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}<span className="rg-origin rg-origin-manual" title="Aus den gepflegten Finanzposten">Gepflegt</span></span>
+            ? <span className="fact-value">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}<ValueOriginBadge kind="system" detail="Aus den gepflegten Finanzposten" /></span>
             : aiAnnual
-              ? <span className="cw-value-origin">{money(data.costs.annual_recurring)}<span className="rg-origin rg-origin-ai" title="Aus der KI-Analyse, noch nicht in die Finanzen übernommen">KI-Vorschlag</span><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
-              : <>– <button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} aria-label="Jährliche Kosten erfassen">Kosten erfassen</button></>}</dd></div>
+              ? <span className="fact-value">{money(data.costs.annual_recurring)}<ValueOriginBadge kind="extracted" detail="Aus der KI-Analyse, noch nicht in die Finanzen übernommen" /><SourceButton evidence={annualCostEvidence} /><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
+              : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} aria-label="Jährliche Kosten erfassen">Kosten erfassen</button></span>}</dd></div>
         </dl>
+        <div className="object-header-term"><ContractTermBar start={contractStart} end={headerEnd} cancelBy={headerCancelBy} /></div>
         <div className="object-header-actions">
-          <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer">Deckblatt (PDF)</a>
-          <button type="button" className="btn" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}>KI-Assistent</button>
+          <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer"><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>Deckblatt (PDF)</a>
+          <button type="button" className="btn" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>KI-Assistent</button>
           <details className="shell-menu">
             <summary className="btn btn-icon" aria-label="Weitere Aktionen">⋯</summary>
             <div className="shell-menu-panel">
@@ -542,15 +588,56 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         {archiveError && <p role="alert" className="field-error">{archiveError}</p>}
       </Dialog>
 
-      <div className="object-tabs"><Tabs label="Vertragsbereiche" idPrefix="contract-tab" items={TABS} active={activeTab} onChange={(key) => setRoute(key)} /></div>
+      <div className="object-tabs"><Tabs label="Vertragsbereiche" idPrefix="contract-tab" items={tabItems} active={activeTab} onChange={(key) => setRoute(key)} /></div>
 
       <div className="cw-content" id="contract-tab-panel" role="tabpanel" aria-labelledby={`contract-tab-${activeTab}`} tabIndex={0}>
-        {activeTab === "overview" && <>
-          <div className="cw-kpi-grid"><InfoCard label="Status" value={statusLabel(data.status)} origin="system" /><InfoCard label="Vertragsbeginn" value={contractStart ? formatDate(contractStart) : "Nicht verfügbar"} origin={data.register_facts?.contract_start ? "system" : contractStart ? "extracted" : "missing"} /><InfoCard label="Vertragsende" value={effectiveEnd ? formatDate(effectiveEnd) : "Nicht verfügbar"} origin={endOrigin} hint={<SourceButton evidence={data.dates.documented_end_date ? endEvidence : null} />} />{maintainedAnnual ? <InfoCard label="Jährliche Kosten (gepflegt)" value={moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)} origin="system" /> : <InfoCard label={aiAnnual ? "Jährliche Kosten (KI-Vorschlag)" : "Jährliche Kosten"} value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} />}<InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} origin={cancellationOrigin} hint={<SourceButton evidence={cancellationEvidence} />} /></div>
-          <ContractAssignmentCard contractId={data.contract_id} assignment={data.assignment} canEdit={canEditData} />
-          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => { const target = workItemTarget(item.item_type, item.requires_review); return <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} disabled={!target} title={target ? fixLabel(target) : "Kein Ort zum Bearbeiten"} onClick={() => target && openTarget(target)}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>; })}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => openTarget(warningTarget(warning.warning_type, warning.requires_review) ?? { tab: "deadlines" })}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
-          <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
-        </>}
+        {activeTab === "overview" && <div className="cw-overview">
+          <div className="cw-overview-main">
+            <OpenPoints contractId={data.contract_id} points={openPoints} searchHref={searchMissingHref} onOpen={openTarget} />
+            {hasAi ? <section className="cw-section" aria-labelledby="leistungsumfang-heading">
+              <div className="cw-section-head"><div><h2 id="leistungsumfang-heading">Leistungsumfang</h2><p>Was der Vertrag abdeckt – laut Dokument</p></div></div>
+              <div className="scope-summary">
+                <Signal tone={scopeCounts.included > 0 ? "done" : "neutral"}>{scopeCounts.included} enthalten</Signal>
+                <Signal tone="neutral">{scopeCounts.excluded} ausgeschlossen</Signal>
+                <Signal tone={scopeCounts.unknown > 0 ? "warning" : "neutral"}>{scopeCounts.unknown} zu prüfen</Signal>
+              </div>
+              <ul className="scope-list">{scopeRows.map((row) => <li key={row.key}>
+                <span className="scope-name">{row.label}</span>
+                <Signal tone={row.state.tone === "yes" ? "done" : row.state.tone === "no" ? "neutral" : "warning"} size="sm">{row.state.label}</Signal>
+                <span className="scope-source"><SourceButton evidence={row.state.evidence} /></span>
+              </li>)}</ul>
+            </section> : null}
+            {hasAi ? <section className="cw-section" aria-labelledby="sla-heading">
+              <div className="cw-section-head"><div><h2 id="sla-heading">SLA</h2><p>Zugesagte Reaktions- und Servicezeiten</p></div></div>
+              <dl className="sla-grid">
+                <div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? <Signal tone="warning" size="sm">Nicht im Vertrag gefunden</Signal>}</dd></div>
+                <div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? <Signal tone="warning" size="sm">Nicht im Vertrag gefunden</Signal>}</dd></div>
+                <div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? <Signal tone="neutral" size="sm">Nicht angegeben</Signal>}</dd></div>
+                <div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? (data.sla.availability_24_7 == null ? <Signal tone="neutral" size="sm">Unbekannt</Signal> : yesNo(data.sla.availability_24_7))}</dd></div>
+              </dl>
+            </section> : null}
+            {slots.overview}
+          </div>
+          <aside className="cw-overview-aside" aria-label="Nachschlagen">
+            <ContractAssignmentCard contractId={data.contract_id} assignment={data.assignment} canEdit={canEditData} />
+            <section className="cw-section" aria-labelledby="data-proof-heading">
+              <div className="cw-section-head"><div><h2 id="data-proof-heading">Daten &amp; Nachweise</h2></div></div>
+              <ul className="side-nav-list">
+                <li><button type="button" onClick={() => setRoute("documents", "evidence")}>Nachweise<b>{data.evidence.length}</b><span aria-hidden="true">›</span></button></li>
+                <li><button type="button" onClick={() => setRoute("documents", "document")}>Dokumente<b>{data.documents.length}</b><span aria-hidden="true">›</span></button></li>
+                <li><button type="button" onClick={() => setRoute("documents", "review")}>Ungeprüfte Angaben<b>{data.contract_review.unresolved_count}</b><span aria-hidden="true">›</span></button></li>
+              </ul>
+            </section>
+            <section className="cw-section" aria-labelledby="origin-legend-heading">
+              <div className="cw-section-head"><div><h2 id="origin-legend-heading">Herkunft der Werte</h2></div></div>
+              <dl className="side-dl side-dl--legend">
+                <div><dt><ValueOriginBadge kind="system" /></dt><dd>Im System erfasst oder bestätigt</dd></div>
+                <div><dt><ValueOriginBadge kind="calculated" /></dt><dd>Aus anderen Werten abgeleitet</dd></div>
+                <div><dt><ValueOriginBadge kind="extracted" /></dt><dd>Aus dem Dokument gelesen, noch nicht bestätigt</dd></div>
+              </dl>
+            </section>
+          </aside>
+        </div>}
 
         {activeTab === "register" && <><ContractRegisterPanel
           contractId={data.contract_id}
@@ -590,15 +677,13 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           </>}
         </>}
 
-        {activeTab === "overview" && hasAi && <><Section title="Leistungsumfang" description="Enthaltene, ausgeschlossene und ungeklärte Leistungen"><div className="cw-service-grid">{SCOPE_FIELDS.map(([key, label, prop]) => { const state = scopeState(key, data.scope[prop]); return <div className="cw-service-row" key={key}><span>{label}</span><strong className={`cw-service-state cw-service-${state.tone}`}>{state.label}</strong><SourceButton evidence={state.evidence} /></div>; })}</div></Section><Section title="SLA"><dl className="cw-definition-grid"><div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? "Nicht verfügbar"}</dd></div><div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? "Nicht verfügbar"}</dd></div><div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? "Nicht verfügbar"}</dd></div><div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? yesNo(data.sla.availability_24_7)}</dd></div></dl></Section></>}
 
         {activeTab === "relations" && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
 
-        {activeTab === "overview" && slots.overview}
         {activeTab === "deadlines" && slots.deadlines}
         {activeTab === "finance" && slots.finance}
         {activeTab === "documents" && <>
-          <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Offene Prüfungen" value={String(data.contract_review.unresolved_count)} /></div>
+          <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Ungeprüfte Angaben" value={String(data.contract_review.unresolved_count)} /></div>
           <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
           {documentTab === "document" && <ReextractionPanel
             contractId={data.contract_id}

@@ -1,12 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import Popover from "@/components/ui/Popover";
 import { useEffect, useMemo, useState } from "react";
 import { getContractRegister, type ContractRegister } from "@/lib/domain-api/register";
 import { getContractRules, type ContractRuleResult } from "@/lib/domain-api/rules";
 import { getContractOwnership } from "@/lib/domain-api/ownership";
-import { FINANCE_ENTRIES_TARGET, REVIEW_TARGET, asFixTarget, contractHref, registerField, type FixTarget } from "@/lib/fix-targets";
+import { FINANCE_ENTRIES_TARGET, REVIEW_TARGET, asFixTarget, registerField, type FixTarget } from "@/lib/fix-targets";
 
 export interface Gap {
   key: string;
@@ -15,6 +13,8 @@ export interface Gap {
   /** Befehl für Strg+K, z. B. „Vertragsbeginn erfassen“. */
   command: string;
   target: FixTarget;
+  /** Ohne diese Angabe lassen sich Laufzeit/Kündigungsfrist nicht berechnen (kritisch). */
+  blocksDeadline?: boolean;
 }
 
 type Input = {
@@ -65,11 +65,13 @@ export function useContractGaps({ contractId, orgSlug, hasAnnualCost, reviewPend
       gaps.push(gap);
     };
     const label = (key: string) => register?.fields?.[key]?.label ?? key;
-    const field = (key: string, reason: string) => add({ key, label: label(key), reason, command: `${label(key)} erfassen`, target: registerField(key) });
+    const field = (key: string, reason: string, blocksDeadline = false) => add({ key, label: label(key), reason, command: `${label(key)} erfassen`, target: registerField(key), blocksDeadline });
 
     if (register) {
-      if (register.business_status === "in_arbeit") for (const key of register.missing_for_valid ?? []) field(key, "nötig für „Gültig“");
-      for (const key of register.terms?.missing ?? []) field(key, "nötig für die Fristberechnung");
+      // Fristrelevante Lücken zuerst, damit sie als kritisch markiert werden (jede Lücke nur einmal).
+      for (const key of register.terms?.missing ?? []) field(key, "nötig für die Fristberechnung", true);
+      // Ohne Vertragsart oder Beginn lässt sich keine Frist berechnen – ebenfalls kritisch.
+      if (register.business_status === "in_arbeit") for (const key of register.missing_for_valid ?? []) field(key, "nötig für „Gültig“", key === "term_model" || key === "term_start_date");
     }
     const running = register ? !["beendet", "geloescht"].includes(register.business_status) : true;
     if (!hasAnnualCost && running) add({ key: "annual_cost", label: "Jährliche Kosten", reason: "keine Finanzeinträge gepflegt", command: "Kosten erfassen", target: FINANCE_ENTRIES_TARGET });
@@ -83,30 +85,4 @@ export function useContractGaps({ contractId, orgSlug, hasAnnualCost, reviewPend
     }
     return gaps;
   }, [documentCount, hasAnnualCost, loaded, register, responsible, reviewPending, rules]);
-}
-
-/**
- * „Was fehlt noch?“ im Kopf der Vertragsakte – auf jedem Reiter sichtbar; ohne Lücken unsichtbar.
- * Jeder Eintrag führt direkt zur Stelle, an der er erfasst wird.
- */
-export default function ContractGaps({ contractId, gaps, searchHref }: { contractId: string; gaps: Gap[] | null; searchHref?: string | null }) {
-  if (!gaps || gaps.length === 0) return null;
-  return <Popover
-    className="gaps-button"
-    label={<><span aria-hidden="true">⚠ </span>Was fehlt · {gaps.length}</>}
-    panelLabel="Was fehlt noch?"
-    wide
-  >
-    {(close) => <div className="gaps-panel">
-      <p className="gaps-title">Was fehlt noch?</p>
-      <ul className="contract-gaps-list">
-        {gaps.map((gap) => <li key={gap.key}>
-          <Link href={contractHref(contractId, gap.target)} onClick={close}>{gap.label}</Link>
-          <span className="cw-muted">{gap.reason}</span>
-        </li>)}
-      </ul>
-      {searchHref ? <Link className="btn btn-sm" href={searchHref} onClick={close}>Fehlende Angaben im Dokument suchen</Link> : null}
-      <p className="field-hint">Jeder Eintrag führt direkt zur Stelle, an der er erfasst wird. Auch über Strg+K erreichbar.</p>
-    </div>}
-  </Popover>;
 }
