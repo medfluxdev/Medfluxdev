@@ -1,3 +1,4 @@
+import type { StatusTone } from "@/components/ui/StatusBadge";
 import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 
 export type FieldOrigin = "ai" | "manual" | "ai_confirmed" | "ai_corrected" | "imported_legacy" | "system";
@@ -96,6 +97,18 @@ export const BUSINESS_STATUS_LABEL: Record<BusinessStatus, string> = {
   gekuendigt: "Gekündigt",
   beendet: "Beendet",
   geloescht: "Gelöscht",
+};
+
+/**
+ * Farbe + Form + Wort je Vertragsstatus (Ruhe & Signal): Grün nur für den bestätigten Zustand „Gültig“,
+ * Gelb für gekündigt (läuft aus), Blau für noch in Arbeit, Grau für beendet, Rot für als gelöscht markiert.
+ */
+export const BUSINESS_STATUS_TONE: Record<BusinessStatus, StatusTone> = {
+  in_arbeit: "information",
+  gueltig: "success",
+  gekuendigt: "warning",
+  beendet: "neutral",
+  geloescht: "critical",
 };
 
 export const TERM_MODEL_LABEL: Record<TermModel, string> = {

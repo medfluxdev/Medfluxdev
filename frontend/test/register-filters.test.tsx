@@ -240,6 +240,27 @@ describe("Vertragsliste: Werkzeugleiste", () => {
     expect(summary).not.toHaveTextContent("0,00");
   });
 
+  it("zeigt den Status zuerst als Farbe + Form + Wort; der Link bleibt in der Spalte „Vertrag“", async () => {
+    api.getGridColumns.mockResolvedValue({ columns: [COLUMNS[4], ...COLUMNS.filter((item) => item.key !== "business_status")] });
+    api.getGrid.mockImplementation(async (_slug: string, spec: Partial<GridSpec>) => ({
+      ...response(spec, 2),
+      items: [
+        { contract_id: "c-1", values: { business_status: "Gültig", register_number: "000001", short_description: "Wartung MRT" }, group: [] },
+        { contract_id: "c-2", values: { business_status: "In Arbeit", register_number: "000002", short_description: "Reinigung" }, group: [] },
+      ],
+    }));
+    render(<RegisterGrid organizationSlug="test-klinik" tab="bestand" />);
+    const table = await screen.findByRole("table");
+    expect(within(table).getAllByRole("columnheader")[0]).toHaveTextContent("Status");
+    const valid = within(table).getByText("Gültig").closest(".status-badge");
+    expect(valid).toHaveClass("status-badge--success");
+    expect(valid?.querySelector("svg.signal-icon")).not.toBeNull();
+    expect(within(table).getByText("In Arbeit").closest(".status-badge")).toHaveClass("status-badge--information");
+    // Der Status ist kein Link; geöffnet wird der Vertrag über seinen Namen.
+    expect(within(table).queryByRole("link", { name: "Gültig" })).not.toBeInTheDocument();
+    expect(within(table).getByRole("link", { name: "Wartung MRT" })).toBeInTheDocument();
+  });
+
   it("bietet „Gelöschte einbeziehen“ nur mit Recht an und merkt es in der Adresse", async () => {
     const user = userEvent.setup();
     permissions.allowed = new Set(["contract.view_deleted"]);

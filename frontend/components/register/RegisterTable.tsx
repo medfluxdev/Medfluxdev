@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { Fragment } from "react";
+import StatusBadge from "@/components/ui/StatusBadge";
+import { BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import type { GridColumn, GridResponse, GridSpec, MoneyTotals } from "@/lib/domain-api/registerGrid";
 import { coverageNote, formatCurrency } from "@/lib/format";
 import { rememberReviewQueue } from "@/lib/review-queue";
@@ -51,6 +53,7 @@ function layout(shown: GridColumn[]): Cell[] {
 
 export default function RegisterTable({ data, spec, shown, columnByKey, archiveMode, reviewMode, canRestore, busyRow, onSort, onRestore, onPreview }: Props) {
   const cells = layout(shown);
+  const hasContractCell = cells.some((cell) => cell.kind === "contract");
   const actionColumn = (archiveMode && canRestore) || reviewMode;
   const groupIndex = new Map((data.groups ?? []).map((item) => [JSON.stringify(item.path), item]));
   const width = cells.length + (actionColumn ? 1 : 0);
@@ -107,7 +110,12 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
             }
             const { column } = cell;
             const text = formatCell(column, row.values[column.key]);
-            if (index === 0 || column.key === "register_number") {
+            if (column.type === "status") {
+              // Die Liste liefert die Beschriftung; der Code kommt aus den Optionen der Spalte.
+              const code = column.options?.find((option) => option.label === text || option.value === text)?.value as BusinessStatus | undefined;
+              return <td key={column.key}>{text === "–" ? text : <StatusBadge label={text} tone={code ? BUSINESS_STATUS_TONE[code] ?? "neutral" : "neutral"} />}</td>;
+            }
+            if ((index === 0 && !hasContractCell) || column.key === "register_number") {
               return <td key={column.key}><Link href={href}>{text}</Link></td>;
             }
             if (column.key === "short_description") {

@@ -25,7 +25,7 @@ from app.reports.grid import GridError, GridSpec
 
 
 def test_spec_parsing_is_strict():
-    assert GridSpec.parse(None).columns[:2] == ["register_number", "short_description"]
+    assert GridSpec.parse(None).columns[:3] == ["business_status", "register_number", "short_description"]
     for bad in (
         {"filters": [{"column": "nope", "op": "in"}]},
         {"filters": [{"column": "partner", "op": "drop"}]},

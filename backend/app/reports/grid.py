@@ -51,11 +51,11 @@ class Column:
 
 
 COLUMNS: tuple[Column, ...] = (
+    Column("business_status", "Status", "status", default=True, groupable=True),
     Column("register_number", "Nr.", "text", default=True),
     Column("short_description", "Kurzbeschreibung", "text", default=True),
     Column("partner", "Vertragspartner", "enum", default=True, groupable=True),
     Column("contract_type", "Vertragstyp", "enum", default=True, groupable=True),
-    Column("business_status", "Status", "status", default=True, groupable=True),
     Column("contract_category", "Kategorie", "enum", groupable=True),
     Column("internal_number", "Interne Nummer", "text"),
     Column("term_model", "Vertragsart", "enum", groupable=True),

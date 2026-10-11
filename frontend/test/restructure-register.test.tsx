@@ -53,6 +53,8 @@ beforeEach(() => {
 
 describe("Vertragsliste: Zustand in der Adresse (U4)", () => {
   it("liest Suche, Sortierung und Seite aus der Adresse und schreibt Änderungen zurück", async () => {
+    // Seite 2 gibt es nur mit mehr als 100 Treffern (sonst springt die Liste korrekt auf Seite 1 zurück).
+    api.getGrid.mockImplementation(async (_slug: string, spec: Partial<GridSpec>) => response(spec, 250));
     window.history.replaceState(null, "", "/register?q=MRT&sort=cancel_by:desc&seite=2");
     render(<RegisterGrid organizationSlug="test-klinik" tab="bestand" />);
     await waitFor(() => expect(api.getGrid).toHaveBeenLastCalledWith(
