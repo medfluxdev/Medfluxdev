@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getOrganizationStructure, listCostCenters } from "@/lib/domain-api/organizations";
@@ -151,8 +152,9 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   }
 
   if (!editable) return null;
-  return <section className="cw-section cw-ownership-section" aria-labelledby="cw-ownership-heading">
-    <div className="cw-section-head"><div><h2 id="cw-ownership-heading">Organisationszuordnung</h2><p>Verantwortlichen Bereich, nutzende Bereiche und zuständige Person getrennt festlegen.</p></div></div>
+  const actions = loading ? null : <><button type="button" className="btn btn-primary btn-sm" onClick={() => void save()} disabled={saving}>{saving ? "Wird gespeichert…" : "Zuordnung speichern"}</button></>;
+  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description="Verantwortlichen Bereich, nutzende Bereiche und zuständige Person getrennt festlegen." actions={actions}>
+    {message ? <p className="cw-ownership-status" role="status">{message}</p> : null}
     {loading ? <p role="status">Zuordnung wird geladen…</p> : <div className="cw-ownership-grid">
       <label><span>Krankenhaus</span><select value={hospitalId} disabled={hospitalLocked} onChange={(event) => {
         setHospitalId(event.target.value);
@@ -181,7 +183,6 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         const department = departments.find((item) => item.id === id);
         return department ? departmentFullPath(department, departments) : "Unbekannter Bereich";
       }).join(" · ")}. Sie wird nicht automatisch als verantwortlich oder nutzend eingestuft.</p> : null}
-      <div className="cw-ownership-actions"><button type="button" className="cw-primary-action" onClick={() => void save()} disabled={saving || loading}>{saving ? "Wird gespeichert…" : "Zuordnung speichern"}</button>{message ? <span role="status">{message}</span> : null}</div>
     </div>}
-  </section>;
+  </CollapsibleSection>;
 }

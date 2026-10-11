@@ -164,3 +164,26 @@ def test_contract_detail_shows_assignment_names_for_every_role(monkeypatch):
     assert assignment["hospital"] == "Klinikum"
     assert assignment["cost_center"] == {"code": "950000", "name": "Radiologie"}
     assert assignment["responsible"] == "Main" and assignment["further_responsible"] == ["Second"]
+
+
+def test_contract_detail_carries_start_date_and_linked_partner(monkeypatch):
+    from app.api.routes.contracts import _build_augmented_detail
+    from app.database.models.register import ContractPartner
+
+    slug, ids = _seed()
+    admin = _client(monkeypatch, ids, "admin", "admin")
+    cid = _contract(admin, slug, term_start_date="2025-04-01")
+    session = create_session()
+    try:
+        detail = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))
+        assert detail["register_facts"]["contract_start"] == "2025-04-01"
+        assert detail["partner"] is None  # noch nicht zugeordnet
+        partner = ContractPartner(organization_id=ids["org"], short_name="ABIOMED", name1="ABIOMED Europe GmbH")
+        session.add(partner)
+        session.flush()
+        session.get(Contract, UUID(cid)).partner_id = partner.id
+        session.commit()
+        detail = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))
+        assert detail["partner"] == {"id": str(partner.id), "name": "ABIOMED Europe GmbH", "short_name": "ABIOMED"}
+    finally:
+        session.close()

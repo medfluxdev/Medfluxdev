@@ -102,7 +102,7 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
     expect(await axe(container)).toHaveNoViolations();
 
     // Abbrechen beendet den Sprung und räumt die Adresse auf.
-    await user.click(screen.getByRole("button", { name: "Abbrechen" }));
+    await user.click(screen.getByRole("button", { name: /^Abbrechen/ }));
     expect(window.location.search).not.toContain("feld=");
   });
 
@@ -197,6 +197,28 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     const badge = (await screen.findAllByText("Gültig")).map((node) => node.closest(".status-badge")).find(Boolean);
     expect(badge).toHaveClass("status-badge--success");
+  });
+
+  it("jeder Kasten hat Bearbeiten/Speichern und Einklappen in seiner Ecke; Abbrechen verwirft nur seine Änderungen", async () => {
+    const user = userEvent.setup();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
+    await user.type(screen.getByLabelText("Kurzbeschreibung"), " Neu");
+    await user.click(screen.getByRole("button", { name: "Laufzeit & Kündigung bearbeiten" }));
+    await user.type(document.getElementById("rg-term_start_date") as HTMLInputElement, "2026-01-01");
+    // Abbrechen im Laufzeit-Kasten verwirft nur dessen Eingabe.
+    await user.click(screen.getByRole("button", { name: "Abbrechen (Laufzeit & Kündigung)" }));
+    expect(document.getElementById("rg-term_start_date")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { short_description: "Wartung MRT Neu" } }));
+    // Einklappen und wieder aufklappen.
+    const toggle = screen.getByRole("button", { name: "Vertrag & Partner einklappen" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await user.click(toggle);
+    expect(screen.getByRole("button", { name: "Vertrag & Partner aufklappen" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Kurzbeschreibung")).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Vertrag & Partner aufklappen" }));
   });
 
   it("ohne Bearbeitungsrecht gibt es den Knopf nicht", async () => {

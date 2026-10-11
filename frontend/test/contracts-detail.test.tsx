@@ -226,6 +226,26 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("Kopf: Vertragsbeginn, farbiger Status und Vertragspartner zum Öffnen", async () => {
+    await renderWithData(detailFixture({
+      business_status: "gueltig",
+      partner: { id: "p-1", name: "ABIOMED Europe GmbH", short_name: "ABIOMED" },
+      register_facts: { contract_start: "2025-04-01", cancel_by: null, contract_end: null, annual_cost: null },
+    }));
+    const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
+    expect(within(header).getByText("Vertragsbeginn")).toBeInTheDocument();
+    expect(within(header).getByText("01.04.2025")).toBeInTheDocument();
+    expect(within(header).getByText("Gültig").closest(".status-badge")).toHaveClass("status-badge--success");
+    expect(within(header).getByRole("link", { name: "ABIOMED Europe GmbH" })).toHaveAttribute("href", "/stammdaten/vertragspartner?id=p-1");
+  });
+
+  it("Kopf: nicht zugeordneter Vertragspartner führt zur Zuordnung, fehlender Beginn zum Feld", async () => {
+    await renderWithData(detailFixture({ partner: null, supplier: "Siemens Healthineers", dates: { ...detailFixture().dates, start_date: null }, register_facts: { contract_start: null, cancel_by: null, contract_end: null, annual_cost: null } }));
+    const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
+    expect(within(header).getByRole("button", { name: /Siemens Healthineers.*zuordnen/ })).toBeInTheDocument();
+    expect(within(header).getByRole("button", { name: "Vertragsbeginn erfassen" })).toBeInTheDocument();
+  });
+
   it("zeigt den belegten Systemnamen, wenn device_name fehlt", async () => {
     const equipment = detailFixture().equipment;
     await renderWithData(detailFixture({

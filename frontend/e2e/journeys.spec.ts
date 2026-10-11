@@ -29,7 +29,7 @@ test("4 – Vertragsdaten bearbeiten und speichern", async ({ page }, info) => {
   await openContract(page, "Softwarepflege PACS");
   await page.getByRole("tab", { name: "Vertragsdaten" }).click();
   await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Vertragsdaten bearbeiten" }).click();
+  await page.getByRole("button", { name: "Vertrag & Partner bearbeiten" }).click();
   const value = `INT-${Date.now() % 100000}`;
   await page.getByLabel("Interne Nummer").fill(value);
   await page.getByRole("button", { name: "Speichern", exact: true }).click();

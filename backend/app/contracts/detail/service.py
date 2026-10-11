@@ -286,6 +286,7 @@ def register_facts(contract, as_of: date) -> dict:
     terms = compute_terms(term_inputs(contract), as_of)
     end = terms.actual_end or terms.possible_end
     return {
+        "contract_start": contract.term_start_date.isoformat() if contract.term_start_date else None,
         "cancel_by": terms.cancel_by.isoformat() if terms.cancel_by else None,
         "contract_end": end.isoformat() if end else None,
         "annual_cost": (
@@ -471,6 +472,7 @@ def build_contract_detail(
         "register_facts": register_facts(contract, today_local()),
         "extracted_terms": _extracted_terms(snapshot),
         "assignment": _assignment(session, contract),
+        "partner": _partner(session, contract),
         "status": contract.status,
         "risk_level": contract.risk_level,
         "identity": _identity_section(
@@ -536,6 +538,18 @@ def build_contract_detail(
 # ---------------------------------------------------------------------------
 # Snapshot-Helfer
 # ---------------------------------------------------------------------------
+
+def _partner(session: Session, contract) -> dict | None:
+    """Zugeordneter Vertragspartner aus den Stammdaten (zum Oeffnen und Bearbeiten im Kopf)."""
+    if contract.partner_id is None:
+        return None
+    from app.database.models.register import ContractPartner
+
+    partner = session.get(ContractPartner, contract.partner_id)
+    if partner is None or partner.organization_id != contract.organization_id:
+        return None
+    return {"id": str(partner.id), "name": partner.name1, "short_name": partner.short_name}
+
 
 def _assignment(session: Session, contract) -> dict:
     """Organisationszuordnung zum Lesen (Uebersicht): Namen statt Kennungen, fuer alle Rollen."""

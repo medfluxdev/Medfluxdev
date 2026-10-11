@@ -447,6 +447,11 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 .object-header h1 { font-size: var(--text-display); line-height: var(--leading-display); overflow-wrap: anywhere; }
 .object-header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .object-header-partner { color: var(--color-text-muted); font-size: var(--text-small); font-weight: var(--weight-medium); }
+/* Vertragspartner im Kopf: eigene Farbe, öffnet den Partner (bzw. die Zuordnung) */
+.partner-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 24px; padding: 0 var(--space-2); border: 1px solid var(--color-accent); border-radius: var(--radius-pill); background: var(--color-surface-accent); color: var(--color-text-accent); font: inherit; font-size: var(--text-small); font-weight: var(--weight-semibold); text-decoration: none; cursor: pointer; }
+.partner-chip:hover { text-decoration: underline; }
+.partner-chip--unlinked { border-style: dashed; }
+.partner-chip-hint { font-weight: var(--weight-regular); color: var(--color-text-muted); }
 .object-header-facts { grid-area: facts; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-4); margin: 0; padding-top: var(--space-4); border-top: 1px solid var(--color-border-subtle); }
 .object-header-facts div { display: grid; gap: 2px; }
 .object-header-facts dt { color: var(--color-text-muted); font-size: var(--text-small); }
@@ -826,3 +831,9 @@ body { background: var(--color-bg); }
 .ai-review-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .ai-review-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
+
+/* Kasten mit Aktionen und Einklappen in der rechten oberen Ecke (CollapsibleSection) */
+.collapsible-corner { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-2); flex: none; }
+.collapsible-toggle { min-width: 32px; min-height: 32px; }
+.collapsible.is-collapsed .cw-section-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.cw-ownership-status { margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-small); }

@@ -541,6 +541,8 @@ class ContractDetailResponse(BaseModel):
     extracted_terms: Optional[dict] = None
     # Organisationszuordnung als Namen (Krankenhaus, Abteilungen, Kostenstelle, Verantwortliche).
     assignment: Optional[dict] = None
+    # Zugeordneter Vertragspartner aus den Stammdaten (None = nur Text aus dem Dokument).
+    partner: Optional[dict] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
 

@@ -470,7 +470,9 @@ export interface ContractDetailResponse {
   supplier: string | null;
   register_number?: string | null;
   business_status?: string | null;
-  register_facts?: { cancel_by: string | null; contract_end: string | null; annual_cost: { amount: string; currency: string } | null } | null;
+  /** Zugeordneter Vertragspartner aus den Stammdaten; null = nur Text aus dem Dokument. */
+  partner?: { id: string; name: string; short_name: string } | null;
+  register_facts?: { contract_start?: string | null; cancel_by: string | null; contract_end: string | null; annual_cost: { amount: string; currency: string } | null } | null;
   /** Organisationszuordnung als Namen (für alle Rollen lesbar). */
   assignment?: ContractAssignment | null;
   status: string | null;

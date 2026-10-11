@@ -1,6 +1,7 @@
 "use client";
 
 import StatusBadge from "@/components/ui/StatusBadge";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -205,7 +206,10 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const isAdmin = Boolean(account?.is_developer || role === "admin");
   const [register, setRegister] = useState<ContractRegister | null>(null);
   const [draft, setDraft] = useState<Draft>({});
-  const [editing, setEditing] = useState(false);
+  // Bearbeitet wird je Kasten (Vertrag & Partner, Laufzeit …); mehrere können offen sein,
+  // „Speichern“ speichert alle offenen Änderungen, „Abbrechen“ verwirft die des Kastens.
+  const [editSections, setEditSections] = useState<Set<string>>(new Set());
+  const editing = editSections.size > 0;
   // Ein spaet eintreffender Ladevorgang darf laufende Eingaben nie ueberschreiben.
   const editingRef = useRef(false);
   useEffect(() => { editingRef.current = editing; }, [editing]);
@@ -328,12 +332,12 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       if (!same(draft[key], field.value)) changes[key] = draft[key] ?? null;
     }
     if (Object.keys(changes).length === 0) {
-      setEditing(false);
+      setEditSections(new Set());
       leaveTarget();
       return;
     }
     if (await run(() => updateContractRegister(orgSlug, contractId, { changes }), "Stammdaten gespeichert.")) {
-      setEditing(false);
+      setEditSections(new Set());
       leaveTarget();
     }
   }
@@ -412,13 +416,40 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     const notes: string[] = [];
     if (hidden) notes.push(model ? `„${labelFor(rawKey)}“ gehört nicht zur gewählten Vertragsart.` : `Erst die Vertragsart wählen – danach erscheint „${labelFor(rawKey)}“.`);
     if (!canEdit) notes.push("Nur Lesen – Änderungen über das Vertragsmanagement.");
-    if (canEdit && !editing) {
+    const targetKey = hidden ? "term_model" : key;
+    if (canEdit) startEdit(sectionOf(targetKey));
+    setTarget({ key: hidden ? "term_model" : key, note: notes.join(" ") || undefined, at: Date.now() });
+  }
+
+  function sectionOf(key: string): string {
+    return SECTIONS.find((section) => section.fields.some((def) => def.key === key))?.id ?? SECTIONS[0].id;
+  }
+
+  // Offene Eingaben in anderen Kästen bleiben erhalten.
+  function startEdit(sectionId: string) {
+    if (!register) return;
+    if (!editingRef.current) {
       editingRef.current = true;
       setDraft(draftFrom(register));
-      setEditing(true);
       setMessage(null);
     }
-    setTarget({ key: hidden ? "term_model" : key, note: notes.join(" ") || undefined, at: Date.now() });
+    setEditSections((current) => current.has(sectionId) ? current : new Set([...current, sectionId]));
+  }
+
+  function cancelEdit(sectionId: string) {
+    if (!register) return;
+    const section = SECTIONS.find((item) => item.id === sectionId);
+    const keys = new Set((section?.fields ?? []).flatMap((def) => fieldKeys(def)));
+    const fresh = draftFrom(register);
+    setDraft((current) => Object.fromEntries(Object.entries(current).map(([key, value]) => [key, keys.has(key) ? fresh[key] : value])) as Draft);
+    const next = new Set(editSections);
+    next.delete(sectionId);
+    setEditSections(next);
+    if (next.size === 0) {
+      setDraft(fresh);
+      setNewPartner(null);
+      leaveTarget();
+    }
   }
 
   function jumpTo(rawKey: string) {
@@ -638,16 +669,21 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     /> : null}
 
     <div className="rg-toolbar">
-      {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Vertragsdaten bearbeiten</button> : null}
-      {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); leaveTarget(); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>{dirty ? <span className="field-hint">Ungespeicherte Änderungen · Strg+S speichert</span> : null}</> : null}
-      <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
+        <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
       <Link href="/stammdaten/vertragspartner" className="rg-link">Vertragspartner verwalten</Link>
     </div>
 
     {SECTIONS.map((section) => {
       const fields = section.id === "term" ? section.fields.filter((def) => visibleTermFields.has(def.key)) : section.fields;
-      return <section className="cw-section" key={section.id} aria-labelledby={`rg-${section.id}-heading`}>
-        <div className="cw-section-head"><div><h2 id={`rg-${section.id}-heading`}>{section.title}</h2><p>{section.description}</p></div></div>
+      // Nur dieser Kasten zeigt Eingabefelder (die übrigen Werte bleiben lesbar).
+      const editing = editSections.has(section.id);
+      const canEditHere = editable && register.business_status !== "geloescht";
+      const actions = editing
+        ? <><button type="button" className="btn btn-sm" disabled={busy} onClick={() => cancelEdit(section.id)} aria-label={`Abbrechen (${section.title})`}>Abbrechen</button><button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button></>
+        : canEditHere
+          ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`}>Bearbeiten</button>
+          : null;
+      return <CollapsibleSection key={section.id} id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))}>
         <dl className="rg-fields">{fields.map((def) => {
           const provenance = originOf(def);
           const label = def.kind === "period" ? PERIOD_LABEL[def.key as (typeof PERIODS)[number]] : register.fields[def.key]?.label ?? def.key;
@@ -667,7 +703,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
             </dd>
           </div>;
         })}</dl>
-      </section>;
+      </CollapsibleSection>;
     })}
   </div>;
 }
