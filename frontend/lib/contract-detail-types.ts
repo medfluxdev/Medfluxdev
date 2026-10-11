@@ -477,6 +477,8 @@ export interface ContractDetailResponse {
   register_facts?: { contract_start?: string | null; term_model?: string | null; cancel_by: string | null; contract_end: string | null; annual_cost: { amount: string; currency: string } | null } | null;
   /** Organisationszuordnung als Namen (für alle Rollen lesbar). */
   assignment?: ContractAssignment | null;
+  /** Typspezifische Abschnitte; null = kein Vertragstyp (alle zeigen). */
+  sections?: import("@/lib/contract-sections").ContractSections | null;
   status: string | null;
   risk_level: string | null;
   identity: Record<string, unknown>;

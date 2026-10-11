@@ -49,6 +49,7 @@ import AiReviewButton from "./AiReviewButton";
 import RiskButton from "./RiskButton";
 import ValueOriginBadge from "./ValueOriginBadge";
 import ContractTermBar from "./ContractTermBar";
+import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
 import OpenPoints, { buildOpenPoints } from "./OpenPoints";
 import { SignalIcon } from "@/components/ui/Signal";
 import ContractAssignmentCard from "./ContractAssignmentCard";
@@ -205,6 +206,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const initialSubtab = isDocumentTab(searchParams.get("subtab")) ? searchParams.get("subtab") as DocumentTab : "document";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [documentTab, setDocumentTab] = useState<DocumentTab>(initialSubtab);
+  const [showAllSections, setShowAllSections] = useState(false);
   const [documentVersionId, setDocumentVersionId] = useState<string | null>(data.documents[0]?.document_version_id ?? null);
   const [navTarget, setNavTarget] = useState<SourceNavigationTarget | null>(null);
   const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
@@ -497,13 +499,20 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     excluded: scopeRows.filter((row) => row.state.tone === "no").length,
     unknown: scopeRows.filter((row) => row.state.tone === "unknown").length,
   };
-  const slaMissing = hasAi ? [data.sla.response_time ? null : "Reaktionszeit", data.sla.resolution_time ? null : "Lösungszeit"].filter((item): item is string => Boolean(item)) : [];
+  // Abschnitte je Vertragstyp: nicht vorgesehene, leere Abschnitte ausblenden (lib/contract-sections.ts).
+  const sections = showAllSections ? null : data.sections ?? null;
+  const scopeHasData = scopeCounts.included + scopeCounts.excluded > 0;
+  const slaHasData = Boolean(data.sla.response_time || data.sla.resolution_time || data.sla.service_hours || data.sla.emergency_availability || data.sla.availability_24_7 != null);
+  const showScope = hasAi && sectionVisible("scope", sections, scopeHasData);
+  const showSla = hasAi && sectionVisible("sla", sections, slaHasData);
+  const hiddenSections = hasAi && data.sections ? ([["scope", showScope], ["sla", showSla]] as const).filter(([, shown]) => !shown).map(([key]) => SECTION_LABELS[key]) : [];
+  const slaMissing = showSla ? [data.sla.response_time ? null : "Reaktionszeit", data.sla.resolution_time ? null : "Lösungszeit"].filter((item): item is string => Boolean(item)) : [];
   // Erst mit geladenen Lücken berechnen, sonst stünde kurz ein unvollständiges Bild da.
   const openPoints = gaps === null ? null : buildOpenPoints({
     gaps,
     tasks: openTasks,
     warnings: actionableWarnings,
-    scopeToCheck: hasAi ? scopeCounts.unknown : 0,
+    scopeToCheck: showScope ? scopeCounts.unknown : 0,
     scopeTotal: scopeRows.length,
     slaMissing,
     cancelByUnknown: !headerCancelBy && !fixedTerm,
@@ -601,7 +610,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         {activeTab === "overview" && <div className="cw-overview">
           <div className="cw-overview-main">
             <OpenPoints contractId={data.contract_id} points={openPoints} searchHref={searchMissingHref} onOpen={openTarget} />
-            {hasAi ? <section className="cw-section" aria-labelledby="leistungsumfang-heading">
+            {showScope ? <section className="cw-section" aria-labelledby="leistungsumfang-heading">
               <div className="cw-section-head"><div><h2 id="leistungsumfang-heading">Leistungsumfang</h2><p>Was der Vertrag abdeckt – laut Dokument</p></div></div>
               <div className="scope-summary">
                 <Signal tone={scopeCounts.included > 0 ? "done" : "neutral"}>{scopeCounts.included} enthalten</Signal>
@@ -614,7 +623,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 <span className="scope-source"><SourceButton evidence={row.state.evidence} /></span>
               </li>)}</ul>
             </section> : null}
-            {hasAi ? <section className="cw-section" aria-labelledby="sla-heading">
+            {showSla ? <section className="cw-section" aria-labelledby="sla-heading">
               <div className="cw-section-head"><div><h2 id="sla-heading">SLA</h2><p>Zugesagte Reaktions- und Servicezeiten</p></div></div>
               <dl className="sla-grid">
                 <div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? <Signal tone="warning" size="sm">Nicht im Vertrag gefunden</Signal>}</dd></div>
@@ -623,6 +632,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 <div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? (data.sla.availability_24_7 == null ? <Signal tone="neutral" size="sm">Unbekannt</Signal> : yesNo(data.sla.availability_24_7))}</dd></div>
               </dl>
             </section> : null}
+            {hiddenSections.length ? <p className="sections-hidden-note">Für {data.sections!.type_label} ausgeblendet: {hiddenSections.join(", ")}. <button type="button" className="rg-link" onClick={() => setShowAllSections(true)}>Trotzdem anzeigen</button></p> : null}
+            {showAllSections && data.sections ? <p className="sections-hidden-note">Alle Abschnitte werden angezeigt. <button type="button" className="rg-link" onClick={() => setShowAllSections(false)}>Nur passende Abschnitte</button></p> : null}
+            {hasAi && !data.sections ? <p className="sections-hidden-note">Mit einem Vertragstyp zeigt die Akte nur die passenden Abschnitte. {canEditData ? <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "ownership" })}>Vertragstyp festlegen</button> : null}</p> : null}
             {slots.overview}
           </div>
           <aside className="cw-overview-aside" aria-label="Nachschlagen">
@@ -653,6 +665,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           searchableKeys={reextraction.state?.can_start ? new Set(fieldSearchMap(reextraction.state).keys()) : undefined}
           onSearchInDocument={(key) => router.replace(documentSearchHref(data.contract_id, key), { scroll: false })}
           onShowSource={showSource}
+          hiddenSections={!showAllSections && data.sections && !data.sections.maintenance ? new Set(["maintenance"]) : undefined}
         />{slots.register}</>}
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
@@ -685,7 +698,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         </>}
 
 
-        {activeTab === "relations" && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
+        {activeTab === "relations" && sectionVisible("equipment", showAllSections ? null : data.sections, data.equipment.length > 0) && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
 
         {activeTab === "deadlines" && slots.deadlines}
         {activeTab === "finance" && slots.finance}

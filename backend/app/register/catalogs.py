@@ -16,6 +16,7 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.register.sections import normalize as normalize_sections, sections_for_type
 from app.database.models.contract import Contract
 from app.database.models.register import (
     CatalogContractCategory,
@@ -334,6 +335,7 @@ def type_payload(row: CatalogContractType) -> dict[str, Any]:
         "id": str(row.id), "code": row.code, "label": row.label, "description": row.description,
         "is_confidential": row.is_confidential, "is_active": row.is_active, "sort_order": row.sort_order,
         "retention_years": row.retention_years,
+        "sections": sections_for_type(row), "sections_default": row.sections is None,
     }
 
 
@@ -441,6 +443,11 @@ def upsert_type(session: Session, organization_id: uuid.UUID, values: dict[str, 
             if not 0 <= years <= 100:
                 raise CatalogError(422, "Aufbewahrung: 0 bis 100 Jahre.")
             row.retention_years = years
+    if "sections" in values:
+        try:
+            row.sections = normalize_sections(values["sections"])
+        except ValueError:
+            raise CatalogError(422, "Abschnitte: unbekannter Abschnitt.")
     session.flush()
     return row
 

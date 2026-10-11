@@ -88,7 +88,7 @@ def _log(session, actor, event_name: str, object_type: str, object_id, context: 
     )
 
 
-_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "field_key")
+_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "sections", "field_key")
 
 
 def _snapshot(row) -> dict:

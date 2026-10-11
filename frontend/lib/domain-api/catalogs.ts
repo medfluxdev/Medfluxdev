@@ -1,3 +1,4 @@
+import type { SectionKey } from "@/lib/contract-sections";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 
 export interface PartnerDto {
@@ -37,6 +38,9 @@ export interface ContractTypeDto {
   is_active: boolean;
   sort_order: number;
   retention_years: number | null;
+  /** Typspezifische Abschnitte der Vertragsakte (wirksam) und ob der Standard nach Code gilt. */
+  sections?: SectionKey[];
+  sections_default?: boolean;
 }
 
 export interface ContractCategoryDto {

@@ -195,6 +195,8 @@ class CatalogContractType(OrgOwnedMixin, Base):
     is_confidential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     # H9: Standard-Aufbewahrung nach Vertragsende (Jahre), falls am Vertrag leer.
     retention_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Typspezifische Abschnitte der Vertragsakte (register/sections.py); NULL = Standard nach Code.
+    sections: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 

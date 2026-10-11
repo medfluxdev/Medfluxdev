@@ -944,3 +944,4 @@ body { background: var(--color-bg); }
 [data-box][data-collapsed] > .cw-section-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
 [data-box][data-collapsed] > .cw-section-head p { display: none; }
 @media print { .box-toggle { display: none; } [data-box][data-collapsed] > * { display: revert; } }
+.sections-hidden-note { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); }

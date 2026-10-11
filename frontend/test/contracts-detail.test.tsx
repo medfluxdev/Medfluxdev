@@ -247,6 +247,27 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(within(header).getByText("Feste Laufzeit – endet ohne Kündigung")).toBeInTheDocument();
   });
 
+  it("Abschnitte je Vertragstyp: Mietvertrag blendet leeren Leistungsumfang/SLA aus, Daten bleiben sichtbar", async () => {
+    const user = userEvent.setup();
+    const empty = { ...detailFixture().scope, maintenance: null, repair: null, remote_support: null } as ContractDetailResponse["scope"];
+    const noSla = { response_time: null, resolution_time: null, service_hours: null, emergency_availability: null, availability_24_7: null, sla_notes: null };
+    const rent = { type_label: "Mietvertrag", scope: false, sla: false, maintenance: false, equipment: true };
+    const { unmount } = await renderWithData(detailFixture({ sections: rent, scope: empty, sla: noSla }));
+    expect(screen.queryByRole("heading", { name: "Leistungsumfang" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "SLA" })).not.toBeInTheDocument();
+    expect(screen.queryByText("SLA unvollständig")).not.toBeInTheDocument();
+    expect(screen.getByText(/Für Mietvertrag ausgeblendet: Leistungsumfang, SLA/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Trotzdem anzeigen" }));
+    expect(screen.getByRole("heading", { name: "SLA" })).toBeInTheDocument();
+    unmount();
+
+    // Mit gefundenen Angaben bleibt der Abschnitt sichtbar, auch wenn der Typ ihn nicht vorsieht.
+    await renderWithData(detailFixture({ sections: rent }));
+    expect(screen.getByRole("heading", { name: "Leistungsumfang" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "SLA" })).toBeInTheDocument();
+    expect(screen.queryByText(/ausgeblendet/)).not.toBeInTheDocument();
+  });
+
   it("Kopf: nicht zugeordneter Vertragspartner führt zur Zuordnung, fehlender Beginn zum Feld", async () => {
     await renderWithData(detailFixture({ partner: null, supplier: "Siemens Healthineers", dates: { ...detailFixture().dates, start_date: null }, register_facts: { contract_start: null, cancel_by: null, contract_end: null, annual_cost: null } }));
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;

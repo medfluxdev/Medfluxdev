@@ -191,8 +191,10 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource }: {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections }: {
   contractId: string;
+  /** Kästen, die der Vertragstyp nicht vorsieht; sie bleiben sichtbar, sobald ein Wert gepflegt ist. */
+  hiddenSections?: Set<string>;
   orgSlug: string;
   onChanged?: () => void;
   /** Felder, die im Vertragsdokument gesucht werden können (erneute Erfassung). */
@@ -678,6 +680,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       const fields = section.id === "term" ? section.fields.filter((def) => visibleTermFields.has(def.key)) : section.fields;
       // Nur dieser Kasten zeigt Eingabefelder (die übrigen Werte bleiben lesbar).
       const editing = editSections.has(section.id);
+      if (hiddenSections?.has(section.id) && !editing && fields.every((def) => register.fields[def.key]?.value == null)) return null;
       const canEditHere = editable && register.business_status !== "geloescht";
       const actions = editing
         ? <><button type="button" className="btn btn-sm" disabled={busy} onClick={() => cancelEdit(section.id)} aria-label={`Abbrechen (${section.title})`}>Abbrechen</button><button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button></>

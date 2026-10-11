@@ -474,6 +474,7 @@ def build_contract_detail(
         "register_facts": register_facts(contract, today_local()),
         "extracted_terms": _extracted_terms(snapshot),
         "assignment": _assignment(session, contract),
+        "sections": _sections(session, contract),
         "partner": _partner(session, contract),
         "risk": _risk(contract),
         "status": contract.status,
@@ -558,6 +559,17 @@ def _partner(session: Session, contract) -> dict | None:
     if partner is None or partner.organization_id != contract.organization_id:
         return None
     return {"id": str(partner.id), "name": partner.name1, "short_name": partner.short_name}
+
+
+def _sections(session: Session, contract) -> Optional[dict]:
+    """Typspezifische Abschnitte (register/sections.py); None ohne Vertragstyp = alle zeigen."""
+    from app.database.models.register import CatalogContractType
+    from app.register.sections import contract_sections
+
+    kind = session.get(CatalogContractType, contract.contract_type_id) if contract.contract_type_id else None
+    if kind is not None and kind.organization_id != contract.organization_id:
+        kind = None
+    return contract_sections(kind)
 
 
 def _assignment(session: Session, contract) -> dict:

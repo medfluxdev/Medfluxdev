@@ -13,6 +13,7 @@ import {
   type ContractTypeDto,
   type LookupDto,
 } from "@/lib/domain-api/catalogs";
+import { SECTION_KEYS, SECTION_LABELS, type SectionKey } from "@/lib/contract-sections";
 import { optional, text, type EntityDefinition } from "../types";
 
 export interface TypeContext {
@@ -28,6 +29,18 @@ async function loadTypes(organizationSlug: string): Promise<TypeContext> {
 function retention(form: Record<string, unknown>): number | null {
   const raw = typeof form.retention_years === "string" ? form.retention_years.trim() : "";
   return raw === "" ? null : Number(raw);
+}
+
+// „Standard“ = Profil nach Vertragstyp (Backend register/sections.py); sonst die gewählten Abschnitte.
+function sections(form: Record<string, unknown>): SectionKey[] | null {
+  if (form.sections_default === true) return null;
+  const chosen = Array.isArray(form.sections) ? (form.sections as string[]) : [];
+  return SECTION_KEYS.filter((key) => chosen.includes(key));
+}
+
+function sectionsLabel(row: ContractTypeDto): string {
+  const list = (row.sections ?? []).map((key) => SECTION_LABELS[key]);
+  return list.length ? list.join(", ") : "Keine";
 }
 
 export const contractTypeDefinition: EntityDefinition<ContractTypeDto, TypeContext> = {
@@ -49,6 +62,7 @@ export const contractTypeDefinition: EntityDefinition<ContractTypeDto, TypeConte
     { key: "label", label: "Bezeichnung", rowHeader: true, sortValue: (row) => row.label.toLocaleLowerCase("de"), render: (row) => row.label },
     { key: "confidential", label: "Vertraulich", sortValue: (row) => (row.is_confidential ? 0 : 1), render: (row) => (row.is_confidential ? <Badge tone="info">Vertraulich</Badge> : "–") },
     { key: "retention", label: "Aufbewahrung", numeric: true, sortValue: (row) => row.retention_years ?? -1, render: (row) => (row.retention_years == null ? "Standard" : `${row.retention_years} Jahre`) },
+    { key: "sections", label: "Abschnitte", sortValue: sectionsLabel, render: (row) => <>{sectionsLabel(row)}{row.sections_default === false ? <> <Badge tone="neutral">angepasst</Badge></> : null}</> },
     { key: "categories", label: "Kategorien", numeric: true, render: (row) => context.categories.filter((item) => item.contract_type_ids.includes(row.id) && item.is_active).length },
   ],
   fields: () => [
@@ -56,14 +70,21 @@ export const contractTypeDefinition: EntityDefinition<ContractTypeDto, TypeConte
     { key: "description", label: "Beschreibung", kind: "textarea", maxLength: 500 },
     { key: "is_confidential", label: "Vertraulich", kind: "checkbox", hint: "Verträge dieses Typs sehen nur Administration und freigegebene Personen." },
     { key: "retention_years", label: "Aufbewahrung nach Vertragsende (Jahre)", kind: "number", min: 0, max: 100, hint: "Leer = Standard der Organisation." },
+    {
+      key: "sections", label: "Abschnitte in der Vertragsakte", kind: "checks",
+      options: SECTION_KEYS.map((key) => ({ value: key, label: SECTION_LABELS[key] })),
+      hint: "Nicht gewählte Abschnitte werden ausgeblendet, solange sie leer sind – gepflegte oder gefundene Angaben bleiben immer sichtbar.",
+    },
+    { key: "sections_default", label: "Standard für diesen Vertragstyp verwenden", kind: "checkbox", hint: "Wartung/Service: alle; Dienstleistung, Lizenz u. Ä.: Leistungsumfang und SLA; Miete, Leasing, Kauf: Geräte; Versicherung, Mitgliedschaft u. Ä.: keine. Eigene Typen: alle." },
   ],
-  emptyForm: (_context, preset) => ({ label: "", description: "", is_confidential: false, retention_years: "", ...preset }),
-  toForm: (row) => ({ label: row.label, description: row.description ?? "", is_confidential: row.is_confidential, retention_years: row.retention_years == null ? "" : String(row.retention_years) }),
+  emptyForm: (_context, preset) => ({ label: "", description: "", is_confidential: false, retention_years: "", sections: [...SECTION_KEYS], sections_default: false, ...preset }),
+  toForm: (row) => ({ label: row.label, description: row.description ?? "", is_confidential: row.is_confidential, retention_years: row.retention_years == null ? "" : String(row.retention_years), sections: [...(row.sections ?? SECTION_KEYS)], sections_default: row.sections_default !== false }),
   create: (organizationSlug, form) => createContractType(organizationSlug, {
-    label: text(form, "label"), description: optional(form, "description"), is_confidential: form.is_confidential === true, retention_years: retention(form),
+    label: text(form, "label"), description: optional(form, "description"), is_confidential: form.is_confidential === true, retention_years: retention(form), sections: sections(form) ?? undefined,
   }),
   update: (organizationSlug, row, form) => updateContractType(organizationSlug, row.id, {
     label: text(form, "label"), description: optional(form, "description"), is_confidential: form.is_confidential === true, retention_years: retention(form),
+    ...({ sections: sections(form) } as unknown as Partial<ContractTypeDto>),
   }),
   setActive: (organizationSlug, row, active) => updateContractType(organizationSlug, row.id, { is_active: active }),
   registerFilter: (row) => ({ column: "contract_type", value: row.label }),
