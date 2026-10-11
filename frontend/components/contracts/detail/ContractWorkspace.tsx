@@ -52,6 +52,7 @@ import ContractTermBar from "./ContractTermBar";
 import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
 import OpenPoints, { buildOpenPoints } from "./OpenPoints";
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
+import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
 import ContractAssignmentCard from "./ContractAssignmentCard";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -744,9 +745,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onClose={() => setCaptureOpen(false)}
           /> : null}
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
-          {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
+          {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
           {documentTab === "review" && <ReviewQueueNav contractId={data.contract_id} />}
-          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /></div>}
+          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}
       </div>
