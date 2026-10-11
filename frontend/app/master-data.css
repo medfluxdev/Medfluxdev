@@ -18,9 +18,9 @@
 .md-filter { flex: 0 1 220px; min-width: 0; }
 .md-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-left: auto; }
 
-.md-check { display: inline-flex; align-items: flex-start; gap: var(--space-2); font-size: var(--text-small); cursor: pointer; }
-.md-check input { flex: none; width: 18px; height: 18px; margin-top: 2px; }
-.md-check small { display: block; flex-basis: 100%; }
+.md-check { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-1) var(--space-2); font-size: var(--text-small); cursor: pointer; }
+.md-check input { width: 18px; height: 18px; margin: 2px 0 0; }
+.md-check small { grid-column: 2; }
 
 .md-segmented { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
 .md-segmented button {
@@ -50,9 +50,10 @@
 .md-status h3 { margin: 0; font-size: var(--text-small); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
 .md-form .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
 .md-wide { grid-column: 1 / -1; }
-.md-form input,
+.md-form input:not([type="checkbox"]),
 .md-form select,
 .md-form textarea { width: 100%; }
+.md-form .md-check { grid-column: 1 / -1; }
 .md-checks { display: grid; gap: var(--space-2); grid-column: 1 / -1; margin: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 .md-checks legend { padding: 0 var(--space-1); font-size: var(--text-small); font-weight: var(--weight-semibold); }
 .md-usage,
