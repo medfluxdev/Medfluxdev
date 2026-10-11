@@ -478,7 +478,7 @@ def portfolio_xlsx(report: dict) -> bytes:
         overview, ["Kennzahl", "Wert"],
         [
             ["Stand", date.fromisoformat(report["as_of"])],
-            ["Verträge (ohne gelöschte)", totals_["contracts"]],
+            ["Verträge (ohne stornierte)", totals_["contracts"]],
             ["Davon laufend", totals_["running"]],
             ["Jährliche Kosten (netto)", _float_or_none(totals_["annual_cost"])],
             ["Kosten lfd. Jahr (netto)", _float_or_none(totals_["cost_current_year"])],

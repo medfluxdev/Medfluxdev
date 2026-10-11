@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.auth.permissions import can as permissions_can
 from app.core.clock import today_local
 from app.core.scope_context import current_scope_context
 from app.core.config import settings
@@ -350,10 +351,13 @@ def contract_deletion_queue(request: Request, organization_slug: str, offset: in
         if visible is not None:
             query = query.where(Contract.id.in_(visible))
         rows = session.scalars(query.order_by(Contract.id).offset(offset).limit(101)).all()
+        names = _account_names(session, [row.deletion_owner for row in rows[:100]])
         return {
             "items": [
                 {"contract_id": str(row.id), "contract_number": row.contract_number,
-                 "lifecycle_state": row.lifecycle_state}
+                 "register_number": row.register_number, "short_description": row.short_description or row.supplier,
+                 "lifecycle_state": row.lifecycle_state, "by_name": names.get(row.deletion_owner),
+                 "deleted_at": row.deleted_at.isoformat() if row.deleted_at else None}
                 for row in rows[:100]
             ],
             "has_more": len(rows) > 100,
@@ -361,6 +365,22 @@ def contract_deletion_queue(request: Request, organization_slug: str, offset: in
         }
     finally:
         session.close()
+
+
+def _account_names(session, raw_ids) -> dict:
+    """Anzeigenamen zu `deletion_owner` (als Text gespeicherte Konto-IDs); Unbekanntes bleibt leer."""
+    from app.database.models import Account
+
+    ids = {}
+    for value in raw_ids:
+        try:
+            ids[value] = UUID(value)
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return {}
+    names = dict(session.execute(select(Account.id, Account.display_name).where(Account.id.in_(set(ids.values())))).all())
+    return {raw: names.get(account_id) for raw, account_id in ids.items()}
 
 
 @router.get("/capabilities/deletion")
@@ -372,9 +392,10 @@ def contract_deletion_capabilities(request: Request, organization_slug: str) -> 
         org = get_organization(session, organization_slug)
         if org is None or actor is None or actor.organization_id != org.id:
             raise _not_found()
-        allowed = bool(settings.auth_enabled and settings.contracts_allow_delete
-                       and (actor.role or "").casefold() == "admin")
-        return {"can_delete": allowed, "can_restore": allowed,
+        enabled = bool(settings.auth_enabled and settings.contracts_allow_delete)
+        allowed = enabled and permissions_can(actor, "contract.delete_confirm")
+        return {"can_request": enabled and permissions_can(actor, "contract.delete_request"),
+                "can_delete": allowed, "can_restore": allowed,
                 "requires_confirmation": True}
     finally:
         session.close()
@@ -743,12 +764,16 @@ def contract_unarchive(
 
 
 
-def _require_explicit_delete_permission(request: Request) -> None:
-    """Fail closed: deleting and restoring require an explicit server opt-in."""
+def _require_explicit_delete_permission(request: Request, permission: str = "contract.delete_confirm") -> None:
+    """Fail closed: nur mit Anmeldung und eingeschalteter Funktion.
+
+    Beantragen/Abbrechen: `contract.delete_request` (Vertragsmanagement, Administration);
+    Bestätigen/Wiederherstellen und die Liste: `contract.delete_confirm` (Administration).
+    """
     actor = getattr(request.state, "actor", None)
-    if not settings.auth_enabled or actor is None:
+    if not settings.auth_enabled or actor is None or not settings.contracts_allow_delete:
         raise HTTPException(status_code=403, detail="Vertragslöschung ist nicht freigegeben.")
-    if not settings.contracts_allow_delete or (actor.role or "").casefold() != "admin":
+    if not permissions_can(actor, permission):
         raise HTTPException(status_code=403, detail="Vertragslöschung ist nicht freigegeben.")
 
 
@@ -767,7 +792,9 @@ def actor_org_mismatch(request: Request, organization_id) -> bool:
 
 def _deletion_transition(request: Request, organization_slug: str, contract_id: str, *,
                          expected: str, target: str) -> dict:
-    _require_explicit_delete_permission(request)
+    # Beantragen und Abbrechen: Vertragsmanagement und Administration; bestätigen/wiederherstellen: Administration.
+    step = "contract.delete_request" if (expected, target) in {("active", "pending_deletion"), ("pending_deletion", "active")} else "contract.delete_confirm"
+    _require_explicit_delete_permission(request, step)
     try:
         cid = UUID(contract_id)
     except ValueError:

@@ -612,7 +612,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         </> : null}
         {transition === "beendet" ? <label>Beendet am<input type="date" value={transitionForm.effective_date} onChange={(event) => setTransitionForm((form) => ({ ...form, effective_date: event.target.value }))} /></label> : null}
         {transition === "gueltig" && register.review_pending ? <label className="rg-check"><input type="checkbox" checked={transitionForm.acknowledge} onChange={(event) => setTransitionForm((form) => ({ ...form, acknowledge: event.target.checked }))} />Die KI-Werte sind noch nicht vollständig geprüft. Ich gebe den Vertrag trotzdem frei.</label> : null}
-        {transition === "geloescht" ? <p className="rg-hint">„Gelöscht“ markiert den Vertrag nur. Daten werden nicht entfernt.</p> : null}
+        {transition === "geloescht" ? <p className="rg-hint">„Storniert“ markiert den Vertrag nur als ungültig; Daten bleiben. Einen Vertrag ganz entfernen: „⋯ → Löschung beantragen“ im Kopf.</p> : null}
         <label>Notiz (optional)<input type="text" maxLength={2000} value={transitionForm.note} onChange={(event) => setTransitionForm((form) => ({ ...form, note: event.target.value }))} /></label>
         <div className="rg-actions"><button type="button" className="btn" onClick={() => setTransition(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Status ändern</button></div>
       </form> : null}

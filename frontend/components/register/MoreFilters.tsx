@@ -93,7 +93,7 @@ export default function MoreFilters({ organizationSlug, columns, spec, canSeeDel
 
     {canSeeDeleted ? <section className="reg-more-section" aria-labelledby="reg-more-advanced">
       <h3 id="reg-more-advanced">Erweitert</h3>
-      <label className="rg-check"><input type="checkbox" checked={spec.include_deleted} onChange={(event) => onIncludeDeleted(event.target.checked)} />Gelöschte einbeziehen</label>
+      <label className="rg-check"><input type="checkbox" checked={spec.include_deleted} onChange={(event) => onIncludeDeleted(event.target.checked)} />Stornierte einbeziehen</label>
     </section> : null}
 
     <div className="rg-actions"><button type="button" className="btn btn-primary" onClick={onDone}>Fertig</button></div>

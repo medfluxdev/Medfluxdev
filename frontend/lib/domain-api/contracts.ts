@@ -96,6 +96,9 @@ export function unarchiveContract(contractId: string, organizationSlug: string) 
 
 
 export type ContractDeletionCapabilities = {
+  /** Löschung beantragen (Vertragsmanagement, Administration). */
+  can_request?: boolean;
+  /** Löschung bestätigen (Administration). */
   can_delete: boolean;
   can_restore: boolean;
   requires_confirmation: boolean;
@@ -108,7 +111,16 @@ export function getContractDeletionCapabilities(organizationSlug: string) {
 }
 
 export type ContractDeletionQueue = {
-  items: Array<{ contract_id: string; contract_number: string | null; lifecycle_state: "pending_deletion" | "deleted" }>;
+  items: Array<{
+    contract_id: string;
+    contract_number: string | null;
+    register_number?: string | null;
+    short_description?: string | null;
+    lifecycle_state: "pending_deletion" | "deleted";
+    /** Wer beantragt bzw. bestätigt hat. */
+    by_name?: string | null;
+    deleted_at?: string | null;
+  }>;
   has_more: boolean;
   next_offset: number | null;
 };

@@ -42,7 +42,7 @@ export default function SecurityPage() {
       <h2 id="sec-audit" className="card-title">Nachvollziehbarkeit</h2>
       <ul>
         <li>Die <Link href="/audit">Historie</Link> zeigt, wer wann was geändert hat; automatische Änderungen sind als „System“ gekennzeichnet.</li>
-        <li>Löschen ist zweistufig: Verträge werden zuerst nur als gelöscht markiert und bleiben wiederherstellbar.</li>
+        <li>Löschen ist zweistufig: Vertragsmanagement oder Administration beantragt, die Administration bestätigt; gelöschte Verträge bleiben wiederherstellbar.</li>
       </ul>
     </section>
 

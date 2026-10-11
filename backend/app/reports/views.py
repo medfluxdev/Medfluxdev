@@ -46,7 +46,7 @@ DEFAULT_VIEWS: tuple[tuple[str, str, dict], ...] = (
         "filters": [{"column": "deletion_from", "op": "overdue"}],
         "sort": {"column": "deletion_from", "dir": "asc"},
     }),
-    ("deleted", "Gelöschte Verträge", {"filters": [{"column": "business_status", "op": "in", "value": ["geloescht"]}]}),
+    ("deleted", "Stornierte Verträge", {"filters": [{"column": "business_status", "op": "in", "value": ["geloescht"]}]}),
 )
 
 
@@ -55,6 +55,9 @@ class ViewError(Exception):
         super().__init__(detail_de)
         self.status_code = status_code
         self.detail_de = detail_de
+
+
+_DEFAULT_NAMES = {key: name for key, name, _config in DEFAULT_VIEWS}
 
 
 def ensure_default_views(session: Session, organization_id: uuid.UUID) -> None:
@@ -76,7 +79,8 @@ def ensure_default_views(session: Session, organization_id: uuid.UUID) -> None:
 def view_payload(row: SavedView, account_id: Optional[uuid.UUID]) -> dict:
     return {
         "id": str(row.id),
-        "name": row.name,
+        # Standardansichten heißen wie im Code (Umbenennungen wie „Stornierte Verträge“ greifen ohne Datenänderung).
+        "name": _DEFAULT_NAMES.get(row.system_key, row.name) if row.system_key else row.name,
         "config": row.config,
         "is_global": row.owner_account_id is None,
         "is_system": row.system_key is not None,

@@ -130,7 +130,7 @@ describe("Vertragsliste: Filterzustand (rein)", () => {
     expect(quickLabel("Status", ["Gültig", "In Arbeit", "Beendet"])).toBe("Status: Gültig +2");
   });
 
-  it("schreibt Spalten und „Gelöschte einbeziehen“ in die Adresse und liest sie zurück", () => {
+  it("schreibt Spalten und „Stornierte einbeziehen“ in die Adresse und liest sie zurück", () => {
     const spec: GridSpec = { columns: ["register_number", "possible_end"], filters: [], sort: null, group_by: [], q: null, include_deleted: true, archived: false };
     writeUrlState("bestand", null, spec, 0, ["register_number"]);
     expect(window.location.search).toContain("spalten=register_number%2Cpossible_end");
@@ -173,7 +173,7 @@ describe("Vertragsliste: Werkzeugleiste", () => {
       { column: "contract_type", op: "in", value: ["Wartungsvertrag"] },
     ]));
     // Ohne Recht keine Option für gelöschte Verträge.
-    expect(within(drawer).queryByLabelText("Gelöschte einbeziehen")).not.toBeInTheDocument();
+    expect(within(drawer).queryByLabelText("Stornierte einbeziehen")).not.toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: "Fertig" }));
     expect(screen.getByRole("button", { name: "Weitere Filter (2)" })).toBeInTheDocument();
 
@@ -261,13 +261,13 @@ describe("Vertragsliste: Werkzeugleiste", () => {
     expect(within(table).getByRole("link", { name: "Wartung MRT" })).toBeInTheDocument();
   });
 
-  it("bietet „Gelöschte einbeziehen“ nur mit Recht an und merkt es in der Adresse", async () => {
+  it("bietet „Stornierte einbeziehen“ nur mit Recht an und merkt es in der Adresse", async () => {
     const user = userEvent.setup();
     permissions.allowed = new Set(["contract.view_deleted"]);
     render(<RegisterGrid organizationSlug="test-klinik" tab="bestand" />);
     await screen.findByRole("table");
     await user.click(screen.getByRole("button", { name: "Weitere Filter" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Weitere Filter" })).getByLabelText("Gelöschte einbeziehen"));
+    await user.click(within(screen.getByRole("dialog", { name: "Weitere Filter" })).getByLabelText("Stornierte einbeziehen"));
     await waitFor(() => expect(lastSpec().include_deleted).toBe(true));
     await waitFor(() => expect(window.location.search).toContain("geloescht=1"));
   });

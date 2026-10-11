@@ -87,7 +87,7 @@ export default function RegisterPortfolio({ organizationSlug }: { organizationSl
     </div>{canExport ? <button type="button" className="btn" onClick={() => void exportXlsx()}>Bericht als Excel</button> : null}</div>
 
     <div className="viz-tiles">
-      <article title={report.definitions?.running}><span>Laufende Verträge</span><strong>{report.totals.running}</strong><small>von {report.totals.contracts} (ohne gelöschte){report.totals.in_progress ? ` · ${report.totals.in_progress} in Arbeit` : ""}</small></article>
+      <article title={report.definitions?.running}><span>Laufende Verträge</span><strong>{report.totals.running}</strong><small>von {report.totals.contracts} (ohne stornierte){report.totals.in_progress ? ` · ${report.totals.in_progress} in Arbeit` : ""}</small></article>
       <AmountTile label="Jährliche Kosten" sub="aktueller Satz" report={report} amountKey="annual_cost" />
       <AmountTile label={`Kosten ${new Date(report.as_of).getFullYear()}`} sub="laufendes Jahr" report={report} amountKey="cost_current_year" />
       <AmountTile label={`Einnahmen ${new Date(report.as_of).getFullYear()}`} sub="laufendes Jahr" report={report} amountKey="income_current_year" />

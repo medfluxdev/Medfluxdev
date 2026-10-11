@@ -20,7 +20,8 @@ STATUS_LABELS = {
     "gueltig": "Gültig",
     "gekuendigt": "Gekündigt",
     "beendet": "Beendet",
-    "geloescht": "Gelöscht",
+    # Code bleibt `geloescht`; angezeigt als „Storniert“, damit „gelöscht“ nur die Vertragslöschung meint.
+    "geloescht": "Storniert",
 }
 
 TRANSITIONS: dict[str, tuple[str, ...]] = {

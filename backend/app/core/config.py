@@ -150,7 +150,9 @@ class Settings(BaseSettings):
     # Instanz startet daher nie unauthentifiziert im Netz.
     auth_enabled: bool = True
     # Explicit opt-in. No role automatically receives contract deletion rights.
-    contracts_allow_delete: bool = False
+    # Vertragslöschung (vormerken → bestätigen → wiederherstellbar). Seit 2026-10-11 an; nur mit Anmeldung.
+    # Beantragen: Administration/Vertragsmanagement, Bestätigen/Wiederherstellen: Administration.
+    contracts_allow_delete: bool = True
     # H5: Tageslauf fuer Fristen/Erinnerungen. Im Prozess nur per Opt-in;
     # alternativ per Aufgabenplanung `python -m app.jobs.daily`.
     reminder_scheduler_enabled: bool = False

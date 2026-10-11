@@ -105,12 +105,12 @@ export const BUSINESS_STATUS_LABEL: Record<BusinessStatus, string> = {
   gueltig: "Gültig",
   gekuendigt: "Gekündigt",
   beendet: "Beendet",
-  geloescht: "Gelöscht",
+  geloescht: "Storniert",
 };
 
 /**
  * Farbe + Form + Wort je Vertragsstatus (Ruhe & Signal): Grün nur für den bestätigten Zustand „Gültig“,
- * Gelb für gekündigt (läuft aus), Blau für noch in Arbeit, Grau für beendet, Rot für als gelöscht markiert.
+ * Gelb für gekündigt (läuft aus), Blau für noch in Arbeit, Grau für beendet, Rot für storniert.
  */
 export const BUSINESS_STATUS_TONE: Record<BusinessStatus, StatusTone> = {
   in_arbeit: "information",

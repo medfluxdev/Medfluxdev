@@ -1,7 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import Dialog from "@/components/ui/Dialog";
+import EmptyState from "@/components/ui/EmptyState";
+import InlineAlert from "@/components/ui/InlineAlert";
+import PageHeader from "@/components/ui/PageHeader";
+import Signal from "@/components/ui/Signal";
 import {
   confirmContractDeletion,
   cancelContractDeletion,
@@ -10,7 +16,16 @@ import {
   restoreDeletedContract,
   type ContractDeletionQueue,
 } from "@/lib/domain-api/contracts";
+import { formatDateTime } from "@/lib/format";
 
+type Item = ContractDeletionQueue["items"][number];
+
+function itemName(item: Item): string {
+  return [item.register_number, item.short_description ?? item.contract_number].filter(Boolean).join(" · ") || "Vertrag";
+}
+
+// Verwaltung → Vertragslöschung: Anträge von Vertragsmanagement/Administration bestätigen oder ablehnen,
+// gelöschte Verträge wiederherstellen. Nichts wird endgültig vernichtet.
 export default function DeletionQueuePage() {
   const { organizationSlug, role, loading } = useAuth();
   const [allowed, setAllowed] = useState(false);
@@ -20,7 +35,7 @@ export default function DeletionQueuePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [pageLoading, setPageLoading] = useState(false);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [confirmItem, setConfirmItem] = useState<Item | null>(null);
   const generation = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -29,7 +44,7 @@ export default function DeletionQueuePage() {
     setAllowed(false);
     setQueue(null);
     setOffset(0);
-    setConfirmId(null);
+    setConfirmItem(null);
     setError(null);
     if (loading || !organizationSlug || role !== "admin") {
       setChecking(false);
@@ -43,7 +58,7 @@ export default function DeletionQueuePage() {
       setQueue(result);
       setAllowed(true);
     } catch {
-      if (current === generation.current) setError("Die Löschverwaltung ist nicht verfügbar oder nicht freigegeben.");
+      if (current === generation.current) setError("Die Vertragslöschung ist nicht verfügbar oder nicht freigegeben.");
     } finally {
       if (current === generation.current) setChecking(false);
     }
@@ -79,7 +94,7 @@ export default function DeletionQueuePage() {
       if (action === "cancel") await cancelContractDeletion(id, organizationSlug);
       if (action === "confirm") await confirmContractDeletion(id, organizationSlug);
       if (action === "restore") await restoreDeletedContract(id, organizationSlug);
-      setConfirmId(null);
+      setConfirmItem(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Aktion fehlgeschlagen.");
@@ -88,37 +103,48 @@ export default function DeletionQueuePage() {
     }
   }
 
-  if (loading) return <main className="page"><p role="status">Benutzerberechtigungen werden geladen…</p></main>;
+  if (loading) return <div className="page"><p role="status">Benutzerberechtigungen werden geladen…</p></div>;
+  if (role !== "admin") {
+    return <div className="page"><PageHeader title="Vertragslöschung" /><EmptyState title="Keine Berechtigung">Löschungen bestätigt die Administration.</EmptyState></div>;
+  }
 
-  if (role !== "admin") return <main className="page"><h1>Keine Berechtigung</h1><p>Diese Funktion ist nur für freigegebene Administratoren verfügbar.</p></main>;
+  const pending = queue?.items.filter((item) => item.lifecycle_state === "pending_deletion") ?? [];
+  const deleted = queue?.items.filter((item) => item.lifecycle_state === "deleted") ?? [];
 
-  return <main className="page">
-    <header><h1>Vertragslöschung verwalten</h1>
-      <p>Nur ausdrücklich freigegebene Administratoren. Keine endgültige Datenvernichtung.</p>
-    </header>
-    {error && <p role="alert">{error}</p>}
-    {checking && <p role="status">Berechtigungen werden geprüft…</p>}
-    {!checking && !allowed && !error && <p>Die Löschverwaltung ist für diese Organisation nicht freigegeben.</p>}
-    {allowed && queue && <>
-      {queue.items.length === 0 && <p>Keine vorgemerkten oder gelöschten Verträge.</p>}
-      {queue.items.length > 0 && <p role="status">Einträge {offset + 1}–{offset + queue.items.length}</p>}
-      <div className="btn-group mb-4">
-        <button type="button" disabled={checking || pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
-        <button type="button" disabled={checking || pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
-      </div>
-      {queue.items.map((item) => <section className="panel mb-4" key={item.contract_id}>
-        <h2>{item.contract_number || item.contract_id}</h2>
-        <p>Status: {item.lifecycle_state === "pending_deletion" ? "Zur Löschung vorgemerkt" : "Gelöscht (wiederherstellbar)"}</p>
-        {item.lifecycle_state === "pending_deletion" ? <>
-          <button type="button" disabled={busy !== null} onClick={() => void act(item.contract_id, "cancel")}>Löschung abbrechen</button>{" "}
-          <button type="button" disabled={busy !== null} onClick={() => setConfirmId(item.contract_id)}>Löschung bestätigen</button>
-          {confirmId === item.contract_id && <div role="dialog" aria-modal="true" aria-label="Löschung bestätigen">
-            <p>Der Vertrag wird aus aktiven Ansichten entfernt, bleibt aber wiederherstellbar.</p>
-            <button type="button" disabled={busy !== null} onClick={() => setConfirmId(null)}>Zurück</button>{" "}
-            <button type="button" disabled={busy !== null} onClick={() => void act(item.contract_id, "confirm")}>Ja, Löschung bestätigen</button>
-          </div>}
-        </> : <button type="button" disabled={busy !== null} onClick={() => void act(item.contract_id, "restore")}>Vertrag wiederherstellen</button>}
-      </section>)}
-    </>}
-  </main>;
+  return <div className="page">
+    <PageHeader title="Vertragslöschung" description="Anträge von Vertragsmanagement und Administration bestätigen oder ablehnen. Gelöschte Verträge verschwinden aus allen Listen, bleiben aber wiederherstellbar – nichts wird endgültig vernichtet." />
+    {error ? <InlineAlert tone="critical" role="alert">{error}</InlineAlert> : null}
+    {checking ? <p role="status">Berechtigungen werden geprüft…</p> : null}
+    {!checking && !allowed && !error ? <EmptyState title="Vertragslöschung ist ausgeschaltet">Sie lässt sich mit CONTRACTS_ALLOW_DELETE=true einschalten (nur mit Anmeldung).</EmptyState> : null}
+    {allowed && queue ? <>
+      <section className="card card-pad stack-4" aria-labelledby="deletion-pending-heading">
+        <h2 id="deletion-pending-heading">Beantragt ({pending.length})</h2>
+        {pending.length === 0 ? <EmptyState variant="calm" title="Keine offenen Anträge" /> : <ul className="deletion-list">{pending.map((item) => <li key={item.contract_id}>
+          <div><Signal tone="warning" size="sm">Beantragt</Signal> <Link href={`/contracts/${item.contract_id}`}>{itemName(item)}</Link>{item.by_name ? <span className="cw-muted"> · von {item.by_name}</span> : null}</div>
+          <div className="rg-actions">
+            <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => void act(item.contract_id, "cancel")} aria-label={`Antrag für ${itemName(item)} ablehnen`}>Ablehnen</button>
+            <button type="button" className="btn btn-danger btn-sm" disabled={busy !== null} onClick={() => setConfirmItem(item)} aria-label={`Löschung von ${itemName(item)} bestätigen`}>Löschung bestätigen</button>
+          </div>
+        </li>)}</ul>}
+      </section>
+      <section className="card card-pad stack-4" aria-labelledby="deletion-done-heading">
+        <h2 id="deletion-done-heading">Gelöscht ({deleted.length})</h2>
+        {deleted.length === 0 ? <EmptyState variant="calm" title="Keine gelöschten Verträge" /> : <ul className="deletion-list">{deleted.map((item) => <li key={item.contract_id}>
+          <div><Signal tone="neutral" size="sm">Gelöscht</Signal> {itemName(item)}<span className="cw-muted">{item.deleted_at ? ` · am ${formatDateTime(item.deleted_at)}` : ""}{item.by_name ? ` von ${item.by_name}` : ""}</span></div>
+          <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => void act(item.contract_id, "restore")} aria-label={`${itemName(item)} wiederherstellen`}>Wiederherstellen</button>
+        </li>)}</ul>}
+      </section>
+      {offset > 0 || queue.has_more ? <div className="rg-actions">
+        <button type="button" className="btn btn-sm" disabled={checking || pageLoading || busy !== null || offset === 0} onClick={() => void changePage(Math.max(0, offset - 100))}>Zurück</button>
+        <button type="button" className="btn btn-sm" disabled={checking || pageLoading || busy !== null || !queue.has_more || queue.next_offset === null} onClick={() => { if (queue.next_offset !== null) void changePage(queue.next_offset); }}>Weitere anzeigen</button>
+      </div> : null}
+    </> : null}
+    <Dialog
+      open={confirmItem !== null}
+      title="Löschung bestätigen?"
+      onClose={() => setConfirmItem(null)}
+      description={confirmItem ? <>„{itemName(confirmItem)}“ verschwindet aus Vertragsliste, Fristen und Auswertungen. Er bleibt unter „Gelöscht“ wiederherstellbar.</> : null}
+      actions={<><button type="button" className="btn" disabled={busy !== null} onClick={() => setConfirmItem(null)}>Abbrechen</button><button type="button" className="btn btn-danger" disabled={busy !== null} onClick={() => { if (confirmItem) void act(confirmItem.contract_id, "confirm"); }}>Ja, löschen</button></>}
+    />
+  </div>;
 }

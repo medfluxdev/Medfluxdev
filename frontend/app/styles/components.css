@@ -988,4 +988,7 @@ body { background: var(--color-bg); }
 .reminder-lead-list input { width: 6rem; }
 /* Kopf eines einklappbaren Kastens: Doppelklick klappt auf/zu. */
 [data-box] > :first-child, .collapsible > .cw-section-head { cursor: default; user-select: none; }
+/* Verwaltung → Vertragslöschung */
+.deletion-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.deletion-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
 

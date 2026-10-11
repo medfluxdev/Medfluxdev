@@ -24,7 +24,7 @@ def _keep_organization_isolation_checks_in_secure_mode(monkeypatch):
     monkeypatch.setattr(contracts.settings, "medflux_insecure_dev", False)
 
 
-def test_deletion_disabled_by_default(monkeypatch):
+def test_deletion_off_when_switched_off(monkeypatch):
     monkeypatch.setattr(contracts.settings, "auth_enabled", True)
     monkeypatch.setattr(contracts.settings, "contracts_allow_delete", False)
     with pytest.raises(HTTPException) as exc:
@@ -32,13 +32,30 @@ def test_deletion_disabled_by_default(monkeypatch):
     assert exc.value.status_code == 403
 
 
-@pytest.mark.parametrize("role", ["viewer", "contract_manager", "", None])
-def test_editing_roles_never_grant_deletion(monkeypatch, role):
+@pytest.mark.parametrize("role", ["viewer", "reviewer", "contract_manager", "", None])
+def test_only_admin_confirms_or_restores(monkeypatch, role):
     monkeypatch.setattr(contracts.settings, "auth_enabled", True)
     monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
     with pytest.raises(HTTPException) as exc:
         contracts._require_explicit_delete_permission(_request(role=role))
     assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize(("role", "allowed"), [("admin", True), ("contract_manager", True), ("reviewer", False), ("viewer", False), (None, False)])
+def test_request_deletion_editors_only(monkeypatch, role, allowed):
+    monkeypatch.setattr(contracts.settings, "auth_enabled", True)
+    monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
+    if allowed:
+        contracts._require_explicit_delete_permission(_request(role=role), "contract.delete_request")
+    else:
+        with pytest.raises(HTTPException):
+            contracts._require_explicit_delete_permission(_request(role=role), "contract.delete_request")
+
+
+def test_deletion_enabled_by_default():
+    from app.core.config import Settings
+
+    assert Settings.model_fields["contracts_allow_delete"].default is True
 
 
 def test_missing_actor_cannot_delete(monkeypatch):
@@ -73,7 +90,7 @@ def test_capability_denied_without_explicit_opt_in(monkeypatch):
     monkeypatch.setattr(contracts.settings, "auth_enabled", True)
     monkeypatch.setattr(contracts.settings, "contracts_allow_delete", False)
     result = contracts.contract_deletion_capabilities(actor_request, "test-org")
-    assert result == {"can_delete": False, "can_restore": False, "requires_confirmation": True}
+    assert result == {"can_request": False, "can_delete": False, "can_restore": False, "requires_confirmation": True}
 
 
 def test_capability_rejects_cross_org(monkeypatch):
@@ -94,10 +111,14 @@ def test_capability_granted_only_to_opted_in_admin(monkeypatch):
     monkeypatch.setattr(contracts.settings, "contracts_allow_delete", True)
     assert contracts.contract_deletion_capabilities(
         _request(role="admin", organization_id=organization), "test-org"
-    ) == {"can_delete": True, "can_restore": True, "requires_confirmation": True}
+    ) == {"can_request": True, "can_delete": True, "can_restore": True, "requires_confirmation": True}
+    # Vertragsmanagement darf beantragen, aber nicht bestätigen oder wiederherstellen.
     assert contracts.contract_deletion_capabilities(
         _request(role="contract_manager", organization_id=organization), "test-org"
-    )["can_delete"] is False
+    ) == {"can_request": True, "can_delete": False, "can_restore": False, "requires_confirmation": True}
+    assert contracts.contract_deletion_capabilities(
+        _request(role="viewer", organization_id=organization), "test-org"
+    )["can_request"] is False
 
 
 @pytest.mark.parametrize("handler", [contracts.contract_archive, contracts.contract_unarchive])
@@ -205,7 +226,8 @@ def test_archived_contract_cannot_enter_deletion_queue(monkeypatch):
 ])
 def test_deletion_queue_pagination_contract(monkeypatch, count, offset, expected_more, expected_next):
     organization = uuid4()
-    rows = [SimpleNamespace(id=uuid4(), contract_number=str(i), lifecycle_state="deleted")
+    rows = [SimpleNamespace(id=uuid4(), contract_number=str(i), register_number=None, short_description=None, supplier=None,
+                            lifecycle_state="deleted", deletion_owner=None, deleted_at=None)
             for i in range(count)]
     query_result = SimpleNamespace(all=lambda: rows)
     session = SimpleNamespace(scalars=lambda query: query_result, close=lambda: None)

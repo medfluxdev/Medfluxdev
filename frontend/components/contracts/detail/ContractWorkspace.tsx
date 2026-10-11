@@ -283,7 +283,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     let active = true;
     setCanRequestDeletion(false);
     getContractDeletionCapabilities(orgSlug)
-      .then((result) => { if (active) setCanRequestDeletion(result.can_delete); })
+      .then((result) => { if (active) setCanRequestDeletion(result.can_request ?? result.can_delete); })
       .catch(() => { if (active) setCanRequestDeletion(false); });
     return () => { active = false; };
   }, [orgSlug]);
@@ -597,7 +597,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       <Dialog
         open={deleteDialogOpen}
         title="Vertragslöschung beantragen?"
-        description="Dieser Schritt markiert den Vertrag als zur Löschung vorgemerkt. Er löscht keine Daten endgültig. Eine separate Bestätigung ist erforderlich."
+        description="Der Vertrag wird zur Löschung vorgemerkt und aus den Listen genommen. Die Administration bestätigt oder lehnt ab (Verwaltung → Vertragslöschung). Auch ein gelöschter Vertrag bleibt wiederherstellbar; nichts wird endgültig vernichtet."
         onClose={() => { if (!deletePending) setDeleteDialogOpen(false); }}
         actions={<>
           <button type="button" className="btn" disabled={deletePending} onClick={() => setDeleteDialogOpen(false)}>Abbrechen</button>

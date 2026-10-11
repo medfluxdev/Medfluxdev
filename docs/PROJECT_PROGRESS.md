@@ -5620,3 +5620,10 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Behoben:** `sections` im Antwortmodell; neuer Regressionstest prüft, dass kein Schlüssel des Lesemodells durch das Antwortmodell verloren geht.
 - **Zuständigkeit (Übersicht):** „Weitere Verantwortliche“ entfernt (bleibt in der Organisationszuordnung).
 
+### Nachtrag 2026-10-11 – Vertragslöschung eingeschaltet, „Gelöscht“ heißt „Storniert“
+
+- **Vertragslöschung** (Entscheidung des Nutzers): `contracts_allow_delete` standardmäßig an (abschaltbar mit `CONTRACTS_ALLOW_DELETE=false`, ohne Anmeldung immer aus). Beantragen/Abbrechen: `contract.delete_request` (Administration, Vertragsmanagement); Bestätigen/Wiederherstellen und Liste: `contract.delete_confirm` (Administration). Gelöschte Verträge bleiben wiederherstellbar, nichts wird vernichtet.
+- **Verwaltung → Vertragslöschung** neu gestaltet: „Beantragt“ (Nr., Bezeichnung, Antragsteller; Ablehnen / Löschung bestätigen mit Rückfrage) und „Gelöscht“ (Datum, wer; Wiederherstellen). Liste liefert `register_number`, `short_description`, `by_name`, `deleted_at`.
+- **Geschäftsstatus „Gelöscht“ → „Storniert“** (Code `geloescht` bleibt, keine Datenänderung): Beschriftungen, Filter „Stornierte einbeziehen“, Standardansicht „Stornierte Verträge“ (Namen von Standardansichten kommen jetzt immer aus dem Code), Rechte „Stornierte Verträge ansehen“ / „Als storniert markieren“.
+- **Tests:** `test_contract_delete_guard.py` angepasst (+Rollen-Tests), `contract-deletion-admin.test.tsx` neu, `register-filters.test.tsx` angepasst.
+

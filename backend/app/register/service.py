@@ -642,7 +642,7 @@ def update_register(
     Gibt die Feld-Diffs {key: {before, after}} zurueck (fuer das Audit).
     """
     if contract.business_status == "geloescht":
-        raise RegisterError(409, "Gelöschte Verträge können nicht bearbeitet werden.")
+        raise RegisterError(409, "Stornierte Verträge können nicht bearbeitet werden.")
     try:
         coerced = {key: coerce_value(key, raw) for key, raw in changes.items()}
     except ValueError as exc:
