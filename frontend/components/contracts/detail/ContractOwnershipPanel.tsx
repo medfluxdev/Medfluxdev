@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getOrganizationStructure, listCostCenters } from "@/lib/domain-api/organizations";
@@ -33,6 +34,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const [beneficiaryDepartmentIds, setBeneficiaryDepartmentIds] = useState<string[]>([]);
   const [centerId, setCenterId] = useState("");
   const [responsibleId, setResponsibleId] = useState("");
+  const [furtherIds, setFurtherIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -66,6 +68,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       setBeneficiaryDepartmentIds(departmentRoles.beneficiary_department_ids ?? []);
       setCenterId(ownership.cost_center_id ?? "");
       setResponsibleId(ownership.responsible_account_id ?? "");
+      setFurtherIds(ownership.further_responsible_account_ids ?? []);
     }).catch(() => { if (!cancelled) setMessage("Zuordnung konnte nicht geladen werden."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -86,6 +89,20 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     (!item.hospital_id || item.hospital_id === hospitalId) &&
     (!item.department_id || selectedDepartments.size === 0 || selectedDepartments.has(item.department_id))),
   [assignees, hospitalId, selectedDepartments]);
+  // Alle Benutzer der Organisation; passende (Krankenhaus/Bereich) zuerst.
+  const otherAssignees = useMemo(() => assignees.filter((item) => !visibleAssignees.includes(item)), [assignees, visibleAssignees]);
+  const isAdmin = Boolean(account?.is_developer || role === "admin");
+  function assigneeName(id: string) {
+    return assignees.find((item) => item.id === id)?.display_name ?? "Unbekannte Person";
+  }
+  function personOptions(matching: Assignee[], others: Assignee[], exclude: Set<string>) {
+    const first = matching.filter((item) => !exclude.has(item.id));
+    const rest = others.filter((item) => !exclude.has(item.id));
+    const render = (list: Assignee[]) => list.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>);
+    if (!rest.length) return render(first);
+    if (!first.length) return render(rest);
+    return <><optgroup label="Passend zur Zuordnung">{render(first)}</optgroup><optgroup label="Weitere Benutzer der Organisation">{render(rest)}</optgroup></>;
+  }
   const hospitalLocked = Boolean(roles?.responsible_department_id || roles?.beneficiary_department_ids.length);
 
   function toggleBeneficiary(id: string) {
@@ -113,6 +130,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         department_ids: existingDepartmentIds,
         cost_center_id: centerId || null,
         responsible_account_id: responsibleId || null,
+        further_responsible_account_ids: furtherIds.filter((id) => id !== responsibleId),
       });
       if (hospitalId && responsibleDepartmentId) {
         await updateContractDepartmentRoles(orgSlug, contractId, {
@@ -150,7 +168,15 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       }}><option value="">Bitte auswählen</option>{visibleDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select></label>
       <div className="cw-ownership-field"><span>Nutzende Abteilungen</span><div className="cw-ownership-checks">{visibleDepartments.filter((item) => item.id !== responsibleDepartmentId).map((item) => <label key={item.id} className="cw-ownership-check"><input type="checkbox" checked={beneficiaryDepartmentIds.includes(item.id)} onChange={() => toggleBeneficiary(item.id)} /><span>{departmentFullPath(item, departments)}</span></label>)}{hospitalId && visibleDepartments.length === 0 ? <small>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</small> : null}</div></div>
       <label><span>Kostenstelle</span><select value={centerId} onChange={(event) => setCenterId(event.target.value)} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{visibleCenters.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</select></label>
-      <label><span>Verantwortliche Person</span><select value={responsibleId} onChange={(event) => setResponsibleId(event.target.value)}><option value="">Nicht zugewiesen</option>{visibleAssignees.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}</select></label>
+      <div className="cw-ownership-field cw-ownership-people">
+        <label><span>Hauptverantwortlich</span><select value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((current) => current.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select></label>
+        <div className="cw-ownership-field"><span id="cw-further-label">Weitere Verantwortliche</span>
+          {furtherIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-further-label">{furtherIds.map((id) => <li key={id}><span>{assigneeName(id)}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => setFurtherIds((current) => current.filter((value) => value !== id))} aria-label={`${assigneeName(id)} entfernen`}>✕</button></li>)}</ul> : null}
+          {assignees.length ? <select aria-label="Weitere verantwortliche Person hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setFurtherIds((current) => current.includes(id) ? current : [...current, id]); }}><option value="">+ Person hinzufügen …</option>{personOptions(visibleAssignees, otherAssignees, new Set([responsibleId, ...furtherIds]))}</select> : null}
+          <small>Erhalten dieselben Erinnerungen, sehen den Vertrag unter „Ich verantwortlich“ und dürfen ihn auch sehen, wenn er vertraulich ist.</small>
+        </div>
+        {assignees.length === 0 ? <p className="cw-ownership-note" role="note">In dieser Organisation gibt es noch keine Benutzer. {isAdmin ? <Link href="/settings/users">Benutzer anlegen</Link> : "Die Administration kann Benutzer anlegen."}</p> : null}
+      </div>
       {roles?.unclassified_department_ids.length ? <p className="cw-ownership-note" role="note">Historische Zuordnung ohne dokumentierte Rolle: {roles.unclassified_department_ids.map((id) => {
         const department = departments.find((item) => item.id === id);
         return department ? departmentFullPath(department, departments) : "Unbekannter Bereich";

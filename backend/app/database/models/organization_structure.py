@@ -113,3 +113,30 @@ class ContractDepartment(Base):
         CheckConstraint("relation_role IS NULL OR relation_role IN ('responsible', 'beneficiary')", name="ck_contract_department_relation_role"),
         Index("uq_contract_department_one_responsible", "contract_id", unique=True, postgresql_where=(relation_role == "responsible")),
     )
+
+
+class ContractResponsible(Base):
+    """Weitere verantwortliche Person eines Vertrags (neben `contract.responsible_account_id`).
+
+    Bekommt dasselbe wie die Hauptverantwortliche: Erinnerungen in der Glocke,
+    „Ich verantwortlich“ und Zugriff auf vertrauliche Vertraege.
+    """
+
+    __tablename__ = "contract_responsible"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("organization.id", ondelete="CASCADE"), nullable=False
+    )
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("contract_id", "account_id", name="uq_contract_responsible_pair"),
+    )
+

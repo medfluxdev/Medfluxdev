@@ -211,17 +211,23 @@ def process_deadlines(
     if organization_id is not None:
         stmt = stmt.where(ContractDeadline.organization_id == organization_id)
     rows = session.execute(stmt).all()
+    from app.ownership.service import further_responsible_by_contract
+
+    further = further_responsible_by_contract(session, {contract.id for _deadline, contract in rows})
     for deadline, contract in rows:
         assignee = deadline.assignee_account_id or contract.responsible_account_id
-        if assignee is None:
+        # Weitere verantwortliche Personen bekommen dieselben Erinnerungen.
+        recipients = [value for value in [assignee, *further.get(contract.id, [])] if value is not None]
+        recipients = list(dict.fromkeys(recipients))
+        if not recipients:
             counts["unassigned"] = counts.get("unassigned", 0) + 1
             continue
         if deadline.due_date >= as_of:
             notify(session, deadline=deadline, contract=contract, kind="deadline_reminder",
-                   recipient_ids=[assignee], as_of=as_of, counts=counts)
+                   recipient_ids=recipients, as_of=as_of, counts=counts)
         else:
             notify(session, deadline=deadline, contract=contract, kind="deadline_overdue",
-                   recipient_ids=[assignee], as_of=as_of, counts=counts)
+                   recipient_ids=recipients, as_of=as_of, counts=counts)
             if deadline.escalation_account_id and deadline.escalation_account_id != assignee:
                 notify(session, deadline=deadline, contract=contract, kind="deadline_escalation",
                        recipient_ids=[deadline.escalation_account_id], as_of=as_of, counts=counts)

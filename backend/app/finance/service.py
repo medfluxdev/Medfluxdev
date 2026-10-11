@@ -321,6 +321,18 @@ def _allocations(session: Session, contract: Contract, summaries: list[dict]) ->
     ]
 
 
+def _primary_cost_center(session: Session, contract: Contract, summaries: list[dict]) -> Optional[dict]:
+    """Kostenstelle aus der Organisationszuordnung – sie traegt 100 %, solange es keine Aufteilung gibt."""
+    if contract.cost_center_id is None:
+        return None
+    center = session.get(CostCenter, contract.cost_center_id)
+    if center is None:
+        return None
+    main = next((item for item in summaries if item["currency"] == "EUR"), summaries[0] if summaries else None)
+    annual = main["expense"]["annual_run_rate"]["net"] if main else None
+    return {"cost_center_id": str(center.id), "code": center.code, "name": center.name, "annual_net": str(annual) if annual is not None else None}
+
+
 def _dismissed(session: Session, contract_id: uuid.UUID) -> set[tuple[str, str]]:
     return set(session.execute(
         select(ContractSuggestionDismissal.scope, ContractSuggestionDismissal.suggestion_key)
@@ -373,6 +385,7 @@ def finance_payload(session: Session, contract: Contract, as_of: Optional[date] 
         "services": [_service_payload(row) for row in services],
         "allocations": _allocations(session, contract, summaries),
         "primary_cost_center_id": str(contract.cost_center_id) if contract.cost_center_id else None,
+        "primary_cost_center": _primary_cost_center(session, contract, summaries),
         "price_adjustment": {
             "kind": contract.price_adjustment_kind,
             "percent": str(contract.price_adjustment_percent) if contract.price_adjustment_percent is not None else None,

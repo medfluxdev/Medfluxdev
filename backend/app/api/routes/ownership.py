@@ -16,6 +16,8 @@ from app.ownership.service import (
     assign_contract_ownership,
     assign_equipment_ownership,
     contract_department_ids,
+    further_responsible_ids,
+    set_further_responsible,
 )
 
 router = APIRouter(prefix="/api/ownership", tags=["ownership"])
@@ -26,6 +28,8 @@ class ContractOwnershipUpdate(BaseModel):
     department_ids: list[UUID] = Field(default_factory=list)
     cost_center_id: UUID | None = None
     responsible_account_id: UUID | None = None
+    # Weitere verantwortliche Personen; None = unveraendert lassen.
+    further_responsible_account_ids: list[UUID] | None = Field(default=None, max_length=30)
 
 
 class EquipmentOwnershipUpdate(BaseModel):
@@ -156,6 +160,7 @@ def get_contract_ownership(contract_id: UUID, request: Request, organization_slu
             "department_ids": [str(value) for value in contract_department_ids(session, contract.id)],
             "cost_center_id": str(contract.cost_center_id) if contract.cost_center_id else None,
             "responsible_account_id": str(responsible_id) if responsible_id else None,
+            "further_responsible_account_ids": [str(value) for value in further_responsible_ids(session, contract.id)],
             "scope_type": contract.scope_type,
         }
     finally:
@@ -172,11 +177,14 @@ def update_contract_ownership(contract_id: UUID, payload: ContractOwnershipUpdat
             raise HTTPException(status_code=404, detail="Vertrag nicht gefunden.")
         _ensure_contract_visible(session, actor, contract)
         _validate_responsible(session, actor.organization_id, payload.responsible_account_id)
+        for account_id in payload.further_responsible_account_ids or []:
+            _validate_responsible(session, actor.organization_id, account_id)
         before = {
             "hospital_id": str(contract.hospital_id) if contract.hospital_id else None,
             "department_ids": [str(value) for value in contract_department_ids(session, contract.id)],
             "cost_center_id": str(contract.cost_center_id) if contract.cost_center_id else None,
             "responsible_account_id": str(contract.responsible_account_id) if contract.responsible_account_id else None,
+            "further_responsible_account_ids": [str(value) for value in further_responsible_ids(session, contract.id)],
         }
         try:
             assign_contract_ownership(
@@ -192,11 +200,18 @@ def update_contract_ownership(contract_id: UUID, payload: ContractOwnershipUpdat
             text("UPDATE contract SET responsible_account_id = :account_id WHERE id = :contract_id"),
             {"account_id": payload.responsible_account_id, "contract_id": contract.id},
         )
+        session.refresh(contract)
+        if payload.further_responsible_account_ids is not None:
+            set_further_responsible(session, contract=contract, account_ids=payload.further_responsible_account_ids)
+        elif payload.responsible_account_id is not None:
+            # Neue Hauptverantwortliche steht nicht zusaetzlich unter „weitere“.
+            set_further_responsible(session, contract=contract, account_ids=further_responsible_ids(session, contract.id))
         after = {
             "hospital_id": str(contract.hospital_id) if contract.hospital_id else None,
             "department_ids": [str(value) for value in contract_department_ids(session, contract.id)],
             "cost_center_id": str(contract.cost_center_id) if contract.cost_center_id else None,
             "responsible_account_id": str(payload.responsible_account_id) if payload.responsible_account_id else None,
+            "further_responsible_account_ids": [str(value) for value in further_responsible_ids(session, contract.id)],
         }
         _log(
             session,

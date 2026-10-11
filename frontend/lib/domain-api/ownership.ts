@@ -6,6 +6,8 @@ export interface ContractOwnershipDto {
   department_ids: string[];
   cost_center_id: string | null;
   responsible_account_id: string | null;
+  /** Weitere verantwortliche Personen (bekommen dasselbe wie die Hauptverantwortliche). */
+  further_responsible_account_ids?: string[];
   scope_type: "organization" | "hospital" | "department" | string;
 }
 
@@ -47,6 +49,7 @@ export function updateContractOwnership(
     department_ids: string[];
     cost_center_id: string | null;
     responsible_account_id?: string | null;
+    further_responsible_account_ids?: string[];
   },
 ) {
   return apiPatch<ContractOwnershipDto>(

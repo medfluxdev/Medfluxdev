@@ -299,6 +299,9 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
 
     <section className="cw-section" aria-labelledby="fin-alloc-heading">
       <div className="cw-section-head"><div><h2 id="fin-alloc-heading">Kostenstellen-Aufteilung</h2><p>Verteilung der Vertragskosten (Summe 100 %). Ohne Aufteilung gilt die Kostenstelle aus der Organisationszuordnung.</p></div></div>
+      {data.allocations.length === 0 && allocations.length === 0 ? (data.primary_cost_center
+        ? <table className="rg-table"><tbody><tr><th scope="row">{data.primary_cost_center.code} – {data.primary_cost_center.name}</th><td>100 %</td><td>{data.primary_cost_center.annual_net ? `${formatCurrency(data.primary_cost_center.annual_net, "EUR")} netto/Jahr` : "–"}</td><td className="cw-muted">aus der Organisationszuordnung</td></tr></tbody></table>
+        : <p className="cw-muted">Noch keine Kostenstelle festgelegt. <Link href={contractHref(contractId, { tab: "register", section: "ownership" })}>In der Organisationszuordnung festlegen</Link>{editable ? " oder hier eine Aufteilung anlegen." : "."}</p>) : null}
       {data.allocations.length > 0 && !editable ? <table className="rg-table"><tbody>{data.allocations.map((item) => <tr key={item.cost_center_id}><th scope="row">{item.code} – {item.name}</th><td>{Number(item.share_percent).toLocaleString("de-DE")} %</td><td>{item.annual_net ? `${formatCurrency(item.annual_net, "EUR")} netto/Jahr` : "–"}</td></tr>)}</tbody></table> : null}
       {editable ? <form onSubmit={(event) => { event.preventDefault(); void run(() => setCostAllocations(orgSlug, contractId, allocations.filter((item) => item.cost_center_id).map((item) => ({ ...item, recharge_mode: item.recharge_mode || null }))), "Aufteilung gespeichert."); }}>
         {allocations.map((item, index) => {
@@ -311,9 +314,14 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
           </div>;
         })}
         <div className="rg-actions">
-          <span className={Math.abs(allocationSum - 100) < 0.001 || allocations.length === 0 ? "cw-muted" : "rg-error"}>Summe {allocationSum.toLocaleString("de-DE")} %</span>
-          <button type="button" className="btn" onClick={() => setAllocations((rows) => [...rows, { cost_center_id: "", share_percent: rows.length ? "" : "100", recharge_mode: "" }])}>Kostenstelle hinzufügen</button>
-          <button type="submit" className="btn btn-primary" disabled={busy || (allocations.length > 0 && Math.abs(allocationSum - 100) >= 0.001)}>Aufteilung speichern</button>
+          {allocations.length > 0 ? <span className={Math.abs(allocationSum - 100) < 0.001 ? "cw-muted" : "rg-error"}>Summe {allocationSum.toLocaleString("de-DE")} %</span> : null}
+          <button type="button" className="btn" onClick={() => setAllocations((rows) => rows.length
+            ? [...rows, { cost_center_id: "", share_percent: "", recharge_mode: "" }]
+            // Erste Aufteilung: mit der Kostenstelle aus der Organisationszuordnung beginnen, dann weitere ergänzen.
+            : data.primary_cost_center
+              ? [{ cost_center_id: data.primary_cost_center.cost_center_id, share_percent: "100", recharge_mode: "" }, { cost_center_id: "", share_percent: "", recharge_mode: "" }]
+              : [{ cost_center_id: "", share_percent: "100", recharge_mode: "" }])}>{allocations.length || !data.primary_cost_center ? "Kostenstelle hinzufügen" : "Auf mehrere Kostenstellen aufteilen"}</button>
+          {allocations.length > 0 || data.allocations.length > 0 ? <button type="submit" className="btn btn-primary" disabled={busy || (allocations.length > 0 && Math.abs(allocationSum - 100) >= 0.001)}>Aufteilung speichern</button> : null}
         </div>
       </form> : null}
     </section>

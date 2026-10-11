@@ -1,7 +1,7 @@
 """Registriert alle ORM-Modelle (fuer Beziehungs-Aufloesung + Alembic-Autogenerate)."""
 
 from app.database.models.organization import Organization
-from app.database.models.organization_structure import Hospital, Department, CostCenter, ContractDepartment
+from app.database.models.organization_structure import Hospital, Department, CostCenter, ContractDepartment, ContractResponsible
 from app.database.models.account import Account, AccountMembership
 from app.database.models.login_session import LoginSession
 from app.database.models.activity_log import ActivityLog
@@ -70,6 +70,7 @@ __all__ = [
     "Department",
     "CostCenter",
     "ContractDepartment",
+    "ContractResponsible",
     "Account",
     "AccountMembership",
     "LoginSession",

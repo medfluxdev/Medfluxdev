@@ -129,6 +129,29 @@ describe("Finanzdaten", () => {
     ]);
   });
 
+  it("ohne Aufteilung zeigt sie die Kostenstelle aus der Organisationszuordnung (100 %) und teilt von dort aus auf", async () => {
+    const user = userEvent.setup();
+    api.getFinance.mockResolvedValue(finance({ primary_cost_center_id: "cc1", primary_cost_center: { cost_center_id: "cc1", code: "471100", name: "Radiologie", annual_net: "12000" } }));
+    render(<ContractFinancePanel contractId="c-1" orgSlug="test-klinik" />);
+    const section = (await screen.findByRole("heading", { name: "Kostenstellen-Aufteilung" })).closest("section")!;
+    expect(within(section).getByText("471100 – Radiologie")).toBeInTheDocument();
+    expect(within(section).getByText("100 %")).toBeInTheDocument();
+    expect(within(section).getByText("aus der Organisationszuordnung")).toBeInTheDocument();
+    expect(within(section).queryByText(/Summe 0/)).not.toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Auf mehrere Kostenstellen aufteilen" }));
+    const selects = within(section).getAllByLabelText("Kostenstelle");
+    expect(selects).toHaveLength(2);
+    expect(selects[0]).toHaveValue("cc1");
+    expect(within(section).getAllByLabelText("Anteil %")[0]).toHaveValue("100");
+  });
+
+  it("ohne Kostenstelle: Hinweis mit Link zur Organisationszuordnung", async () => {
+    api.getFinance.mockResolvedValue(finance({ primary_cost_center: null }));
+    render(<ContractFinancePanel contractId="c-1" orgSlug="test-klinik" />);
+    const link = await screen.findByRole("link", { name: "In der Organisationszuordnung festlegen" });
+    expect(link).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=ownership");
+  });
+
   it("pflegt Zahlungszeitpunkt und Zahlungserinnerung je Eintrag", async () => {
     const user = userEvent.setup();
     const withTiming = finance();

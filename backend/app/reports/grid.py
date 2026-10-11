@@ -70,6 +70,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("reminder_recipient", "Erinnerung an", "account", groupable=True),
     Column("escalation_recipient", "Eskalation an", "account", groupable=True),
     Column("responsible", "Verantwortlich", "account", groupable=True),
+    Column("further_responsible", "Weitere Verantwortliche", "text"),
     Column("next_deadline", "Nächster Termin", "date"),
     Column("hospital", "Krankenhaus", "enum", groupable=True),
     Column("department", "Abteilung", "enum", groupable=True),
@@ -157,6 +158,8 @@ class GridRow:
     contract_id: uuid.UUID
     values: dict[str, Any]
     ids: dict[str, Optional[uuid.UUID]]
+    # Weitere Personen je Personen-Spalte (für „Ich“): z. B. weitere Verantwortliche.
+    also: dict[str, frozenset] = field(default_factory=dict)
     yearly: dict[int, dict[str, Decimal]] = field(default_factory=dict)
     allocations: list[tuple[str, Decimal]] = field(default_factory=list)
     upcoming: list[tuple[date, str]] = field(default_factory=list)
@@ -228,11 +231,14 @@ def build_rows(
             LookupValue.organization_id == organization_id, LookupValue.field_key == "storage_location"
         )
     ).all())
+    from app.ownership.service import further_responsible_by_contract
+
+    further = further_responsible_by_contract(session, [contract.id for contract in contracts])
     account_ids = {
         value for contract in contracts
         for value in (contract.responsible_account_id, contract.reminder_recipient_account_id, contract.escalation_recipient_account_id)
         if value
-    }
+    } | {value for values in further.values() for value in values}
     accounts = dict(session.execute(select(Account.id, Account.display_name).where(Account.id.in_(account_ids))).all()) if account_ids else {}
 
     department_links: dict[uuid.UUID, list[tuple[Optional[str], uuid.UUID]]] = defaultdict(list)
@@ -323,6 +329,7 @@ def build_rows(
             "reminder_recipient": accounts.get(contract.reminder_recipient_account_id),
             "escalation_recipient": accounts.get(contract.escalation_recipient_account_id),
             "responsible": accounts.get(contract.responsible_account_id),
+            "further_responsible": ", ".join(accounts.get(value) or "–" for value in further.get(contract.id, [])) or None,
             "next_deadline": next_deadline.get(contract.id),
             "hospital": hospitals.get(contract.hospital_id) if contract.hospital_id else None,
             "department": departments.get(department_id) if department_id else None,
@@ -361,6 +368,7 @@ def build_rows(
                 "reminder_recipient": contract.reminder_recipient_account_id,
                 "escalation_recipient": contract.escalation_recipient_account_id,
             },
+            also={"responsible": frozenset(further.get(contract.id, []))},
             allocations=allocations.get(contract.id, []),
         )
         if years is not None:
@@ -401,6 +409,8 @@ SELECT concat_ws('|',
      FROM contract_review r JOIN contract c ON c.id = r.contract_id WHERE c.organization_id = :org),
   (SELECT md5(coalesce(string_agg(contract_id::text || department_id::text || coalesce(relation_role, ''), ',' ORDER BY id), ''))
      FROM contract_department WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(contract_id::text || account_id::text, ',' ORDER BY id), ''))
+     FROM contract_responsible WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM hospital WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM department WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM cost_center WHERE organization_id = :org),
@@ -480,7 +490,7 @@ def _predicate(item: dict, as_of: date, account_id: Optional[uuid.UUID]) -> Call
     if op == "me":
         if column.type != "account":
             raise GridError("„Ich“ gilt nur für Personen-Spalten.")
-        return lambda row: account_id is not None and row.ids.get(key) == account_id
+        return lambda row: account_id is not None and (row.ids.get(key) == account_id or account_id in row.also.get(key, ()))
     if op == "is":
         wanted = bool(value)
         return lambda row: bool(row.values[key]) is wanted

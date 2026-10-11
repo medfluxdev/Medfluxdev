@@ -131,11 +131,13 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
             for cid, number, title in session.execute(stmt.order_by(Contract.register_number)).all()
         ]
 
+    from app.ownership.service import further_responsible_ids
+
+    further = further_responsible_ids(session, contract.id)
+    wanted = [value for value in (contract.responsible_account_id, contract.reminder_recipient_account_id, *further) if value]
     names = dict(session.execute(
-        select(Account.id, Account.display_name).where(Account.id.in_([
-            value for value in (contract.responsible_account_id, contract.reminder_recipient_account_id) if value
-        ]))
-    ).all()) if (contract.responsible_account_id or contract.reminder_recipient_account_id) else {}
+        select(Account.id, Account.display_name).where(Account.id.in_(wanted))
+    ).all()) if wanted else {}
     documents = session.scalar(select(func.count()).select_from(ContractDocument).where(ContractDocument.contract_id == contract.id)) or 0
     open_deadlines = session.scalars(
         select(ContractDeadline).where(ContractDeadline.contract_id == contract.id, ContractDeadline.status == "open")
@@ -213,7 +215,9 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
         "price_adjustment_notes": adjustment_notes,
         "partner": partner_name or contract.supplier,
         "partner_contracts": partner_contracts,
-        "responsible": names.get(contract.responsible_account_id),
+        "responsible": ", ".join(
+            name for name in [names.get(contract.responsible_account_id), *(names.get(value) for value in further)] if name
+        ) or None,
         "reminder_recipient": names.get(contract.reminder_recipient_account_id),
         "documents": documents,
         "review_pending": unreviewed,

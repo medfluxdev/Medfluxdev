@@ -90,6 +90,8 @@ export interface FinanceDto {
   services: ServiceItemDto[];
   allocations: AllocationDto[];
   primary_cost_center_id: string | null;
+  /** Kostenstelle aus der Organisationszuordnung; trägt 100 %, solange es keine Aufteilung gibt. */
+  primary_cost_center?: { cost_center_id: string; code: string; name: string; annual_net: string | null } | null;
   price_adjustment: { kind: string | null; percent: string | null; index_name: string | null; next_date: string | null; interval_months: number | null };
   suggestions: { entries: SuggestionDto[]; services: SuggestionDto[] };
 }

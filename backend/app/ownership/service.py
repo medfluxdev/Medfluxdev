@@ -128,3 +128,51 @@ def assign_equipment_ownership(
 
 def contract_department_ids(session: Session, contract_id: UUID) -> list[UUID]:
     return list(session.scalars(select(ContractDepartment.department_id).where(ContractDepartment.contract_id == contract_id)).all())
+
+
+def further_responsible_ids(session: Session, contract_id: UUID) -> list[UUID]:
+    """Weitere verantwortliche Personen (ohne die Hauptverantwortliche), in Anlagereihenfolge."""
+    from app.database.models import ContractResponsible
+
+    return list(session.scalars(
+        select(ContractResponsible.account_id)
+        .where(ContractResponsible.contract_id == contract_id)
+        .order_by(ContractResponsible.created_at, ContractResponsible.id)
+    ).all())
+
+
+def further_responsible_by_contract(session: Session, contract_ids) -> dict[UUID, list[UUID]]:
+    from app.database.models import ContractResponsible
+
+    out: dict[UUID, list[UUID]] = {}
+    ids = list(contract_ids)
+    if not ids:
+        return out
+    for contract_id, account_id in session.execute(
+        select(ContractResponsible.contract_id, ContractResponsible.account_id)
+        .where(ContractResponsible.contract_id.in_(ids))
+        .order_by(ContractResponsible.created_at, ContractResponsible.id)
+    ).all():
+        out.setdefault(contract_id, []).append(account_id)
+    return out
+
+
+def set_further_responsible(session: Session, *, contract: Contract, account_ids: list[UUID]) -> list[UUID]:
+    """Ersetzt die weiteren Verantwortlichen (ohne Doppelte und ohne die Hauptverantwortliche)."""
+    from app.database.models import ContractResponsible
+
+    wanted: list[UUID] = []
+    for account_id in account_ids:
+        if account_id != contract.responsible_account_id and account_id not in wanted:
+            wanted.append(account_id)
+    current = {row.account_id: row for row in session.scalars(
+        select(ContractResponsible).where(ContractResponsible.contract_id == contract.id)
+    ).all()}
+    for account_id, row in current.items():
+        if account_id not in wanted:
+            session.delete(row)
+    for account_id in wanted:
+        if account_id not in current:
+            session.add(ContractResponsible(organization_id=contract.organization_id, contract_id=contract.id, account_id=account_id))
+    session.flush()
+    return wanted

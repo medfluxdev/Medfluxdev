@@ -69,4 +69,33 @@ describe("Contract360 Organisationszuordnung", () => {
     }));
     expect(screen.getByRole("status")).toHaveTextContent("Organisationszuordnung gespeichert.");
   });
+
+  it("ohne Benutzer: sagt es und verlinkt nicht auf eine leere Auswahl", async () => {
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect(await screen.findByText(/In dieser Organisation gibt es noch keine Benutzer/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Hauptverantwortlich")).toBeDisabled();
+  });
+
+  it("mehrere Verantwortliche: Haupt + weitere hinzufügen, entfernen, speichern; alle Benutzer wählbar", async () => {
+    const user = userEvent.setup();
+    mocks.listOwnershipAssignees.mockResolvedValue({ items: [
+      { id: "u-1", display_name: "Maria Becker", email: "m@x", role: "contract_manager", hospital_id: null, department_id: null },
+      { id: "u-2", display_name: "Jonas Kurz", email: "j@x", role: "viewer", hospital_id: "hospital-1", department_id: "dept-rad" },
+      { id: "u-3", display_name: "Lea Wolf", email: "l@x", role: "viewer", hospital_id: "hospital-1", department_id: "dept-other" },
+    ] });
+    mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: ["dept-rad"], cost_center_id: null, responsible_account_id: "u-1", further_responsible_account_ids: ["u-2"], scope_type: "department" });
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect(await screen.findByLabelText("Hauptverantwortlich")).toHaveValue("u-1");
+    expect(screen.getByRole("list", { name: "Weitere Verantwortliche" })).toHaveTextContent("Jonas Kurz");
+    // Lea gehört zu einer anderen Abteilung – trotzdem wählbar (unter „Weitere Benutzer der Organisation“).
+    const add = screen.getByLabelText("Weitere verantwortliche Person hinzufügen");
+    await user.selectOptions(add, "u-3");
+    expect(screen.getByRole("list", { name: "Weitere Verantwortliche" })).toHaveTextContent("Lea Wolf");
+    await user.click(screen.getByRole("button", { name: "Jonas Kurz entfernen" }));
+    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
+    await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalledWith("klinik", "contract-1", expect.objectContaining({
+      responsible_account_id: "u-1", further_responsible_account_ids: ["u-3"],
+    })));
+  });
 });
+

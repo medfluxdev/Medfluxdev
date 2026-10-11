@@ -41,9 +41,17 @@ def hidden_confidential_ids(session: Session, organization_id: UUID) -> set[UUID
             ContractAccessGrant.contract_id.in_([contract_id for contract_id, _ in rows]),
         )
     ).all())
+    from app.database.models import ContractResponsible
+
+    further = set(session.scalars(
+        select(ContractResponsible.contract_id).where(
+            ContractResponsible.account_id == account_id,
+            ContractResponsible.contract_id.in_([contract_id for contract_id, _ in rows]),
+        )
+    ).all())
     return {
         contract_id for contract_id, responsible in rows
-        if responsible != account_id and contract_id not in granted
+        if responsible != account_id and contract_id not in granted and contract_id not in further
     }
 
 
