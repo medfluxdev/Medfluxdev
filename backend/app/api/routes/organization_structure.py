@@ -35,6 +35,8 @@ class DepartmentCreate(BaseModel):
     name: str
     code: str
     unit_type: str | None = None
+    # Optional: Nummer der Kostenstelle dieser Abteilung (neu anlegen oder bestehende verknüpfen).
+    cost_center_code: str | None = None
 
 
 class DepartmentUpdate(BaseModel):
@@ -43,6 +45,33 @@ class DepartmentUpdate(BaseModel):
     code: str | None = None
     unit_type: str | None = None
     is_active: bool | None = None
+    # Leer = Verknüpfung zur bisherigen Kostenstelle lösen (die Kostenstelle selbst bleibt).
+    cost_center_code: str | None = None
+
+
+def _attach_cost_center(session, *, organization_id: UUID, department: "Department", code: str | None) -> dict | None:
+    """Kostenstelle zur Abteilung: bestehende Nummer verknüpfen (gleiches Krankenhaus, noch frei) oder neu anlegen.
+
+    Leere Nummer: nichts tun. Eine Nummer, die schon einer anderen Abteilung gehört, wird abgelehnt.
+    """
+    value = (code or "").strip()
+    if not value:
+        return None
+    center = session.scalars(select(CostCenter).where(CostCenter.organization_id == organization_id, CostCenter.code == value)).first()
+    if center is None:
+        center = CostCenter(organization_id=organization_id, hospital_id=department.hospital_id, department_id=department.id,
+                            code=value, name=department.name, is_active=True)
+        session.add(center)
+        session.flush()
+        return {"id": str(center.id), "code": center.code, "created": True}
+    if center.hospital_id != department.hospital_id:
+        raise HTTPException(status_code=422, detail=f"Kostenstelle {value} gehört zu einem anderen Krankenhaus.")
+    if center.department_id is not None and center.department_id != department.id:
+        owner = session.get(Department, center.department_id)
+        raise HTTPException(status_code=409, detail=f"Kostenstelle {value} ist bereits der Abteilung „{owner.name if owner else 'unbekannt'}“ zugeordnet.")
+    center.department_id = department.id
+    center.is_active = True
+    return {"id": str(center.id), "code": center.code, "created": False}
 
 
 def _normalize_unit_type(value: str | None) -> str | None:
@@ -217,9 +246,10 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=name, code=code, unit_type=_normalize_unit_type(payload.unit_type), is_active=True)
         session.add(row)
         session.flush()
-        _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "unit_type": row.unit_type})
+        center = _attach_cost_center(session, organization_id=organization.id, department=row, code=payload.cost_center_code)
+        _record_activity(session, actor, event_name="department.created", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "unit_type": row.unit_type, "cost_center": center})
         session.commit()
-        return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "unit_type": row.unit_type}
+        return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "unit_type": row.unit_type, "cost_center": center}
     finally:
         session.close()
 
@@ -285,6 +315,14 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
                     ),
                 )
         if payload.is_active is not None: row.is_active = payload.is_active
+        center = None
+        if "cost_center_code" in payload.model_fields_set:
+            wanted = (payload.cost_center_code or "").strip()
+            linked = session.scalars(select(CostCenter).where(CostCenter.department_id == row.id)).all()
+            # Genau eine bisherige Kostenstelle wird durch die neue ersetzt (Verknüpfung gelöst, Kostenstelle bleibt).
+            if len(linked) == 1 and linked[0].code != wanted:
+                linked[0].department_id = None
+            center = _attach_cost_center(session, organization_id=organization.id, department=row, code=wanted)
         _record_activity(session, actor, event_name="department.updated", object_type="department", object_id=row.id, hospital_id=row.hospital_id, department_id=row.id, context_data={"name": row.name, "code": row.code, "is_active": row.is_active})
         session.commit()
         return {"id": str(row.id), "hospital_id": str(row.hospital_id), "name": row.name, "code": row.code, "unit_type": row.unit_type, "is_active": row.is_active}

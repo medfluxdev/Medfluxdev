@@ -301,7 +301,7 @@ describe("Organisation", () => {
     await user.selectOptions(within(drawer).getByLabelText("Einheitentyp"), "funktionsbereich");
     await user.click(within(drawer).getByRole("button", { name: "Anlegen" }));
     await waitFor(() => expect(organizations.createDepartment).toHaveBeenCalledWith("test-klinik", {
-      hospital_id: "h-1", parent_id: "d-1", name: "Herzkatheterlabor", code: "HKL", unit_type: "funktionsbereich",
+      hospital_id: "h-1", parent_id: "d-1", name: "Herzkatheterlabor", code: "HKL", unit_type: "funktionsbereich", cost_center_code: null,
     }));
   });
 

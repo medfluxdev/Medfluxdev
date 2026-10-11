@@ -102,6 +102,15 @@ export function departmentParentOptions(context: OrganizationContext, hospitalId
     .sort((a, b) => a.label.localeCompare(b.label, "de"));
 }
 
+// Aktive Kostenstellen einer Abteilung (Liste) bzw. die erste (Formular).
+function departmentCenterCodes(context: OrganizationContext, departmentId: string): string {
+  return context.costCenters.filter((item) => item.department_id === departmentId && item.is_active).map((item) => item.code).join(", ");
+}
+
+function firstCenterCode(context: OrganizationContext, departmentId: string): string {
+  return context.costCenters.find((item) => item.department_id === departmentId && item.is_active)?.code ?? "";
+}
+
 export const departmentDefinition: EntityDefinition<DepartmentDto, OrganizationContext> = {
   kind: "department",
   singular: "Abteilung",
@@ -125,7 +134,7 @@ export const departmentDefinition: EntityDefinition<DepartmentDto, OrganizationC
     } },
     { key: "type", label: "Typ", sortValue: (row) => row.unit_type ?? "", render: (row) => (row.unit_type ? DEPARTMENT_UNIT_TYPE_LABELS[row.unit_type] : "–") },
     { key: "hospital", label: "Krankenhaus", sortValue: (row) => hospitalName(context, row.hospital_id), render: (row) => hospitalName(context, row.hospital_id) },
-    { key: "centers", label: "Kostenstellen", numeric: true, render: (row) => context.costCenters.filter((item) => item.department_id === row.id && item.is_active).length },
+    { key: "centers", label: "Kostenstelle", sortValue: (row) => departmentCenterCodes(context, row.id), render: (row) => departmentCenterCodes(context, row.id) || "–" },
   ],
   fields: (context, form, row) => [
     { key: "hospital_id", label: "Krankenhaus", kind: "select", required: true, createOnly: true, options: hospitalOptions(context, row?.hospital_id) },
@@ -137,21 +146,27 @@ export const departmentDefinition: EntityDefinition<DepartmentDto, OrganizationC
     { key: "name", label: "Name", required: true, maxLength: 255 },
     { key: "code", label: "Kürzel", required: true, maxLength: 40, hint: "Eindeutig im Krankenhaus." },
     { key: "unit_type", label: "Einheitentyp", kind: "select", emptyOption: "Nicht festgelegt", options: UNIT_TYPE_OPTIONS },
+    {
+      key: "cost_center_code", label: "Kostenstelle (optional)", maxLength: 80,
+      hint: "Nummer eintragen: neue Nummern werden als Kostenstelle dieser Abteilung angelegt, eine freie bestehende wird verknüpft. In der Vertragszuordnung füllen sich Abteilung und Kostenstelle dann gegenseitig.",
+    },
   ],
-  emptyForm: (context, preset) => ({ hospital_id: defaultHospital(context), parent_id: "", name: "", code: "", unit_type: "", ...preset }),
-  toForm: (row) => ({ hospital_id: row.hospital_id, parent_id: row.parent_id ?? "", name: row.name, code: row.code, unit_type: row.unit_type ?? "" }),
+  emptyForm: (context, preset) => ({ hospital_id: defaultHospital(context), parent_id: "", name: "", code: "", unit_type: "", cost_center_code: "", ...preset }),
+  toForm: (row, context) => ({ hospital_id: row.hospital_id, parent_id: row.parent_id ?? "", name: row.name, code: row.code, unit_type: row.unit_type ?? "", cost_center_code: firstCenterCode(context, row.id) }),
   create: (organizationSlug, form) => createDepartment(organizationSlug, {
     hospital_id: text(form, "hospital_id"),
     parent_id: optional(form, "parent_id"),
     name: text(form, "name"),
     code: text(form, "code"),
     unit_type: (optional(form, "unit_type") as DepartmentUnitType | null),
+    cost_center_code: optional(form, "cost_center_code"),
   }),
   update: (organizationSlug, row, form) => updateDepartment(organizationSlug, row.id, {
     ...(optional(form, "parent_id") !== (row.parent_id ?? null) ? { parent_id: optional(form, "parent_id") } : {}),
     name: text(form, "name"),
     code: text(form, "code"),
     unit_type: (optional(form, "unit_type") as DepartmentUnitType | null),
+    cost_center_code: text(form, "cost_center_code"),
   }),
   setActive: (organizationSlug, row, active) => updateDepartment(organizationSlug, row.id, { is_active: active }),
   registerFilter: (row) => ({ column: "department", value: row.name }),

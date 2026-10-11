@@ -5560,3 +5560,9 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Nicht umgesetzt / offen:** Prüfung unter Farbsehschwäche-Simulation und Dark Mode nur über die bestehenden axe-Durchläufe (hell/dunkel/forced-colors), keine manuelle DevTools-Simulation.
 - **Verifikation:** pytest 1662 / 3 übersprungen; `npm run verify` grün (66 Testdateien, neu `contract-term-bar`, `open-points`); Playwright 187/187 inkl. neuer Referenz „vertragsakte“ (Desktop/Telefon) und Layout 1920/1366/1000/390.
 
+### Nachtrag 2026-10-11 – Kostenstelle direkt an der Abteilung
+
+- **Abteilung anlegen/bearbeiten:** optionales Feld „Kostenstelle“. Neue Nummer → Kostenstelle für diese Abteilung angelegt (Name = Abteilung); bestehende freie Nummer desselben Krankenhauses → verknüpft; Nummer einer anderen Abteilung → 409 mit deren Namen. Beim Bearbeiten ersetzt eine neue Nummer die bisherige Verknüpfung, leer löst sie (die Kostenstelle bleibt). Liste zeigt die Kostenstellen-Nummer(n).
+- **Organisationszuordnung:** Abteilung wählen setzt ihre Kostenstelle, Kostenstelle wählen setzt ihre Abteilung; alle Kostenstellen des Krankenhauses wählbar (passende zuerst).
+- **Tests:** neu `backend/tests/test_department_cost_center.py`; `contract-ownership-roles.test.tsx` (+1), `master-data.test.tsx` angepasst. Verifikation: pytest 1663 / 3 übersprungen; `npm run verify` grün; Playwright 187/187.
+

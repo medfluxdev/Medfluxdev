@@ -83,8 +83,10 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     () => new Set([responsibleDepartmentId, ...beneficiaryDepartmentIds].filter(Boolean)),
     [responsibleDepartmentId, beneficiaryDepartmentIds],
   );
-  const visibleCenters = useMemo(() => centers.filter((item) =>
-    item.hospital_id === hospitalId && (!item.department_id || selectedDepartments.has(item.department_id))),
+  // Alle Kostenstellen des Krankenhauses (passende zuerst); die Wahl einer Kostenstelle setzt ihre Abteilung.
+  const visibleCenters = useMemo(() => centers
+    .filter((item) => item.hospital_id === hospitalId)
+    .sort((a, b) => Number(Boolean(b.department_id && selectedDepartments.has(b.department_id))) - Number(Boolean(a.department_id && selectedDepartments.has(a.department_id)))),
   [centers, hospitalId, selectedDepartments]);
   const visibleAssignees = useMemo(() => assignees.filter((item) =>
     (!item.hospital_id || item.hospital_id === hospitalId) &&
@@ -166,10 +168,20 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         const next = event.target.value;
         setResponsibleDepartmentId(next);
         setBeneficiaryDepartmentIds((current) => current.filter((id) => id !== next));
-        setCenterId("");
+        // Kostenstelle der Abteilung automatisch übernehmen (falls hinterlegt).
+        setCenterId(centers.find((item) => item.department_id === next && item.hospital_id === hospitalId)?.id ?? "");
       }}><option value="">Bitte auswählen</option>{visibleDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select></label>
       <div className="cw-ownership-field"><span>Nutzende Abteilungen</span><div className="cw-ownership-checks">{visibleDepartments.filter((item) => item.id !== responsibleDepartmentId).map((item) => <label key={item.id} className="cw-ownership-check"><input type="checkbox" checked={beneficiaryDepartmentIds.includes(item.id)} onChange={() => toggleBeneficiary(item.id)} /><span>{departmentFullPath(item, departments)}</span></label>)}{hospitalId && visibleDepartments.length === 0 ? <small>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</small> : null}</div></div>
-      <label><span>Kostenstelle</span><select value={centerId} onChange={(event) => setCenterId(event.target.value)} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{visibleCenters.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</select></label>
+      <label><span>Kostenstelle</span><select value={centerId} onChange={(event) => {
+        const next = event.target.value;
+        setCenterId(next);
+        // Abteilung der Kostenstelle automatisch übernehmen (falls verknüpft).
+        const owner = centers.find((item) => item.id === next)?.department_id;
+        if (owner) {
+          setResponsibleDepartmentId(owner);
+          setBeneficiaryDepartmentIds((current) => current.filter((id) => id !== owner));
+        }
+      }} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{visibleCenters.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</select></label>
       <div className="cw-ownership-field cw-ownership-people">
         <label><span>Hauptverantwortlich</span><select value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((current) => current.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select></label>
         <div className="cw-ownership-field"><span id="cw-further-label">Weitere Verantwortliche</span>

@@ -80,14 +80,14 @@ export function updateHospital(organizationSlug: string, hospitalId: string, pay
   );
 }
 
-export function createDepartment(organizationSlug: string, payload: { hospital_id: string; parent_id?: string | null; name: string; code: string; unit_type?: DepartmentUnitType | null }) {
+export function createDepartment(organizationSlug: string, payload: { hospital_id: string; parent_id?: string | null; name: string; code: string; unit_type?: DepartmentUnitType | null; cost_center_code?: string | null }) {
   return apiPost<Pick<DepartmentDto, "id" | "hospital_id" | "name" | "code">>(
     `/api/organization-structure/departments?${orgQuery(organizationSlug)}`,
     payload,
   );
 }
 
-export function updateDepartment(organizationSlug: string, departmentId: string, payload: Partial<Pick<DepartmentDto, "parent_id" | "name" | "code" | "unit_type" | "is_active">>) {
+export function updateDepartment(organizationSlug: string, departmentId: string, payload: Partial<Pick<DepartmentDto, "parent_id" | "name" | "code" | "unit_type" | "is_active">> & { cost_center_code?: string | null }) {
   return apiPatch<DepartmentDto>(
     `/api/organization-structure/departments/${encodeURIComponent(departmentId)}?${orgQuery(organizationSlug)}`,
     payload,

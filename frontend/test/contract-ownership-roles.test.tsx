@@ -97,5 +97,21 @@ describe("Contract360 Organisationszuordnung", () => {
       responsible_account_id: "u-1", further_responsible_account_ids: ["u-3"],
     })));
   });
+
+  it("Abteilung wählen füllt ihre Kostenstelle, Kostenstelle wählen füllt ihre Abteilung", async () => {
+    const user = userEvent.setup();
+    mocks.listCostCenters.mockResolvedValue({ items: [
+      { id: "cc-rad", hospital_id: "hospital-1", department_id: "dept-rad", code: "4400", name: "Radiologie", is_active: true },
+      { id: "cc-icu", hospital_id: "hospital-1", department_id: "dept-icu", code: "4500", name: "Intensiv", is_active: true },
+    ] });
+    mocks.getContractDepartmentRoles.mockResolvedValue({ contract_id: "contract-1", responsible_department_id: null, beneficiary_department_ids: [], unclassified_department_ids: [] });
+    mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: [], cost_center_id: null, responsible_account_id: null, scope_type: "hospital" });
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    const department = await screen.findByLabelText("Verantwortliche Abteilung");
+    await user.selectOptions(department, "dept-rad");
+    expect(screen.getByLabelText("Kostenstelle")).toHaveValue("cc-rad");
+    await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-icu");
+    expect(department).toHaveValue("dept-icu");
+  });
 });
 
