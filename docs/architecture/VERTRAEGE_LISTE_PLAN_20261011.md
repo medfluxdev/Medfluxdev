@@ -1,7 +1,7 @@
 # صفحة «Verträge» – الخطة النهائية (مراجَعة مقابل الكود)
 
 **التاريخ:** 2026-10-11 · **الأساس:** `Medflux-Vertraege-Claude-Code-Plan.md` (مبنية على صورة فقط) · **المرجع:** الفرع `feature/developer-hub-import-wizard` @ `74ea4c5`
-**الحالة:** قيد التنفيذ على `feature/register-list-toolbar` – P0 ✅
+**الحالة:** منفَّذة على `feature/register-list-toolbar` (2026-10-11): P0 ✅ · P1–P4 ✅ (في commit واحد، لأن التقسيم والشريط الجديد يمسّان الأسطر نفسها) · P5 ✅ – التفاصيل في `docs/PROJECT_PROGRESS.md`
 
 ---
 

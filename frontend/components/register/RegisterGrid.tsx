@@ -358,6 +358,15 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
           </div>}
         </Popover>
       </div>}
+    </div>
+
+    {/* Schnellfilter links, Filter-/Darstellungs-/Export-Aktionen rechts – eine Zeile auf breiten Bildschirmen. */}
+    <div className="reg-row">
+      <div className="reg-quick" role="group" aria-label="Schnellfilter">
+        <StatusFilter column={columnByKey.get("business_status")} spec={spec} onFilters={setFilters} />
+        <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("partner")} spec={spec} onFilters={setFilters} />
+        <AreaFilter tree={data?.tree ?? []} spec={spec} onFilters={setFilters} />
+      </div>
       <div className="reg-bar-actions">
         <button type="button" className={`btn${extra ? " popover-trigger--active" : ""}`} aria-haspopup="dialog" onClick={() => setMoreOpen(true)}>
           Weitere Filter{extra ? ` (${extra})` : ""}
@@ -372,12 +381,6 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
         />
         {canExport ? <button type="button" className="btn" onClick={() => void exportXlsx()}>Excel exportieren</button> : null}
       </div>
-    </div>
-
-    <div className="reg-quick" role="group" aria-label="Schnellfilter">
-      <StatusFilter column={columnByKey.get("business_status")} spec={spec} onFilters={setFilters} />
-      <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("partner")} spec={spec} onFilters={setFilters} />
-      <AreaFilter tree={data?.tree ?? []} spec={spec} onFilters={setFilters} />
     </div>
 
     {spec.filters.length > 0 || narrowed ? <ul className="reg-chips" aria-label="Aktive Filter">

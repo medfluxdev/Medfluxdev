@@ -5429,3 +5429,21 @@ Branch `feature/developer-hub-import-wizard` (auf `feature/finance-reminders-rev
 
 **Migration:** `p7e9f1a23008` (additiv). **Tests:** `test_import_wizard.py`, `test_analytics_drilldown.py`, Vitest `import`, `portfolio-drilldown`. Gesamtläufe im Commit.
 **Offen:** Betrag einer Vorauszahlung, Extraktions-Benchmark (WP2.4).
+
+### Nachtrag 2026-10-11 – Vertragsliste: eine Werkzeugleiste, Schnellfilter, gelöschte Verträge nur mit Recht
+
+Branch `feature/register-list-toolbar` (auf `feature/developer-hub-import-wizard`). Plan (gegen den Code geprüft, mit Entscheidungen des Owners): `docs/architecture/VERTRAEGE_LISTE_PLAN_20261011.md`.
+
+- **Gelöschte Verträge** (`business_status = geloescht`) nur noch für Administration und Vertragsmanagement: neues Recht `contract.view_deleted`; Raster, Werte, Baum und Export blenden sie für andere Rollen serverseitig aus – gleich ob über die Option, einen Statusfilter, eine alte Ansicht oder einen Link. Die Standardansicht „Gelöschte Verträge“ und der Statuswert „Gelöscht“ werden ihnen nicht angeboten. Vorher sahen alle Lesenden sie.
+- **Werkzeugleiste:** Suche, Ansicht (mit „Ansicht verwalten“), „Weitere Filter (n)“ als Seitenleiste, „Darstellung“ (Spalten, Gruppierung, „Standardspalten“), Excel-Export. Der Baum Krankenhaus → Abteilung neben der Liste ist ersetzt durch den Schnellfilter „Abteilung“ (gleiche Zahlen, inkl. „ohne“); dazu Schnellfilter Status und Vertragspartner.
+- **Ein Filterzustand:** Schnellfilter, Seitenleiste und Chips schreiben dieselben `GridSpec.filters`; die Zahl an „Weitere Filter“ zählt nichts doppelt. „Alle zurücksetzen“ behält Ansicht, Reiter, Bereich und Darstellung. Jede Änderung springt auf Seite 1. Spalten und „Gelöschte einbeziehen“ stehen jetzt auch in der Adresse. Krankenhaus-/Abteilungsfilter, die es im gewählten Bereich nicht gibt (z. B. nach einem Bereichswechsel), werden mit Hinweis entfernt.
+- **Weitere Filter:** Ich verantwortlich, kündbar in 30 Tagen, Kosten unbekannt, fehlende Angaben (Krankenhaus, Abteilung, Partner, verantwortliche Person), Vertragstyp, Kostenbereich, jede andere Bedingung über den bisherigen Filter-Editor. Unbefristete Verträge gelten nicht als unvollständig.
+- **Seitenkopf:** Titel und „Vertrag hinzufügen“ in einer Zeile (nur Vertragsliste, `className="reg-header"`); Schnellfilter links und Aktionen rechts in einer Zeile.
+- **Tabelle:** Nr. und Kurzbeschreibung als eine Spalte „Vertrag“ (beide sortierbar, Suche unverändert), ohne Beschreibung „Vertrag <Nr.>“; Ergebniszeile mit Anzahl und Summen (`CoverageValue`) über der Tabelle; Standardspalten: Vertrag, Vertragspartner, Vertragstyp, Status, Kündbar bis, Jährliche Kosten („Mögliches Ende“ unter Darstellung). Gespeicherte Ansichten behalten ihre Spalten.
+- Neuer Baustein `components/ui/Popover.tsx`.
+- Nebenbei: Kontrollkästchen in Stammdaten-Formularen überlappten das Nachbarfeld (`master-data.css`).
+
+**Keine Migration.** **Tests:** neu `backend/tests/test_register_deleted_visibility.py`, `frontend/test/register-filters.test.tsx`; angepasst `test_register_grid.py`, `register-grid.test.tsx`, Playwright-Journeys/-Helfer; neuer Layout-Test „erste Zeile ohne Scrollen“ bei 1366×768 und 1920×1080.
+**Verifikation:** Backend pytest komplett (Docker-Postgres) 1628 bestanden, 3 übersprungen, 0 Fehler; `npm run verify` grün (55 Testdateien); Playwright 176/176 (Wegwerf-DB, inkl. axe hell/dunkel/forced-colors, Layout 1440/900/390 und neu 1366×768/1920×1080); Bildreferenzen `vertragsliste` und `rollen` (neue Zeile „Gelöschte Verträge ansehen“) bewusst aktualisiert. Journey 9 (Benutzerimport) schlug in einem Lauf an „target-size“ fehl, weil die feste Kopfzeile den Knopf „Vorlage herunterladen“ verdeckt; am Ausgangsstand `74ea4c5` identisch reproduziert, also nicht durch diese Änderung, und im nächsten Lauf grün (wackelig).
+**Offen:** Partnerfilter arbeitet weiter mit dem Namen statt der Kennung; Abteilungsnamen sind krankenhausübergreifend nicht eindeutig (die Auswahl setzt deshalb immer das Krankenhaus mit). Gelöschte Verträge sind außerhalb der Liste (z. B. direkter Link auf die Vertragsakte) nicht zusätzlich gesperrt.
+

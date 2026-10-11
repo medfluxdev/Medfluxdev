@@ -71,6 +71,7 @@ export default function RegisterPage() {
     <div className="page">
       <PageHeader
         title="Verträge"
+        className="reg-header"
         description={current.description}
         actions={organizationSlug ? <AddContractMenu /> : undefined}
       />

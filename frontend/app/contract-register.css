@@ -82,6 +82,13 @@
 .reg-view select{min-height: var(--control-height-md);max-width: 260px}
 .reg-bar-actions{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2)}
 .reg-quick{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2)}
+.reg-row{display: flex;flex-wrap: wrap;align-items: center;justify-content: space-between;gap: var(--space-2) var(--space-3)}
+.reg-row .reg-bar-actions{margin-left: auto}
+/* Seitenkopf der Vertragsliste: Titel links, „Vertrag hinzufügen“ rechts in derselben Zeile */
+.reg-header{display: grid;grid-template-columns: minmax(0,1fr) auto;column-gap: var(--space-4);align-items: start}
+.reg-header h1,.reg-header .page-sub{grid-column: 1}
+.reg-header .page-actions{grid-column: 2;grid-row: 1 / span 2;margin: 0}
+@media (max-width:700px){.reg-header{grid-template-columns: minmax(0,1fr)}.reg-header .page-actions{grid-column: 1;grid-row: auto}}
 .reg-menu{display: grid;gap: var(--space-1)}
 .reg-menu .btn{justify-content: flex-start}
 .reg-checklist{display: grid;gap: var(--space-2);margin: 0;padding: 0;border: 0;min-width: 220px}
@@ -123,7 +130,8 @@
 .reg-table .reg-contract{white-space: normal;min-width: 220px;max-width: 420px}
 .reg-contract a{font-weight: var(--weight-semibold)}
 .reg-sub{display: flex;flex-wrap: wrap;gap: var(--space-2);margin-top: 2px;color: var(--color-text-muted);font-size: var(--text-caption);font-variant-numeric: tabular-nums}
-.reg-sub .reg-preview{font-size: var(--text-caption)}
+.reg-sub .reg-preview{display: inline-flex;align-items: center;min-height: 24px;padding: 0 var(--space-1);font-size: var(--text-caption)}
+.reg-contract .reg-sort{min-width: 24px;min-height: 24px}
 .reg-sort-divider{margin: 0 var(--space-1);color: var(--color-text-subtle)}
 .reg-sort-sub{font-weight: var(--weight-regular)}
 .reg-table th.num{text-align: right}

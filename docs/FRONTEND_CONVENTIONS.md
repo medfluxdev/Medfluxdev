@@ -42,6 +42,7 @@ Vor jedem neuen UI-Element in `components/ui/` nachsehen:
 | Leer | `EmptyState` mit Titel und nächstem Schritt; in Übersichtskarten „nichts zu tun“ als `variant="calm"` (graue Zeile, kein Grün, ohne gestrichelten Rahmen) |
 | Bestätigung, Unterbrechung | `Dialog` (Fokusfalle, Esc, Rückgabe des Fokus) |
 | Vorschau, Details ohne Seitenwechsel | `Drawer` |
+| Auswahl unter einem Knopf (Filterwerte, Darstellung, kleines Menü) | `Popover`: nicht modal, Esc schließt und gibt den Fokus an den Knopf zurück, Klick daneben schließt; `active` hebt den Knopf bei aktiver Auswahl hervor |
 | Reiter | `Tabs` + `TabPanel` (Pfeiltasten, `aria-controls`) |
 | Kennzahl mit Ziel | `KpiTile`: mit `href` ist die ganze Kachel ein Link; die Kachel ist immer neutral; Aufmerksamkeit nur über `signal={{ tone, label }}`; `icon` = graues Liniensymbol vor der Beschriftung |
 | Einfache sortierbare Tabelle | `DataTable` |
