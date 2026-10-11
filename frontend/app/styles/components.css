@@ -661,15 +661,6 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 }
 
 /* ---------- Vertragsseite: KI-Übernahme und Vertragsregeln ---------- */
-.ai-fill { border-color: var(--color-ai-bg); background: var(--color-ai-bg); }
-.ai-fill-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-.ai-fill-icon { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-ai); font-weight: var(--weight-bold); }
-.ai-fill-text { flex: 1 1 240px; min-width: 0; }
-.ai-fill-text h2 { margin: 0; font-size: var(--text-body); font-weight: var(--weight-semibold); color: var(--color-ai); }
-.ai-fill-text p { margin: var(--space-1) 0 0; font-size: var(--text-small); color: var(--color-text-muted); }
-.ai-fill-details { margin-top: var(--space-2); font-size: var(--text-small); }
-.ai-fill-details summary { cursor: pointer; color: var(--color-text-muted); }
-.ai-fill-details ul { margin: var(--space-2) 0 0; padding-left: var(--space-5); columns: 2 220px; }
 .rules-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .rules-list li { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--color-border-subtle); }
 .rules-list li:first-child { border-top: 0; }
@@ -825,3 +816,12 @@ body { background: var(--color-bg); }
 @media (max-width: 900px) { .md-supplier { grid-template-columns: minmax(0, 1fr); } }
 /* Reiterinhalt darf breite Tabellen nicht über die Seite schieben (Tabellen scrollen in ihrem Rahmen) */
 .tab-panel { min-width: 0; max-width: 100%; }
+
+/* KI-Prüfung im Kopf der Vertragsakte (auf jedem Reiter) */
+.ai-review .popover-trigger { border-color: var(--color-ai-border); background: var(--color-ai-bg); color: var(--color-ai); font-weight: var(--weight-semibold); }
+.ai-review-panel { display: grid; gap: var(--space-3); min-width: min(360px, calc(100vw - 2 * var(--space-4))); }
+.ai-review-title { margin: 0; font-weight: var(--weight-semibold); color: var(--color-ai); }
+.ai-review-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.ai-review-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.ai-review-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+

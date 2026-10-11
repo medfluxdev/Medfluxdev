@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import FloatingAssistant from "@/components/assistant/FloatingAssistant";
-import AiFillSummary from "@/components/contracts/detail/AiFillSummary";
 import ContractRulesSection from "@/components/contracts/detail/ContractRulesSection";
 import { ruleDefinition } from "@/components/master-data/definitions/rules";
 import EntityManager from "@/components/master-data/EntityManager";
@@ -111,23 +110,6 @@ describe("Vertragsseite", () => {
     rules.getContractRules.mockResolvedValue({ status: null, items: [] });
     render(<ContractRulesSection organizationSlug="test-klinik" contractId="c-1" />);
     expect(await screen.findByRole("link", { name: "Regeln festlegen" })).toHaveAttribute("href", "/stammdaten/vertragsregeln");
-  });
-
-  it("fasst zusammen, was die KI übernommen hat, und führt zur Prüfung", async () => {
-    const field = (label: string, origin: RegisterField["origin"]): RegisterField => ({
-      value: "x", label, group: "identity", display: null, origin, source_field: null, extraction_id: null,
-      ai_proposed_value: null, confirmed_by_name: null, confirmed_at: null, updated_by_name: null, updated_at: null,
-    });
-    const register = {
-      has_ai_analysis: true, review_pending: true,
-      fields: { a: field("Kurzbeschreibung", "ai"), b: field("Vertragsbeginn", "ai"), c: field("Kündigungsfrist", "ai_confirmed"), d: field("Interne Nummer", "manual") },
-    } as unknown as ContractRegister;
-    const { container } = render(<AiFillSummary register={register} contractId="c-1" />);
-    expect(screen.getByRole("heading", { name: "KI hat 3 Angaben aus dem Dokument übernommen" })).toBeInTheDocument();
-    expect(screen.getByText("2 noch nicht bestätigt · 1 bestätigt")).toBeInTheDocument();
-    expect(screen.getByText("Prüfung offen")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Jetzt prüfen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=review");
-    expect(await axe(container)).toHaveNoViolations();
   });
 
   it("bietet im Assistenten häufige Fragen zum Vertrag an und stellt sie per Klick", async () => {

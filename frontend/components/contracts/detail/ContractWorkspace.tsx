@@ -45,6 +45,7 @@ import ContractGaps, { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
 import SourceCapture from "./SourceCapture";
+import AiReviewButton from "./AiReviewButton";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
@@ -480,7 +481,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <div className="object-header-meta">
             {data.business_status ? <button type="button" className={`badge badge-button ${BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? ""}`} onClick={() => setRoute("register")} title="Status in den Stammdaten ändern">{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}
             {data.supplier ? <span className="object-header-partner">{data.supplier}</span> : null}
-            {data.review.requires_manual_review ? <button type="button" className="badge-button signal-button" onClick={() => setRoute("documents", "review")}><Signal tone="ai">KI-Prüfung offen</Signal></button> : null}
+            <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={data.review.requires_manual_review} canEdit={canEditData} version={data} />
             {data.risk_level === "high" || data.risk_level === "medium" ? <Signal tone="warning">Risiko {riskLabel(data.risk_level).toLowerCase()}</Signal> : null}
           </div>
         </div>

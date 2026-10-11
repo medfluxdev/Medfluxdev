@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { loadAllPartners } from "@/components/master-data/definitions/partners";
 import { QuickCreatePartner } from "@/components/master-data/lazy";
-import AiFillSummary from "./AiFillSummary";
+import { REGISTER_CHANGED_EVENT } from "./AiReviewButton";
 import ContractRulesSection from "./ContractRulesSection";
 import type { FormValues } from "@/components/master-data/types";
 import MissingList from "@/components/ui/MissingList";
@@ -239,6 +239,12 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   }, [contractId, orgSlug]);
 
   useEffect(() => { void load(); }, [load]);
+  // Bestätigung über die KI-Prüfung im Kopf der Akte: hier nachladen.
+  useEffect(() => {
+    const reload = () => { void load(); };
+    window.addEventListener(REGISTER_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(REGISTER_CHANGED_EVENT, reload);
+  }, [load]);
 
   useEffect(() => {
     let cancelled = false;
@@ -575,7 +581,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       </form> : null}
     </section>
 
-    <AiFillSummary register={register} contractId={contractId} onSelectField={jumpTo} />
     <ContractRulesSection organizationSlug={orgSlug} contractId={contractId} version={register} />
 
     <section className="cw-section" aria-labelledby="rg-terms-heading">

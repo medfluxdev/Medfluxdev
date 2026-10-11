@@ -5521,3 +5521,9 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Verifikation:** pytest 1652 bestanden / 3 übersprungen; `npm run verify` grün (61 Testdateien); Playwright 181/181.
 - **Plan abgeschlossen** (alle vier Phasen). Offen: Verträge ohne bisherige KI-Analyse (manuell erfasst) können noch keine *KI*-Neuerfassung starten – „Angabe aus dem Text übernehmen“ braucht dort ebenfalls gelesenen Text, der erst mit einer Analyse entsteht; Vergleich auf dem lokalen Extraktions-Benchmark steht aus (KI-Läufe nur auf Anfrage).
 
+### Nachtrag 2026-10-11 – KI-Prüfung in den Kopf der Vertragsakte
+
+- Die Karte „KI hat N Angaben aus dem Dokument übernommen“ stand nur im Reiter „Vertragsdaten“. Jetzt ein Knopf im Kopf der Akte, auf jedem Reiter sichtbar: **„✦ KI-Werte prüfen · 3“** (ersetzt die Plakette „KI-Prüfung offen“). Er öffnet eine Liste der noch nicht bestätigten KI-Werte mit „Bestätigen“ je Feld, „Alle bestätigen“ und „Im Dokument prüfen“; jeder Name führt zum Feld. Ohne Bearbeitungsrecht nur ansehen; ohne offene Werte, aber mit offener Dokumentprüfung: „KI-Prüfung offen“; sonst kein Knopf. `components/contracts/detail/AiReviewButton.tsx`; `AiFillSummary.tsx` entfernt.
+- **Behoben:** Die Karte zählte Zeiträume doppelt (Anzahl + Einheit), z. B. „4 noch nicht bestätigt“ bei 3 Feldern.
+- **Tests:** neu `frontend/test/ai-review.test.tsx` (5, axe); alter Kartentest entfernt. Verifikation: `npm run verify` grün (62 Testdateien), Playwright 181/181.
+
