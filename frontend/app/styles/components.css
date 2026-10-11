@@ -963,3 +963,19 @@ body { background: var(--color-bg); }
 
 .ai-review-link { text-decoration: none; }
 .box-toggle svg, .collapsible-toggle svg { width: 18px; height: 18px; }
+.box-toggle path, .collapsible-toggle path { stroke-width: 2.2; }
+.box-toggle, .collapsible-toggle { color: var(--color-text-muted); }
+.box-toggle:hover, .collapsible-toggle:hover { color: var(--color-text); }
+/* Gerätearten am Vertrag (Verknüpfungen → Geräte). */
+.device-types { display: grid; gap: var(--space-3); }
+.device-type-list, .device-type-suggestions { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.device-type-list li { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2) var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border); }
+.device-type-name { display: grid; min-width: 10rem; flex: 1 1 10rem; }
+.device-type-name small { color: var(--color-text-muted); font-size: var(--text-small); }
+.device-type-qty, .device-type-note { display: grid; gap: var(--space-1); font-size: var(--text-small); color: var(--color-text-muted); }
+.device-type-qty input { width: 7rem; }
+.device-type-note { flex: 2 1 12rem; }
+.device-type-suggestions li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.device-type-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.device-type-save { display: inline-flex; gap: var(--space-2); margin-left: auto; }
+.device-found-heading { margin: var(--space-5) 0 var(--space-2); font-size: var(--text-body); font-weight: var(--weight-semibold); }

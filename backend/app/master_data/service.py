@@ -20,6 +20,7 @@ from app.database.models.finance import ContractCostAllocation
 from app.database.models.organization_structure import ContractDepartment, CostCenter, Department, Hospital
 from app.database.models.register import (
     CatalogContractCategory,
+    CatalogDeviceType,
     CatalogContractType,
     ContractHospital,
     ContractPartner,
@@ -28,7 +29,7 @@ from app.database.models.register import (
 )
 from app.register import catalogs
 
-KINDS = ("partner", "hospital", "department", "cost_center", "contract_type", "contract_category", "lookup", "rule")
+KINDS = ("partner", "hospital", "department", "cost_center", "contract_type", "contract_category", "device_type", "lookup", "rule")
 
 # Ereignisse im Aktivitaetsprotokoll je Datenart (fuer "zuletzt geaendert").
 _EVENT_PREFIXES: dict[str, tuple[str, ...]] = {
@@ -38,6 +39,7 @@ _EVENT_PREFIXES: dict[str, tuple[str, ...]] = {
     "cost_center": ("cost_center.",),
     "contract_type": ("catalog.contract_type_",),
     "contract_category": ("catalog.contract_category_",),
+    "device_type": ("catalog.device_type_",),
     "lookup": ("catalog.lookup_",),
     "rule": ("catalog.rule_",),
 }
@@ -103,6 +105,7 @@ def summary(session: Session, organization_id: uuid.UUID, scope: Scope, visible:
         "cost_center": _counts(session, CostCenter, organization_id, cost_center_filter),
         "contract_type": _counts(session, CatalogContractType, organization_id),
         "contract_category": _counts(session, CatalogContractCategory, organization_id),
+        "device_type": _counts(session, CatalogDeviceType, organization_id),
         "lookup": _counts(session, LookupValue, organization_id),
         "rule": _counts(session, ContractRule, organization_id),
     }
@@ -163,6 +166,11 @@ def usage(session: Session, organization_id: uuid.UUID, kind: str, visible: Opti
         return _grouped(session, select(Contract.contract_type_id.label("ref_id"), Contract.id.label("contract_id")).where(*live))
     if kind == "contract_category":
         return _grouped(session, select(Contract.contract_category_id.label("ref_id"), Contract.id.label("contract_id")).where(*live))
+    if kind == "device_type":
+        from app.database.models.register import ContractDeviceType
+
+        return _grouped(session, select(ContractDeviceType.device_type_id.label("ref_id"), ContractDeviceType.contract_id.label("contract_id"))
+                        .join(Contract, Contract.id == ContractDeviceType.contract_id).where(*live))
     if kind == "hospital":
         return _grouped(session, union(
             select(Contract.hospital_id.label("ref_id"), Contract.id.label("contract_id")).where(*live),

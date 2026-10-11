@@ -152,7 +152,7 @@ def test_contract_detail_shows_assignment_names_for_every_role(monkeypatch):
         empty = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))["assignment"]
     finally:
         session.close()
-    assert empty == {"contract_type": None, "contract_category": None, "hospital": None, "responsible_department": None, "beneficiary_departments": [], "other_departments": [],
+    assert empty == {"contract_type": None, "contract_category": None, "device_types": [], "hospital": None, "responsible_department": None, "beneficiary_departments": [], "other_departments": [],
                      "cost_center": None, "responsible": "Admin", "further_responsible": []}  # Anleger ist verantwortlich
     _patch(admin, slug, cid, hospital_id=str(ids["hospital"]), cost_center_id=str(ids["center"]),
            responsible_account_id=str(ids["main"]), further_responsible_account_ids=[str(ids["second"])])

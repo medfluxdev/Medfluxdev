@@ -71,6 +71,8 @@ COLUMNS: tuple[Column, ...] = (
     Column("escalation_recipient", "Eskalation an", "account", groupable=True),
     Column("responsible", "Verantwortlich", "account", groupable=True),
     Column("further_responsible", "Weitere Verantwortliche", "text"),
+    # Mehrfachwert: Filter „in“ trifft jede einzelne Geräteart (GridRow.lists).
+    Column("device_types", "Gerätearten", "text"),
     Column("next_deadline", "Nächster Termin", "date"),
     Column("hospital", "Krankenhaus", "enum", groupable=True),
     Column("department", "Abteilung", "enum", groupable=True),
@@ -160,6 +162,8 @@ class GridRow:
     ids: dict[str, Optional[uuid.UUID]]
     # Weitere Personen je Personen-Spalte (für „Ich“): z. B. weitere Verantwortliche.
     also: dict[str, frozenset] = field(default_factory=dict)
+    # Mehrfachwerte je Spalte (z. B. Gerätearten) für Filter und Werteliste.
+    lists: dict[str, tuple[str, ...]] = field(default_factory=dict)
     yearly: dict[int, dict[str, Decimal]] = field(default_factory=dict)
     allocations: list[tuple[str, Decimal]] = field(default_factory=list)
     upcoming: list[tuple[date, str]] = field(default_factory=list)
@@ -234,6 +238,9 @@ def build_rows(
     from app.ownership.service import further_responsible_by_contract
 
     further = further_responsible_by_contract(session, [contract.id for contract in contracts])
+    from app.register.device_types import device_types_by_contract
+
+    devices = device_types_by_contract(session, organization_id)
     account_ids = {
         value for contract in contracts
         for value in (contract.responsible_account_id, contract.reminder_recipient_account_id, contract.escalation_recipient_account_id)
@@ -330,6 +337,7 @@ def build_rows(
             "escalation_recipient": accounts.get(contract.escalation_recipient_account_id),
             "responsible": accounts.get(contract.responsible_account_id),
             "further_responsible": ", ".join(accounts.get(value) or "–" for value in further.get(contract.id, [])) or None,
+            "device_types": ", ".join(f"{label} ({quantity})" if quantity else label for label, quantity in devices.get(contract.id, [])) or None,
             "next_deadline": next_deadline.get(contract.id),
             "hospital": hospitals.get(contract.hospital_id) if contract.hospital_id else None,
             "department": departments.get(department_id) if department_id else None,
@@ -360,6 +368,7 @@ def build_rows(
         values["rules_violated"] = ", ".join(item.label for item in failed) or None
         # Nicht als Spalte sichtbar: fuer die Zaehlung je Regel (Stammdaten).
         values["_rule_failures"] = [str(item.rule_id) for item in failed]
+        values["_device_quantities"] = {label: quantity for label, quantity in devices.get(contract.id, [])}
         row = GridRow(
             contract_id=contract.id,
             values=values,
@@ -369,6 +378,7 @@ def build_rows(
                 "escalation_recipient": contract.escalation_recipient_account_id,
             },
             also={"responsible": frozenset(further.get(contract.id, []))},
+            lists={"device_types": tuple(label for label, _ in devices.get(contract.id, []))},
             allocations=allocations.get(contract.id, []),
         )
         if years is not None:
@@ -411,6 +421,9 @@ SELECT concat_ws('|',
      FROM contract_department WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(contract_id::text || account_id::text, ',' ORDER BY id), ''))
      FROM contract_responsible WHERE organization_id = :org),
+  (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') || ':' || md5(coalesce(string_agg(contract_id::text || device_type_id::text || coalesce(quantity::text, ''), ',' ORDER BY id), ''))
+     FROM contract_device_type WHERE organization_id = :org),
+  (SELECT md5(coalesce(string_agg(id::text || label, ',' ORDER BY id), '')) FROM catalog_device_type WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM hospital WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM department WHERE organization_id = :org),
   (SELECT md5(coalesce(string_agg(id::text || name, ',' ORDER BY id), '')) FROM cost_center WHERE organization_id = :org),
@@ -496,7 +509,14 @@ def _predicate(item: dict, as_of: date, account_id: Optional[uuid.UUID]) -> Call
         return lambda row: bool(row.values[key]) is wanted
     if op == "in":
         allowed = {str(entry) for entry in (value if isinstance(value, list) else [value])}
-        return lambda row: str(row.values[key]) in allowed if row.values[key] is not None else "" in allowed
+
+        def matches(row: GridRow) -> bool:
+            if key in row.lists:
+                items = row.lists[key]
+                return bool(allowed & set(items)) if items else "" in allowed
+            return str(row.values[key]) in allowed if row.values[key] is not None else "" in allowed
+
+        return matches
     if op == "contains":
         needle = str(value or "").casefold()
         return lambda row: needle in str(row.values[key] or "").casefold()
@@ -685,6 +705,10 @@ def distinct_values(rows: list[GridRow], key: str) -> list[dict]:
     column = COLUMN_BY_KEY[key]
     counts: dict[Any, int] = defaultdict(int)
     for row in rows:
+        if key in row.lists:
+            for item in row.lists[key] or (None,):
+                counts[item] += 1
+            continue
         counts[row.values[key]] += 1
     ordered = sorted(counts, key=_sort_value)
     return [

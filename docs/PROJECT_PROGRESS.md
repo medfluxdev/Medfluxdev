@@ -5587,3 +5587,15 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Fristen & Aufgaben:** Reiter „Aufgaben“ zuerst und Standard (ohne Aufgaben-Recht weiter „Termine“).
 - **Verifikation:** `npm run verify` grün (67 Testdateien); Playwright 187/187 (Bildreferenzen bewusst erneuert: Einklapp-Knöpfe, Kopf, Reiterfolge).
 
+### Nachtrag 2026-10-11 – Gerätearten statt Geräteseite (Plan `docs/architecture/GERAETEARTEN_PLAN_20261011.md`)
+
+- **Idee:** Verträge nach Geräteart einordnen (z. B. alle Wartungsverträge für CTs), filtern und vergleichen. Die Seite „Geräte“ ist aus dem Menü entfernt; `/equipment` leitet zu Analysen → Gerätearten, die Gerätedetails bleiben aus dem Vertrag erreichbar.
+- **Stammdaten → Gerätearten:** Liste je Organisation nach Bereich (Medizintechnik, IT, Haustechnik, Sonstiges) mit zuständiger Abteilung und Suchbegriffen; Standardliste (CT, MRT, Röntgen …, Server, Netzwerk, Drucker …, Aufzug, Klima/Lüftung …) wird einmalig angelegt. Pflegen: Administration und Vertragsmanagement (`device_type.edit`).
+- **Am Vertrag (Verknüpfungen → Geräte):** Gerätearten mit optionaler Anzahl und Notiz; die Gerätearten der verantwortlichen Abteilung stehen in der Auswahl zuerst; Vorschläge aus im Dokument gefundenen Geräten (ganzes Wort, Bezeichnung oder Suchbegriff) übernimmt nur eine Person. Verlauf „Gerätearten geändert“; Zuständigkeitskarte zeigt die Gerätearten.
+- **Vertragsliste:** Spalte und Schnellfilter „Geräteart“ (Mehrfachwert: ein Vertrag mit CT und MRT erscheint unter beiden).
+- **Analysen → Gerätearten vergleichen:** je Geräteart laufende Verträge, Geräte und jährliche Kosten mit Abdeckung; eine Geräteart öffnet alle Verträge nebeneinander mit Kosten je Gerät – nur wenn Kosten und Anzahl gepflegt sind und der Vertrag nur diese Geräteart abdeckt, sonst „nicht berechenbar“ mit Grund. Verträge ohne Geräteart werden genannt und verlinkt.
+- **Nebenbei:** Einklapp-Pfeil größer und dunkler.
+- **Technik:** Migration `w5f7a9b01015` (`catalog_device_type`, `contract_device_type`), `app/register/device_types.py`, Rasterspalte `device_types` (`GridRow.lists`), Bericht `device_type_comparison`, Nutzungszähler in den Stammdaten.
+- **Tests:** neu `backend/tests/test_device_types.py` (4), `frontend/test/device-types.test.tsx` (4); `equipment.test.tsx` prüft die Weiterleitung. pytest 1670 bestanden / 3 übersprungen; `npm run verify` grün (68 Testdateien); Migration auf Wegwerf-DB auf/ab/auf.
+- **Offen:** Migrationen `u3d5e7f89013`, `v4e6f8a90014`, `w5f7a9b01015` noch nicht auf der lokalen Datenbank des Nutzers (Freigabe ausstehend).
+

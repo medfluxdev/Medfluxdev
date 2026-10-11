@@ -251,6 +251,25 @@ def get_drilldown(
         session.close()
 
 
+@router.get("/api/register/reports/device-types")
+def get_device_type_comparison(
+    request: Request,
+    organization_slug: str,
+    device_type: Optional[str] = Query(default=None, max_length=160),
+):
+    """Analysen: Gerätearten vergleichen (sichtbarer Bereich, laufende Verträge)."""
+    from app.reports.exports import device_type_comparison
+
+    actor = current_actor(request, organization_slug)
+    as_of = today_local()
+    session = create_session()
+    try:
+        rows, _ = _rows(session, actor, GridSpec(), as_of, years=_report_years(as_of))
+        return device_type_comparison(rows, as_of, device_type or None)
+    finally:
+        session.close()
+
+
 @router.get("/api/register/reports/portfolio")
 def get_portfolio(request: Request, organization_slug: str):
     actor = current_actor(request, organization_slug)

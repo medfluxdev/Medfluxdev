@@ -31,6 +31,7 @@ from app.register.service import (
     create_manual_contract,
     ensure_synced,
     list_remarks,
+    log_activity,
     load_extracted,
     set_confidentiality,
     set_contract_hospitals,
@@ -413,5 +414,58 @@ def put_confidentiality(contract_id: UUID, payload: ConfidentialityUpdate, reque
             raise _http(exc)
         session.commit()
         return _register_payload(session, contract, actor)
+    finally:
+        session.close()
+
+
+# --------------------------------------------------------------------------- Gerätearten am Vertrag
+
+
+class DeviceTypeItem(BaseModel):
+    device_type_id: UUID
+    quantity: Optional[int] = None
+    note: Optional[str] = Field(default=None, max_length=255)
+
+
+class DeviceTypeAssignment(BaseModel):
+    items: list[DeviceTypeItem] = Field(default_factory=list, max_length=50)
+
+
+def _device_type_payload(session, contract: Contract) -> dict:
+    from app.register import device_types
+
+    return {"items": device_types.contract_device_types(session, contract), "suggestions": device_types.suggestions(session, contract)}
+
+
+@router.get("/{contract_id}/device-types")
+def get_device_types(contract_id: UUID, request: Request, organization_slug: str):
+    actor = _register_actor(request, organization_slug)
+    session = create_session()
+    try:
+        return _device_type_payload(session, _contract(session, actor, contract_id))
+    finally:
+        session.close()
+
+
+@router.put("/{contract_id}/device-types")
+def put_device_types(contract_id: UUID, payload: DeviceTypeAssignment, request: Request, organization_slug: str):
+    from app.register import device_types
+    from app.register.catalogs import CatalogError
+
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            before, after = device_types.set_contract_device_types(session, contract, [item.model_dump(mode="json") for item in payload.items])
+        except CatalogError as exc:
+            session.rollback()
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail_de)
+        if before != after:
+            summary = lambda items: [f"{item['label']}{' × ' + str(item['quantity']) if item['quantity'] else ''}" for item in items]
+            log_activity(session, actor, contract.id, "contract.device_types_updated", {"before": summary(before), "after": summary(after)})
+        session.commit()
+        return _device_type_payload(session, contract)
     finally:
         session.close()

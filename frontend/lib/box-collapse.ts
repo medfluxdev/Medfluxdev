@@ -90,7 +90,7 @@ function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "btn btn-ghost btn-icon btn-sm box-toggle";
-  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="${ICON_OPEN}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  button.innerHTML = `<svg viewBox="4 4 16 16" aria-hidden="true" width="16" height="16"><path d="${ICON_OPEN}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   button.addEventListener("click", () => setCollapsed(box, !box.hasAttribute("data-collapsed")));
   // Direkt nach dem Kopf: in der Tab-Reihenfolge vor dem Inhalt.
   box.firstElementChild!.after(button);

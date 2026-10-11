@@ -12,6 +12,7 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ "equipment-id": "eq-1" }),
+  redirect: (path: string) => { throw new Error(`REDIRECT:${path}`); },
 }));
 
 function summary(overrides: Partial<EquipmentSummary> = {}): EquipmentSummary {
@@ -53,50 +54,9 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("Geräte-Liste (PR-4)", () => {
-  it("zeigt einen Ladezustand", () => {
-    apiGetMock.mockImplementation(() => new Promise(() => {}));
-    render(<EquipmentPage />);
-    expect(screen.getByText("Geräte werden geladen…")).toBeInTheDocument();
-  });
-
-  it("zeigt einen Fehlerzustand", async () => {
-    apiGetMock.mockRejectedValue(new Error("boom"));
-    render(<EquipmentPage />);
-    await waitFor(() =>
-      expect(screen.getByText("Geräte konnten nicht geladen werden.")).toBeInTheDocument()
-    );
-  });
-
-  it("zeigt Geräte mit Identität, Vertragszahl und Detail-Link", async () => {
-    apiGetMock.mockResolvedValue([summary()]);
-    render(<EquipmentPage />);
-    await waitFor(() =>
-      expect(screen.getByRole("link", { name: "Computertomograph" })).toBeInTheDocument()
-    );
-    expect(screen.getByText("Eindeutig (Seriennr./Inventarnr.)")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Computertomograph" })).toHaveAttribute(
-      "href",
-      "/equipment/eq-1"
-    );
-  });
-
-  it("zeigt 'keine Geräte' bei leerer Liste", async () => {
-    apiGetMock.mockResolvedValue([]);
-    render(<EquipmentPage />);
-    await waitFor(() =>
-      expect(screen.getByText(/Noch keine Geräte vorhanden/)).toBeInTheDocument()
-    );
-  });
-
-  it("hat keine A11y-Verstöße im normalen Zustand", async () => {
-    apiGetMock.mockResolvedValue([summary()]);
-    const { container } = render(<EquipmentPage />);
-    await waitFor(() =>
-      expect(screen.getByRole("link", { name: "Computertomograph" })).toBeInTheDocument()
-    );
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
+describe("Geräte-Liste (ersetzt durch Gerätearten)", () => {
+  it("leitet zu Analysen → Gerätearten weiter", () => {
+    expect(() => EquipmentPage()).toThrow("REDIRECT:/analysen#geraetearten");
   });
 });
 

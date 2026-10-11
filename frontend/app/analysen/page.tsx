@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AiPortfolioNotes from "@/components/analytics/AiPortfolioNotes";
+import DeviceTypeComparison from "@/components/analytics/DeviceTypeComparison";
 import PortfolioDrilldown from "@/components/analytics/PortfolioDrilldown";
 import PortfolioQueryPanel from "@/components/analytics/PortfolioQueryPanel";
 import RegisterPortfolio from "@/components/analytics/RegisterPortfolio";
@@ -33,6 +34,7 @@ export default function AnalyticsPage() {
       <PageHeader title="Analysen" description="Kosten, Fristen und Handlungsbedarf im Vertragsportfolio." />
       {organizationSlug ? <RegisterPortfolio organizationSlug={organizationSlug} /> : null}
       {organizationSlug ? <PortfolioDrilldown organizationSlug={organizationSlug} /> : null}
+      {organizationSlug ? <DeviceTypeComparison organizationSlug={organizationSlug} /> : null}
       {error ? <InlineAlert tone="critical" role="alert">{error}</InlineAlert> : null}
       {!report && !error ? <Skeleton lines={3} label="KI-Hinweise werden geladen…" /> : null}
       {report ? <AiPortfolioNotes report={report} suppliers={suppliers} /> : null}

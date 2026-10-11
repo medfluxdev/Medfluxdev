@@ -29,6 +29,7 @@ export default function ContractAssignmentCard({ contractId, assignment, canEdit
     </div>
     <dl className="side-dl">
       <div><dt>Vertragstyp</dt><dd>{a?.contract_type ? <>{a.contract_type}{a.contract_category ? ` · ${a.contract_category}` : ""}</> : missing("Vertragstyp")}</dd></div>
+      <div><dt>Gerätearten</dt><dd>{a?.device_types?.length ? a.device_types.join(", ") : canEdit ? <Link href={contractHref(contractId, { tab: "relations" })} aria-label="Gerätearten festlegen">Festlegen</Link> : none}</dd></div>
       <div><dt>Krankenhaus</dt><dd>{a?.hospital ?? (a ? "Organisationsweit" : missing("Krankenhaus"))}</dd></div>
       <div><dt>Verantwortliche Abteilung</dt><dd>{a?.responsible_department ?? missing("Verantwortliche Abteilung")}</dd></div>
       <div><dt>Hauptverantwortlich</dt><dd>{a?.responsible ?? missing("Verantwortliche Person")}</dd></div>

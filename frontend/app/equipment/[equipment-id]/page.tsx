@@ -68,7 +68,7 @@ export default function EquipmentDetailPage() {
   return (
     <div className="page">
       <nav className="breadcrumb" aria-label="Brotkrümelnavigation">
-        <Link href="/equipment">Geräte</Link>
+        <Link href="/analysen#geraetearten">Gerätearten</Link>
         <span aria-hidden="true">/</span>
         <span>Detail</span>
       </nav>

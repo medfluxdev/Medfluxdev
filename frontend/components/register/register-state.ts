@@ -10,7 +10,7 @@ export const LAST_VIEW_KEY = "medflux.register.lastView";
 export const TAB_VIEW_KEYS = new Set(["review", "archive"]);
 const AREA_COLUMNS = new Set(["hospital", "department"]);
 // Schnellfilter „besitzen“ den ersten „ist einer von“-Filter ihrer Spalte; weitere Bedingungen bleiben unberührt.
-export const QUICK_COLUMNS = new Set(["business_status", "partner"]);
+export const QUICK_COLUMNS = new Set(["business_status", "partner", "device_types"]);
 
 export function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;

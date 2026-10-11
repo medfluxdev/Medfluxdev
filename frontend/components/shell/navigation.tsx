@@ -59,8 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { label: "Mein Tag", href: "/", icon: "home", keywords: "übersicht dashboard start", shortcut: "g s" },
     { label: "Verträge", href: "/register", icon: "contracts", keywords: "verträge register liste bestand zu prüfen prüfungen archiv", shortcut: "g v" },
     { label: "Fristen & Aufgaben", href: "/fristen", icon: "deadlines", keywords: "termine fristen wiedervorlage kündigung verlängerung entscheidung aufgaben to-dos", shortcut: "g t" },
-    { label: "Geräte", href: "/equipment", icon: "equipment", keywords: "medizintechnik anlagen" },
-    { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio" },
+    { label: "Analysen", href: "/analysen", icon: "analytics", keywords: "kosten berichte portfolio geräte gerätearten ct mrt medizintechnik vergleich" },
   ] },
   { label: "Daten & Verwaltung", items: [
     { label: "Aktivitäten & Protokoll", href: "/audit", icon: "history", roles: EDITORS, keywords: "historie audit protokoll änderungen verlauf" },

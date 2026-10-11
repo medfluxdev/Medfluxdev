@@ -64,7 +64,7 @@ export default function CollapsibleSection({ id, title, description, actions, fo
       <div className="collapsible-corner">
         {!collapsed ? actions : null}
         <button type="button" className="btn btn-ghost btn-icon btn-sm collapsible-toggle" aria-expanded={!collapsed} aria-controls={bodyId} onClick={toggle} aria-label={`${title} ${collapsed ? "aufklappen" : "einklappen"}`} title={collapsed ? "Aufklappen" : "Einklappen"}>
-          <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d={collapsed ? "m6 9 6 6 6-6" : "m6 15 6-6 6 6"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <svg viewBox="4 4 16 16" aria-hidden="true" width="16" height="16"><path d={collapsed ? "m6 9 6 6 6-6" : "m6 15 6-6 6 6"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </div>
     </div>

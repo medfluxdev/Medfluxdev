@@ -9,6 +9,7 @@ import { masterDataSection, type MasterDataSection } from "@/lib/master-data";
 import { contractCategoryDefinition, contractTypeDefinition, lookupDefinition } from "./definitions/catalogs";
 import { costCenterDefinition, departmentDefinition, hospitalDefinition } from "./definitions/organization";
 import { partnerDefinition } from "./definitions/partners";
+import { deviceTypeDefinition } from "./definitions/deviceTypes";
 import { ruleDefinition } from "./definitions/rules";
 import EntityManager from "./EntityManager";
 
@@ -42,6 +43,8 @@ function Manager({ section, organizationSlug }: { section: MasterDataSection; or
       return <EntityManager definition={contractTypeDefinition} section={section} organizationSlug={organizationSlug} />;
     case "contract_category":
       return <EntityManager definition={contractCategoryDefinition} section={section} organizationSlug={organizationSlug} />;
+    case "device_type":
+      return <EntityManager definition={deviceTypeDefinition} section={section} organizationSlug={organizationSlug} />;
     case "rule":
       return <EntityManager definition={ruleDefinition} section={section} organizationSlug={organizationSlug} />;
     case "lookup":

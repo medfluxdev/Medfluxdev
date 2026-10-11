@@ -563,6 +563,8 @@ export interface ContractAssignment {
   /** Vertragstyp und Kategorie aus den Vertragsdaten (Bezeichnung). */
   contract_type?: string | null;
   contract_category?: string | null;
+  /** Gerätearten mit Anzahl, z. B. „CT (2)“. */
+  device_types?: string[];
   hospital: string | null;
   responsible_department: string | null;
   beneficiary_departments: string[];

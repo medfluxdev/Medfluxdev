@@ -56,6 +56,11 @@ export const MASTER_DATA_SECTIONS: MasterDataSection[] = [
     permission: "catalog.admin", editors: ADMINS,
   },
   {
+    slug: "geraetearten", href: "/stammdaten/geraetearten", kind: "device_type", group: "Vertragsdaten",
+    label: "Gerätearten", description: "CT, MRT, Server … – für Filter und Vergleich der Verträge",
+    permission: "device_type.edit", editors: PARTNER_EDITORS,
+  },
+  {
     slug: "vertragsregeln", href: "/stammdaten/vertragsregeln", kind: "rule", group: "Vertragsdaten",
     label: "Vertragsregeln", description: "Anforderungen, die jeder Vertrag erfüllen soll",
     permission: "catalog.admin", editors: ADMINS,

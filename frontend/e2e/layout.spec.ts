@@ -3,7 +3,7 @@ import { openContract } from "./helpers";
 
 // U9: keine waagerechte Seitenverschiebung – breite Tabellen scrollen in ihrem eigenen Rahmen.
 const PAGES = [
-  "/", "/postfach", "/register", "/equipment", "/fristen", "/fristen?ansicht=termine", "/fristen?ansicht=entscheidungen",
+  "/", "/postfach", "/register", "/stammdaten/geraetearten", "/fristen", "/fristen?ansicht=termine", "/fristen?ansicht=entscheidungen",
   "/import", "/register?ansicht=review", "/register?ansicht=archive", "/analysen", "/audit", "/admin", "/suche", "/contracts/new",
   "/settings", "/profile", "/settings/users", "/stammdaten", "/stammdaten/vertragspartner", "/stammdaten/abteilungen", "/stammdaten/kostenstellen", "/stammdaten/vertragstypen", "/stammdaten/vertragsregeln", "/stammdaten/auswahllisten/storage_location", "/sicherheit", "/settings/nummernkreis", "/settings/roles",
 ];

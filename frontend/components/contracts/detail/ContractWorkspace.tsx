@@ -51,6 +51,7 @@ import ValueOriginBadge from "./ValueOriginBadge";
 import ContractTermBar from "./ContractTermBar";
 import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
 import OpenPoints, { buildOpenPoints } from "./OpenPoints";
+import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import { SignalIcon } from "@/components/ui/Signal";
 import ContractAssignmentCard from "./ContractAssignmentCard";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -506,7 +507,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const slaHasData = Boolean(data.sla.response_time || data.sla.resolution_time || data.sla.service_hours || data.sla.emergency_availability || data.sla.availability_24_7 != null);
   const showScope = hasAi && sectionVisible("scope", sections, scopeHasData);
   const showSla = hasAi && sectionVisible("sla", sections, slaHasData);
-  const hiddenSections = hasAi && data.sections ? ([["scope", showScope], ["sla", showSla]] as const).filter(([, shown]) => !shown).map(([key]) => SECTION_LABELS[key]) : [];
+  const showEquipment = sectionVisible("equipment", sections, data.equipment.length > 0 || (data.assignment?.device_types?.length ?? 0) > 0);
+  const hiddenSections = data.sections ? ([["scope", showScope || !hasAi], ["sla", showSla || !hasAi], ["equipment", showEquipment]] as const).filter(([, shown]) => !shown).map(([key]) => SECTION_LABELS[key]) : [];
   const slaMissing = showSla ? [data.sla.response_time ? null : "Reaktionszeit", data.sla.resolution_time ? null : "Lösungszeit"].filter((item): item is string => Boolean(item)) : [];
   // Erst mit geladenen Lücken berechnen, sonst stünde kurz ein unvollständiges Bild da.
   const openPoints = gaps === null ? null : buildOpenPoints({
@@ -706,7 +708,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         </>}
 
 
-        {activeTab === "relations" && sectionVisible("equipment", showAllSections ? null : data.sections, data.equipment.length > 0) && <Section title="Geräte" description="Dem Vertrag zugeordnete Geräte">{data.equipment.length === 0 ? <p className="cw-muted">Keine Geräte zugeordnet.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
+        {activeTab === "relations" && showEquipment && <Section title="Geräte" description="Gerätearten für Filter und Vergleich unter Analysen; darunter die im Dokument gefundenen Geräte.">
+          <ContractDeviceTypesPanel contractId={data.contract_id} orgSlug={orgSlug} canEdit={canEditData} responsibleDepartment={data.assignment?.responsible_department ?? null} onSaved={reload} />
+          <h3 className="device-found-heading">Im Dokument gefunden</h3>
+          {data.equipment.length === 0 ? <p className="cw-muted">Die Analyse hat keine einzelnen Geräte erkannt.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
 
         {activeTab === "deadlines" && slots.deadlines}
         {activeTab === "finance" && slots.finance}

@@ -252,6 +252,81 @@ def drilldown(rows: list[GridRow], as_of: date, hospital: Optional[str] = None, 
     }
 
 
+DEVICE_CONTRACT_LIMIT = 500
+
+
+def device_type_comparison(rows: list[GridRow], as_of: date, device_type: Optional[str] = None) -> dict:
+    """Analysen: laufende Verträge je Geräteart (Plan GERAETEARTEN_PLAN_20261011).
+
+    Ohne `device_type`: Übersicht je Geräteart. Mit `device_type` (Bezeichnung): die Verträge nebeneinander.
+    Kosten je Gerät nur, wenn Jahreskosten und Anzahl gepflegt sind und der Vertrag nur diese Geräteart
+    abdeckt – sonst None mit Grund. Nichts wird geschätzt.
+    """
+    running = running_rows([row for row in rows if row.values["business_status"] != "geloescht"], as_of)
+    without = [row for row in running if not row.lists.get("device_types")]
+    if device_type is None:
+        buckets: dict[str, MoneyTotals] = defaultdict(MoneyTotals)
+        devices: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # [Summe bekannter Anzahl, Verträge ohne Anzahl]
+        for row in running:
+            for label in row.lists.get("device_types", ()):
+                buckets[label].add(row)
+                quantity = row.values.get("_device_quantities", {}).get(label)
+                if quantity:
+                    devices[label][0] += quantity
+                else:
+                    devices[label][1] += 1
+        ordered = sorted(buckets.items(), key=lambda item: (-(item[1].sum("annual_cost") or Decimal("-1")), item[0]))
+        return {
+            "as_of": as_of.isoformat(), "level": "types",
+            "items": [{
+                **_bucket_item(label, label, data),
+                "devices_known": devices[label][0], "devices_missing": devices[label][1],
+                "annual_known": data.known["annual_cost"], "annual_missing": data.missing["annual_cost"],
+            } for label, data in ordered],
+            "running_count": len(running), "without_count": len(without),
+        }
+
+    selected = [row for row in running if device_type in row.lists.get("device_types", ())]
+    items = []
+    for row in selected:
+        quantity = row.values.get("_device_quantities", {}).get(device_type)
+        others = [label for label in row.lists["device_types"] if label != device_type]
+        annual = row.values["annual_cost"]
+        per_device, reason = None, None
+        if annual is None:
+            reason = "Jährliche Kosten nicht gepflegt"
+        elif not quantity:
+            reason = "Anzahl Geräte nicht gepflegt"
+        elif others:
+            reason = "Vertrag umfasst weitere Gerätearten"
+        else:
+            per_device = annual / quantity
+        items.append({
+            "contract_id": str(row.contract_id),
+            "register_number": row.values["register_number"],
+            "short_description": row.values["short_description"],
+            "partner": row.values["partner"],
+            "hospital": row.values["hospital"],
+            "department": row.values["department"],
+            "possible_end": row.values["possible_end"].isoformat() if row.values["possible_end"] else None,
+            "currency": row.values.get("_currency") or "EUR",
+            "annual_cost": _money(annual),
+            "quantity": quantity,
+            "other_device_types": others,
+            "cost_per_device": _money(per_device),
+            "cost_per_device_reason": reason,
+        })
+    items.sort(key=lambda item: (item["cost_per_device"] is None, Decimal(item["cost_per_device"] or "0"), item["register_number"] or ""))
+    totals = money_totals(selected)
+    return {
+        "as_of": as_of.isoformat(), "level": "contracts", "device_type": device_type,
+        "items": items[:DEVICE_CONTRACT_LIMIT], "count": len(selected), "truncated": len(selected) > DEVICE_CONTRACT_LIMIT,
+        "totals": _amount(totals, "annual_cost"),
+        "devices_known": sum(item["quantity"] or 0 for item in items), "devices_missing": sum(1 for item in items if not item["quantity"]),
+        "register_filter": [{"column": "device_types", "op": "in", "value": [device_type]}],
+    }
+
+
 def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
     active = [row for row in rows if row.values["business_status"] != "geloescht"]
     running = running_rows(active, as_of)

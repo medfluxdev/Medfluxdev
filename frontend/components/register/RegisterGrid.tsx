@@ -366,6 +366,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
         <StatusFilter column={columnByKey.get("business_status")} spec={spec} onFilters={setFilters} />
         <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("partner")} spec={spec} onFilters={setFilters} />
         <AreaFilter tree={data?.tree ?? []} spec={spec} onFilters={setFilters} />
+        <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("device_types") ? { ...columnByKey.get("device_types")!, label: "Geräteart" } : undefined} spec={spec} onFilters={setFilters} />
       </div>
       <div className="reg-bar-actions">
         <button type="button" className={`btn${extra ? " popover-trigger--active" : ""}`} aria-haspopup="dialog" onClick={() => setMoreOpen(true)}>

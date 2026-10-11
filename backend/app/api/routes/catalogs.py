@@ -88,7 +88,7 @@ def _log(session, actor, event_name: str, object_type: str, object_id, context: 
     )
 
 
-_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "sections", "field_key")
+_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "sections", "area", "keywords", "field_key")
 
 
 def _snapshot(row) -> dict:
@@ -636,5 +636,69 @@ def reserve_numbers(payload: NumberReservation, request: Request, organization_s
         _log(session, actor, "number_range.reserved", "organization", actor.organization_id, {"values": reserved})
         session.commit()
         return _range_payload(session, actor.organization_id)
+    finally:
+        session.close()
+
+
+# --------------------------------------------------------------------------- device types (Gerätearten)
+
+
+def _require_device_type_write(actor) -> None:
+    require(actor, "device_type.edit", "Keine Berechtigung zum Pflegen von Gerätearten.")
+
+
+@router.get("/device-types")
+def list_device_types_route(request: Request, organization_slug: str):
+    from app.register import device_types
+
+    actor = _actor(request, organization_slug)
+    session = create_session()
+    try:
+        device_types.ensure_device_types(session, actor.organization_id)
+        session.commit()
+        return {"items": device_types.list_device_types(session, actor.organization_id), "areas": device_types.AREAS}
+    finally:
+        session.close()
+
+
+@router.post("/device-types")
+def create_device_type(payload: CatalogEntry, request: Request, organization_slug: str):
+    from app.register import device_types
+
+    actor = _actor(request, organization_slug)
+    _require_device_type_write(actor)
+    session = create_session()
+    try:
+        try:
+            row = device_types.upsert_device_type(session, actor.organization_id, payload.values)
+        except CatalogError as exc:
+            session.rollback()
+            raise _http(exc)
+        _log(session, actor, "catalog.device_type_created", "catalog_device_type", row.id, {"label": row.label})
+        session.commit()
+        return device_types.device_type_payload(row)
+    finally:
+        session.close()
+
+
+@router.patch("/device-types/{device_type_id}")
+def patch_device_type(device_type_id: UUID, payload: CatalogEntry, request: Request, organization_slug: str):
+    from app.database.models.register import CatalogDeviceType
+    from app.register import device_types
+
+    actor = _actor(request, organization_slug)
+    _require_device_type_write(actor)
+    session = create_session()
+    try:
+        row = _own(session, CatalogDeviceType, device_type_id, actor.organization_id)
+        before = _snapshot(row)
+        try:
+            device_types.upsert_device_type(session, actor.organization_id, payload.values, row)
+        except CatalogError as exc:
+            session.rollback()
+            raise _http(exc)
+        _log(session, actor, "catalog.device_type_updated", "catalog_device_type", row.id, {"fields": _diff(before, _snapshot(row))})
+        session.commit()
+        return device_types.device_type_payload(row)
     finally:
         session.close()

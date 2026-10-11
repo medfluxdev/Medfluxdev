@@ -577,6 +577,7 @@ def _assignment(session: Session, contract) -> dict:
     from app.database.models import Account, ContractDepartment, CostCenter, Department, Hospital
     from app.database.models.register import CatalogContractCategory, CatalogContractType
     from app.ownership.service import further_responsible_ids
+    from app.register.device_types import contract_device_types
 
     hospital = session.get(Hospital, contract.hospital_id) if contract.hospital_id else None
     links = session.execute(
@@ -594,6 +595,7 @@ def _assignment(session: Session, contract) -> dict:
     return {
         "contract_type": kind.label if kind and kind.organization_id == contract.organization_id else None,
         "contract_category": category.label if category and category.organization_id == contract.organization_id else None,
+        "device_types": [f"{item['label']} ({item['quantity']})" if item["quantity"] else item["label"] for item in contract_device_types(session, contract)],
         "hospital": hospital.name if hospital else None,
         "responsible_department": next((name for role, name in links if role == "responsible"), None),
         "beneficiary_departments": [name for role, name in links if role == "beneficiary"],

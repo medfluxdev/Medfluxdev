@@ -281,6 +281,50 @@ class LookupValue(OrgOwnedMixin, Base):
     )
 
 
+class CatalogDeviceType(OrgOwnedMixin, Base):
+    """Geräteart (z. B. CT, Server) für Filter und Vergleich der Verträge; je Bereich, optional einer Abteilung zugeordnet."""
+
+    __tablename__ = "catalog_device_type"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    # medizintechnik | it | haustechnik | sonstiges (register/device_types.AREAS)
+    area: Mapped[str] = mapped_column(String(32), nullable=False, default="sonstiges", server_default="sonstiges")
+    department_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("department.id", ondelete="SET NULL", name="fk_catalog_device_type_department"), nullable=True
+    )
+    # Suchbegriffe für Vorschläge aus im Dokument gefundenen Geräten (kommagetrennt).
+    keywords: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "code", name="uq_catalog_device_type_org_code"),
+    )
+
+
+class ContractDeviceType(OrgOwnedMixin, Base):
+    """Gerätearten eines Vertrags mit optionaler Anzahl Geräte (gepflegt, nie geschätzt)."""
+
+    __tablename__ = "contract_device_type"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    device_type_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("catalog_device_type.id", ondelete="CASCADE", name="fk_contract_device_type_device_type"), nullable=False, index=True
+    )
+    quantity: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("contract_id", "device_type_id", name="uq_contract_device_type_pair"),
+    )
+
+
 class ContractHospital(OrgOwnedMixin, Base):
     """D3: Ein Vertrag kann mehreren Gesellschaften/Krankenhaeusern gehoeren."""
 

@@ -6,6 +6,7 @@ import { getPermissionMatrix, type PermissionMatrix } from "@/lib/domain-api/acc
 
 export type PermissionKey =
   | "partner.edit"
+  | "device_type.edit"
   | "catalog.admin"
   | "organization.admin"
   | "review.settings"

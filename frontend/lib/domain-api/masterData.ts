@@ -1,7 +1,7 @@
 import { apiGet, apiPost } from "@/lib/api";
 import type { PartnerDto } from "@/lib/domain-api/catalogs";
 
-export type MasterDataKind = "partner" | "hospital" | "department" | "cost_center" | "contract_type" | "contract_category" | "lookup" | "rule";
+export type MasterDataKind = "partner" | "hospital" | "department" | "cost_center" | "contract_type" | "contract_category" | "device_type" | "lookup" | "rule";
 export type MasterDataImportKind = "partner" | "department" | "cost_center" | "lookup";
 
 export interface MasterDataCount {
