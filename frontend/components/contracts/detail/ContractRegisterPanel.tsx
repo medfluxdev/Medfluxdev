@@ -1,6 +1,7 @@
 "use client";
 
 import StatusBadge from "@/components/ui/StatusBadge";
+import ReminderLeadsEditor from "./ReminderLeadsEditor";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -148,7 +149,7 @@ const FIELD_HELP: Record<string, string> = {
   notice_to: "Zu welchem Termin gekündigt werden kann – z. B. „zum Quartalsende“ = 31.03., 30.06., 30.09. oder 31.12.",
   minimum_term: "Frühestens nach dieser Zeit ist eine Kündigung wirksam.",
   renewal_period: "Um wie viel sich der Vertrag ohne Kündigung jeweils verlängert.",
-  reminder_lead_months: "Wie viele Monate vor der Kündigungsfrist die Erinnerung kommt.",
+  reminder_lead_months: "Wie viele Monate vor dem Kündigungstermin (bei fester Laufzeit: vor dem Vertragsende) die erste Erinnerung kommt. Leer = Standard (4 Monate).",
   retention_years_after_end: "Leer lassen, um die Aufbewahrungsfrist des Vertragstyps zu verwenden.",
   maintenance_next_date: "Ein Monat vorher entsteht der Termin „Wartung fällig“ unter Fristen & Aufgaben.",
   maintenance_interval_months: "Leer lassen für einen einmaligen Termin; sonst entsteht nach Erledigung der nächste Termin.",
@@ -478,6 +479,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     }
     const field = register.fields[def.key];
     const value = field?.value;
+    if ((value == null || value === "") && def.key === "reminder_lead_months") return `${register.reminders?.default_lead_months ?? 4} Monate vor der Frist (Standard)`;
     if (value == null || value === "") return def.kind === "bool" ? "Nein" : "Nicht erfasst";
     switch (def.kind) {
       case "bool": return value ? "Ja" : "Nein";
@@ -582,6 +584,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   }
 
   const terms = register.terms;
+  const fixedTerm = register.fields.term_model?.value === "fixed_term";
   const proposalKeys = Object.entries(register.fields).filter(([, field]) => field.ai_proposed_value).map(([key]) => key);
 
   return <div className="rg-panel">
@@ -625,10 +628,11 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         items={terms.missing.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))}
       /> : null}
       <div className="rg-terms">
-        <div><span>Kündbar bis</span><strong>{terms.cancel_by ? formatDate(terms.cancel_by) : "–"}</strong></div>
-        <div><span>{terms.actual_end ? "Tatsächliches Ende" : "Mögliches Vertragsende"}</span><strong>{formatDate(terms.actual_end ?? terms.possible_end)}</strong></div>
-        <div><span>Frühestes / festes Ende</span><strong>{formatDate(terms.earliest_end)}</strong></div>
-        <div><span>Erinnerung am</span><strong>{formatDate(terms.reminder_date)}</strong></div>
+        {/* Feste Laufzeit endet ohne Kündigung: kein „Kündbar bis“, ein Vertragsende. */}
+        {fixedTerm ? null : <div><span>Kündbar bis</span><strong>{terms.cancel_by ? formatDate(terms.cancel_by) : "–"}</strong></div>}
+        <div><span>{terms.actual_end ? "Tatsächliches Ende" : fixedTerm ? "Vertragsende" : "Mögliches Vertragsende"}</span><strong>{formatDate(terms.actual_end ?? terms.possible_end)}</strong></div>
+        {fixedTerm ? null : <div><span>Frühestes / festes Ende</span><strong>{formatDate(terms.earliest_end)}</strong></div>}
+        <div><span>{(terms.reminder_dates?.length ?? 0) > 1 ? "Erinnerungen am" : "Erinnerung am"}</span><strong>{terms.reminder_dates?.length ? terms.reminder_dates.map((value) => formatDate(value)).join(", ") : formatDate(terms.reminder_date)}</strong></div>
       </div>
       {terms.explanation.length > 0 ? <ul className="rg-explanation">{terms.explanation.map((line) => <li key={line}>{line}</li>)}</ul> : null}
     </section>
@@ -718,6 +722,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
             </dd>
           </div>;
         })}</dl>
+        {section.id === "reminder" ? <ReminderLeadsEditor contractId={contractId} orgSlug={orgSlug} register={register} editable={canEditHere} onSaved={(next) => { setRegister(next); onChanged?.(); }} /> : null}
       </CollapsibleSection>;
     })}
   </div>;

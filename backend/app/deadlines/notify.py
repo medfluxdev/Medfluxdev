@@ -118,8 +118,12 @@ def notify(
     recipient_ids: Iterable[uuid.UUID],
     as_of: date,
     counts: dict[str, int],
+    stage: Optional[date] = None,
 ) -> None:
-    """Postfach-Eintrag (+ Vertretung) und ggf. E-Mail; doppelte Eintraege werden verworfen."""
+    """Postfach-Eintrag (+ Vertretung) und ggf. E-Mail; doppelte Eintraege werden verworfen.
+
+    `stage`: erreichte weitere Erinnerung (je weiterer Erinnerung genau eine Benachrichtigung).
+    """
     title, body = _message(kind, deadline, contract, as_of)
     targets: list[tuple[Account, Optional[str]]] = []
     seen: set[uuid.UUID] = set()
@@ -134,7 +138,7 @@ def notify(
             targets.append((deputy, account.display_name))
             seen.add(deputy.id)
     for account, on_behalf_of in targets:
-        dedupe = f"{kind}:{deadline.id}:{deadline.due_date.isoformat()}"
+        dedupe = f"{kind}:{deadline.id}:{deadline.due_date.isoformat()}" + (f":{stage.isoformat()}" if stage else "")
         inserted = session.execute(
             pg_insert(Notification)
             .values(
@@ -223,8 +227,10 @@ def process_deadlines(
             counts["unassigned"] = counts.get("unassigned", 0) + 1
             continue
         if deadline.due_date >= as_of:
+            # Weitere Erinnerungen: die zuletzt erreichte zählt (verpasste Tage werden nicht nachgeholt).
+            reached = [day for day in (date.fromisoformat(value) for value in deadline.extra_remind_on or []) if day <= as_of]
             notify(session, deadline=deadline, contract=contract, kind="deadline_reminder",
-                   recipient_ids=recipients, as_of=as_of, counts=counts)
+                   recipient_ids=recipients, as_of=as_of, counts=counts, stage=max(reached) if reached else None)
         else:
             notify(session, deadline=deadline, contract=contract, kind="deadline_overdue",
                    recipient_ids=recipients, as_of=as_of, counts=counts)

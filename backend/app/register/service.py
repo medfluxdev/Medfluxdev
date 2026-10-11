@@ -47,6 +47,7 @@ from app.models.contract import Contract as ExtractedContract
 from app.register.ai_mapping import proposals_from_extraction
 from app.register.fields import FIELD_SPECS, FIELDS, REQUIRED_FOR_VALID, FieldValidationError, coerce_value, to_json, validate_pairs
 from app.register.status import STATUS_LABELS, TransitionError, allowed_targets, plan_transition
+from app.register.reminders import DEFAULT_REMINDER_LEAD_MONTHS
 from app.register.terms import TermInputs, compute_terms, period
 
 HUMAN_ORIGINS = frozenset({"manual", "ai_corrected", "ai_confirmed", "imported_legacy"})
@@ -423,6 +424,7 @@ def term_inputs(contract: Contract) -> TermInputs:
         notice_to=contract.notice_to,
         renewal_period=period(contract.renewal_period_value, contract.renewal_period_unit),
         reminder_lead_months=contract.reminder_lead_months,
+        reminder_extra=tuple(contract.reminder_extra_leads or ()),
         terminated_effective=contract.terminated_effective,
         ended_on=contract.ended_on,
     )
@@ -579,6 +581,11 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
         "ended_on": contract.ended_on.isoformat() if contract.ended_on else None,
         "fields": fields,
         "terms": terms.as_dict(),
+        "reminders": {
+            "default_lead_months": DEFAULT_REMINDER_LEAD_MONTHS,
+            "lead_months": contract.reminder_lead_months,
+            "extra_leads": list(contract.reminder_extra_leads or []),
+        },
         "retention": retention_info(session, contract, terms),
         "confidentiality": confidentiality(session, contract),
         "missing_for_valid": missing_for_valid,

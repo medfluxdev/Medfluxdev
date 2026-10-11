@@ -20,6 +20,24 @@ const HEADING = /^H[1-4]$/;
 const ICON_OPEN = "m6 15 6-6 6 6";
 const ICON_CLOSED = "m6 9 6 6 6-6";
 
+const INTERACTIVE = "a, button, input, select, textarea, label, summary, [contenteditable], [role='button'], [role='link']";
+
+/** Doppelklick auf den Kopf eines Kastens klappt ihn auf bzw. zu – nicht auf Knöpfen, Links oder Feldern. */
+export function isHeadDoubleClick(event: { target: EventTarget | null }, head: Element | null): boolean {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target || !head || !head.contains(target)) return false;
+  return target.closest(INTERACTIVE) === null;
+}
+
+/** Beim Doppelklick markierten Text wieder aufheben (sonst bleibt die Überschrift markiert). */
+export function clearSelection() {
+  try {
+    window.getSelection()?.removeAllRanges();
+  } catch {
+    // ohne Auswahl-API nichts zu tun
+  }
+}
+
 function readCollapsed(): Set<string> {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -92,6 +110,11 @@ function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
   button.className = "btn btn-ghost btn-icon btn-sm box-toggle";
   button.innerHTML = `<svg viewBox="4 4 16 16" aria-hidden="true" width="16" height="16"><path d="${ICON_OPEN}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   button.addEventListener("click", () => setCollapsed(box, !box.hasAttribute("data-collapsed")));
+  box.addEventListener("dblclick", (event) => {
+    if (!isHeadDoubleClick(event, box.firstElementChild)) return;
+    clearSelection();
+    setCollapsed(box, !box.hasAttribute("data-collapsed"));
+  });
   // Direkt nach dem Kopf: in der Tab-Reihenfolge vor dem Inhalt.
   box.firstElementChild!.after(button);
   render(box, button, collapsedKeys.has(key), name);

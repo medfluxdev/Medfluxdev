@@ -83,13 +83,13 @@ def test_system_deadline_follows_register_and_daily_run_notifies(monkeypatch):
 
     [deadline] = client.get(f"/api/contracts/{contract_id}/deadlines", params=query).json()["items"]
     assert deadline["source"] == "system" and deadline["system_key"] == "cancel_by"
-    assert (deadline["due_date"], deadline["remind_on"]) == ("2027-06-30", "2027-03-30")
+    assert (deadline["due_date"], deadline["remind_on"]) == ("2027-06-30", "2027-02-28")
     assert deadline["assignee_name"] == "Manager" and deadline["escalation_name"] == "Boss"
     assert deadline["basis_unconfirmed"] is False
 
     client.patch(f"/api/contracts/{contract_id}/register", params=query, json={"changes": {"notice_period_value": 6}})
     [updated] = client.get(f"/api/contracts/{contract_id}/deadlines", params=query).json()["items"]
-    assert updated["id"] == deadline["id"] and (updated["due_date"], updated["remind_on"]) == ("2027-06-30", "2027-03-30")
+    assert updated["id"] == deadline["id"] and (updated["due_date"], updated["remind_on"]) == ("2027-06-30", "2027-02-28")
 
     assert client.patch(f"/api/deadlines/{updated['id']}", params=query, json={"values": {"due_date": "2027-01-01"}}).status_code == 422
     assert client.post(f"/api/deadlines/{updated['id']}/cancel", params=query, json={}).status_code == 409
@@ -251,3 +251,30 @@ def test_inbox_count_matches_visible_scope(monkeypatch):
     app.include_router(deadline_routes.router)
     scoped = TestClient(app).get("/api/inbox", params=query).json()
     assert scoped["notifications"] == [] and scoped["unread_count"] == 0
+
+
+def test_extra_reminders_are_sent_once_each(monkeypatch):
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    client = _client(monkeypatch, ids, "manager", "contract_manager")
+    contract_id = _contract(client, slug, ids)
+    bad = client.put(f"/api/contracts/{contract_id}/reminders", params=query, json={"extra_leads": [{"value": 0, "unit": "weeks"}]})
+    assert bad.status_code == 422
+    saved = client.put(f"/api/contracts/{contract_id}/reminders", params=query, json={"extra_leads": [{"value": 2, "unit": "weeks"}, {"value": 1, "unit": "months"}]})
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["reminders"]["extra_leads"] == [{"value": 1, "unit": "months"}, {"value": 2, "unit": "weeks"}]
+    assert body["reminders"]["default_lead_months"] == 4
+    assert body["terms"]["reminder_dates"] == ["2027-02-28", "2027-05-30", "2027-06-16"]
+    [deadline] = client.get(f"/api/contracts/{contract_id}/deadlines", params=query).json()["items"]
+    assert deadline["remind_on"] == "2027-02-28"
+
+    def reminders(day):
+        return run_daily(as_of=day, trigger="test", transport_factory=FakeTransport, organization_id=ids["org"]).counts.get("deadline_reminder", 0)
+
+    assert reminders(date(2027, 3, 1)) == 1  # erste Erinnerung
+    assert reminders(date(2027, 4, 1)) == 0
+    assert reminders(date(2027, 5, 30)) == 1  # 1 Monat vorher
+    assert reminders(date(2027, 6, 1)) == 0
+    assert reminders(date(2027, 6, 16)) == 1  # 2 Wochen vorher
+    assert reminders(date(2027, 6, 20)) == 0

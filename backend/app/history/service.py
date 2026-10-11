@@ -39,6 +39,7 @@ EVENT_LABELS: dict[str, str] = {
     "contract.document_removed": "Dokument entfernt",
     "contract.document_restored": "Dokument wiederhergestellt",
     "contract.device_types_updated": "Gerätearten geändert",
+    "contract.reminders_updated": "Erinnerungen geändert",
     "catalog.device_type_created": "Geräteart angelegt",
     "catalog.device_type_updated": "Geräteart geändert",
     "contract.ai_values_applied": "KI-Werte in Stammdaten übernommen",

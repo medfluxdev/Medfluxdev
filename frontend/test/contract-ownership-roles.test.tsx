@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
@@ -140,8 +140,25 @@ describe("Contract360 Organisationszuordnung", () => {
     const department = await screen.findByLabelText("Verantwortliche Abteilung");
     await user.selectOptions(department, "dept-rad");
     expect(screen.getByLabelText("Kostenstelle")).toHaveValue("cc-rad");
-    await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-icu");
-    expect(department).toHaveValue("dept-icu");
+    // Kostenstelle einer nutzenden Abteilung wählen: die verantwortliche Abteilung bleibt.
+    await user.click(screen.getByRole("checkbox", { name: "Intensivmedizin" }));
+    const center = screen.getByLabelText("Kostenstelle");
+    expect(within(center).getByRole("group", { name: "Verantwortliche Abteilung" })).toHaveTextContent("4400");
+    expect(within(center).getByRole("group", { name: "Nutzende Abteilungen" })).toHaveTextContent("4500");
+    await user.selectOptions(center, "cc-icu");
+    expect(department).toHaveValue("dept-rad");
+    expect(screen.getByRole("checkbox", { name: "Intensivmedizin" })).toBeChecked();
+    expect(center).toHaveValue("cc-icu");
+  });
+
+  it("ohne verantwortliche Abteilung: Kostenstelle wählen setzt ihre Abteilung", async () => {
+    const user = userEvent.setup();
+    mocks.listCostCenters.mockResolvedValue({ items: [{ id: "cc-icu", hospital_id: "hospital-1", department_id: "dept-icu", code: "4500", name: "Intensiv", is_active: true }] });
+    mocks.getContractDepartmentRoles.mockResolvedValue({ contract_id: "contract-1", responsible_department_id: null, beneficiary_department_ids: [], unclassified_department_ids: [] });
+    mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: [], cost_center_id: null, responsible_account_id: null, scope_type: "hospital" });
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await user.selectOptions(await screen.findByLabelText("Kostenstelle"), "cc-icu");
+    expect(screen.getByLabelText("Verantwortliche Abteilung")).toHaveValue("dept-icu");
   });
 });
 

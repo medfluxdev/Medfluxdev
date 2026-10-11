@@ -32,9 +32,14 @@ export interface RegisterTerms {
   possible_end: string | null;
   actual_end: string | null;
   reminder_date: string | null;
+  /** Alle Erinnerungstermine (erste + weitere), aufsteigend. */
+  reminder_dates?: string[];
   missing: string[];
   explanation: string[];
 }
+
+export type ReminderUnit = "days" | "weeks" | "months";
+export interface ReminderLead { value: number; unit: ReminderUnit }
 
 export interface PartnerSuggestion {
   id: string;
@@ -56,6 +61,8 @@ export interface ContractRegister {
   ended_on: string | null;
   fields: Record<string, RegisterField>;
   terms: RegisterTerms;
+  /** Erste Erinnerung (leer = Standard) und weitere Erinnerungen. */
+  reminders?: { default_lead_months: number; lead_months: number | null; extra_leads: ReminderLead[] };
   missing_for_valid: string[];
   as_of: string;
   partner_suggestions: PartnerSuggestion[];
@@ -184,6 +191,10 @@ export interface DocumentCapture {
   document_version_id: string;
   page: number;
   quote: string;
+}
+
+export function saveReminderLeads(organizationSlug: string, contractId: string, extraLeads: ReminderLead[]) {
+  return apiPut<ContractRegister>(contractPath(contractId, "reminders", organizationSlug), { extra_leads: extraLeads });
 }
 
 export function getDocumentPageText(organizationSlug: string, contractId: string, documentVersionId: string, page: number) {

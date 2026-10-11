@@ -35,6 +35,13 @@ describe("Jeder Kasten einklappbar", () => {
     expect(box).toHaveAttribute("data-collapsed");
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).toHaveAccessibleName("SLA aufklappen");
+    // Doppelklick auf den Kopf klappt auf; Doppelklick auf einen Knopf darin nicht.
+    await user.dblClick(screen.getByRole("heading", { name: "SLA" }));
+    expect(box).not.toHaveAttribute("data-collapsed");
+    await user.dblClick(screen.getByRole("heading", { name: "SLA" }));
+    expect(box).toHaveAttribute("data-collapsed");
+    await user.dblClick(toggle);
+    expect(box).toHaveAttribute("data-collapsed");
     unmount();
 
     // Neu gerendert: Zustand aus dem Speicher.

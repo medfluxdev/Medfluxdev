@@ -200,6 +200,8 @@ class Contract(OrgOwnedMixin, Base):
     renewal_period_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     renewal_period_unit: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     reminder_lead_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Weitere Erinnerungen vor Kündigungstermin/Vertragsende, z. B. [{"value": 2, "unit": "weeks"}].
+    reminder_extra_leads: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     reminder_recipient_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )

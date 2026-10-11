@@ -57,6 +57,8 @@ class ContractDeadline(OrgOwnedMixin, Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     remind_on: Mapped[date] = mapped_column(Date, nullable=False)
+    # Weitere Erinnerungstage (ISO-Daten, aufsteigend), je einmal gesendet.
+    extra_remind_on: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     assignee_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )

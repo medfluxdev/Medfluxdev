@@ -85,6 +85,8 @@ class TermInputs:
     notice_to: Optional[str] = None
     renewal_period: Optional[Period] = None
     reminder_lead_months: Optional[int] = None
+    # Weitere Erinnerungen (register/reminders.normalize_leads).
+    reminder_extra: tuple = ()
     terminated_effective: Optional[date] = None
     ended_on: Optional[date] = None
 
@@ -97,6 +99,8 @@ class TermResult:
     possible_end: Optional[date] = None
     actual_end: Optional[date] = None
     reminder_date: Optional[date] = None
+    # Alle Erinnerungstermine (erste + weitere), aufsteigend.
+    reminder_dates: list[date] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     explanation: list[str] = field(default_factory=list)
 
@@ -111,6 +115,7 @@ class TermResult:
             "possible_end": iso(self.possible_end),
             "actual_end": iso(self.actual_end),
             "reminder_date": iso(self.reminder_date),
+            "reminder_dates": [iso(value) for value in self.reminder_dates],
             "missing": list(self.missing),
             "explanation": list(self.explanation),
         }
@@ -154,10 +159,12 @@ def _following_period_end(previous_end: date, length: Period) -> date:
     return term_end(previous_end + timedelta(days=1), length)
 
 
-def _reminder(anchor: Optional[date], lead_months: Optional[int]) -> Optional[date]:
-    if anchor is None or lead_months is None or lead_months < 0:
-        return None
-    return month_add(anchor, -lead_months)
+def _reminders(anchor: Optional[date], inputs: "TermInputs") -> dict:
+    """Erste Erinnerung (ohne Angabe der Standard) und weitere Erinnerungen vor dem Stichtag."""
+    from app.register.reminders import extra_reminders, first_reminder
+
+    first = first_reminder(anchor, inputs.reminder_lead_months)
+    return {"reminder_date": first, "reminder_dates": ([first] if first else []) + extra_reminders(anchor, list(inputs.reminder_extra), first)}
 
 
 def _calendar_end(
@@ -245,7 +252,7 @@ def compute_terms(inputs: TermInputs, as_of: date) -> TermResult:
                 status="complete",
                 earliest_end=initial_end,
                 possible_end=initial_end,
-                reminder_date=_reminder(initial_end, inputs.reminder_lead_months),
+                **_reminders(initial_end, inputs),
                 explanation=lines,
             )
 
@@ -293,7 +300,7 @@ def compute_terms(inputs: TermInputs, as_of: date) -> TermResult:
             earliest_end=initial_end,
             cancel_by=cancel_by,
             possible_end=end,
-            reminder_date=_reminder(cancel_by, inputs.reminder_lead_months),
+            **_reminders(cancel_by, inputs),
             explanation=lines,
         )
 
@@ -342,7 +349,7 @@ def compute_terms(inputs: TermInputs, as_of: date) -> TermResult:
             earliest_end=earliest_end,
             cancel_by=cancel_by,
             possible_end=possible_end,
-            reminder_date=_reminder(cancel_by, inputs.reminder_lead_months),
+            **_reminders(cancel_by, inputs),
             explanation=lines,
         )
 

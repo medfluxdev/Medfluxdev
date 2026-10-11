@@ -104,6 +104,17 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     .filter((item) => item.hospital_id === hospitalId)
     .sort((a, b) => Number(Boolean(b.department_id && selectedDepartments.has(b.department_id))) - Number(Boolean(a.department_id && selectedDepartments.has(a.department_id)))),
   [centers, hospitalId, selectedDepartments]);
+  // Kostenstellen gruppiert: verantwortliche Abteilung, nutzende Abteilungen, übrige des Krankenhauses.
+  const centerGroups = useMemo(() => {
+    const own = visibleCenters.filter((item) => item.department_id && item.department_id === responsibleDepartmentId);
+    const using = visibleCenters.filter((item) => item.department_id && beneficiaryDepartmentIds.includes(item.department_id));
+    const rest = visibleCenters.filter((item) => !own.includes(item) && !using.includes(item));
+    return [
+      { label: "Verantwortliche Abteilung", items: own },
+      { label: "Nutzende Abteilungen", items: using },
+      { label: own.length || using.length ? "Weitere Kostenstellen des Krankenhauses" : "Kostenstellen des Krankenhauses", items: rest },
+    ];
+  }, [visibleCenters, responsibleDepartmentId, beneficiaryDepartmentIds]);
   const visibleAssignees = useMemo(() => assignees.filter((item) =>
     (!item.hospital_id || item.hospital_id === hospitalId) &&
     (!item.department_id || selectedDepartments.size === 0 || selectedDepartments.has(item.department_id))),
@@ -127,7 +138,6 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   function toggleBeneficiary(id: string) {
     if (id === responsibleDepartmentId) return;
     setBeneficiaryDepartmentIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
-    setCenterId("");
   }
 
   async function save() {
@@ -200,13 +210,14 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       <label><span>Kostenstelle</span><select value={centerId} onChange={(event) => {
         const next = event.target.value;
         setCenterId(next);
-        // Abteilung der Kostenstelle automatisch übernehmen (falls verknüpft).
+        // Kostenstelle einer verantwortlichen oder nutzenden Abteilung: Rollen bleiben, wie sie sind.
+        // Gehört sie einer noch nicht gewählten Abteilung, wird diese verantwortlich (falls noch keine gewählt ist).
         const owner = centers.find((item) => item.id === next)?.department_id;
-        if (owner) {
+        if (owner && !selectedDepartments.has(owner) && !responsibleDepartmentId) {
           setResponsibleDepartmentId(owner);
           setBeneficiaryDepartmentIds((current) => current.filter((id) => id !== owner));
         }
-      }} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{visibleCenters.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</select></label>
+      }} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{centerGroups.map((group) => group.items.length ? <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</optgroup> : null)}</select>{hospitalId && centerGroups[0].items.length === 0 && centerGroups[1].items.length === 0 && selectedDepartments.size ? <small>Die gewählten Abteilungen haben keine eigene Kostenstelle; unten stehen die übrigen des Krankenhauses.</small> : null}</label>
       <div className="cw-ownership-field cw-ownership-people">
         <label><span>Hauptverantwortlich</span><select value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((current) => current.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select></label>
         <div className="cw-ownership-field"><span id="cw-further-label">Weitere Verantwortliche</span>

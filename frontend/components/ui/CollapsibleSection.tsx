@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { clearSelection, isHeadDoubleClick } from "@/lib/box-collapse";
 
 const STORAGE_KEY = "medflux.collapsed-sections";
 
@@ -59,7 +60,7 @@ export default function CollapsibleSection({ id, title, description, actions, fo
 
   const bodyId = `${id}-body`;
   return <section className={["cw-section collapsible", collapsed ? "is-collapsed" : "", className ?? ""].filter(Boolean).join(" ")} aria-labelledby={`${id}-heading`}>
-    <div className="cw-section-head">
+    <div className="cw-section-head" onDoubleClick={(event) => { if (!isHeadDoubleClick(event, event.currentTarget)) return; clearSelection(); toggle(); }}>
       <div><h2 id={`${id}-heading`}>{title}</h2>{description && !collapsed ? <p>{description}</p> : null}</div>
       <div className="collapsible-corner">
         {!collapsed ? actions : null}

@@ -469,3 +469,44 @@ def put_device_types(contract_id: UUID, payload: DeviceTypeAssignment, request: 
         return _device_type_payload(session, contract)
     finally:
         session.close()
+
+
+# --------------------------------------------------------------------------- weitere Erinnerungen
+
+
+class ReminderLead(BaseModel):
+    value: int
+    unit: str
+
+
+class ReminderUpdate(BaseModel):
+    extra_leads: list[ReminderLead] = Field(default_factory=list, max_length=10)
+
+
+@router.put("/{contract_id}/reminders")
+def put_reminders(contract_id: UUID, payload: ReminderUpdate, request: Request, organization_slug: str):
+    """Weitere Erinnerungen vor Kündigungstermin/Vertragsende (die erste steht im Feld „Erinnerung“)."""
+    from app.register.reminders import lead_label, normalize_leads
+
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            leads = normalize_leads([item.model_dump() for item in payload.extra_leads])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        before = list(contract.reminder_extra_leads or [])
+        if before != leads:
+            contract.reminder_extra_leads = leads or None
+            log_activity(session, actor, contract.id, "contract.reminders_updated", {
+                "before": [lead_label(lead) for lead in before], "after": [lead_label(lead) for lead in leads],
+            })
+            session.flush()
+            sync_system_deadlines(session, contract, today_local())
+        session.commit()
+        return _register_payload(session, contract, actor)
+    finally:
+        session.close()
+

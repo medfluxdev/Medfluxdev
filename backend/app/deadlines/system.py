@@ -30,9 +30,9 @@ from app.database.models import Contract
 from app.database.models.deadlines import ContractDeadline
 from app.database.models.finance import ContractFinanceEntry
 from app.register.service import log_system_activity, retention_info, term_inputs
+from app.register.reminders import DEFAULT_REMINDER_LEAD_MONTHS as DEFAULT_LEAD_MONTHS, extra_reminders
 from app.register.terms import TermResult, compute_terms
 
-DEFAULT_LEAD_MONTHS = 3
 ACTIVE_STATUSES = frozenset({"in_arbeit", "gueltig"})
 ADJUSTING_KINDS = frozenset({"percent", "index", "negotiation"})
 # Zahlungen/Wartungen laufen bis zum Vertragsende weiter, auch nach einer Kuendigung.
@@ -56,6 +56,13 @@ class SystemDeadlineSpec:
     todo_text: str
     assignee_account_id: Optional[uuid.UUID]
     escalation_account_id: Optional[uuid.UUID]
+    # Weitere Erinnerungstage (nur Kündigungsfrist/Vertragsende), ISO-Daten aufsteigend.
+    extra_remind_on: Optional[list] = None
+
+
+def _extra(due: date, contract: Contract) -> Optional[list]:
+    extra = extra_reminders(due, contract.reminder_extra_leads or [], _remind_on(due, contract.reminder_lead_months))
+    return [day.isoformat() for day in extra] or None
 
 
 def _remind_on(due: date, lead_months: Optional[int]) -> date:
@@ -168,6 +175,7 @@ def plan_system_deadlines(
                 title="Kündigungsfrist",
                 due_date=terms.cancel_by,
                 remind_on=_remind_on(terms.cancel_by, contract.reminder_lead_months),
+                extra_remind_on=_extra(terms.cancel_by, contract),
                 todo_text=contract.reminder_todo or "Verlängerung prüfen oder Vertrag fristgerecht kündigen.",
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
@@ -179,6 +187,7 @@ def plan_system_deadlines(
                 title="Vertragsende (feste Laufzeit)",
                 due_date=terms.possible_end,
                 remind_on=_remind_on(terms.possible_end, contract.reminder_lead_months),
+                extra_remind_on=_extra(terms.possible_end, contract),
                 todo_text=contract.reminder_todo or "Folgevertrag oder Verlängerung klären.",
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
@@ -310,6 +319,7 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
                 title=spec.title,
                 due_date=spec.due_date,
                 remind_on=spec.remind_on,
+                extra_remind_on=spec.extra_remind_on,
                 todo_text=spec.todo_text,
                 assignee_account_id=spec.assignee_account_id,
                 escalation_account_id=spec.escalation_account_id,
@@ -326,7 +336,7 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
             # erledigt wird; erst danach entsteht die naechste Periode.
             continue
         diffs = {}
-        for attr in ("kind", "title", "due_date", "remind_on", "todo_text", "assignee_account_id", "escalation_account_id"):
+        for attr in ("kind", "title", "due_date", "remind_on", "extra_remind_on", "todo_text", "assignee_account_id", "escalation_account_id"):
             value = getattr(spec, attr)
             if getattr(row, attr) != value:
                 diffs[attr] = {"before": _plain(getattr(row, attr)), "after": _plain(value)}
