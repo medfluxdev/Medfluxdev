@@ -44,6 +44,8 @@ export interface GridGroup extends MoneyTotals {
 }
 
 export interface GridResponse {
+  /** Anzeigenamen für Kennungs-Filterwerte („id:<uuid>“, z. B. Vertragspartner). */
+  filter_labels?: Record<string, string>;
   as_of: string;
   spec: GridSpec;
   total: number;

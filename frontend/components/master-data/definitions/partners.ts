@@ -118,7 +118,8 @@ export const partnerDefinition: EntityDefinition<PartnerDto, PartnerContext> = {
   create: async (organizationSlug, form, { force }) => createPartnerFromForm(organizationSlug, form, force),
   update: (organizationSlug, row, form) => updatePartner(organizationSlug, row.id, toValues(form)),
   setActive: (organizationSlug, row, active) => updatePartner(organizationSlug, row.id, { is_active: active }),
-  registerFilter: (row) => ({ column: "partner", value: row.short_name }),
+  // Über die Kennung: bleibt richtig bei Umbenennen und bei gleichen Namen.
+  registerFilter: (row) => ({ column: "partner", value: `id:${row.id}` }),
   findSimilar: similarPartnerNames,
   importKind: "partner",
   importColumns: [

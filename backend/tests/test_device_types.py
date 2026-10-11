@@ -160,3 +160,22 @@ def test_suggestions_match_whole_words_only():
     # „CT“ steckt in „Victory“ – kein ganzes Wort, kein Vorschlag.
     assert match_device_types(["Victory Desk"], [ct]) == []
 
+
+
+def test_partner_filter_by_id_and_legacy_name():
+    from app.reports.grid import distinct_values, filter_labels
+
+    siemens_a, siemens_b = uuid4(), uuid4()
+    rows = [_row("001", {}, None), _row("002", {}, None), _row("003", {}, None)]
+    for row, partner, name in zip(rows, (siemens_a, siemens_b, None), ("Siemens", "Siemens", "Freitext GmbH")):
+        row.values["partner"] = name
+        row.ids["partner"] = partner
+    by_id = GridSpec.parse({"filters": [{"column": "partner", "op": "in", "value": [f"id:{siemens_b}"]}]})
+    assert [row.values["register_number"] for row in apply_filters(rows, by_id, date(2026, 10, 11), None)] == ["002"]
+    # Alte Links über den Namen und freie Lieferantentexte funktionieren weiter.
+    by_name = GridSpec.parse({"filters": [{"column": "partner", "op": "in", "value": ["Siemens", "Freitext GmbH"]}]})
+    assert len(apply_filters(rows, by_name, date(2026, 10, 11), None)) == 3
+    values = distinct_values(rows, "partner")
+    assert {item["value"] for item in values} == {f"id:{siemens_a}", f"id:{siemens_b}", "Freitext GmbH"}
+    assert [item["label"] for item in values].count("Siemens") == 2
+    assert filter_labels(rows, by_id) == {f"id:{siemens_b}": "Siemens"}

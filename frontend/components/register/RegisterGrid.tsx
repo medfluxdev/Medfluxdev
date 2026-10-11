@@ -364,7 +364,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
     <div className="reg-row">
       <div className="reg-quick" role="group" aria-label="Schnellfilter">
         <StatusFilter column={columnByKey.get("business_status")} spec={spec} onFilters={setFilters} />
-        <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("partner")} spec={spec} onFilters={setFilters} />
+        <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("partner")} spec={spec} onFilters={setFilters} labels={data?.filter_labels} />
         <AreaFilter tree={data?.tree ?? []} spec={spec} onFilters={setFilters} />
         <PartnerFilter organizationSlug={organizationSlug} column={columnByKey.get("device_types") ? { ...columnByKey.get("device_types")!, label: "Geräteart" } : undefined} spec={spec} onFilters={setFilters} />
       </div>

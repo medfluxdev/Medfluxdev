@@ -93,15 +93,18 @@ export function StatusFilter({ column, spec, onFilters }: { column: GridColumn |
   </Popover>;
 }
 
-export function PartnerFilter({ organizationSlug, column, spec, onFilters }: {
+export function PartnerFilter({ organizationSlug, column, spec, onFilters, labels }: {
   organizationSlug: string;
   column: GridColumn | undefined;
   spec: GridSpec;
   onFilters: (filters: GridFilter[]) => void;
+  /** Namen zu Kennungs-Werten („id:<uuid>“) aus der Antwort der Liste. */
+  labels?: Record<string, string>;
 }) {
   if (!column) return null;
   const selected = inValues(spec.filters, column.key);
-  return <Popover label={quickLabel(column.label, selected.map((value) => value || "(ohne)"))} panelLabel={`${column.label} wählen`} active={selected.length > 0}>
+  const name = (value: string) => labels?.[value] ?? (value.startsWith("id:") ? "1 Eintrag" : value || "(ohne)");
+  return <Popover label={quickLabel(column.label, selected.map(name))} panelLabel={`${column.label} wählen`} active={selected.length > 0}>
     <RemoteChecklist organizationSlug={organizationSlug} column={column.key} legend={column.label} hideLegend spec={spec} onFilters={onFilters} />
   </Popover>;
 }

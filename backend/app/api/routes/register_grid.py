@@ -28,6 +28,7 @@ from app.database.session import create_session
 from app.demo.workspace import workspace_contract_ids
 from app.reports.exports import cover_html, drilldown, grid_xlsx, html_to_pdf, portfolio, portfolio_xlsx
 from app.reports.grid import (
+    filter_labels,
     COLUMN_BY_KEY,
     GridError,
     GridSpec,
@@ -147,6 +148,7 @@ def get_grid(
             "total": len(ordered),
             "totals": totals(ordered),
             "groups": groups(ordered, parsed),
+            "filter_labels": filter_labels(all_rows, parsed),
             "items": [{**row_payload(row, parsed.columns), "group": [display(COLUMN_BY_KEY[key], row.values[key]) for key in parsed.group_by]} for row in page],
             **({"tree": tree_payload} if include_tree else {}),
         }

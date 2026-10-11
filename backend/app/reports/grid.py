@@ -98,6 +98,9 @@ COLUMNS: tuple[Column, ...] = (
 COLUMN_BY_KEY = {column.key: column for column in COLUMNS}
 MONEY_KEYS = tuple(column.key for column in COLUMNS if column.type == "money")
 DEFAULT_COLUMNS = [column.key for column in COLUMNS if column.default]
+# Spalten, deren Filterwert die Kennung des Stammdatums sein kann („id:<uuid>“).
+ID_PREFIX = "id:"
+ID_VALUE_COLUMNS = frozenset({"partner"})
 FILTER_OPS = {"empty", "not_empty", "in", "contains", "range", "within_days", "due_within_days", "overdue", "me", "is"}
 MAX_GROUP_LEVELS = 2
 RISK_LABELS = {"high": "Hoch", "medium": "Mittel", "low": "Niedrig"}
@@ -373,6 +376,8 @@ def build_rows(
             contract_id=contract.id,
             values=values,
             ids={
+                # Vertragspartner aus den Stammdaten: Filterwert „id:<uuid>“ (stabil bei Umbenennen, eindeutig bei gleichen Namen).
+                "partner": contract.partner_id,
                 "responsible": contract.responsible_account_id,
                 "reminder_recipient": contract.reminder_recipient_account_id,
                 "escalation_recipient": contract.escalation_recipient_account_id,
@@ -511,6 +516,9 @@ def _predicate(item: dict, as_of: date, account_id: Optional[uuid.UUID]) -> Call
         allowed = {str(entry) for entry in (value if isinstance(value, list) else [value])}
 
         def matches(row: GridRow) -> bool:
+            linked = row.ids.get(key)
+            if linked is not None and f"{ID_PREFIX}{linked}" in allowed:
+                return True
             if key in row.lists:
                 items = row.lists[key]
                 return bool(allowed & set(items)) if items else "" in allowed
@@ -704,6 +712,20 @@ def columns_payload(*, with_deleted: bool = True) -> list[dict]:
 def distinct_values(rows: list[GridRow], key: str) -> list[dict]:
     column = COLUMN_BY_KEY[key]
     counts: dict[Any, int] = defaultdict(int)
+    if key in ID_VALUE_COLUMNS:
+        # Verknüpfte Einträge über ihre Kennung, freie Texte (z. B. Lieferant ohne Stammdaten) über den Text.
+        labels: dict[str, str] = {}
+        for row in rows:
+            linked = row.ids.get(key)
+            value = f"{ID_PREFIX}{linked}" if linked else row.values[key]
+            if linked:
+                labels[value] = str(row.values[key] or "–")
+            counts[value] += 1
+        ordered = sorted(counts, key=lambda value: (labels.get(value) or value or "").casefold())
+        return [
+            {"value": value or "", "label": labels.get(value) or (value or "(ohne)"), "count": counts[value]}
+            for value in ordered
+        ]
     for row in rows:
         if key in row.lists:
             for item in row.lists[key] or (None,):
@@ -736,3 +758,23 @@ def tree(rows: list[GridRow]) -> list[dict]:
             ],
         })
     return out
+
+
+def filter_labels(rows: list["GridRow"], spec: "GridSpec") -> dict[str, str]:
+    """Anzeigenamen für Kennungs-Filterwerte („id:<uuid>“) der aktuellen Filter."""
+    wanted = {
+        str(value) for item in spec.filters if item["column"] in ID_VALUE_COLUMNS and item["op"] == "in"
+        for value in (item.get("value") if isinstance(item.get("value"), list) else [item.get("value")])
+        if isinstance(value, str) and value.startswith(ID_PREFIX)
+    }
+    if not wanted:
+        return {}
+    labels: dict[str, str] = {}
+    for row in rows:
+        for column in ID_VALUE_COLUMNS:
+            linked = row.ids.get(column)
+            value = f"{ID_PREFIX}{linked}" if linked else None
+            if value in wanted and value not in labels:
+                labels[value] = str(row.values[column] or "–")
+    return labels
+
