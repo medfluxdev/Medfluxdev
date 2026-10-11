@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Signal from "@/components/ui/Signal";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Popover from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
@@ -60,8 +61,13 @@ export default function AiReviewButton({ contractId, orgSlug, reviewPending, can
 
   const open = useMemo(() => openAiValues(register), [register]);
   useEffect(() => { onCount?.(open.length); }, [onCount, open.length]);
-  // Nur unbestätigte KI-Werte; eine Warnung, die eine Prüfung verlangt, steht unter „Offene Punkte“.
-  if (open.length === 0) return null;
+  // KI-Prüfung im Kopf: unbestätigte KI-Werte (Liste zum Bestätigen) oder die offene Prüfung am Dokument.
+  if (open.length === 0) {
+    if (!reviewPending) return null;
+    return <Link className="ai-review-link" href={contractHref(contractId, REVIEW_TARGET)} title="Werte aus dem Dokument mit dem Vertrag vergleichen">
+      <Signal tone="ai">KI-Prüfung offen</Signal>
+    </Link>;
+  }
 
   async function confirm(keys: string[], success: string) {
     setBusy(true);
@@ -76,7 +82,7 @@ export default function AiReviewButton({ contractId, orgSlug, reviewPending, can
     }
   }
 
-  const label = `KI-Werte prüfen · ${open.length}`;
+  const label = `KI-Prüfung · ${open.length}`;
   return <Popover
     className="ai-review"
     label={<><span aria-hidden="true">✦ </span>{label}</>}

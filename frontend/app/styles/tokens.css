@@ -140,6 +140,19 @@
   --color-ai: #6941c6;
   --color-ai-bg: #f2edfd;
   --color-ai-border: #d4c6f5;   /* Ruhe & Signal: Rahmen fuer KI-Plaketten */
+  /* Kennfarben der Hauptangaben im Vertragskopf (Ausnahme in VISUAL_IDENTITY.md): immer mit Symbol + Text. */
+  --color-tag-type: #0b5e66;
+  --color-tag-type-bg: #e2f2f3;
+  --color-tag-type-border: #9ccfd3;
+  --color-tag-partner: #0f4c81;
+  --color-tag-partner-bg: #e8f0f8;
+  --color-tag-partner-border: #9dbcd9;
+  --color-tag-department: #4a3f9b;
+  --color-tag-department-bg: #eeecfa;
+  --color-tag-department-border: #c1bbeb;
+  --color-tag-cost: #8a3b62;
+  --color-tag-cost-bg: #f8e9f0;
+  --color-tag-cost-border: #e2b6cb;
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
@@ -260,6 +273,18 @@
     --color-ai: #c4b2f7;
     --color-ai-bg: #2a2340;
     --color-ai-border: #4a3d73;
+    --color-tag-type: #7fd3da;
+    --color-tag-type-bg: #10302f;
+    --color-tag-type-border: #245a5d;
+    --color-tag-partner: #8cc0f2;
+    --color-tag-partner-bg: #13283d;
+    --color-tag-partner-border: #24496e;
+    --color-tag-department: #b9b1f2;
+    --color-tag-department-bg: #24213f;
+    --color-tag-department-border: #45407a;
+    --color-tag-cost: #eeaccb;
+    --color-tag-cost-bg: #37202c;
+    --color-tag-cost-border: #6b3c53;
     --color-success-fill: #3fae86;
     --color-warning-fill: #d99a2b;
     --color-danger-fill: #d9605a;
@@ -325,6 +350,18 @@
   --color-ai: #c4b2f7;
   --color-ai-bg: #2a2340;
   --color-ai-border: #4a3d73;
+  --color-tag-type: #7fd3da;
+  --color-tag-type-bg: #10302f;
+  --color-tag-type-border: #245a5d;
+  --color-tag-partner: #8cc0f2;
+  --color-tag-partner-bg: #13283d;
+  --color-tag-partner-border: #24496e;
+  --color-tag-department: #b9b1f2;
+  --color-tag-department-bg: #24213f;
+  --color-tag-department-border: #45407a;
+  --color-tag-cost: #eeaccb;
+  --color-tag-cost-bg: #37202c;
+  --color-tag-cost-border: #6b3c53;
   --color-success-fill: #3fae86;
   --color-warning-fill: #d99a2b;
   --color-danger-fill: #d9605a;

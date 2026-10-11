@@ -48,7 +48,7 @@ describe("KI-Prüfung im Kopf der Vertragsakte", () => {
     const changed = vi.fn();
     window.addEventListener(REGISTER_CHANGED_EVENT, changed);
     const { container } = render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending canEdit />);
-    await user.click(await screen.findByRole("button", { name: /KI-Werte prüfen · 3/ }));
+    await user.click(await screen.findByRole("button", { name: /KI-Prüfung · 3/ }));
     const panel = screen.getByRole("group", { name: "KI-Werte prüfen" });
     expect(within(panel).getByText("3 KI-Werte noch nicht bestätigt")).toBeInTheDocument();
     expect(within(panel).getByRole("link", { name: "Laufzeit" })).toHaveAttribute("href", "/contracts/c-1?tab=register&feld=initial_term");
@@ -57,7 +57,7 @@ describe("KI-Prüfung im Kopf der Vertragsakte", () => {
     await user.click(within(panel).getByRole("button", { name: "Laufzeit bestätigen" }));
     expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {}, confirm: ["initial_term_value", "initial_term_unit"] });
     await waitFor(() => expect(changed).toHaveBeenCalled());
-    expect(await screen.findByRole("button", { name: /KI-Werte prüfen · 2/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /KI-Prüfung · 2/ })).toBeInTheDocument();
     window.removeEventListener(REGISTER_CHANGED_EVENT, changed);
   });
 
@@ -65,7 +65,7 @@ describe("KI-Prüfung im Kopf der Vertragsakte", () => {
     const user = userEvent.setup();
     api.updateContractRegister.mockResolvedValue(register({}));
     render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending={false} canEdit />);
-    await user.click(await screen.findByRole("button", { name: /KI-Werte prüfen · 3/ }));
+    await user.click(await screen.findByRole("button", { name: /KI-Prüfung · 3/ }));
     await user.click(screen.getByRole("button", { name: "Alle bestätigen" }));
     expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {}, confirm: ["short_description", "term_model", "initial_term_value", "initial_term_unit"] });
   });
@@ -73,15 +73,14 @@ describe("KI-Prüfung im Kopf der Vertragsakte", () => {
   it("ohne Bearbeitungsrecht nur ansehen; ohne offene Werte nur die Dokumentprüfung", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending canEdit={false} />);
-    await user.click(await screen.findByRole("button", { name: /KI-Werte prüfen · 3/ }));
+    await user.click(await screen.findByRole("button", { name: /KI-Prüfung · 3/ }));
     expect(screen.queryByRole("button", { name: /bestätigen/i })).not.toBeInTheDocument();
     unmount();
 
     api.getContractRegister.mockResolvedValue(register({ short_description: field("Kurzbeschreibung", "ai_confirmed") }));
-    // Nur eine Warnung verlangt eine Prüfung: kein Kopf-Knopf (sie steht unter „Offene Punkte“).
-    const { container } = render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending canEdit />);
-    await waitFor(() => expect(api.getContractRegister).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    // Keine offenen Werte, aber die Prüfung am Dokument ist offen: „KI-Prüfung offen“ führt dorthin.
+    render(<AiReviewButton contractId="c-1" orgSlug="test-klinik" reviewPending canEdit />);
+    expect(await screen.findByRole("link", { name: "KI-Prüfung offen" })).toHaveAttribute("href", expect.stringContaining("subtab=review"));
   });
 
   it("verschwindet, wenn nichts mehr zu prüfen ist", async () => {

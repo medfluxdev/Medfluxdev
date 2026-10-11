@@ -5579,3 +5579,11 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Jeder Kasten einklappbar:** `lib/box-collapse.ts` (in `ClientNav`) gibt jedem Abschnitt mit Überschrift im Inhaltsbereich einen Knopf rechts oben; Zustand je Seite und Kasten im Browser; Sprünge zu Abschnitten klappen auf (`revealBox`). Regel in `docs/FRONTEND_CONVENTIONS.md` §3.
 - **Abschnitte je Vertragstyp** (Plan `docs/architecture/VERTRAGSPROFIL_ABSCHNITTE_PLAN_20261011.md`): Leistungsumfang, SLA, Wartung und Geräte nur, wo der Vertragstyp sie vorsieht (Wartung/Service: alle; Dienstleistung/Lizenz u. Ä.: Leistungsumfang + SLA; Miete/Leasing/Kauf: Geräte; Versicherung u. Ä.: keine). Ausgeblendet wird nur, was leer ist; ohne Vertragstyp alles. Übersicht nennt Ausgeblendetes mit „Trotzdem anzeigen“; Offene Punkte zählen ausgeblendete Abschnitte nicht. Je Vertragstyp anpassbar (Stammdaten → Vertragstypen → „Abschnitte“, „Standard verwenden“). Migration `v4e6f8a90014` (`catalog_contract_type.sections`), `app/register/sections.py`, Lesemodell `sections`.
 - **Tests:** neu `backend/tests/test_contract_sections.py` (2), `frontend/test/box-collapse.test.tsx`; `contracts-detail.test.tsx` (+1). Migration auf Wegwerf-DB auf/ab/auf.
+
+### Nachtrag 2026-10-11 – Vertragskopf: alles anklickbar, Kennfarben, KI-Prüfung; Aufgaben zuerst
+
+- **Vertragskopf:** Jede Angabe führt zur Quelle bzw. zur Stelle, an der sie gepflegt wird: Vertragsnummer → Vertragsdaten, „Nr. lt. Dokument“ → Fundstelle, Vertragstyp/Abteilung/Kostenstelle → Organisationszuordnung, Vertragspartner → Stammdaten, Beginn/Ende → Vertragsdaten oder Fundstelle, „Kündbar bis“ und Laufzeitleiste → Fristen, Kosten → Finanzposten oder Fundstelle. Vertragstyp, Vertragspartner, Abteilung und Kostenstelle tragen je eine eigene Kennfarbe mit Symbol und Wort (Ausnahme in `docs/VISUAL_IDENTITY.md`, Tokens `--color-tag-*`). Fehlt der Vertragstyp, steht „Vertragstyp festlegen“ im Kopf.
+- **KI-Prüfung im Kopf:** „KI-Prüfung · N“ (unbestätigte KI-Werte zum Bestätigen) bzw. „KI-Prüfung offen“, wenn nur die Prüfung am Dokument offen ist.
+- **Fristen & Aufgaben:** Reiter „Aufgaben“ zuerst und Standard (ohne Aufgaben-Recht weiter „Termine“).
+- **Verifikation:** `npm run verify` grün (67 Testdateien); Playwright 187/187 (Bildreferenzen bewusst erneuert: Einklapp-Knöpfe, Kopf, Reiterfolge).
+

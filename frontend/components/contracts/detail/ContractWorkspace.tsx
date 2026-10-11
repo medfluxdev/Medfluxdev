@@ -459,6 +459,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const paymentStartEvidence = evidenceById(data.dates.payment_start_evidence) ?? findExactEvidence("dates.payment_start_rule", "payment.start");
   const minimumDurationEvidence = evidenceById(data.dates.minimum_duration_evidence) ?? findExactEvidence("dates.minimum_duration_months", "duration.minimum");
   const cancellationEvidence = findExactEvidence("dates.latest_cancellation_date", "termination.latest_cancellation_date", "termination.notice_period");
+  const contractNumberEvidence = findExactEvidence("identity.contract_number", "contract_number");
   const annualCostEvidence = findExactEvidence("costs.annual_recurring", "cost.annual_recurring", "payment.annual_cost", "annual_cost");
   const monthlyCostEvidence = findExactEvidence("costs.monthly_recurring", "cost.monthly_recurring", "payment.monthly_cost", "monthly_cost");
   const taxRateEvidence = evidenceById(data.costs.tax_breakdown?.evidence_field_refs?.vat_rate) ?? findExactEvidence("costs.tax_rate_percent", "cost.tax_rate_percent", "vat_rate");
@@ -535,17 +536,24 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       <nav className="object-crumbs" aria-label="Brotkrümelnavigation"><Link href="/register">Vertragsliste</Link><span aria-hidden="true">›</span><span aria-current="page">{data.contract_title ?? data.contract_number ?? "Vertrag"}</span></nav>
       <header className="object-header">
         <div className="object-header-main">
-          <p className="object-header-eyebrow">{data.register_number ? <>Vertrag <span className="mono">{data.register_number}</span></> : "Vertrag ohne Nummer"}{data.contract_number ? <> · Nr. lt. Dokument <span className="mono">{data.contract_number}</span></> : null}</p>
+          <p className="object-header-eyebrow">{data.register_number
+            ? <button type="button" className="header-link" onClick={() => openTarget({ tab: "register", section: "identity" })} title="In den Vertragsdaten ansehen">Vertrag <span className="mono">{data.register_number}</span></button>
+            : "Vertrag ohne Nummer"}{data.contract_number ? <> · {contractNumberEvidence
+              ? <button type="button" className="header-link" onClick={() => openEvidence(contractNumberEvidence)} title="Fundstelle im Dokument zeigen">Nr. lt. Dokument <span className="mono">{data.contract_number}</span></button>
+              : <>Nr. lt. Dokument <span className="mono">{data.contract_number}</span></>}</> : null}</p>
           <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
           <div className="object-header-meta object-header-who">
-            {data.assignment?.contract_type ? <><span className="type-chip">{data.assignment.contract_type}</span><span className="meta-sep" aria-hidden="true" /></> : null}
+            {/* Hauptangaben mit eigener Kennfarbe, Symbol und Wort; jede führt zur Stelle, an der sie gepflegt wird. */}
+            {data.assignment?.contract_type
+              ? <button type="button" className="tag-chip tag-chip--type" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Vertragstyp – in der Organisationszuordnung ändern"><TagIcon kind="type" /><span className="sr-only">Vertragstyp: </span>{data.assignment.contract_type}</button>
+              : canEditData ? <button type="button" className="tag-chip tag-chip--missing" onClick={() => openTarget({ tab: "register", section: "ownership" })}><TagIcon kind="type" />Vertragstyp festlegen</button> : null}
             {data.partner
-              ? <Link className="partner-chip" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten">{data.partner.name}</Link>
+              ? <Link className="tag-chip tag-chip--partner" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten"><TagIcon kind="partner" /><span className="sr-only">Vertragspartner: </span>{data.partner.name}</Link>
               : data.supplier
-                ? <button type="button" className="partner-chip partner-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet">{data.supplier}<span className="partner-chip-hint">zuordnen</span></button>
+                ? <button type="button" className="tag-chip tag-chip--partner tag-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet"><TagIcon kind="partner" />{data.supplier}<span className="partner-chip-hint">zuordnen</span></button>
                 : null}
-            {data.assignment?.responsible_department ? <><span className="meta-sep" aria-hidden="true" /><span>{data.assignment.responsible_department}</span></> : null}
-            {data.assignment?.cost_center ? <><span className="meta-sep" aria-hidden="true" /><span>Kostenstelle <span className="mono">{data.assignment.cost_center.code}</span> · {data.assignment.cost_center.name}</span></> : null}
+            {data.assignment?.responsible_department ? <button type="button" className="tag-chip tag-chip--department" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Verantwortliche Abteilung – in der Organisationszuordnung ändern"><TagIcon kind="department" /><span className="sr-only">Verantwortliche Abteilung: </span>{data.assignment.responsible_department}</button> : null}
+            {data.assignment?.cost_center ? <button type="button" className="tag-chip tag-chip--cost" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Kostenstelle – in der Organisationszuordnung ändern"><TagIcon kind="cost" />Kostenstelle <span className="mono">{data.assignment.cost_center.code}</span> · {data.assignment.cost_center.name}</button> : null}
           </div>
           <div className="object-header-meta object-header-signals">
             {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
@@ -555,16 +563,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           </div>
         </div>
         <dl className={`object-header-facts${fixedTerm ? " object-header-facts--three" : ""}`}>
-          <div><dt>Vertragsbeginn</dt><dd>{contractStart ? <span className="fact-value">{formatDate(contractStart)}<ValueOriginBadge kind={data.register_facts?.contract_start ? "system" : "extracted"} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></span>}</dd></div>
-          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value">{formatDate(headerEnd)}<ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} /><SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} /></span> : (openEnded ? <span className="fact-value">unbefristet</span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })}>Laufzeit &amp; Kündigung ergänzen</button></span>)}</dd></div>
-          {fixedTerm ? null : <div className={headerCancelBy ? undefined : "fact--alert"}><dt>Kündbar bis</dt><dd>{headerCancelBy ? <span className="fact-value">{formatDate(headerCancelBy)}<ValueOriginBadge kind="calculated" /><SourceButton evidence={data.register_facts?.cancel_by ? null : cancellationEvidence} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Nicht berechenbar</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "notice_period_value" })}>Kündigungsfrist erfassen</button></span>}</dd></div>}
+          <div><dt>Vertragsbeginn</dt><dd>{contractStart ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (data.register_facts?.contract_start || !startEvidence ? openTarget({ tab: "register", field: "term_start_date" }) : openEvidence(startEvidence))} title={data.register_facts?.contract_start || !startEvidence ? "In den Vertragsdaten ansehen" : "Fundstelle im Dokument zeigen"}>{formatDate(contractStart)}</button><ValueOriginBadge kind={data.register_facts?.contract_start ? "system" : "extracted"} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></span>}</dd></div>
+          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (data.register_facts?.contract_end || !endEvidence ? openTarget({ tab: "register", section: "term" }) : openEvidence(endEvidence))} title={data.register_facts?.contract_end || !endEvidence ? "Berechnung in den Vertragsdaten (Laufzeit) ansehen" : "Fundstelle im Dokument zeigen"}>{formatDate(headerEnd)}</button><ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} /><SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} /></span> : (openEnded ? <span className="fact-value">unbefristet</span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })}>Laufzeit &amp; Kündigung ergänzen</button></span>)}</dd></div>
+          {fixedTerm ? null : <div className={headerCancelBy ? undefined : "fact--alert"}><dt>Kündbar bis</dt><dd>{headerCancelBy ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => setRoute("deadlines")} title="Fristen ansehen">{formatDate(headerCancelBy)}</button><ValueOriginBadge kind="calculated" /><SourceButton evidence={data.register_facts?.cancel_by ? null : cancellationEvidence} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Nicht berechenbar</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "notice_period_value" })}>Kündigungsfrist erfassen</button></span>}</dd></div>}
           <div><dt>Jährliche Kosten</dt><dd className="num">{maintainedAnnual
-            ? <span className="fact-value">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}<ValueOriginBadge kind="system" detail="Aus den gepflegten Finanzposten" /></span>
+            ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} title="Finanzposten ansehen">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}</button><ValueOriginBadge kind="system" detail="Aus den gepflegten Finanzposten" /></span>
             : aiAnnual
-              ? <span className="fact-value">{money(data.costs.annual_recurring)}<ValueOriginBadge kind="extracted" detail="Aus der KI-Analyse, noch nicht in die Finanzen übernommen" /><SourceButton evidence={annualCostEvidence} /><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
+              ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (annualCostEvidence ? openEvidence(annualCostEvidence) : setRoute("finance"))} title={annualCostEvidence ? "Fundstelle im Dokument zeigen" : "Finanzen ansehen"}>{money(data.costs.annual_recurring)}</button><ValueOriginBadge kind="extracted" detail="Aus der KI-Analyse, noch nicht in die Finanzen übernommen" /><SourceButton evidence={annualCostEvidence} /><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
               : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} aria-label="Jährliche Kosten erfassen">Kosten erfassen</button></span>}</dd></div>
         </dl>
-        <div className="object-header-term"><ContractTermBar start={contractStart} end={headerEnd} cancelBy={headerCancelBy} fixedTerm={fixedTerm} openEnded={openEnded} /></div>
+        <div className="object-header-term"><ContractTermBar start={contractStart} end={headerEnd} cancelBy={headerCancelBy} fixedTerm={fixedTerm} openEnded={openEnded} onOpen={() => setRoute("deadlines")} /></div>
         <div className="object-header-actions">
           <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer"><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>Deckblatt (PDF)</a>
           <button type="button" className="btn" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>KI-Assistent</button>
@@ -733,4 +741,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       </div>
     </div>
   );
+}
+
+const TAG_ICON_PATHS = {
+  type: "M7 3h7l5 5v13H7zM14 3v5h5",
+  partner: "M4 21V7l6-4 6 4v14M16 11h4v10M8 9h4M8 13h4M8 17h4",
+  department: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 20a6 6 0 0 0-3-5",
+  cost: "M9 4 7 20M17 4l-2 16M4 9h16M3 15h16",
+} as const;
+
+/** Symbol der Kennfarbe im Vertragskopf (Farbe nie allein). */
+function TagIcon({ kind }: { kind: keyof typeof TAG_ICON_PATHS }) {
+  return <svg className="tag-chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={TAG_ICON_PATHS[kind]} /></svg>;
 }

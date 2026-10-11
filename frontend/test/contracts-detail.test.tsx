@@ -236,7 +236,20 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(within(header).getByText("Vertragsbeginn")).toBeInTheDocument();
     expect(within(header.querySelector("dl")!).getByText("01.04.2025")).toBeInTheDocument();
     expect(within(header).getByText("Gültig").closest(".status-badge")).toHaveClass("status-badge--success");
-    expect(within(header).getByRole("link", { name: "ABIOMED Europe GmbH" })).toHaveAttribute("href", "/stammdaten/vertragspartner?id=p-1");
+    expect(within(header).getByRole("link", { name: "Vertragspartner: ABIOMED Europe GmbH" })).toHaveAttribute("href", "/stammdaten/vertragspartner?id=p-1");
+  });
+
+  it("Kopf: Hauptangaben mit Kennfarbe führen zur Organisationszuordnung, Werte zu ihrer Quelle", async () => {
+    await renderWithData(detailFixture({
+      assignment: { contract_type: "Wartungsvertrag", contract_category: null, hospital: "Nordwest", responsible_department: "Medizintechnik", beneficiary_departments: [], other_departments: [], cost_center: { code: "950000", name: "Radiologie" }, responsible: null, further_responsible: [] },
+      register_facts: { contract_start: "2025-05-05", cancel_by: null, contract_end: null, annual_cost: null },
+    }));
+    const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
+    expect(within(header).getByRole("button", { name: "Vertragstyp: Wartungsvertrag" })).toHaveClass("tag-chip--type");
+    expect(within(header).getByRole("button", { name: /Kostenstelle 950000/ })).toHaveClass("tag-chip--cost");
+    expect(within(header).getByRole("button", { name: "Verantwortliche Abteilung: Medizintechnik" })).toHaveClass("tag-chip--department");
+    expect(within(header).getByRole("button", { name: "05.05.2025" })).toHaveAttribute("title", "In den Vertragsdaten ansehen");
+    expect(within(header).getByRole("button", { name: "Fristen ansehen" })).toBeInTheDocument();
   });
 
   it("Kopf: feste Laufzeit braucht kein „Kündbar bis“ – nichts Kritisches dazu", async () => {

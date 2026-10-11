@@ -945,3 +945,21 @@ body { background: var(--color-bg); }
 [data-box][data-collapsed] > .cw-section-head p { display: none; }
 @media print { .box-toggle { display: none; } [data-box][data-collapsed] > * { display: revert; } }
 .sections-hidden-note { margin: 0; color: var(--color-text-muted); font-size: var(--text-small); }
+/* Vertragskopf: Hauptangaben mit Kennfarbe + Symbol, alle anklickbar (führen zur Quelle). */
+.tag-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 28px; padding: 0 var(--space-2); border: 1px solid var(--tag-border, var(--color-border-strong)); border-radius: var(--radius-pill); background: var(--tag-bg, var(--color-surface)); color: var(--tag-fg, var(--color-text)); font: inherit; font-size: var(--text-small); font-weight: var(--weight-semibold); text-decoration: none; cursor: pointer; }
+.tag-chip:hover { text-decoration: underline; }
+.tag-chip-icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tag-chip--type { --tag-fg: var(--color-tag-type); --tag-bg: var(--color-tag-type-bg); --tag-border: var(--color-tag-type-border); }
+.tag-chip--partner { --tag-fg: var(--color-tag-partner); --tag-bg: var(--color-tag-partner-bg); --tag-border: var(--color-tag-partner-border); }
+.tag-chip--department { --tag-fg: var(--color-tag-department); --tag-bg: var(--color-tag-department-bg); --tag-border: var(--color-tag-department-border); }
+.tag-chip--cost { --tag-fg: var(--color-tag-cost); --tag-bg: var(--color-tag-cost-bg); --tag-border: var(--color-tag-cost-border); }
+.tag-chip--unlinked, .tag-chip--missing { border-style: dashed; }
+.tag-chip--missing { color: var(--color-text-muted); font-weight: var(--weight-regular); }
+.header-link, .fact-link { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--color-border-strong); text-underline-offset: 3px; }
+.header-link:hover, .fact-link:hover { text-decoration-color: currentColor; }
+.term-bar--link { cursor: pointer; }
+.term-bar-open-link { justify-self: end; font-size: var(--text-small); }
+@media (forced-colors: active) { .tag-chip { border-color: ButtonText; } }
+
+.ai-review-link { text-decoration: none; }
+.box-toggle svg, .collapsible-toggle svg { width: 18px; height: 18px; }

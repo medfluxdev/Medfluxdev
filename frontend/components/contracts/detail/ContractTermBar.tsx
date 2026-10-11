@@ -38,6 +38,8 @@ interface Props {
   fixedTerm?: boolean;
   /** Unbefristet: kein Ende, keine Leiste. */
   openEnded?: boolean;
+  /** Klick auf die Leiste: Fristen öffnen. */
+  onOpen?: () => void;
   /** Nur für Tests; sonst der heutige Tag (lokal). */
   today?: string;
 }
@@ -46,7 +48,7 @@ interface Props {
  * Laufzeit als Leiste: Beginn → Ende, „Heute“ und der Kündigungstermin.
  * Nur mit bekanntem Beginn und Ende; alles steht zusätzlich als Text (aria-label und Legende).
  */
-export default function ContractTermBar({ start, end, cancelBy, fixedTerm = false, openEnded = false, today = localToday() }: Props) {
+export default function ContractTermBar({ start, end, cancelBy, fixedTerm = false, openEnded = false, onOpen, today = localToday() }: Props) {
   if (openEnded && start) return <p className="term-bar-open">Unbefristet seit {formatDate(start)} – kein festes Ende.</p>;
   if (!start || !end) return null;
   const from = parse(start);
@@ -74,8 +76,8 @@ export default function ContractTermBar({ start, end, cancelBy, fixedTerm = fals
     cancel ? cancel.text : fixedTerm ? "feste Laufzeit, endet ohne Kündigung" : "Kündigungsfrist fehlt",
   ].join(", ");
 
-  return <div className="term-bar" role="img" aria-label={description}>
-    <div className="term-bar-track" aria-hidden="true">
+  return <div className={`term-bar${onOpen ? " term-bar--link" : ""}`} onClick={onOpen}>
+    <div className="term-bar-track" role="img" aria-label={description}>
       <div className="term-bar-fill" style={{ width: `${elapsed}%` }} />
       {!ended ? <div className="term-bar-today" style={{ left: `${elapsed}%` }} title="Heute" /> : null}
       {cancel ? <div className={`term-bar-cancel term-bar-cancel--${cancel.tone}`} style={{ left: `${cancel.pct}%` }} title={cancel.text} /> : null}
@@ -88,5 +90,6 @@ export default function ContractTermBar({ start, end, cancelBy, fixedTerm = fals
         : fixedTerm ? <span className="term-bar-cancel-label">Feste Laufzeit – endet ohne Kündigung</span> : <Signal tone="critical" size="sm">Kündigungsfrist fehlt</Signal>}
       <span>{formatDate(end)}</span>
     </div>
+    {onOpen ? <button type="button" className="rg-link term-bar-open-link" onClick={(event) => { event.stopPropagation(); onOpen(); }}>Fristen ansehen</button> : null}
   </div>;
 }

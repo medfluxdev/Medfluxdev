@@ -33,19 +33,21 @@ beforeEach(() => {
 });
 
 describe("Fristen & Aufgaben", () => {
-  it("zeigt Termine, Entscheidungen und Aufgaben als Reiter und merkt den Reiter in der Adresse", async () => {
+  it("zeigt Aufgaben (zuerst), Termine und Entscheidungen als Reiter und merkt den Reiter in der Adresse", async () => {
     const user = userEvent.setup();
     const { container } = render(<DeadlinesAndTasksPage />);
     expect(screen.getByRole("heading", { level: 1, name: "Fristen & Aufgaben" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Termine" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Terminliste")).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Aufgaben", "Termine", "Kündigungsentscheidungen"]);
+    expect(screen.getByRole("tab", { name: "Aufgaben" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Aufgabenliste")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Kündigungsentscheidungen" }));
     expect(screen.getByText("Entscheidungsliste")).toBeInTheDocument();
     expect(window.location.search).toBe("?ansicht=entscheidungen");
 
-    await user.click(screen.getByRole("tab", { name: "Aufgaben" }));
-    expect(screen.getByText("Aufgabenliste")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Termine" }));
+    expect(screen.getByText("Terminliste")).toBeInTheDocument();
+    expect(window.location.search).toBe("?ansicht=termine");
     expect(await axe(container)).toHaveNoViolations();
   });
 
