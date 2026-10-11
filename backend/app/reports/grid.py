@@ -659,12 +659,13 @@ def row_payload(row: GridRow, columns: list[str]) -> dict:
     }
 
 
-def columns_payload() -> list[dict]:
+def columns_payload(*, with_deleted: bool = True) -> list[dict]:
+    statuses = [(code, label) for code, label in STATUS_LABELS.items() if with_deleted or code != "geloescht"]
     return [
         {
             "key": column.key, "label": column.label, "type": column.type, "default": column.default,
             "groupable": column.groupable,
-            **({"options": [{"value": code, "label": label} for code, label in STATUS_LABELS.items()]} if column.type == "status" else {}),
+            **({"options": [{"value": code, "label": label} for code, label in statuses]} if column.type == "status" else {}),
         }
         for column in COLUMNS
     ]

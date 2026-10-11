@@ -11,7 +11,8 @@ export type PermissionKey =
   | "review.settings"
   | "audit.view"
   | "export"
-  | "contract.create";
+  | "contract.create"
+  | "contract.view_deleted";
 
 const cache = new Map<string, Promise<PermissionMatrix>>();
 

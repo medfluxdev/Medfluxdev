@@ -25,6 +25,7 @@ import {
 import { unarchiveContract } from "@/lib/domain-api/contracts";
 import { coverageNote, formatCurrency, formatDate } from "@/lib/format";
 import { useToast } from "@/components/ui/Toast";
+import { usePermissions } from "@/lib/use-permissions";
 import { rememberReviewQueue } from "@/lib/review-queue";
 import ContractQuickView from "./ContractQuickView";
 import FilterEditor from "./FilterEditor";
@@ -175,7 +176,9 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
   tab?: string;
 }) {
   const { role, account } = useAuth();
+  const permissions = usePermissions();
   const canExport = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
+  const canSeeDeleted = permissions.can("contract.view_deleted");
   const [columns, setColumns] = useState<GridColumn[]>([]);
   const [views, setViews] = useState<SavedViewDto[]>([]);
   const [canManageGlobal, setCanManageGlobal] = useState(false);
@@ -470,7 +473,7 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
           <option value="">–</option>
           {groupable.filter((item) => item.key !== spec.group_by[0]).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
         </select></label> : null}
-        <label className="rg-check"><input type="checkbox" checked={spec.include_deleted} onChange={(event) => update({ include_deleted: event.target.checked })} />Gelöschte einbeziehen</label>
+        {canSeeDeleted ? <label className="rg-check"><input type="checkbox" checked={spec.include_deleted} onChange={(event) => update({ include_deleted: event.target.checked })} />Gelöschte einbeziehen</label> : null}
         <button type="button" className="btn" onClick={() => setAddingFilter(true)}>Filter hinzufügen</button>
       </div>
 

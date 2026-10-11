@@ -77,10 +77,20 @@ def _visible(session, actor):
     )
 
 
+def _without_deleted(actor, rows: list) -> list:
+    """Als gelöscht markierte Verträge nur für Rollen mit `contract.view_deleted` – gleich über welchen
+    Weg (Option, Statusfilter, gespeicherte Ansicht, Link, Export) sie angefragt werden."""
+    if can(actor, "contract.view_deleted"):
+        return rows
+    return [row for row in rows if row.values["business_status"] != "geloescht"]
+
+
 def _rows(session, actor, spec: GridSpec, as_of: date, *, years: Optional[range] = None):
+    if not can(actor, "contract.view_deleted"):
+        spec.include_deleted = False
     rows = visible_rows(cached_rows(session, actor.organization_id, as_of, years=years, archived=spec.archived), _visible(session, actor))
     try:
-        return rows, apply_filters(rows, spec, as_of, actor.account_id)
+        return rows, _without_deleted(actor, apply_filters(rows, spec, as_of, actor.account_id))
     except GridError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -104,8 +114,8 @@ def _attachment(content: bytes, media_type: str, filename: str) -> Response:
 
 @router.get("/api/register/columns")
 def get_columns(request: Request, organization_slug: str):
-    current_actor(request, organization_slug)
-    return {"columns": columns_payload()}
+    actor = current_actor(request, organization_slug)
+    return {"columns": columns_payload(with_deleted=can(actor, "contract.view_deleted"))}
 
 
 @router.get("/api/register/grid")
@@ -127,7 +137,7 @@ def get_grid(
                 item for item in parsed.filters if item["column"] not in ("hospital", "department")
             ]})
             try:
-                tree_payload = tree(apply_filters(all_rows, tree_spec, as_of, actor.account_id))
+                tree_payload = tree(_without_deleted(actor, apply_filters(all_rows, tree_spec, as_of, actor.account_id)))
             except GridError as exc:
                 raise HTTPException(status_code=422, detail=str(exc))
         page = ordered[max(offset, 0):max(offset, 0) + limit]
@@ -314,6 +324,8 @@ def get_views(request: Request, organization_slug: str, kind: str = "register"):
     try:
         items = list_views(session, actor.organization_id, actor.account_id, kind)
         session.commit()
+        if not can(actor, "contract.view_deleted"):
+            items = [item for item in items if item.get("system_key") != "deleted"]
         return {"items": items, "can_manage_global": can(actor, "views.global")}
     finally:
         session.close()

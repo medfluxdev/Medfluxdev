@@ -174,7 +174,7 @@ def test_saved_views_defaults_permissions_and_ownership(monkeypatch):
     viewer = _as(monkeypatch, ids, "viewer", "viewer")
     listed = viewer.get("/api/register/views", params=query).json()
     names = [item["name"] for item in listed["items"]]
-    assert names == ["Meine Verträge", "Meine Wiedervorlage", "Kündigungsfrist < 90 Tage", "Zu prüfen", "Regelverstöße", "Archiv", "In Arbeit", "Zum Löschen vorgesehen", "Gelöschte Verträge"]
+    assert names == ["Meine Verträge", "Meine Wiedervorlage", "Kündigungsfrist < 90 Tage", "Zu prüfen", "Regelverstöße", "Archiv", "In Arbeit", "Zum Löschen vorgesehen"]  # „Gelöschte Verträge“ nur mit contract.view_deleted
     assert {item["system_key"] for item in listed["items"]} >= {"review", "archive"}
     assert listed["can_manage_global"] is False
     system_id = listed["items"][0]["id"]
