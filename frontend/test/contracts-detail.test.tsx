@@ -260,7 +260,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(within(header).getByText("Feste Laufzeit – endet ohne Kündigung")).toBeInTheDocument();
   });
 
-  it("Abschnitte je Vertragstyp: Mietvertrag blendet leeren Leistungsumfang/SLA aus, Daten bleiben sichtbar", async () => {
+  it("Abschnitte je Vertragstyp: Mietvertrag blendet Leistungsumfang/SLA aus, KI-Angaben über „Trotzdem anzeigen“", async () => {
     const user = userEvent.setup();
     const empty = { ...detailFixture().scope, maintenance: null, repair: null, remote_support: null } as ContractDetailResponse["scope"];
     const noSla = { response_time: null, resolution_time: null, service_hours: null, emergency_availability: null, availability_24_7: null, sla_notes: null };
@@ -274,11 +274,11 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getByRole("heading", { name: "SLA" })).toBeInTheDocument();
     unmount();
 
-    // Mit gefundenen Angaben bleibt der Abschnitt sichtbar, auch wenn der Typ ihn nicht vorsieht.
+    // Der Typ entscheidet auch bei von der KI gelesenen Angaben; der Hinweis nennt sie, „Trotzdem anzeigen“ zeigt sie.
     await renderWithData(detailFixture({ sections: rent }));
-    expect(screen.getByRole("heading", { name: "Leistungsumfang" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "SLA" })).toBeInTheDocument();
-    expect(screen.queryByText(/ausgeblendet/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Leistungsumfang" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "SLA" })).not.toBeInTheDocument();
+    expect(screen.getByText(/ausgeblendet: Leistungsumfang \(mit Angaben aus dem Dokument\), SLA \(mit Angaben aus dem Dokument\)/)).toBeInTheDocument();
   });
 
   it("Kopf: nicht zugeordneter Vertragspartner führt zur Zuordnung, fehlender Beginn zum Feld", async () => {

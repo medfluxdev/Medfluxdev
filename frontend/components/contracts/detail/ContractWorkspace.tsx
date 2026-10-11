@@ -505,10 +505,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const sections = showAllSections ? null : data.sections ?? null;
   const scopeHasData = scopeCounts.included + scopeCounts.excluded > 0;
   const slaHasData = Boolean(data.sla.response_time || data.sla.resolution_time || data.sla.service_hours || data.sla.emergency_availability || data.sla.availability_24_7 != null);
-  const showScope = hasAi && sectionVisible("scope", sections, scopeHasData);
-  const showSla = hasAi && sectionVisible("sla", sections, slaHasData);
-  const showEquipment = sectionVisible("equipment", sections, data.equipment.length > 0 || (data.assignment?.device_types?.length ?? 0) > 0);
-  const hiddenSections = data.sections ? ([["scope", showScope || !hasAi], ["sla", showSla || !hasAi], ["equipment", showEquipment]] as const).filter(([, shown]) => !shown).map(([key]) => SECTION_LABELS[key]) : [];
+  // Der Vertragstyp entscheidet. Nur von einer Person gepflegte Angaben (Gerätearten, Wartungsdaten) halten
+  // einen Abschnitt sichtbar; von der KI gelesene Angaben stehen im Hinweis und sind über „Trotzdem anzeigen“ erreichbar.
+  const showScope = hasAi && sectionVisible("scope", sections, false);
+  const showSla = hasAi && sectionVisible("sla", sections, false);
+  const showEquipment = sectionVisible("equipment", sections, (data.assignment?.device_types?.length ?? 0) > 0);
+  const hiddenSections = data.sections ? ([
+    ["scope", showScope || !hasAi, scopeHasData],
+    ["sla", showSla || !hasAi, slaHasData],
+    ["equipment", showEquipment, data.equipment.length > 0],
+  ] as const).filter(([, shown]) => !shown).map(([key, , found]) => `${SECTION_LABELS[key]}${found ? " (mit Angaben aus dem Dokument)" : ""}`) : [];
   const slaMissing = showSla ? [data.sla.response_time ? null : "Reaktionszeit", data.sla.resolution_time ? null : "Lösungszeit"].filter((item): item is string => Boolean(item)) : [];
   // Erst mit geladenen Lücken berechnen, sonst stünde kurz ein unvollständiges Bild da.
   const openPoints = gaps === null ? null : buildOpenPoints({

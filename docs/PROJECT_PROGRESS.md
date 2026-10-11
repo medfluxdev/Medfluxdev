@@ -5599,3 +5599,10 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Tests:** neu `backend/tests/test_device_types.py` (4), `frontend/test/device-types.test.tsx` (4); `equipment.test.tsx` prüft die Weiterleitung. pytest 1670 bestanden / 3 übersprungen; `npm run verify` grün (68 Testdateien); Migration auf Wegwerf-DB auf/ab/auf.
 - **Offen:** Migrationen `u3d5e7f89013`, `v4e6f8a90014`, `w5f7a9b01015` noch nicht auf der lokalen Datenbank des Nutzers (Freigabe ausstehend).
 
+### Nachtrag 2026-10-11 – Abschnitte je Vertragstyp: der Typ entscheidet
+
+- **Rückmeldung:** Vertrag 000002 von Wartung auf Miete umgestellt – Leistungsumfang und SLA blieben sichtbar. Ursache: die Regel „Abschnitt mit Inhalt bleibt sichtbar“ griff, weil die KI Leistungen (Wartung, Inspektion, Software-Updates) und Servicezeiten gelesen hatte.
+- **Änderung:** Von der KI gelesene Angaben halten Leistungsumfang, SLA und Geräte nicht mehr sichtbar; der Hinweis nennt sie („mit Angaben aus dem Dokument“), „Trotzdem anzeigen“ zeigt sie. Gepflegte Wartungsdaten und Gerätearten halten ihren Kasten weiter sichtbar. Plan Entscheidung 3 angepasst.
+- **Außerdem:** Migrationen `u3d5e7f89013`, `v4e6f8a90014`, `w5f7a9b01015` auf der lokalen Datenbank angewendet (Freigabe des Nutzers); die Vertragsliste meldete vorher „Verbindung zum Server fehlgeschlagen“, weil die Tabelle `contract_device_type` fehlte.
+- **Tests:** `contracts-detail.test.tsx` angepasst.
+
