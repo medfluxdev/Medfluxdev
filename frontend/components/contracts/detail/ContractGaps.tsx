@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Popover from "@/components/ui/Popover";
 import { useEffect, useMemo, useState } from "react";
 import { getContractRegister, type ContractRegister } from "@/lib/domain-api/register";
 import { getContractRules, type ContractRuleResult } from "@/lib/domain-api/rules";
@@ -84,19 +85,28 @@ export function useContractGaps({ contractId, orgSlug, hasAnnualCost, reviewPend
   }, [documentCount, hasAnnualCost, loaded, register, responsible, reviewPending, rules]);
 }
 
-/** Karte „Was fehlt noch?“ oben in der Übersicht; ohne Lücken unsichtbar. */
+/**
+ * „Was fehlt noch?“ im Kopf der Vertragsakte – auf jedem Reiter sichtbar; ohne Lücken unsichtbar.
+ * Jeder Eintrag führt direkt zur Stelle, an der er erfasst wird.
+ */
 export default function ContractGaps({ contractId, gaps, searchHref }: { contractId: string; gaps: Gap[] | null; searchHref?: string | null }) {
   if (!gaps || gaps.length === 0) return null;
-  return <section className="cw-section contract-gaps" aria-labelledby="gaps-heading">
-    <div className="cw-section-head"><div>
-      <h2 id="gaps-heading">Was fehlt noch?</h2>
-      <p>Jeder Eintrag führt direkt zur Stelle, an der er erfasst wird. Auch über Strg+K erreichbar.</p>
-    </div>{searchHref ? <Link className="btn btn-sm" href={searchHref}>Fehlende Angaben im Dokument suchen</Link> : null}</div>
-    <ul className="contract-gaps-list">
-      {gaps.map((gap) => <li key={gap.key}>
-        <Link href={contractHref(contractId, gap.target)}>{gap.label}</Link>
-        <span className="cw-muted">{gap.reason}</span>
-      </li>)}
-    </ul>
-  </section>;
+  return <Popover
+    className="gaps-button"
+    label={<><span aria-hidden="true">⚠ </span>Was fehlt · {gaps.length}</>}
+    panelLabel="Was fehlt noch?"
+    wide
+  >
+    {(close) => <div className="gaps-panel">
+      <p className="gaps-title">Was fehlt noch?</p>
+      <ul className="contract-gaps-list">
+        {gaps.map((gap) => <li key={gap.key}>
+          <Link href={contractHref(contractId, gap.target)} onClick={close}>{gap.label}</Link>
+          <span className="cw-muted">{gap.reason}</span>
+        </li>)}
+      </ul>
+      {searchHref ? <Link className="btn btn-sm" href={searchHref} onClick={close}>Fehlende Angaben im Dokument suchen</Link> : null}
+      <p className="field-hint">Jeder Eintrag führt direkt zur Stelle, an der er erfasst wird. Auch über Strg+K erreichbar.</p>
+    </div>}
+  </Popover>;
 }

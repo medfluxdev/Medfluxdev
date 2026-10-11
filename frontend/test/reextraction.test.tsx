@@ -179,9 +179,11 @@ describe("Fehlende Angaben im Dokument suchen", () => {
   it("die Karte „Was fehlt noch?“ bietet die Suche an, der Link öffnet den Dialog mit allen fehlenden Angaben", async () => {
     const gaps = [{ key: "term_start_date", label: "Vertragsbeginn", reason: "nötig für „Gültig“", command: "Vertragsbeginn erfassen", target: { tab: "register" as const, field: "term_start_date" } }];
     const { unmount } = render(<ContractGaps contractId="c-1" gaps={gaps} searchHref="/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende" />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /Was fehlt · 1/ }));
     expect(screen.getByRole("link", { name: "Fehlende Angaben im Dokument suchen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende");
     unmount();
     render(<ContractGaps contractId="c-1" gaps={gaps} searchHref={null} />);
+    await userEvent.setup().click(screen.getByRole("button", { name: /Was fehlt · 1/ }));
     expect(screen.queryByRole("link", { name: "Fehlende Angaben im Dokument suchen" })).not.toBeInTheDocument();
 
     nav.params = new URLSearchParams("tab=documents&suchen=fehlende");

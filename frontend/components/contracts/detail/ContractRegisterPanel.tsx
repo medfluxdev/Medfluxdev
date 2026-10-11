@@ -50,7 +50,7 @@ import { usePermissions } from "@/lib/use-permissions";
 import { FIELD_PARAM, baseFieldKey } from "@/lib/fix-targets";
 
 type Draft = Record<string, RegisterValue>;
-type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo";
+type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo" | "auto_number";
 type FieldDef = { key: string; kind: FieldKind };
 
 const PERIODS = ["initial_term", "minimum_term", "notice_period", "renewal_period"] as const;
@@ -62,7 +62,8 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
     description: "Kurzbeschreibung, Vertragspartner und Einordnung",
     fields: [
       { key: "short_description", kind: "text" },
-      { key: "internal_number", kind: "text" },
+      // Interne Nummer = automatisch vergebene, eindeutige Vertragsnummer (Nummernkreis), nie von Hand.
+      { key: "register_number", kind: "auto_number" },
       { key: "partner_id", kind: "partner" },
       { key: "contract_type_id", kind: "type" },
       { key: "contract_category_id", kind: "category" },
@@ -685,6 +686,17 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           : null;
       return <CollapsibleSection key={section.id} id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))}>
         <dl className="rg-fields">{fields.map((def) => {
+          if (def.kind === "auto_number") {
+            const earlier = register.fields.internal_number?.value;
+            return <div key={def.key} id="rg-field-register_number" className="rg-field">
+              <dt>Interne Nummer</dt>
+              <dd>
+                <span className="rg-value">{register.register_number ?? "Wird beim ersten Speichern vergeben"}</span>
+                <span className="rg-origin rg-origin-system" title="Vom Programm aus dem Nummernkreis vergeben – eindeutig, nicht änderbar">automatisch</span>
+                {earlier ? <span className="field-hint rg-help">Frühere interne Nummer: {String(earlier)}</span> : null}
+              </dd>
+            </div>;
+          }
           const provenance = originOf(def);
           const label = def.kind === "period" ? PERIOD_LABEL[def.key as (typeof PERIODS)[number]] : register.fields[def.key]?.label ?? def.key;
           const isTarget = target?.key === def.key;

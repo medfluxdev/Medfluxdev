@@ -837,3 +837,9 @@ body { background: var(--color-bg); }
 .collapsible-toggle { min-width: 32px; min-height: 32px; }
 .collapsible.is-collapsed .cw-section-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
 .cw-ownership-status { margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-small); }
+
+/* „Was fehlt noch?“ im Kopf der Vertragsakte */
+.gaps-button .popover-trigger { border-color: var(--color-warning-border); background: var(--color-warning-bg); color: var(--color-warning); font-weight: var(--weight-semibold); }
+.gaps-panel { display: grid; gap: var(--space-3); min-width: min(360px, calc(100vw - 2 * var(--space-4))); }
+.gaps-title { margin: 0; font-weight: var(--weight-semibold); }
+

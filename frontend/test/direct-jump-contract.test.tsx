@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,7 +64,8 @@ describe("Direkt zur Stelle: Ziele für Aufgaben, Warnungen und API-Antworten", 
 describe("Direkt zur Stelle: Vertragsakte", () => {
   it("„Was fehlt noch?“ listet jede Lücke einmal, jede mit Link zur Stelle", async () => {
     const { container } = render(<Gaps hasAnnualCost={false} reviewPending documentCount={0} />);
-    const card = (await screen.findByRole("heading", { name: "Was fehlt noch?" })).closest("section")!;
+    await userEvent.setup().click(await screen.findByRole("button", { name: /Was fehlt · 8/ }));
+    const card = screen.getByRole("group", { name: "Was fehlt noch?" });
     const links = within(card).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
       ["Vertragsbeginn", "/contracts/c-1?tab=register&feld=term_start_date"],

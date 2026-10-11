@@ -31,7 +31,7 @@ test("4 – Vertragsdaten bearbeiten und speichern", async ({ page }, info) => {
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Vertrag & Partner bearbeiten" }).click();
   const value = `INT-${Date.now() % 100000}`;
-  await page.getByLabel("Interne Nummer").fill(value);
+  await page.getByLabel("Vertragsgegenstand").fill(value);
   await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(page.getByText(value)).toBeVisible();
   await checkA11y(page, info, "stammdaten");
@@ -234,7 +234,8 @@ test("14 – Direkt zur Stelle: Strg+K kennt, was dem offenen Vertrag fehlt", as
   expect(created.ok()).toBeTruthy();
   const { contract_id: contractId } = await created.json();
   await page.goto(`/contracts/${contractId}`);
-  const gaps = page.getByRole("region", { name: "Was fehlt noch?" });
+  await page.getByRole("button", { name: /Was fehlt · / }).click();
+  const gaps = page.getByRole("group", { name: "Was fehlt noch?" });
   await expect(gaps).toBeVisible();
   const first = (await gaps.getByRole("link").first().getAttribute("href"))!;
   await page.keyboard.press("Control+k");
@@ -287,6 +288,8 @@ test("15 – Erneut aus dem Dokument erfassen: fehlende Angaben suchen, vergleic
 
   await openContract(page, "Softwarepflege PACS");
   // Einstieg „Was fehlt noch?“ → Dialog mit den fehlenden Angaben.
+  const gapsButton = page.getByRole("button", { name: /Was fehlt · / });
+  if (await gapsButton.isVisible().catch(() => false)) await gapsButton.click();
   const search = page.getByRole("link", { name: "Fehlende Angaben im Dokument suchen" });
   if (await search.isVisible().catch(() => false)) {
     await search.click();

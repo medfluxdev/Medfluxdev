@@ -144,14 +144,26 @@ describe("Vertragsregister – Stammdaten", () => {
     expect(api.acceptRegisterProposal).toHaveBeenCalledWith("test-klinik", "c-1", "term_start_date");
   });
 
+  it("Interne Nummer ist die automatisch vergebene Vertragsnummer – nicht von Hand änderbar", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue({ ...(await api.getContractRegister()), fields: { ...(await api.getContractRegister()).fields, internal_number: { ...(await api.getContractRegister()).fields.internal_number, value: "ALT-12" } } });
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const field = (await screen.findByText("Interne Nummer")).closest(".rg-field") as HTMLElement;
+    expect(within(field).getByText("automatisch")).toBeInTheDocument();
+    expect(within(field).getByText("Frühere interne Nummer: ALT-12")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
+    expect(screen.queryByLabelText("Interne Nummer")).not.toBeInTheDocument();
+    expect(within(field).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
   it("speichert nur geänderte Felder", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
-    await user.type(screen.getByLabelText("Interne Nummer"), "INT-7");
+    await user.type(screen.getByLabelText("Vertragsgegenstand"), "INT-7");
     await user.click(screen.getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { internal_number: "INT-7" } }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { subject_text: "INT-7" } }));
   });
 
   it("verlangt bei ungeprüften KI-Werten eine bewusste Freigabe", async () => {
@@ -226,9 +238,9 @@ describe("Vertragsregister – Formularschutz", () => {
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
-    await user.type(screen.getByLabelText("Interne Nummer"), "INT-9");
+    await user.type(screen.getByLabelText("Vertragsgegenstand"), "INT-9");
     expect(screen.getByText(/Ungespeicherte Änderungen/)).toBeInTheDocument();
     await user.keyboard("{Control>}s{/Control}");
-    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { internal_number: "INT-9" } }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { subject_text: "INT-9" } }));
   });
 });
