@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ReextractionPanel, { ReextractionBanner, parsePages } from "@/components/contracts/detail/Reextraction";
+import ContractGaps from "@/components/contracts/detail/ContractGaps";
 import type { FactRow, ReextractionRun, ReextractionState } from "@/lib/domain-api/reextraction";
 
 const api = vi.hoisted(() => ({
@@ -167,6 +168,30 @@ describe("Erneut aus dem Dokument erfassen", () => {
     expect(api.startReextraction).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({
       mode: "missing_fields", fields: ["termination.cancellation_period"], page_hint: [4, 5, 9],
     }));
+  });
+});
+
+describe("Fehlende Angaben im Dokument suchen", () => {
+  it("die Karte „Was fehlt noch?“ bietet die Suche an, der Link öffnet den Dialog mit allen fehlenden Angaben", async () => {
+    const gaps = [{ key: "term_start_date", label: "Vertragsbeginn", reason: "nötig für „Gültig“", command: "Vertragsbeginn erfassen", target: { tab: "register" as const, field: "term_start_date" } }];
+    const { unmount } = render(<ContractGaps contractId="c-1" gaps={gaps} searchHref="/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende" />);
+    expect(screen.getByRole("link", { name: "Fehlende Angaben im Dokument suchen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende");
+    unmount();
+    render(<ContractGaps contractId="c-1" gaps={gaps} searchHref={null} />);
+    expect(screen.queryByRole("link", { name: "Fehlende Angaben im Dokument suchen" })).not.toBeInTheDocument();
+
+    nav.params = new URLSearchParams("tab=documents&suchen=fehlende");
+    panel(state());
+    const dialog = await screen.findByRole("dialog", { name: "Erneut aus dem Dokument erfassen" });
+    expect(within(dialog).getByRole("checkbox", { name: "Vertragsbeginn" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "Laufzeit" })).toBeChecked();
+  });
+
+  it("während einer Auswertung öffnet der Link keinen zweiten Dialog", () => {
+    nav.params = new URLSearchParams("suchen=fehlende");
+    panel(state({ run: run({ status: "running" }) }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(nav.replace).toHaveBeenCalled();
   });
 });
 

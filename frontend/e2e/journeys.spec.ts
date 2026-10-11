@@ -250,3 +250,66 @@ test("14 – Direkt zur Stelle: Strg+K kennt, was dem offenen Vertrag fehlt", as
   });
   expect(archived.ok()).toBeTruthy();
 });
+
+test("15 – Erneut aus dem Dokument erfassen: fehlende Angaben suchen, vergleichen, übernehmen", async ({ page }, info) => {
+  // Die lokale KI läuft in der Testumgebung nicht: die Schnittstelle der erneuten Erfassung wird im Browser
+  // beantwortet (Ablauf, Vergleich und Barrierefreiheit der echten Seite werden geprüft; Backend: pytest).
+  const origin = process.env.E2E_BASE_URL ?? "";
+  const cors = { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "content-type", "Access-Control-Allow-Methods": "GET,POST" };
+  const missing = [{ key: "dates.start_date", label: "Vertragsbeginn" }];
+  const run = { id: "run-e2e", mode: "missing_fields", fields: missing, page_hint: [], reread_document: false, model_id: null, applied_keys: [], requested_by_name: "E2E", message: null, queue_position: 0, created_at: null, started_at: null, finished_at: null, stale: false };
+  const rows = [
+    { key: "dates.start_date", label: "Vertragsbeginn", group: "new", current: null, proposed: "01.01.2025", evidence: [{ page: 1, quote: "Beginn 01.01.2025" }], register_keys: ["term_start_date"], preselected: true },
+    { key: "identity.contract_title", label: "Vertragstitel", group: "missing_again", current: "Softwarepflege PACS", proposed: null, evidence: [], register_keys: [], preselected: false },
+  ];
+  let state: Record<string, unknown> = { can_start: true, blocked_reason: null, missing, field_search: { term_start_date: missing }, reread_suggested: false, run: null, rows: [] };
+  let started: Record<string, unknown> | null = null;
+  let applied: string[] | null = null;
+  await page.route(/\/api\/contracts\/[^/]+\/reextraction/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    const json = (body: unknown, status = 200) => route.fulfill({ status, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
+    if (url.pathname.endsWith("/models")) return json({ provider_id: "ollama", current_model: "qwen3-vl:8b", models: [{ model_id: "qwen3-vl:8b", label: "qwen3-vl:8b", parameter_size: "8B", vision: true, current: true }] });
+    if (url.pathname.endsWith("/apply")) {
+      applied = (request.postDataJSON() as { keys: string[] }).keys;
+      state = { ...state, missing: [], run: { ...run, status: "applied", applied_keys: applied, summary: { new: 1 } }, rows: [] };
+      return json({ applied: applied.length, keys: applied, message: `${applied.length} Angabe(n) übernommen.` });
+    }
+    if (request.method() === "POST") {
+      started = request.postDataJSON() as Record<string, unknown>;
+      // Nächste Abfrage: Ergebnis liegt vor.
+      state = { ...state, run: { ...run, status: "ready", summary: { new: 1, missing_again: 1 } }, rows };
+      return json({ ...run, status: "queued", summary: {} }, 202);
+    }
+    return json(state);
+  });
+
+  await openContract(page, "Softwarepflege PACS");
+  // Einstieg „Was fehlt noch?“ → Dialog mit den fehlenden Angaben.
+  const search = page.getByRole("link", { name: "Fehlende Angaben im Dokument suchen" });
+  if (await search.isVisible().catch(() => false)) {
+    await search.click();
+  } else {
+    await page.goto(`${page.url().split("?")[0]}?tab=documents&subtab=document&abschnitt=reextraction&suchen=fehlende`);
+  }
+  const dialog = page.getByRole("dialog", { name: "Erneut aus dem Dokument erfassen" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: "Vertragsbeginn" })).toBeChecked();
+  await dialog.getByRole("textbox", { name: "Wo steht es? (optional)" }).fill("1");
+  await checkA11y(page, info, "erneut-erfassen-dialog");
+  await dialog.getByRole("button", { name: "Auswertung starten" }).click();
+  await expect(dialog).toBeHidden();
+  expect(started).toMatchObject({ mode: "missing_fields", fields: ["dates.start_date"], page_hint: [1] });
+
+  // Ergebnis: Kopfhinweis und Vergleich; Neues mit Fundstelle ist vorausgewählt, Bisheriges bleibt.
+  await expect(page.getByText("Erneute Erfassung abgeschlossen: 1 Angabe zum Prüfen.")).toBeVisible();
+  const section = page.getByRole("region", { name: "Erneut aus dem Dokument erfassen" });
+  await expect(section.getByRole("checkbox", { name: "Vertragsbeginn übernehmen" })).toBeChecked();
+  await expect(section.getByText("Nicht erneut gefunden – der bisherige Wert bleibt (1)")).toBeVisible();
+  await checkA11y(page, info, "erneut-erfassen-vergleich");
+  await section.getByRole("button", { name: "Ausgewählte übernehmen (1)" }).click();
+  await expect.poll(() => applied).toEqual(["dates.start_date"]);
+  await expect(section.getByText(/Zuletzt übernommen: 1 Angabe/)).toBeVisible();
+});
+

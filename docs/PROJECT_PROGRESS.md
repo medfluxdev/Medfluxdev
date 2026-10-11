@@ -5502,3 +5502,12 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Tests:** neu `backend/tests/test_harness_focus.py` (4); `test_reextraction.py` (+1, Fokus bis zur Harness); `frontend/test/reextraction.test.tsx` (10), `direct-jump.test.tsx` (+2).
 - **Verifikation (Phasen 1+2):** pytest 1646 bestanden / 3 übersprungen; `npm run verify` grün (60 Testdateien); Migration auf Wegwerf-DB auf/ab/auf. Playwright (nach Phase 1): 177/179 – beide Abweichungen sind die Bildreferenz „Rollen & Rechte“ (neue Zeile „Erneut aus dem Dokument erfassen“), wird mit Phase 3 bewusst erneuert.
 
+### Nachtrag 2026-10-11 – Erneut aus dem Dokument erfassen, Phase 3 (Einbindung)
+
+- **„Was fehlt noch?“** hat den Knopf **„Fehlende Angaben im Dokument suchen“** (nur mit Recht, ohne laufende Auswertung, wenn etwas fehlt); er öffnet den Dialog mit allen fehlenden Angaben (`?suchen=fehlende`, `MISSING_SEARCH`).
+- **Strg+K** auf der Vertragsakte: zusätzlich „Fehlende Angaben im Dokument suchen“ unter „Dieser Vertrag“.
+- Glocke (Link direkt zum Ergebnis) und Verlauf („Erneute Erfassung gestartet/übernommen/verworfen“) kamen schon mit Phase 1.
+- **Regel:** `docs/FRONTEND_CONVENTIONS.md` §5b um „Im Dokument suchen“ ergänzt.
+- **Tests:** `frontend/test/reextraction.test.tsx` (+2: Karte, Link „fehlende“, kein zweiter Dialog während einer Auswertung); Playwright-Journey 15 (Dialog → Seitenhinweis → Vergleich → Übernehmen, axe; die Schnittstelle der erneuten Erfassung wird im Browser beantwortet, weil in der Testumgebung keine lokale KI läuft – das Backend ist durch pytest abgedeckt). Bildreferenz „Rollen & Rechte“ bewusst erneuert (neue Zeile „Erneut aus dem Dokument erfassen“).
+- **Verifikation:** `npm run verify` grün (60 Testdateien); Playwright 180/180 (inkl. Journey 15 und axe hell/dunkel/forced-colors, Layout 1440/900/390).
+

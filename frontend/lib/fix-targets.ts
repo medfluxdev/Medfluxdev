@@ -47,6 +47,8 @@ export function contractHref(contractId: string, raw?: FixTarget): string {
 
 /** Parameter: Dialog „Erneut aus dem Dokument erfassen“ für dieses Vertragsdaten-Feld öffnen. */
 export const SEARCH_PARAM = "suchen";
+/** Wert für SEARCH_PARAM: alle fehlenden Angaben („Was fehlt noch?“, Strg+K). */
+export const MISSING_SEARCH = "fehlende";
 
 /** „Im Dokument suchen“: Dokumente → Dokument, Dialog mit diesem Feld vorausgewählt. */
 export function documentSearchHref(contractId: string, fieldKey: string): string {

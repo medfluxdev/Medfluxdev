@@ -7,7 +7,7 @@ import Dialog from "@/components/ui/Dialog";
 import InlineAlert from "@/components/ui/InlineAlert";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
-import { SEARCH_PARAM, baseFieldKey } from "@/lib/fix-targets";
+import { MISSING_SEARCH, SEARCH_PARAM, baseFieldKey } from "@/lib/fix-targets";
 import {
   applyReextraction,
   cancelReextraction,
@@ -137,8 +137,11 @@ export default function ReextractionPanel({ contractId, orgSlug, state, reload, 
     handledSearch.current = searchFor;
     const busyRun = state.run?.status === "queued" || state.run?.status === "running";
     if (state.can_start && !busyRun) {
-      const fields = fieldSearchMap(state).get(baseFieldKey(searchFor));
-      if (fields?.length) setDialog({ advanced: false, fields });
+      if (searchFor === MISSING_SEARCH) setDialog({ advanced: false });
+      else {
+        const fields = fieldSearchMap(state).get(baseFieldKey(searchFor));
+        if (fields?.length) setDialog({ advanced: false, fields });
+      }
     }
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     params.delete(SEARCH_PARAM);

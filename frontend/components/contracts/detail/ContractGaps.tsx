@@ -85,13 +85,13 @@ export function useContractGaps({ contractId, orgSlug, hasAnnualCost, reviewPend
 }
 
 /** Karte „Was fehlt noch?“ oben in der Übersicht; ohne Lücken unsichtbar. */
-export default function ContractGaps({ contractId, gaps }: { contractId: string; gaps: Gap[] | null }) {
+export default function ContractGaps({ contractId, gaps, searchHref }: { contractId: string; gaps: Gap[] | null; searchHref?: string | null }) {
   if (!gaps || gaps.length === 0) return null;
   return <section className="cw-section contract-gaps" aria-labelledby="gaps-heading">
     <div className="cw-section-head"><div>
       <h2 id="gaps-heading">Was fehlt noch?</h2>
       <p>Jeder Eintrag führt direkt zur Stelle, an der er erfasst wird. Auch über Strg+K erreichbar.</p>
-    </div></div>
+    </div>{searchHref ? <Link className="btn btn-sm" href={searchHref}>Fehlende Angaben im Dokument suchen</Link> : null}</div>
     <ul className="contract-gaps-list">
       {gaps.map((gap) => <li key={gap.key}>
         <Link href={contractHref(contractId, gap.target)}>{gap.label}</Link>
