@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   getContractDepartmentRoles: vi.fn(),
   updateContractOwnership: vi.fn(),
   updateContractDepartmentRoles: vi.fn(),
+  listContractTypes: vi.fn(),
+  getContractRegister: vi.fn(),
+  updateContractRegister: vi.fn(),
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
@@ -20,6 +23,8 @@ vi.mock("@/lib/domain-api/organizations", () => ({
   getOrganizationStructure: mocks.getOrganizationStructure,
   listCostCenters: mocks.listCostCenters,
 }));
+vi.mock("@/lib/domain-api/catalogs", () => ({ listContractTypes: mocks.listContractTypes }));
+vi.mock("@/lib/domain-api/register", () => ({ getContractRegister: mocks.getContractRegister, updateContractRegister: mocks.updateContractRegister }));
 vi.mock("@/lib/domain-api/ownership", () => ({
   getContractOwnership: mocks.getContractOwnership,
   getContractDepartmentRoles: mocks.getContractDepartmentRoles,
@@ -45,6 +50,31 @@ describe("Contract360 Organisationszuordnung", () => {
     mocks.getContractDepartmentRoles.mockResolvedValue({ contract_id: "contract-1", responsible_department_id: "dept-rad", beneficiary_department_ids: ["dept-icu"], unclassified_department_ids: [] });
     mocks.updateContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: ["dept-rad", "dept-icu"], cost_center_id: "cc-1", responsible_account_id: null, scope_type: "department" });
     mocks.updateContractDepartmentRoles.mockResolvedValue({});
+    mocks.listContractTypes.mockResolvedValue({
+      contract_types: [
+        { id: "t-wartung", label: "Wartungsvertrag", is_active: true },
+        { id: "t-miete", label: "Mietvertrag", is_active: true },
+      ],
+      contract_categories: [{ id: "cat-mt", label: "Medizintechnik", is_active: true, contract_type_ids: ["t-wartung"] }],
+    });
+    mocks.getContractRegister.mockResolvedValue({ fields: { contract_type_id: { value: "t-wartung" }, contract_category_id: { value: "cat-mt" } } });
+    mocks.updateContractRegister.mockResolvedValue({});
+  });
+
+  it("Vertragstyp: zeigt den aktuellen Typ und speichert einen neuen (unpassende Kategorie wird geleert)", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    const type = await screen.findByLabelText("Vertragstyp");
+    expect(type).toHaveValue("t-wartung");
+    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
+    await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalled());
+    expect(mocks.updateContractRegister).not.toHaveBeenCalled();
+
+    await user.selectOptions(type, "t-miete");
+    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
+    await waitFor(() => expect(mocks.updateContractRegister).toHaveBeenCalledWith("klinik", "contract-1", {
+      changes: { contract_type_id: "t-miete", contract_category_id: null },
+    }));
   });
 
   it("zeigt Verantwortlichen und nutzenden Bereich mit vollständigem Pfad und speichert beide Rollen", async () => {

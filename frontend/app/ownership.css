@@ -8,3 +8,4 @@
 .cw-people-chips{list-style: none;margin: 0;padding: 0;display: flex;flex-wrap: wrap;gap: 8px}
 .cw-people-chips li{display: inline-flex;align-items: center;gap: 4px;border: 1px solid var(--color-border);border-radius: var(--radius-pill);background: var(--color-surface);padding: 2px 4px 2px 10px;font-size: var(--text-small)}
 @media(max-width:640px){.cw-ownership-people{grid-template-columns: 1fr}}
+.cw-ownership-grid>.cw-ownership-type{grid-column: 1/-1;max-width: calc(50% - 8px)}@media(max-width:640px){.cw-ownership-grid>.cw-ownership-type{max-width: none}}

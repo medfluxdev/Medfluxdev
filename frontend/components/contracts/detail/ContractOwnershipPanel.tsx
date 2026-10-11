@@ -5,6 +5,8 @@ import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getOrganizationStructure, listCostCenters } from "@/lib/domain-api/organizations";
+import { listContractTypes, type ContractCategoryDto, type ContractTypeDto } from "@/lib/domain-api/catalogs";
+import { getContractRegister, updateContractRegister } from "@/lib/domain-api/register";
 import { departmentFullPath } from "@/lib/organization-tree";
 import {
   getContractDepartmentRoles,
@@ -36,6 +38,12 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const [centerId, setCenterId] = useState("");
   const [responsibleId, setResponsibleId] = useState("");
   const [furtherIds, setFurtherIds] = useState<string[]>([]);
+  // Vertragstyp wird in den Vertragsdaten gespeichert; hier nur mit erfasst, weil er zur Zuordnung gehört.
+  const [types, setTypes] = useState<ContractTypeDto[]>([]);
+  const [categories, setCategories] = useState<ContractCategoryDto[]>([]);
+  const [typeId, setTypeId] = useState("");
+  const [savedTypeId, setSavedTypeId] = useState("");
+  const [savedCategoryId, setSavedCategoryId] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -50,8 +58,16 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       listOwnershipAssignees(orgSlug),
       getContractOwnership(orgSlug, contractId),
       getContractDepartmentRoles(orgSlug, contractId),
-    ]).then(([structure, costCenters, users, ownership, departmentRoles]) => {
+      listContractTypes(orgSlug).catch(() => null),
+      getContractRegister(orgSlug, contractId).catch(() => null),
+    ]).then(([structure, costCenters, users, ownership, departmentRoles, catalog, register]) => {
       if (cancelled) return;
+      const currentType = (register?.fields.contract_type_id?.value as string | null | undefined) ?? "";
+      setTypes((catalog?.contract_types ?? []).filter((item) => item.is_active || item.id === currentType));
+      setCategories(catalog?.contract_categories ?? []);
+      setTypeId(currentType);
+      setSavedTypeId(currentType);
+      setSavedCategoryId((register?.fields.contract_category_id?.value as string | null | undefined) ?? "");
       const activeDepartments = (structure.departments ?? []).filter((item) => item.is_active);
       setHospitals((structure.hospitals ?? []).filter((item) => item.is_active));
       setDepartments(activeDepartments);
@@ -143,6 +159,14 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       } else if (!hospitalId && roles && (roles.responsible_department_id || roles.beneficiary_department_ids.length)) {
         throw new Error("Entfernen Sie zuerst die Bereichsrollen, bevor Sie das Krankenhaus aufheben.");
       }
+      if (typeId !== savedTypeId) {
+        // Kategorie bleibt nur, wenn sie zum neuen Typ passt (wie in den Vertragsdaten).
+        const category = categories.find((item) => item.id === savedCategoryId);
+        const keepCategory = Boolean(category && typeId && category.contract_type_ids.includes(typeId));
+        await updateContractRegister(orgSlug, contractId, { changes: { contract_type_id: typeId || null, ...(keepCategory || !savedCategoryId ? {} : { contract_category_id: null }) } });
+        setSavedTypeId(typeId);
+        if (!keepCategory) setSavedCategoryId("");
+      }
       setAssignment(ownership);
       setMessage("Organisationszuordnung gespeichert.");
       onSaved?.();
@@ -158,6 +182,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description="Verantwortlichen Bereich, nutzende Bereiche und zuständige Person getrennt festlegen." actions={actions}>
     {message ? <p className="cw-ownership-status" role="status">{message}</p> : null}
     {loading ? <p role="status">Zuordnung wird geladen…</p> : <div className="cw-ownership-grid">
+      <label className="cw-ownership-type"><span>Vertragstyp</span><select value={typeId} onChange={(event) => setTypeId(event.target.value)}><option value="">Nicht festgelegt</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>{types.length === 0 ? <small>Noch keine Vertragstypen angelegt. {isAdmin ? <Link href="/stammdaten/vertragstypen">Vertragstypen pflegen</Link> : null}</small> : null}</label>
       <label><span>Krankenhaus</span><select value={hospitalId} disabled={hospitalLocked} onChange={(event) => {
         setHospitalId(event.target.value);
         setResponsibleDepartmentId("");

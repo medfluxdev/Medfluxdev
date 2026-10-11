@@ -563,6 +563,7 @@ def _partner(session: Session, contract) -> dict | None:
 def _assignment(session: Session, contract) -> dict:
     """Organisationszuordnung zum Lesen (Uebersicht): Namen statt Kennungen, fuer alle Rollen."""
     from app.database.models import Account, ContractDepartment, CostCenter, Department, Hospital
+    from app.database.models.register import CatalogContractCategory, CatalogContractType
     from app.ownership.service import further_responsible_ids
 
     hospital = session.get(Hospital, contract.hospital_id) if contract.hospital_id else None
@@ -576,7 +577,11 @@ def _assignment(session: Session, contract) -> dict:
     further = further_responsible_ids(session, contract.id)
     people = [value for value in (contract.responsible_account_id, *further) if value]
     names = dict(session.execute(select(Account.id, Account.display_name).where(Account.id.in_(people))).all()) if people else {}
+    kind = session.get(CatalogContractType, contract.contract_type_id) if contract.contract_type_id else None
+    category = session.get(CatalogContractCategory, contract.contract_category_id) if contract.contract_category_id else None
     return {
+        "contract_type": kind.label if kind and kind.organization_id == contract.organization_id else None,
+        "contract_category": category.label if category and category.organization_id == contract.organization_id else None,
         "hospital": hospital.name if hospital else None,
         "responsible_department": next((name for role, name in links if role == "responsible"), None),
         "beneficiary_departments": [name for role, name in links if role == "beneficiary"],

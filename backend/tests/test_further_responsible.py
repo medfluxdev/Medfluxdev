@@ -152,7 +152,7 @@ def test_contract_detail_shows_assignment_names_for_every_role(monkeypatch):
         empty = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))["assignment"]
     finally:
         session.close()
-    assert empty == {"hospital": None, "responsible_department": None, "beneficiary_departments": [], "other_departments": [],
+    assert empty == {"contract_type": None, "contract_category": None, "hospital": None, "responsible_department": None, "beneficiary_departments": [], "other_departments": [],
                      "cost_center": None, "responsible": "Admin", "further_responsible": []}  # Anleger ist verantwortlich
     _patch(admin, slug, cid, hospital_id=str(ids["hospital"]), cost_center_id=str(ids["center"]),
            responsible_account_id=str(ids["main"]), further_responsible_account_ids=[str(ids["second"])])
@@ -164,6 +164,21 @@ def test_contract_detail_shows_assignment_names_for_every_role(monkeypatch):
     assert assignment["hospital"] == "Klinikum"
     assert assignment["cost_center"] == {"code": "950000", "name": "Radiologie"}
     assert assignment["responsible"] == "Main" and assignment["further_responsible"] == ["Second"]
+
+    # Vertragstyp (aus den Vertragsdaten) steht mit Bezeichnung in der Zuordnung.
+    from app.database.models.register import CatalogContractType
+
+    session = create_session()
+    try:
+        kind = CatalogContractType(organization_id=ids["org"], code=f"wv-{uuid4().hex[:6]}", label="Wartungsvertrag")
+        session.add(kind)
+        session.flush()
+        session.get(Contract, UUID(cid)).contract_type_id = kind.id
+        session.commit()
+        assignment = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))["assignment"]
+    finally:
+        session.close()
+    assert assignment["contract_type"] == "Wartungsvertrag" and assignment["contract_category"] is None
 
 
 def test_contract_detail_carries_start_date_and_linked_partner(monkeypatch):

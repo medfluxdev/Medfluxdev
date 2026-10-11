@@ -558,6 +558,9 @@ export const SEVERITY_LABEL: Record<string, string> = {
 };
 
 export interface ContractAssignment {
+  /** Vertragstyp und Kategorie aus den Vertragsdaten (Bezeichnung). */
+  contract_type?: string | null;
+  contract_category?: string | null;
   hospital: string | null;
   responsible_department: string | null;
   beneficiary_departments: string[];

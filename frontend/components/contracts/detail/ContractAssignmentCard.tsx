@@ -28,6 +28,7 @@ export default function ContractAssignmentCard({ contractId, assignment, canEdit
       {canEdit ? <Link className="btn btn-sm" href={href} aria-label="Zuordnung ändern">Ändern</Link> : null}
     </div>
     <dl className="side-dl">
+      <div><dt>Vertragstyp</dt><dd>{a?.contract_type ? <>{a.contract_type}{a.contract_category ? ` · ${a.contract_category}` : ""}</> : missing("Vertragstyp")}</dd></div>
       <div><dt>Krankenhaus</dt><dd>{a?.hospital ?? (a ? "Organisationsweit" : missing("Krankenhaus"))}</dd></div>
       <div><dt>Verantwortliche Abteilung</dt><dd>{a?.responsible_department ?? missing("Verantwortliche Abteilung")}</dd></div>
       <div><dt>Hauptverantwortlich</dt><dd>{a?.responsible ?? missing("Verantwortliche Person")}</dd></div>

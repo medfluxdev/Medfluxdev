@@ -527,6 +527,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <p className="object-header-eyebrow">{data.register_number ? <>Vertrag <span className="mono">{data.register_number}</span></> : "Vertrag ohne Nummer"}{data.contract_number ? <> · Nr. lt. Dokument <span className="mono">{data.contract_number}</span></> : null}</p>
           <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
           <div className="object-header-meta object-header-who">
+            {data.assignment?.contract_type ? <><span className="type-chip">{data.assignment.contract_type}</span><span className="meta-sep" aria-hidden="true" /></> : null}
             {data.partner
               ? <Link className="partner-chip" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten">{data.partner.name}</Link>
               : data.supplier
