@@ -5,7 +5,8 @@ import type { ContractAssignment } from "@/lib/contract-detail-types";
 import { contractHref } from "@/lib/fix-targets";
 
 /**
- * Übersicht, Seitenleiste: wem der Vertrag gehört – Krankenhaus, Abteilungen, Kostenstelle, Verantwortliche.
+ * Übersicht, Seitenleiste: wem der Vertrag gehört – Krankenhaus, Abteilungen, Kostenstelle, Hauptverantwortliche.
+ * Weitere Verantwortliche stehen nur in der Organisationszuordnung (Entscheidung 2026-10-11).
  * Für alle Rollen lesbar; mit Bearbeitungsrecht führt „Ändern“ bzw. „Festlegen“ zur Organisationszuordnung.
  */
 export default function ContractAssignmentCard({ contractId, assignment, canEdit }: {
@@ -20,7 +21,6 @@ export default function ContractAssignmentCard({ contractId, assignment, canEdit
     : <span className="side-none">Nicht festgelegt</span>;
   const none = <span className="side-none">Keine</span>;
   const departments = [...(a?.beneficiary_departments ?? []), ...(a?.other_departments ?? [])];
-  const people = a?.further_responsible ?? [];
 
   return <section className="cw-section contract-assignment" aria-labelledby="assignment-heading">
     <div className="cw-section-head">
@@ -34,7 +34,6 @@ export default function ContractAssignmentCard({ contractId, assignment, canEdit
       <div><dt>Verantwortliche Abteilung</dt><dd>{a?.responsible_department ?? missing("Verantwortliche Abteilung")}</dd></div>
       <div><dt>Hauptverantwortlich</dt><dd>{a?.responsible ?? missing("Verantwortliche Person")}</dd></div>
       <div><dt>Kostenstelle</dt><dd>{a?.cost_center ? <><span className="mono">{a.cost_center.code}</span> · {a.cost_center.name}</> : missing("Kostenstelle")}</dd></div>
-      <div><dt>Weitere Verantwortliche</dt><dd>{people.length ? people.join(", ") : none}</dd></div>
       <div><dt>Nutzende Abteilungen</dt><dd>{departments.length ? departments.join(", ") : none}</dd></div>
     </dl>
   </section>;

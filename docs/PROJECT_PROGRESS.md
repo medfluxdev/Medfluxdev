@@ -5614,3 +5614,9 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Kostenstelle:** wählbar aus verantwortlicher **oder** nutzender Abteilung (gruppiert: Verantwortliche Abteilung · Nutzende Abteilungen · Weitere); die Wahl ändert die Abteilungsrollen nicht mehr, und das Anhaken einer nutzenden Abteilung leert die Kostenstelle nicht mehr.
 - **Tests:** `test_deadlines_units.py` (+2), `test_deadlines_api.py` (+1, Standard 4 Monate), `reminder-leads.test.tsx`, `box-collapse.test.tsx`, `contract-ownership-roles.test.tsx`. pytest 1673 / 3 übersprungen; `npm run verify` grün (70 Testdateien); Migration auf Wegwerf-DB auf/ab/auf.
 
+### Nachtrag 2026-10-11 – Abschnitte kamen nicht an (Fehler behoben)
+
+- **Ursache:** Die Route `GET /api/contracts/{id}` filtert über `ContractDetailResponse`; dort fehlte `sections`. FastAPI verwarf das Feld, die Vertragsakte sah „kein Vertragstyp“ und zeigte alle Abschnitte – daher blieben Leistungsumfang und SLA beim Mietvertrag sichtbar. Die bisherigen Tests riefen den Aufbau direkt auf und sahen das nicht.
+- **Behoben:** `sections` im Antwortmodell; neuer Regressionstest prüft, dass kein Schlüssel des Lesemodells durch das Antwortmodell verloren geht.
+- **Zuständigkeit (Übersicht):** „Weitere Verantwortliche“ entfernt (bleibt in der Organisationszuordnung).
+

@@ -14,9 +14,10 @@ describe("Übersicht: Zuständigkeit (Seitenleiste)", () => {
     const { container } = render(<ContractAssignmentCard contractId="c-1" assignment={FULL} canEdit />);
     expect(screen.getByRole("heading", { name: "Zuständigkeit" })).toBeInTheDocument();
     expect(screen.getByText("Vertragstyp").closest("div")).toHaveTextContent("Wartungsvertrag · Medizintechnik");
-    for (const text of ["Nordwest Krankenhaus", "Medizintechnik", "Haustechnik", "Maria Becker", "Jonas Kurz, Lea Wolf"]) {
+    for (const text of ["Nordwest Krankenhaus", "Medizintechnik", "Haustechnik", "Maria Becker"]) {
       expect(screen.getByText(text)).toBeInTheDocument();
     }
+    expect(screen.queryByText("Weitere Verantwortliche")).not.toBeInTheDocument();
     expect(screen.getByText("950000")).toHaveClass("mono");
     expect(screen.getByText("950000").closest("dd")).toHaveTextContent("950000 · Radiologie");
     expect(screen.getByRole("link", { name: "Zuordnung ändern" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=ownership");

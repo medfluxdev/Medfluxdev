@@ -57,6 +57,12 @@ def test_custom_sections_reset_and_detail():
         session.commit()
         detail = _build_augmented_detail(session, organization_id=org.id, contract_id=contract.id)
         assert detail["sections"] == {"type_label": "Mietvertrag", "scope": False, "sla": False, "maintenance": True, "equipment": True}
+        # Regression: die Route liefert ContractDetailResponse – nichts aus dem Lesemodell darf verloren gehen.
+        from app.contracts.detail.models import ContractDetailResponse
+
+        dumped = ContractDetailResponse.model_validate(detail).model_dump()
+        assert set(detail) - set(dumped) == set()
+        assert dumped["sections"] == detail["sections"]
 
         catalogs.upsert_type(session, org.id, {"sections": None}, session.get(CatalogContractType, rent.id))
         session.commit()
