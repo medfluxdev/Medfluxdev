@@ -62,6 +62,24 @@ describe("Shell: Topbar-Eingaben", () => {
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health"));
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status"));
     expect(await screen.findByText("Lokale KI bereit (qwen)")).toBeInTheDocument();
+    expect(document.querySelector(".shell-status")).toHaveClass("shell-status--done");
+  });
+
+  it("KI-Ampel: orange ohne Modell, rot ohne Server", async () => {
+    apiGetMock.mockImplementation((path: string) => {
+      if (path === "/health") return Promise.resolve({ status: "ok" });
+      if (path === "/api/ai/status") return Promise.resolve({ provider: "ollama", available: true, model: "qwen", model_available: false, message: "Modell fehlt" });
+      return Promise.resolve({});
+    });
+    const { unmount } = render(<ClientNav>Inhalt</ClientNav>);
+    expect(await screen.findByText("Lokale KI nicht bereit")).toBeInTheDocument();
+    expect(document.querySelector(".shell-status")).toHaveClass("shell-status--warning");
+    unmount();
+
+    apiGetMock.mockImplementation(() => Promise.reject(new Error("offline")));
+    render(<ClientNav>Inhalt</ClientNav>);
+    expect(await screen.findByText("Server nicht erreichbar")).toBeInTheDocument();
+    expect(document.querySelector(".shell-status")).toHaveClass("shell-status--critical");
   });
 });
 

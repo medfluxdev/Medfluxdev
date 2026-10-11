@@ -26,6 +26,7 @@ export default function AppSidebar({ collapsed, mobileOpen, onToggleCollapsed, o
   const { account, membership, role } = useAuth();
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [aiStatus, setAiStatus] = useState<AIStatus | null>(null);
+  const [aiUnknown, setAiUnknown] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -34,6 +35,7 @@ export default function AppSidebar({ collapsed, mobileOpen, onToggleCollapsed, o
       if (!mounted) return;
       setApiHealthy(api.status === "fulfilled" ? api.value.status === "ok" : false);
       setAiStatus(ai.status === "fulfilled" ? ai.value : null);
+      setAiUnknown(ai.status === "rejected");
     }
     void refresh();
     const timer = window.setInterval(refresh, STATUS_REFRESH_MS);
@@ -44,9 +46,10 @@ export default function AppSidebar({ collapsed, mobileOpen, onToggleCollapsed, o
 
   const groups = useMemo(() => visibleGroups(role, Boolean(account?.is_developer)), [account?.is_developer, role]);
   const aiReady = Boolean(aiStatus?.available && aiStatus?.model_available);
-  const statusText = apiHealthy === false ? "Server nicht erreichbar" : aiReady ? `Lokale KI bereit (${aiStatus?.model})` : aiStatus ? "Lokale KI nicht bereit" : "Status wird geprüft…";
-  // Ruhe & Signal: Normalbetrieb ist grau; nur Ausfall (kritisch) bzw. fehlendes Modell (prüfen) färbt.
-  const statusTone = apiHealthy === false ? "critical" : aiReady ? "neutral" : aiStatus ? "warning" : "neutral";
+  const statusText = apiHealthy === false ? "Server nicht erreichbar" : aiReady ? `Lokale KI bereit (${aiStatus?.model})` : aiStatus ? "Lokale KI nicht bereit" : aiUnknown ? "KI-Status nicht abrufbar" : "Status wird geprüft…";
+  // KI-Ampel (bewusste Ausnahme von „Ruhe & Signal“): grün = bereit, orange = KI nicht bereit, rot = Server weg.
+  // Farbe immer mit eigener Form und Text; grau nur, solange noch geprüft wird.
+  const statusTone = apiHealthy === false ? "critical" : aiReady ? "done" : aiStatus || aiUnknown ? "warning" : "neutral";
 
   return (
     <>
