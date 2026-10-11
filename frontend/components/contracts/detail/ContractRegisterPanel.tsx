@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { loadAllPartners } from "@/components/master-data/definitions/partners";
@@ -8,6 +9,7 @@ import { QuickCreatePartner } from "@/components/master-data/lazy";
 import AiFillSummary from "./AiFillSummary";
 import ContractRulesSection from "./ContractRulesSection";
 import type { FormValues } from "@/components/master-data/types";
+import MissingList from "@/components/ui/MissingList";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { formatDate } from "@/lib/format";
@@ -42,6 +44,7 @@ import {
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 import { usePermissions } from "@/lib/use-permissions";
+import { FIELD_PARAM, SECTION_PARAM, baseFieldKey } from "@/lib/fix-targets";
 
 type Draft = Record<string, RegisterValue>;
 type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo";
@@ -156,6 +159,8 @@ const TERM_FIELDS: Record<TermModel, string[]> = {
   perpetual: ["term_model", "term_start_date"],
 };
 
+const TERM_SECTION_KEYS = new Set(SECTIONS.find((section) => section.id === "term")!.fields.map((def) => def.key));
+
 // Ruhe & Signal: Geschäftsstatus ist ein normaler Zustand, neutral (das Wort trägt die Bedeutung).
 const STATUS_TONE: Record<BusinessStatus, string> = { in_arbeit: "", gueltig: "", gekuendigt: "", beendet: "", geloescht: "" };
 
@@ -207,6 +212,12 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   const [transitionForm, setTransitionForm] = useState({ terminated_on: "", effective_date: "", note: "", acknowledge: false });
   const [confidentialDraft, setConfidentialDraft] = useState<{ is_confidential: boolean; grants: string[] } | null>(null);
   const [newPartner, setNewPartner] = useState<FormValues | null>(null);
+  // Sprungziel „Direkt zur Stelle“: Feld, zu dem gesprungen wird, mit optionalem Hinweis.
+  const [target, setTarget] = useState<{ key: string; note?: string; at: number } | null>(null);
+  const handledLink = useRef<string | null>(null);
+  const searchParams = useSearchParams();
+  const linkedField = searchParams?.get(FIELD_PARAM) ?? null;
+  const linkedSection = searchParams?.get(SECTION_PARAM) ?? null;
   const { can } = usePermissions();
 
   const load = useCallback(async () => {
@@ -244,6 +255,31 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     return () => { cancelled = true; };
   }, [editable, orgSlug]);
 
+  // Ziel aus der Adresse (?feld=…, ?abschnitt=…) einmal anspringen, sobald die Daten da sind.
+  useEffect(() => {
+    if (!register) return;
+    const link = linkedField ? `f:${linkedField}` : linkedSection ? `s:${linkedSection}` : null;
+    if (!link || handledLink.current === link) return;
+    handledLink.current = link;
+    if (linkedField) focusField(linkedField);
+    else document.getElementById(`rg-${linkedSection}-heading`)?.scrollIntoView?.({ block: "start" });
+    // focusField liest den aktuellen Stand; neu auslösen soll nur ein neues Ziel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [register, linkedField, linkedSection]);
+
+  // Nach dem Rendern (Bearbeitung offen): zum Feld scrollen, Cursor setzen, kurz hervorheben.
+  useEffect(() => {
+    if (!target) return;
+    const frame = window.requestAnimationFrame(() => {
+      const row = document.getElementById(`rg-field-${target.key}`);
+      const control = document.getElementById(`rg-${target.key}`);
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      row?.scrollIntoView?.({ block: "center", behavior: reduce ? "auto" : "smooth" });
+      (control ?? row)?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [target, editing]);
+
   const termModel = (editing ? draft.term_model : register?.fields.term_model?.value) as TermModel | null | undefined;
   const visibleTermFields = useMemo(() => new Set(termModel ? TERM_FIELDS[termModel] : ["term_model"]), [termModel]);
   const visibleCategories = useMemo(() => {
@@ -280,9 +316,13 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     }
     if (Object.keys(changes).length === 0) {
       setEditing(false);
+      leaveTarget();
       return;
     }
-    if (await run(() => updateContractRegister(orgSlug, contractId, { changes }), "Stammdaten gespeichert.")) setEditing(false);
+    if (await run(() => updateContractRegister(orgSlug, contractId, { changes }), "Stammdaten gespeichert.")) {
+      setEditing(false);
+      leaveTarget();
+    }
   }
 
   const dirty = editing && Boolean(register) && Object.entries(register?.fields ?? {}).some(([key, field]) => !same(draft[key], field.value));
@@ -331,6 +371,55 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   function labelFor(key: string): string {
     if (key.endsWith("_value") && PERIODS.some((prefix) => `${prefix}_value` === key)) return PERIOD_LABEL[key.replace(/_value$/, "") as (typeof PERIODS)[number]];
     return register?.fields[key]?.label ?? key;
+  }
+
+  // Feld in der Adresse merken (Zurück, Teilen), ohne die Seite neu zu laden.
+  function setFieldParam(key: string | null) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (key) params.set(FIELD_PARAM, key); else params.delete(FIELD_PARAM);
+      handledLink.current = key ? `f:${key}` : null;
+      const query = params.toString();
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    } catch {
+      // Adresse ist nur Komfort.
+    }
+  }
+
+  /**
+   * „Direkt zur Stelle“: Bearbeitung öffnen (wenn erlaubt), zum Feld springen und den Cursor setzen.
+   * Eine offene Bearbeitung bleibt erhalten; ein für die Vertragsart verborgenes Feld führt zur Vertragsart.
+   */
+  function focusField(rawKey: string) {
+    if (!register) return;
+    const key = baseFieldKey(rawKey);
+    const model = (editing ? draft.term_model : register.fields.term_model?.value) as TermModel | null | undefined;
+    const hidden = TERM_SECTION_KEYS.has(key) && !(model ? TERM_FIELDS[model] : ["term_model"]).includes(key);
+    const canEdit = editable && register.business_status !== "geloescht";
+    const notes: string[] = [];
+    if (hidden) notes.push(model ? `„${labelFor(rawKey)}“ gehört nicht zur gewählten Vertragsart.` : `Erst die Vertragsart wählen – danach erscheint „${labelFor(rawKey)}“.`);
+    if (!canEdit) notes.push("Nur Lesen – Änderungen über das Vertragsmanagement.");
+    if (canEdit && !editing) {
+      editingRef.current = true;
+      setDraft(draftFrom(register));
+      setEditing(true);
+      setMessage(null);
+    }
+    setTarget({ key: hidden ? "term_model" : key, note: notes.join(" ") || undefined, at: Date.now() });
+  }
+
+  function jumpTo(rawKey: string) {
+    setFieldParam(baseFieldKey(rawKey));
+    focusField(rawKey);
+  }
+
+  function leaveTarget() {
+    setTarget(null);
+    try {
+      if (new URLSearchParams(window.location.search).has(FIELD_PARAM)) setFieldParam(null);
+    } catch {
+      // Adresse ist nur Komfort.
+    }
   }
 
   function display(def: FieldDef): string {
@@ -460,7 +549,11 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
           {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-ghost btn-danger" : "btn"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>→ {item.label}</button>)}
         </div>
       </div>
-      {register.business_status === "in_arbeit" && register.missing_for_valid.length > 0 ? <p className="rg-hint">Für „Gültig“ fehlen noch: {register.missing_for_valid.map((key) => labelFor(key)).join(", ")}.</p> : null}
+      {register.business_status === "in_arbeit" ? <MissingList
+        className="rg-hint"
+        intro="Für „Gültig“ fehlen noch:"
+        items={register.missing_for_valid.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))}
+      /> : null}
       {transition ? <form className="rg-transition" onSubmit={(event) => { event.preventDefault(); void submitTransition(); }}>
         <strong>Statuswechsel nach „{BUSINESS_STATUS_LABEL[transition]}“</strong>
         {transition === "gekuendigt" ? <>
@@ -475,12 +568,16 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       </form> : null}
     </section>
 
-    <AiFillSummary register={register} contractId={contractId} />
+    <AiFillSummary register={register} contractId={contractId} onSelectField={jumpTo} />
     <ContractRulesSection organizationSlug={orgSlug} contractId={contractId} version={register} />
 
     <section className="cw-section" aria-labelledby="rg-terms-heading">
       <div className="cw-section-head"><div><h2 id="rg-terms-heading">Berechnete Fristen</h2><p>Deterministisch aus den Stammdaten berechnet (Stand {formatDate(register.as_of)}).</p></div></div>
-      {terms.status === "incomplete" ? <p className="rg-hint">Fristen noch nicht berechenbar. Es fehlen: {terms.missing.map((key) => labelFor(key)).join(", ")}.</p> : null}
+      {terms.status === "incomplete" ? <MissingList
+        className="rg-hint"
+        intro="Fristen noch nicht berechenbar. Es fehlen:"
+        items={terms.missing.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))}
+      /> : null}
       <div className="rg-terms">
         <div><span>Kündbar bis</span><strong>{terms.cancel_by ? formatDate(terms.cancel_by) : "–"}</strong></div>
         <div><span>{terms.actual_end ? "Tatsächliches Ende" : "Mögliches Vertragsende"}</span><strong>{formatDate(terms.actual_end ?? terms.possible_end)}</strong></div>
@@ -494,7 +591,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
       <div className="cw-section-head"><div><h2 id="rg-protection-heading">Vertraulichkeit & Aufbewahrung</h2><p>Wer den Vertrag sehen darf und ab wann er gelöscht werden darf.</p></div></div>
       <div className="rg-terms">
         <div><span>Vertraulich</span><strong>{register.confidentiality.effective ? (register.confidentiality.type_confidential && !register.confidentiality.is_confidential ? "Ja (über Vertragstyp)" : "Ja") : "Nein"}</strong></div>
-        <div><span>Aufbewahrung</span><strong>{register.retention.years == null ? "Nicht festgelegt" : `${register.retention.years} Jahr(e) nach Vertragsende`}</strong>{register.retention.source ? <small className="cw-muted">{register.retention.source === "contract" ? "am Vertrag festgelegt" : "aus Vertragstyp"}</small> : null}</div>
+        <div><span>Aufbewahrung</span><strong>{register.retention.years == null ? "Nicht festgelegt" : `${register.retention.years} Jahr(e) nach Vertragsende`}</strong>{register.retention.years == null && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo("retention_years_after_end")} aria-label="Aufbewahrung festlegen">Festlegen</button> : null}{register.retention.source ? <small className="cw-muted">{register.retention.source === "contract" ? "am Vertrag festgelegt" : "aus Vertragstyp"}</small> : null}</div>
         <div><span>Löschen ab</span><strong>{register.retention.deletion_from ? formatDate(register.retention.deletion_from) : "–"}</strong>{!register.retention.deletion_from ? <small className="cw-muted">erst nach bekanntem Vertragsende</small> : null}</div>
       </div>
       {register.confidentiality.effective ? <p className="cw-muted">Sichtbar für Administratoren, die verantwortliche Person, die Erinnerungsempfänger{register.confidentiality.grants.length > 0 ? ` und freigegeben für: ${register.confidentiality.grants.map((item) => item.display_name).join(", ")}` : ""}.</p> : null}
@@ -530,7 +627,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
 
     <div className="rg-toolbar">
       {editable && !editing && register.business_status !== "geloescht" ? <button type="button" className="btn btn-primary" onClick={() => { editingRef.current = true; setDraft(draftFrom(register)); setEditing(true); setMessage(null); }}>Vertragsdaten bearbeiten</button> : null}
-      {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>{dirty ? <span className="field-hint">Ungespeicherte Änderungen · Strg+S speichert</span> : null}</> : null}
+      {editing ? <><button type="button" className="btn" disabled={busy} onClick={() => { setEditing(false); setDraft(draftFrom(register)); setNewPartner(null); leaveTarget(); }}>Abbrechen</button><button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>{dirty ? <span className="field-hint">Ungespeicherte Änderungen · Strg+S speichert</span> : null}</> : null}
       <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
       <Link href="/stammdaten/vertragspartner" className="rg-link">Vertragspartner verwalten</Link>
     </div>
@@ -542,13 +639,17 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
         <dl className="rg-fields">{fields.map((def) => {
           const provenance = originOf(def);
           const label = def.kind === "period" ? PERIOD_LABEL[def.key as (typeof PERIODS)[number]] : register.fields[def.key]?.label ?? def.key;
-          return <div key={def.key} className="rg-field">
+          const isTarget = target?.key === def.key;
+          const empty = !editing && def.kind !== "bool" && display(def) === "Nicht erfasst";
+          return <div key={def.key} id={`rg-field-${def.key}`} className={isTarget ? "rg-field rg-field--target" : "rg-field"} tabIndex={isTarget ? -1 : undefined}>
             <dt>{editing && def.kind !== "period" ? <label htmlFor={`rg-${def.key}`}>{label}</label> : label}</dt>
             <dd>
               {editing ? input(def) : <span className="rg-value">{display(def)}</span>}
               {editing && FIELD_HELP[def.key] ? <span className="field-hint rg-help">{FIELD_HELP[def.key]}</span> : null}
               {!editing && provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null}
               {!editing && editable && provenance?.origin === "ai" ? <button type="button" className="rg-link" disabled={busy} onClick={() => confirm(fieldKeys(def))}>Bestätigen</button> : null}
+              {empty && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo(def.key)} aria-label={`${label} erfassen`}>Erfassen</button> : null}
+              {isTarget && target?.note ? <span className="rg-field-note" role="status">{target.note}</span> : null}
             </dd>
           </div>;
         })}</dl>

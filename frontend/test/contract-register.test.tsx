@@ -116,7 +116,7 @@ describe("Vertragsregister – Stammdaten", () => {
     expect(within(terms).getByText("Erinnerung am").nextElementSibling).toHaveTextContent("30.03.2027");
     expect(screen.getByText("KI-Vorschlag")).toHaveAttribute("title", "Quelle: identity.contract_title");
     expect(screen.getByText("KI · korrigiert")).toBeInTheDocument();
-    expect(screen.getByText(/Für „Gültig“ fehlen noch: Vertragspartner/)).toBeInTheDocument();
+    expect(screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
   });
 
   it("ist barrierefrei in Ansicht und Bearbeitung", async () => {

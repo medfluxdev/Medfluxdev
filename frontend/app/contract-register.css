@@ -19,6 +19,10 @@
 .rg-toolbar{display: flex;gap: 10px;align-items: center;flex-wrap: wrap}
 .rg-fields{display: grid;grid-template-columns: repeat(2,minmax(0,1fr));gap: 0 26px;margin: 0}
 .rg-field{display: grid;gap: 6px;padding: 12px 0;border-bottom: 1px solid var(--color-border-subtle)}
+/* Sprungziel „Direkt zur Stelle“: kurz hervorgehoben, ohne Bewegung */
+.rg-field--target{outline: 2px solid var(--color-accent);outline-offset: 4px;border-radius: var(--radius-sm)}
+.rg-field-note{flex-basis: 100%;color: var(--color-text-muted);font-size: var(--text-small)}
+.rg-field{scroll-margin-top: 96px}
 .rg-field dt{font-size: var(--text-small);font-weight: 700;color: var(--color-text-subtle)}
 .rg-field dd{margin: 0;display: flex;flex-wrap: wrap;gap: 8px;align-items: center}
 .rg-field input[type=text],.rg-field input[type=date],.rg-field input[type=number],.rg-field input:not([type]),.rg-field select,.rg-field textarea{min-height: 38px;padding: 6px 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);font: inherit;max-width: 100%}

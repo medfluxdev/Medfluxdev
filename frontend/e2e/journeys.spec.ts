@@ -196,3 +196,18 @@ test("11 – Vertragsregel anlegen und in der Vertragsliste nutzen", async ({ pa
   if (await confirm.isVisible().catch(() => false)) await confirm.click();
   await expect(editor).toBeHidden();
 });
+
+test("12 – Direkt zur Stelle: fehlende Angabe anklicken setzt den Cursor ins Feld", async ({ page }, info) => {
+  await openContract(page, "Softwarepflege PACS");
+  await page.getByRole("tab", { name: "Vertragsdaten" }).click();
+  // Hinweis „Für Gültig fehlen noch …“ oder „Erfassen“ an einem leeren Feld – beides nutzt denselben Sprung.
+  const missing = page.locator(".missing-list button, .rg-field button[aria-label$=' erfassen']").first();
+  await expect(missing).toBeVisible();
+  await missing.click();
+  await expect(page.getByRole("button", { name: "Speichern", exact: true })).toBeVisible();
+  await expect(page.locator(":focus")).toHaveAttribute("id", /^rg-/);
+  await expect(page).toHaveURL(/feld=/);
+  await checkA11y(page, info, "direkt-zur-stelle");
+  await page.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(page).not.toHaveURL(/feld=/);
+});
