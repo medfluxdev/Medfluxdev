@@ -131,7 +131,7 @@ export default function EquipmentDetailPage() {
                     </Link>
                     <div className="badge-row">
                       <StatusBadge label={relationshipQualityLabel(c.relationship_quality)} tone={c.requires_review ? "review" : "success"} />
-                      {c.requires_review && <StatusBadge label="Zu prüfen" tone="review" />}
+                      {c.requires_review && <Link className="signal-link" href={`/contracts/${c.contract_id}?tab=relations`} aria-label={`Zuordnung zu ${c.contract_number ?? "Vertrag"} prüfen`}><StatusBadge label="Zu prüfen" tone="review" /></Link>}
                     </div>
                     {c.service_scope && <p className="muted">{c.service_scope}</p>}
                   </li>

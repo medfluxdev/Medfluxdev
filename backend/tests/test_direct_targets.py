@@ -56,3 +56,15 @@ def test_finance_notes_carry_targets_in_the_same_order():
 
     [known] = summarize([entry], as_of=date(2026, 10, 11), contract_end=date(2027, 12, 31))
     assert known.as_dict()["note_items"] == []
+
+
+def test_notification_links_lead_to_where_the_task_is_done():
+    from app.work_queue.targets import work_item_href
+
+    assert work_item_href("c-1", "missing_cost") == "/contracts/c-1?tab=finance&abschnitt=entries"
+    assert work_item_href("c-1", "manual_review") == "/contracts/c-1?tab=documents&subtab=review"
+    assert work_item_href("c-1", "missing_cost", requires_review=True) == "/contracts/c-1?tab=documents&subtab=review"
+    assert work_item_href("c-1", "cancellation_deadline") == "/contracts/c-1?tab=deadlines&abschnitt=renewal"
+    assert work_item_href("c-1", "equipment_coverage_review") == "/contracts/c-1?tab=relations"
+    assert work_item_href("c-1", "sla_issue") == "/contracts/c-1"
+    assert work_item_href(None, "missing_cost") == "/fristen?ansicht=aufgaben"

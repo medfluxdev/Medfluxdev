@@ -20,6 +20,7 @@ from app.database.scope_queries import scoped_contract_ids
 from app.database.services import get_organization
 from app.database.session import create_session
 from app.work_queue.derive import task_items_only
+from app.work_queue.targets import work_item_href
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -79,7 +80,7 @@ def notification_feed(
                 "message": row.why_de,
                 "contract_id": str(row.contract_id),
                 "target_date": row.target_date,
-                "href": f"/contracts/{row.contract_id}?tab=deadlines" if row.contract_id else "/fristen?ansicht=aufgaben",
+                "href": work_item_href(row.contract_id, row.item_type, bool(row.requires_review)),
             }
             for row in work_items
         ]
@@ -92,7 +93,8 @@ def notification_feed(
                 "message": row.reason,
                 "contract_id": str(row.contract_id) if row.contract_id else None,
                 "target_date": None,
-                "href": f"/contracts/{row.contract_id}" if row.contract_id else "/admin",
+                # Freigaben stehen in der Übersicht unter „Vertragsintelligenz“.
+                "href": f"/contracts/{row.contract_id}?abschnitt=intelligence" if row.contract_id else "/admin",
             }
             for row in actions
         )

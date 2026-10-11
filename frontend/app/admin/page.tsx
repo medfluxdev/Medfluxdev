@@ -118,8 +118,8 @@ export default function AdminPage() {
 
     {!loading ? <>
       <section className={styles.kpis} aria-label="Administrationskennzahlen">
-        <article><span>Offene Aufgaben</span><strong>{overview?.total_action_items ?? 0}</strong><small>priorisierte Handlungspunkte</small></article>
-        <article><span>Manuelle Prüfungen</span><strong>{reviews}</strong><small>Angaben mit Prüfbedarf</small></article>
+        <article><span>Offene Aufgaben</span><strong>{overview?.total_action_items ?? 0}</strong><small><Link href="/fristen?ansicht=aufgaben">priorisierte Handlungspunkte anzeigen</Link></small></article>
+        <article><span>Manuelle Prüfungen</span><strong>{reviews}</strong><small><Link href="/register?ansicht=review">Angaben mit Prüfbedarf anzeigen</Link></small></article>
         <article title="Gezählt werden Mitgliedschaften in dieser Organisation. Entwicklerkonten haben keine Mitgliedschaft und erscheinen hier nicht."><span>Mitglieder dieser Organisation</span><strong>{activeUsers}</strong><small>{users.length} Konten insgesamt{account?.is_developer ? " · Ihr Entwicklerkonto zählt nicht mit" : ""}</small></article>
         <article><span>Analyse-Ereignisse</span><strong>{intelligenceEvents.length}</strong><small>zuletzt sichtbare Ereignisse</small></article>
       </section>

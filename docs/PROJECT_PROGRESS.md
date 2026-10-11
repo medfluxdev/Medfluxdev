@@ -5465,3 +5465,13 @@ Plan: `docs/architecture/DIREKT_ZUR_STELLE_PLAN_20261011.md` (Entscheidungen: ga
 - **Tests:** neu `backend/tests/test_direct_targets.py`, Erweiterung `test_renewal_brief.py`; `frontend/test/direct-jump-contract.test.tsx`; Playwright-Journey 13. Verifikation: pytest 1630 bestanden / 3 übersprungen; `npm run verify` grün (57 Testdateien); Playwright 178/178.
 - **Nächster Schritt:** Phase 3 (Mein Tag, Vertragsliste, Fristen & Aufgaben, Benachrichtigungen, Analysen, Import, Verwaltung, Geräte).
 
+### Nachtrag 2026-10-11 – „Direkt zur Stelle“, Phase 3 (Listen und Übersichten)
+
+- **Mein Tag:** Lagebild-Themen sind Links (Liste, Termine, Prüfliste, Entscheidungen); Kachel „Jährliche Kosten“ führt bei fehlenden Kosten zu „Verträge ohne Kosten“; „nicht bewertbar“ führt zu den Laufzeitangaben (ein Vertrag: direkt in die Akte).
+- **Vertragsliste:** Verträge aus einer nach Lücken gefilterten Liste öffnen dort, wo die Lücke behoben wird (ohne Kosten → Finanzen, ohne Verantwortliche → Zuständigkeit, Laufzeit unvollständig → Laufzeit, ohne Erinnerungsempfänger → Feld, Prüfung → Prüfung …); Zellen „Unvollständig“ (Laufzeit, Regeln) sind Links; Ergebniszeile „Verträge ohne Kosten anzeigen“.
+- **Fristen & Aufgaben:** Aufgaben haben „Kosten erfassen“ / „Im Vertrag erledigen“ je Typ; „Ungeprüfte KI-Werte“ → Prüfung; „nicht berechenbar“ → Akte bzw. Liste; fehlende Jahreskosten → „Kosten erfassen“.
+- **Benachrichtigungen (Backend):** Links je Aufgabentyp (`app/work_queue/targets.py`, gleiche Zuordnung wie `workItemTarget`), Freigaben → `?abschnitt=intelligence`. Einsicht „Kündigungsfrist in 90 Tagen ohne Erinnerungsempfänger“ hat jetzt `filters` (Frist bald **und** kein Empfänger), statt alle bald fälligen Verträge zu zeigen.
+- **Analysen, Import, Verwaltung, Geräte:** „Teilsumme …“, „Keine gepflegten Finanzposten“, Drilldown (fehlende Kosten, Kosten/Laufzeit je Vertrag), „N Verträge erfordern manuelle Prüfung“ → Prüfliste, fehlgeschlagener Import → Dokument im Vertrag, Verwaltungs-Kennzahlen, Geräte „Zu prüfen“ → Verknüpfungen.
+- **Offen:** Stammdaten „{n} ohne Vertrag“ (Partnerliste hat keinen Adressfilter); Balken in Analysen führen weiter zur Dimension, nicht zu „ohne Kosten“.
+- **Tests:** `test_direct_targets.py` (Benachrichtigungslinks), `frontend/test/direct-jump-lists.test.tsx`, `import.test.tsx` angepasst. Verifikation: pytest 1631 / 3 übersprungen; `npm run verify` grün (58 Testdateien); Playwright 177 + Analysen-Referenz bewusst aktualisiert (neuer Link).
+

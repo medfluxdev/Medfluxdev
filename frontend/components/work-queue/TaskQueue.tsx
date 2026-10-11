@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "@/components/ui/EmptyState";
 import Link from "next/link";
+import { contractHref, fixLabel, workItemTarget } from "@/lib/fix-targets";
 import InlineAlert from "@/components/ui/InlineAlert";
 import LoadingState from "@/components/ui/LoadingState";
 import Button from "@/components/ui/Button";
@@ -174,6 +175,11 @@ export default function TaskQueue() {
                         <div className="cell-title">{workItemTypeLabel(item.item_type)}: {item.title_de}</div>
                         {item.why_de && <p className="muted cell-sub"><strong>Warum:</strong> {item.why_de}</p>}
                         {item.action_hint_de && <p className="cell-sub work-action-hint"><strong>Nächster Schritt:</strong> {item.action_hint_de}</p>}
+                        {(() => {
+                          // Direkt zur Stelle, an der die Aufgabe erledigt wird (Prüfaufgaben haben unten „Prüfung öffnen“).
+                          const target = item.requires_review ? null : workItemTarget(item.item_type);
+                          return target && item.contract_id ? <p className="cell-sub"><Link className="table-link" href={contractHref(item.contract_id, target)}>{fixLabel(target) === "Öffnen" ? "Im Vertrag erledigen" : fixLabel(target)}</Link></p> : null;
+                        })()}
                         {item.equipment_device_name && <p className="muted cell-sub"><span className="cell-kicker">Gerät</span>{" "}{item.equipment_device_name}{item.equipment_manufacturer ? ` · ${item.equipment_manufacturer}` : ""}{item.equipment_model ? ` (${item.equipment_model})` : ""}{item.equipment_serial_number ? ` · Seriennr. ${item.equipment_serial_number}` : ""}</p>}
                         {item.requires_review && <div className="badge-row"><StatusBadge label="Manuelle Prüfung" tone="review" /><Link className="table-link" href={`/contracts/${item.contract_id}?tab=documents&subtab=review`}>Prüfung öffnen</Link></div>}
                       </td>

@@ -427,7 +427,7 @@ export default function ImportPage() {
                   <div><strong>{analysisFailedCount}</strong><span>Analyse fehlgeschlagen</span></div>
                   <div><strong>{duplicateCount}</strong><span>Duplikate</span></div>
                 </div>
-                {reviewCount > 0 && <InlineAlert tone="warning" role="status">{reviewCount} {reviewCount === 1 ? "Vertrag erfordert" : "Verträge erfordern"} manuelle Prüfung.</InlineAlert>}
+                {reviewCount > 0 && <InlineAlert tone="warning" role="status">{reviewCount} {reviewCount === 1 ? "Vertrag erfordert" : "Verträge erfordern"} manuelle Prüfung. <Link href="/register?ansicht=review">Zur Prüfliste</Link></InlineAlert>}
                 <div className="result-list">
                   {results.map((r, i) => (
                     <div key={`${r.document_version_id ?? r.original_filename}-${i}`} className="result-row">

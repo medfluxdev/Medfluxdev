@@ -61,7 +61,7 @@ export default function FailedImports({ organizationSlug }: { organizationSlug: 
         </span>
         <span className="btn-group">
           <Button size="sm" loading={retrying === job.document_version_id} disabled={retrying !== null} onClick={() => void retry(job)}>Analyse erneut starten</Button>
-          {job.contract_id ? <Link className="result-link" href={`/contracts/${job.contract_id}`}>Vertrag ansehen</Link> : null}
+          {job.contract_id ? <Link className="result-link" href={`/contracts/${job.contract_id}?tab=documents&subtab=document`}>Dokument im Vertrag ansehen</Link> : null}
         </span>
       </li>)}
     </ul>

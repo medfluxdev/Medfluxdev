@@ -411,6 +411,9 @@ export default function RegisterGrid({ organizationSlug, initialViewKey, tab }: 
           <strong>{total === 1 ? "1 Vertrag" : `${total.toLocaleString("de-DE")} Verträge`}</strong>
           <span>Jährliche Kosten (netto) <CoverageValue value={data.totals.sums.annual_cost} currency={data.totals.currency} known={coverage("annual_cost")?.known} missing={coverage("annual_cost")?.missing} otherCurrencies={data.totals.other_currencies?.annual_cost} /></span>
           <span>Kosten lfd. Jahr (netto) <CoverageValue value={data.totals.sums.cost_current_year} currency={data.totals.currency} known={coverage("cost_current_year")?.known} missing={coverage("cost_current_year")?.missing} otherCurrencies={data.totals.other_currencies?.cost_current_year} /></span>
+          {(coverage("annual_cost")?.missing ?? 0) > 0 && !spec.filters.some((item) => item.column === "cost_current_year" && item.op === "empty")
+            ? <button type="button" className="rg-link" onClick={() => setFilters([...spec.filters, { column: "cost_current_year", op: "empty" }])}>Verträge ohne Kosten anzeigen</button>
+            : null}
         </p> : null}
       {data && total === 0 && narrowed && !loading ? <p className="reg-filtered-empty">Die Filter oder die Suche blenden alle Verträge aus. <button type="button" className="rg-link" onClick={resetNarrowing}>Filter und Suche zurücksetzen</button></p> : null}
       {data && data.items.length > 0 ? <RegisterTable

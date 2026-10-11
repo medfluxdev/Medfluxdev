@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { NO_FINANCE_FILTERS, notEvaluableLink, registerHref } from "@/lib/fix-targets";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import EmptyState from "@/components/ui/EmptyState";
@@ -108,17 +109,18 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
       level: (item.severity === "critical" ? "critical" : "warning") as WorkItem["level"],
       label: item.label,
       count: item.count,
-      href: `/register?filter=${encodeURIComponent(JSON.stringify([item.filter]))}`,
+      href: registerHref(item.filters ?? [item.filter]),
     })),
   ].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
 
   // Lagebild: Themen (nicht Verträge), die heute Aufmerksamkeit brauchen.
   const criticalInsights = work.filter((item) => item.level === "critical");
-  const topics: { tone: SignalTone; text: string }[] = [
-    ...criticalInsights.map((item) => ({ tone: "critical" as const, text: item.key === "no_end" ? plural(item.count, "Vertrag ohne berechenbare Frist", "Verträge ohne berechenbare Frist") : `${item.count} ${item.label}` })),
-    ...(overdue.length ? [{ tone: "critical" as const, text: plural(overdue.length, "Termin überfällig", "Termine überfällig") }] : []),
-    ...(reviewer && state.reviewCount ? [{ tone: "ai" as const, text: plural(state.reviewCount, "KI-Prüfung", "KI-Prüfungen") }] : []),
-    ...(urgentDecisions.length ? [{ tone: "warning" as const, text: plural(urgentDecisions.length, "Entscheidung in ≤ 30 Tagen", "Entscheidungen in ≤ 30 Tagen") }] : []),
+  // Jedes Thema führt direkt zu der Liste, in der es erledigt wird.
+  const topics: { tone: SignalTone; text: string; href: string }[] = [
+    ...criticalInsights.map((item) => ({ tone: "critical" as const, text: item.key === "no_end" ? plural(item.count, "Vertrag ohne berechenbare Frist", "Verträge ohne berechenbare Frist") : `${item.count} ${item.label}`, href: item.href })),
+    ...(overdue.length ? [{ tone: "critical" as const, text: plural(overdue.length, "Termin überfällig", "Termine überfällig"), href: "/fristen?ansicht=termine&nur=meine" }] : []),
+    ...(reviewer && state.reviewCount ? [{ tone: "ai" as const, text: plural(state.reviewCount, "KI-Prüfung", "KI-Prüfungen"), href: "/register?ansicht=review" }] : []),
+    ...(urgentDecisions.length ? [{ tone: "warning" as const, text: plural(urgentDecisions.length, "Entscheidung in ≤ 30 Tagen", "Entscheidungen in ≤ 30 Tagen"), href: "/fristen?ansicht=entscheidungen" }] : []),
   ];
   const calm: string[] = [
     ...(state.deadlines !== null && state.deadlines.length === 0 ? ["Keine Termine diese Woche"] : []),
@@ -138,7 +140,7 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
   const runningHint = state.portfolio
     ? `von ${state.portfolio.totals.contracts} Verträgen${state.portfolio.totals.in_progress ? ` · ${state.portfolio.totals.in_progress} in Arbeit` : ""}`
     : undefined;
-  const notEvaluableHref = `/register?filter=${encodeURIComponent(JSON.stringify([{ column: "term_status", op: "in", value: ["Unvollständig"] }]))}`;
+  const notEvaluableHref = notEvaluableLink(state.notEvaluable);
   const canCreate = role === "admin" || role === "contract_manager" || account?.is_developer;
 
   return (
@@ -160,7 +162,7 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
             {topics.length ? `Heute ${topics.length === 1 ? "braucht 1 Thema" : `brauchen ${topics.length} Themen`} Ihre Aufmerksamkeit` : "Heute ist nichts dringend"}
           </p>
           <div className="my-day-brief-items">
-            {topics.slice(0, 3).map((item) => <Signal key={item.text} tone={item.tone}>{item.text}</Signal>)}
+            {topics.slice(0, 3).map((item) => <Link key={item.text} className="signal-link" href={item.href}><Signal tone={item.tone}>{item.text}</Signal></Link>)}
             {topics.length < 3 ? calm.slice(0, 3 - topics.length).map((text) => <Signal key={text} tone="neutral">{text}</Signal>) : null}
           </div>
         </>}
@@ -168,8 +170,8 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
 
       <section className="my-day-kpis" aria-label="Kennzahlen">
         <KpiTile label="Laufende Verträge" icon={<TileIcon>{ICONS.contracts}</TileIcon>} loading={!loaded} value={state.portfolio?.totals.running} hint={runningHint} href="/register" linkLabel="Zur Vertragsliste" />
-        <KpiTile label="Jährliche Kosten (netto)" icon={<TileIcon>{EURO_ICON}</TileIcon>} loading={!loaded} value={state.portfolio?.totals.annual_cost ? formatCurrency(state.portfolio.totals.annual_cost, "EUR") : null} hint={annualHint} signal={annualSignal} href="/analysen" linkLabel="Zu den Analysen" />
-        <KpiTile label="Kündigungsfristen in 90 Tagen" icon={<TileIcon>{CLOCK_ICON}</TileIcon>} loading={!loaded} value={state.renewals?.length} hint={state.renewals === null ? undefined : openDecisions.length === 0 ? (state.notEvaluable.length > 0 ? `${state.notEvaluable.length} nicht bewertbar` : "Keine Entscheidung offen") : `${openDecisions.length} ohne Entscheidung`} href="/fristen?ansicht=entscheidungen" linkLabel="Zu den Kündigungsentscheidungen" />
+        <KpiTile label="Jährliche Kosten (netto)" icon={<TileIcon>{EURO_ICON}</TileIcon>} loading={!loaded} value={state.portfolio?.totals.annual_cost ? formatCurrency(state.portfolio.totals.annual_cost, "EUR") : null} hint={annualHint} signal={annualSignal} href={noFinance > 0 ? registerHref(NO_FINANCE_FILTERS) : "/analysen"} linkLabel={noFinance > 0 ? "Verträge ohne Kosten anzeigen" : "Zu den Analysen"} />
+        <KpiTile label="Kündigungsfristen in 90 Tagen" icon={<TileIcon>{CLOCK_ICON}</TileIcon>} loading={!loaded} value={state.renewals?.length} hint={state.renewals === null ? undefined : openDecisions.length === 0 ? (state.notEvaluable.length > 0 ? `${state.notEvaluable.length} nicht bewertbar` : "Keine Entscheidung offen") : `${openDecisions.length} ohne Entscheidung`} href={openDecisions.length === 0 && state.notEvaluable.length > 0 ? notEvaluableHref : "/fristen?ansicht=entscheidungen"} linkLabel={openDecisions.length === 0 && state.notEvaluable.length > 0 ? "Laufzeitangaben ergänzen" : "Zu den Kündigungsentscheidungen"} />
       </section>
 
       <div className="my-day-grid">

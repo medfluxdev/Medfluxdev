@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { FINANCE_ENTRIES_TARGET, NO_FINANCE_FILTERS, contractHref, registerHref as listHref } from "@/lib/fix-targets";
+import type { GridFilter } from "@/lib/domain-api/registerGrid";
 import { useCallback, useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import CoverageValue from "@/components/ui/CoverageValue";
@@ -53,7 +55,7 @@ export default function PortfolioDrilldown({ organizationSlug }: { organizationS
     {failed ? <InlineAlert tone="warning" action={<Button size="sm" onClick={load}>Erneut laden</Button>}>Die Auswertung konnte nicht geladen werden.</InlineAlert> : null}
     {!report && !failed ? <Skeleton lines={3} label="Auswertung wird geladen…" /> : null}
     {report ? <>
-      <p className="drill-total"><strong>{report.count} laufende {report.count === 1 ? "Vertrag" : "Verträge"}</strong> · <CoverageValue value={report.totals.value} currency={report.totals.currency} known={report.totals.known} missing={report.totals.missing} otherCurrencies={report.totals.other_currencies} /></p>
+      <p className="drill-total"><strong>{report.count} laufende {report.count === 1 ? "Vertrag" : "Verträge"}</strong> · <CoverageValue value={report.totals.value} currency={report.totals.currency} known={report.totals.known} missing={report.totals.missing} otherCurrencies={report.totals.other_currencies} missingHref={listHref([...(report.register_filter as GridFilter[]), ...NO_FINANCE_FILTERS])} /></p>
       {report.items.length === 0 ? <p className="cw-muted">Keine laufenden Verträge in dieser Auswahl.</p> : report.level === "contract"
         ? <div className="table-scroll"><table className="rg-table">
             <caption className="visually-hidden">Verträge der Auswahl</caption>
@@ -62,8 +64,8 @@ export default function PortfolioDrilldown({ organizationSlug }: { organizationS
               <td>{item.register_number ?? "–"}</td>
               <th scope="row"><Link href={`/contracts/${item.contract_id}`}>{item.short_description ?? "Vertrag"}</Link></th>
               <td>{item.partner ?? "–"}</td>
-              <td>{item.cost_current_year ? formatCurrency(item.cost_current_year, item.currency) : "—"}</td>
-              <td>{item.term_status ?? "–"}</td>
+              <td>{item.cost_current_year ? formatCurrency(item.cost_current_year, item.currency) : <Link href={contractHref(item.contract_id, FINANCE_ENTRIES_TARGET)} aria-label={`Kosten für ${item.short_description ?? "Vertrag"} erfassen`}>Kosten erfassen</Link>}</td>
+              <td>{item.term_status === "Unvollständig" ? <Link href={contractHref(item.contract_id, { tab: "register", section: "term" })} aria-label={`Laufzeitangaben für ${item.short_description ?? "Vertrag"} ergänzen`}>Unvollständig</Link> : item.term_status ?? "–"}</td>
             </tr>)}</tbody>
           </table></div>
         : <div className="table-scroll"><table className="rg-table">

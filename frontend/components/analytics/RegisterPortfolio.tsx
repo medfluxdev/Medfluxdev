@@ -99,7 +99,7 @@ export default function RegisterPortfolio({ organizationSlug }: { organizationSl
       <ul className="viz-insights">
         {report.insights.filter((item) => item.count > 0).map((item) => <li key={item.key}>
           <Signal tone={item.severity === "critical" ? "critical" : "warning"}>{item.count}</Signal>
-          <Link href={registerLink([item.filter])}>{item.label}</Link>
+          <Link href={registerLink(item.filters ?? [item.filter])}>{item.label}</Link>
         </li>)}
         {report.insights.every((item) => item.count === 0) ? <li><Signal tone="neutral">0</Signal><span>Keine Lücken in den gepflegten Daten</span></li> : null}
         {report.supplier_concentration ? <li><strong>{report.supplier_concentration.share_percent.replace(".", ",")} %</strong><span>der Kosten {new Date(report.as_of).getFullYear()} entfallen auf den größten Partner ({report.supplier_concentration.partner})</span></li> : null}
@@ -129,7 +129,7 @@ export default function RegisterPortfolio({ organizationSlug }: { organizationSl
 
       <section className="cw-section" aria-labelledby="years-heading">
         <h3 id="years-heading">Ausgaben und Einnahmen je Jahr</h3>
-        {report.cost_by_year.every((item) => item.expense === null && item.income === null) ? <p className="cw-muted">Keine gepflegten Finanzposten – ohne Daten wird keine Jahreskurve gezeichnet.</p> : <ColumnChart
+        {report.cost_by_year.every((item) => item.expense === null && item.income === null) ? <p className="cw-muted">Keine gepflegten Finanzposten – ohne Daten wird keine Jahreskurve gezeichnet. <Link href={NO_FINANCE}>Verträge ohne Kosten anzeigen</Link></p> : <ColumnChart
           title="Jahr"
           series={[{ key: "expense", label: "Ausgaben", className: "viz-series-1" }, { key: "income", label: "Einnahmen", className: "viz-series-2" }]}
           data={report.cost_by_year.map((item) => ({
@@ -140,7 +140,7 @@ export default function RegisterPortfolio({ organizationSlug }: { organizationSl
           }))}
           format={(value) => `${compact.format(value)} €`}
         />}
-        {report.cost_by_year_coverage && report.cost_by_year_coverage.known < report.cost_by_year_coverage.total ? <p className="cw-muted">Teilsumme: Finanzposten für {report.cost_by_year_coverage.known} von {report.cost_by_year_coverage.total} Verträgen gepflegt.</p> : null}
+        {report.cost_by_year_coverage && report.cost_by_year_coverage.known < report.cost_by_year_coverage.total ? <p className="cw-muted">Teilsumme: Finanzposten für {report.cost_by_year_coverage.known} von {report.cost_by_year_coverage.total} Verträgen gepflegt. <Link href={NO_FINANCE}>Fehlende anzeigen</Link></p> : null}
         <p className="cw-muted">Künftige Jahre: Hochrechnung aus den gepflegten Finanzposten inkl. vereinbarter prozentualer Preisanpassung.</p>
       </section>
 

@@ -7,6 +7,7 @@ import { BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/regi
 import type { GridColumn, GridResponse, GridSpec, MoneyTotals } from "@/lib/domain-api/registerGrid";
 import { coverageNote, formatCurrency } from "@/lib/format";
 import { rememberReviewQueue } from "@/lib/review-queue";
+import { contractHref, listRowTarget } from "@/lib/fix-targets";
 import { formatCell } from "./register-state";
 
 type Props = {
@@ -54,6 +55,8 @@ function layout(shown: GridColumn[]): Cell[] {
 export default function RegisterTable({ data, spec, shown, columnByKey, archiveMode, reviewMode, canRestore, busyRow, onSort, onRestore, onPreview }: Props) {
   const cells = layout(shown);
   const hasContractCell = cells.some((cell) => cell.kind === "contract");
+  // Nach einer Lücke gefiltert („ohne Kosten“ …): der Vertrag öffnet dort, wo sie behoben wird.
+  const rowTarget = listRowTarget(spec.filters);
   const actionColumn = (archiveMode && canRestore) || reviewMode;
   const groupIndex = new Map((data.groups ?? []).map((item) => [JSON.stringify(item.path), item]));
   const width = cells.length + (actionColumn ? 1 : 0);
@@ -92,7 +95,7 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
       previous = row.group;
       const number = row.values.register_number == null ? "" : String(row.values.register_number);
       const description = row.values.short_description == null ? "" : String(row.values.short_description).trim();
-      const href = `/contracts/${row.contract_id}?tab=register`;
+      const href = contractHref(row.contract_id, rowTarget);
       return <Fragment key={row.contract_id}>
         {headers}
         <tr>
@@ -120,6 +123,13 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
             }
             if (column.key === "short_description") {
               return <td key={column.key} className="reg-wrap"><button type="button" className="btn-link reg-preview" onClick={() => onPreview(row.contract_id)} aria-label={`${text} in der Schnellansicht öffnen`}>{text}</button></td>;
+            }
+            // „Unvollständig“ / „Verstoß“ führen zur Stelle, an der es behoben wird.
+            if (column.key === "term_status" && text === "Unvollständig") {
+              return <td key={column.key}><Link href={contractHref(row.contract_id, { tab: "register", section: "term" })} aria-label={`Laufzeitangaben von ${description || number} ergänzen`}>{text}</Link></td>;
+            }
+            if (column.key === "rules_status" && (text === "Unvollständig" || text === "Verstoß")) {
+              return <td key={column.key}><Link href={contractHref(row.contract_id, { tab: "register", section: "rules" })} aria-label={`Vertragsregeln von ${description || number} ansehen`}>{text}</Link></td>;
             }
             const numeric = column.type === "money" || column.type === "number";
             return <td key={column.key} className={numeric ? "num" : column.type === "text" || column.type === "enum" ? "reg-wrap" : undefined}>{text}</td>;

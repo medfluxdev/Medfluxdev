@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { REVIEW_TARGET, contractHref, notEvaluableLink } from "@/lib/fix-targets";
 import { useCallback, useEffect, useState } from "react";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";
@@ -16,7 +17,7 @@ const HORIZONS = [
   { value: "180", label: "6 Monate" },
   { value: "", label: "Alle" },
 ];
-const NOT_EVALUABLE_HREF = `/register?filter=${encodeURIComponent(JSON.stringify([{ column: "term_status", op: "in", value: ["Unvollständig"] }]))}`;
+
 
 function isoInDays(days: number) {
   const date = new Date();
@@ -55,7 +56,7 @@ function Rows({ items }: { items: DeadlineDto[] }) {
       <td><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.contract_label ?? "Vertrag"}</Link></td>
       <td>{item.assignee_name ?? "Vertragsverantwortliche/r"}</td>
       <td>{formatDate(item.remind_on)}</td>
-      <td>{item.source === "system" ? "Berechnet aus den Vertragsdaten" : "Manuelle Wiedervorlage"}{item.basis_unconfirmed ? <> <Signal tone="ai">Ungeprüfte KI-Werte</Signal></> : null}</td>
+      <td>{item.source === "system" ? "Berechnet aus den Vertragsdaten" : "Manuelle Wiedervorlage"}{item.basis_unconfirmed ? <> <Link className="signal-link" href={contractHref(item.contract_id, REVIEW_TARGET)} title="Zugrunde liegende KI-Werte jetzt prüfen"><Signal tone="ai">Ungeprüfte KI-Werte</Signal></Link></> : null}</td>
     </tr>)}</tbody>
   </table></div>;
 }
@@ -71,6 +72,7 @@ export default function DeadlineList({ organizationSlug }: { organizationSlug: s
   const [status, setStatus] = useState<DeadlineStatus | "all">("open");
   const [error, setError] = useState<string | null>(null);
   const [notEvaluable, setNotEvaluable] = useState(0);
+  const [notEvaluableItems, setNotEvaluableItems] = useState<{ contract_id: string }[]>([]);
 
   useEffect(() => {
     setMine(readParam("nur") === "meine");
@@ -94,7 +96,7 @@ export default function DeadlineList({ organizationSlug }: { organizationSlug: s
   useEffect(() => {
     if (!organizationSlug) return;
     listRenewals(organizationSlug, 1)
-      .then((result) => setNotEvaluable(result.not_evaluable?.length ?? 0))
+      .then((result) => { setNotEvaluable(result.not_evaluable?.length ?? 0); setNotEvaluableItems(result.not_evaluable ?? []); })
       .catch(() => setNotEvaluable(0));
   }, [organizationSlug]);
 
@@ -117,7 +119,7 @@ export default function DeadlineList({ organizationSlug }: { organizationSlug: s
         {overdue.length > 0 ? <Signal tone="critical">{overdue.length} überfällig</Signal> : null}
       </div>
     </section>
-    {notEvaluable > 0 ? <InlineAlert tone="warning">Für {notEvaluable} {notEvaluable === 1 ? "Vertrag ist" : "Verträge ist"} die Kündigungsfrist nicht berechenbar (Laufzeitangaben unvollständig); diese Fristen fehlen hier. <Link href={NOT_EVALUABLE_HREF}>Verträge anzeigen</Link></InlineAlert> : null}
+    {notEvaluable > 0 ? <InlineAlert tone="warning">Für {notEvaluable} {notEvaluable === 1 ? "Vertrag ist" : "Verträge ist"} die Kündigungsfrist nicht berechenbar (Laufzeitangaben unvollständig); diese Fristen fehlen hier. <Link href={notEvaluableLink(notEvaluableItems)}>{notEvaluable === 1 ? "Laufzeitangaben ergänzen" : "Verträge anzeigen"}</Link></InlineAlert> : null}
     {error ? <p role="alert" className="rg-error">{error} <button type="button" className="btn btn-sm" onClick={() => void load()}>Erneut versuchen</button></p> : null}
     {items === null && !error ? <p role="status">Termine werden geladen…</p> : null}
     {items !== null && items.length === 0 ? (

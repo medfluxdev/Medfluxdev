@@ -331,7 +331,10 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
          "filter": {"column": "responsible", "op": "empty"}, "severity": "warning"},
         {"key": "notice_no_reminder", "label": "Kündigungsfrist in 90 Tagen ohne Erinnerungsempfänger",
          "count": sum(1 for row in soon if not row.values["reminder_recipient"]),
-         "filter": {"column": "cancel_by", "op": "within_days", "value": 90}, "severity": "warning"},
+         "filter": {"column": "cancel_by", "op": "within_days", "value": 90},
+         # Genau die betroffenen Verträge (Frist bald UND kein Empfänger); `filter` bleibt für ältere Aufrufer.
+         "filters": [{"column": "cancel_by", "op": "within_days", "value": 90}, {"column": "reminder_recipient", "op": "empty"}],
+         "severity": "warning"},
         # Auch "In Arbeit": sonst zeigt die Kachel 0, solange noch kein Vertrag laeuft.
         {"key": "no_finance", "label": "Verträge ohne gepflegte Kosten (laufend oder in Arbeit)",
          "count": sum(1 for row in considered if row.values["annual_cost"] is None and row.values["cost_current_year"] is None),

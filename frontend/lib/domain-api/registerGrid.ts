@@ -121,7 +121,7 @@ export interface PortfolioReport {
   deadlines_by_month: { month: string; notice: number; other: number }[];
   upcoming: { contract_id: string; register_number: string | null; short_description: string | null; due_date: string; title: string; kind: string }[];
   supplier_concentration: { partner: string; share_percent: string } | null;
-  insights: { key: string; label: string; count: number; filter: GridFilter; severity?: "critical" | "warning" }[];
+  insights: { key: string; label: string; count: number; filter: GridFilter; filters?: GridFilter[]; severity?: "critical" | "warning" }[];
 }
 
 export const EMPTY_SPEC: GridSpec = { columns: [], filters: [], sort: null, group_by: [], q: null, include_deleted: false, archived: false };

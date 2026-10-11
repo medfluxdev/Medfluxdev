@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FINANCE_ENTRIES_TARGET, contractHref, notEvaluableLink } from "@/lib/fix-targets";
 import { useEffect, useState } from "react";
 import { URGENCY } from "@/components/contracts/detail/ContractRenewalBrief";
 import { listRenewals, type NotEvaluableItem, type RenewalListItem } from "@/lib/domain-api/registerGrid";
@@ -38,7 +39,7 @@ export default function RenewalOverview({ organizationSlug }: { organizationSlug
     </div>
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
     {!items && !error ? <p role="status">Wird geladen…</p> : null}
-    {notEvaluable.length > 0 ? <InlineAlert tone="warning">Für {notEvaluable.length} {notEvaluable.length === 1 ? "Vertrag ist" : "Verträge ist"} die Kündigungsfrist nicht berechenbar (Laufzeitangaben unvollständig) – sie fehlen in dieser Liste. <Link href={`/register?filter=${encodeURIComponent(JSON.stringify([{ column: "term_status", op: "in", value: ["Unvollständig"] }]))}`}>Verträge anzeigen</Link></InlineAlert> : null}
+    {notEvaluable.length > 0 ? <InlineAlert tone="warning">Für {notEvaluable.length} {notEvaluable.length === 1 ? "Vertrag ist" : "Verträge ist"} die Kündigungsfrist nicht berechenbar (Laufzeitangaben unvollständig) – sie fehlen in dieser Liste. <Link href={notEvaluableLink(notEvaluable)}>{notEvaluable.length === 1 ? "Laufzeitangaben ergänzen" : "Verträge anzeigen"}</Link></InlineAlert> : null}
     {items && items.length === 0 ? <EmptyState variant="calm" title="Keine fälligen Kündigungsfristen bekannt">{notEvaluable.length > 0 ? "Im gewählten Zeitraum ist keine berechenbare Frist fällig." : "Im gewählten Zeitraum ist keine Kündigungsfrist fällig."}</EmptyState> : null}
     {items && items.length > 0 ? <div className="reg-scroll"><table className="rg-table">
       <thead><tr><th scope="col">Kündbar bis</th><th scope="col">Vertrag</th><th scope="col">Partner</th><th scope="col">Jährliche Kosten</th><th scope="col">Verantwortlich</th><th scope="col">Entscheidung</th></tr></thead>
@@ -46,7 +47,7 @@ export default function RenewalOverview({ organizationSlug }: { organizationSlug
         <td>{formatDate(item.cancel_by)} <Signal tone={URGENCY[item.urgency].tone}>{item.days_left >= 0 ? `in ${item.days_left} Tagen` : "verstrichen"}</Signal></td>
         <th scope="row"><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link></th>
         <td>{item.partner ?? "–"}</td>
-        <td className="num">{item.annual_cost ? formatCurrency(item.annual_cost, "EUR") : "–"}</td>
+        <td className="num">{item.annual_cost ? formatCurrency(item.annual_cost, "EUR") : <Link href={contractHref(item.contract_id, FINANCE_ENTRIES_TARGET)} aria-label={`Kosten für ${item.register_number ?? "Vertrag"} erfassen`}>Kosten erfassen</Link>}</td>
         <td>{item.responsible ?? "–"}</td>
         <td>{item.decision ? item.decision.label : <span className="cw-muted">offen</span>}</td>
       </tr>)}</tbody>

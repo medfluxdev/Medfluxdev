@@ -71,6 +71,7 @@ const SECTION_ANCHORS: Record<string, string> = {
   rules: "rules-heading",
   renewal: "renewal-heading",
   deadlines: "rg-deadlines-heading",
+  intelligence: "contract-intelligence-heading",
 };
 
 export function sectionAnchor(section: string): string {
@@ -140,4 +141,47 @@ export function workItemTarget(itemType: string, requiresReview = false): FixTar
 export function warningTarget(warningType: string, requiresReview = false): FixTarget | null {
   if (requiresReview) return REVIEW_TARGET;
   return WARNING_TARGETS[warningType] ?? null;
+}
+
+// Listenfilter für „fehlt“ an einem Ort (vorher mehrfach von Hand gebaut).
+export const NOT_EVALUABLE_FILTERS: GridFilter[] = [{ column: "term_status", op: "in", value: ["Unvollständig"] }];
+export const NO_FINANCE_FILTERS: GridFilter[] = [{ column: "cost_current_year", op: "empty" }];
+
+/** Verträge ohne berechenbare Frist: ein einzelner direkt in seine Laufzeitangaben, sonst die gefilterte Liste. */
+export function notEvaluableLink(items: { contract_id: string }[]): string {
+  return items.length === 1 ? contractHref(items[0].contract_id, { tab: "register", section: "term" }) : registerHref(NOT_EVALUABLE_FILTERS);
+}
+
+const EMPTY_COLUMN_TARGETS: Record<string, FixTarget> = {
+  annual_cost: FINANCE_ENTRIES_TARGET,
+  cost_current_year: FINANCE_ENTRIES_TARGET,
+  reminder_recipient: { tab: "register", field: "reminder_recipient_account_id" },
+  responsible: { tab: "register", section: "ownership" },
+  hospital: { tab: "register", section: "ownership" },
+  department: { tab: "register", section: "ownership" },
+  cost_center: { tab: "register", section: "ownership" },
+  partner: { tab: "register", field: "partner_id" },
+  contract_type: { tab: "register", field: "contract_type_id" },
+  cancel_by: { tab: "register", section: "term" },
+  possible_end: { tab: "register", section: "term" },
+};
+
+/**
+ * Vertragsliste: wohin ein Vertrag aus einer gefilterten Liste führt. Ist die Liste nach einer Lücke gefiltert
+ * („ohne Kosten“, „ohne Verantwortliche“, „Laufzeit unvollständig“ …), öffnet der Vertrag dort, wo sie behoben wird.
+ */
+export function listRowTarget(filters: GridFilter[]): FixTarget {
+  for (const filter of filters) {
+    if (filter.column === "review_pending" && filter.op === "is" && filter.value === true) return REVIEW_TARGET;
+  }
+  for (const filter of filters) {
+    if (filter.op === "empty" && EMPTY_COLUMN_TARGETS[filter.column]) return EMPTY_COLUMN_TARGETS[filter.column];
+  }
+  for (const filter of filters) {
+    if (filter.column === "term_status") return { tab: "register", section: "term" };
+    if (filter.column === "rules_status" || filter.column === "rules_violated") return { tab: "register", section: "rules" };
+    if (filter.column === "deletion_from") return { tab: "register", section: "protection" };
+    if (filter.column === "cancel_by") return { tab: "deadlines", section: "renewal" };
+  }
+  return { tab: "register" };
 }

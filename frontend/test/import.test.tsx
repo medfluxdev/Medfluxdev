@@ -189,7 +189,7 @@ describe("Import (FE-08)", () => {
     expect(within(section).getByText("impella.pdf")).toBeInTheDocument();
     expect(within(section).getByText("Lokale KI nicht verfügbar.")).toBeInTheDocument();
     expect(within(section).queryByText("Älterer Lauf")).not.toBeInTheDocument();
-    expect(within(section).getByRole("link", { name: "Vertrag ansehen" })).toHaveAttribute("href", "/contracts/c-1");
+    expect(within(section).getByRole("link", { name: "Dokument im Vertrag ansehen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=document");
     await userEvent.click(within(section).getByRole("button", { name: "Analyse erneut starten" }));
     await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith(expect.stringContaining("/api/documents/dv-1/retry"), {}, expect.any(Number)));
   });
