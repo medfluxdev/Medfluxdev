@@ -192,6 +192,13 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
     expect(onShowSource).toHaveBeenCalledWith(source);
   });
 
+  it("zeigt den Bearbeitungsstatus in seiner Farbe wie in der Vertragsliste (Gültig = grün)", async () => {
+    api.getContractRegister.mockResolvedValue(register({ business_status: "gueltig", business_status_label: "Gültig", allowed_transitions: [] }));
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const badge = (await screen.findAllByText("Gültig")).map((node) => node.closest(".status-badge")).find(Boolean);
+    expect(badge).toHaveClass("status-badge--success");
+  });
+
   it("ohne Bearbeitungsrecht gibt es den Knopf nicht", async () => {
     auth.role = "viewer";
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" searchableKeys={new Set(["term_start_date"])} onSearchInDocument={vi.fn()} />);

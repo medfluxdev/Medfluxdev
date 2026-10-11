@@ -1,5 +1,6 @@
 "use client";
 
+import StatusBadge from "@/components/ui/StatusBadge";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/domain-api/catalogs";
 import {
   BUSINESS_STATUS_LABEL,
+  BUSINESS_STATUS_TONE,
   DURATION_UNIT_LABEL,
   NOTICE_TO_LABEL,
   ORIGIN_LABEL,
@@ -161,8 +163,6 @@ const TERM_FIELDS: Record<TermModel, string[]> = {
 
 const TERM_SECTION_KEYS = new Set(SECTIONS.find((section) => section.id === "term")!.fields.map((def) => def.key));
 
-// Ruhe & Signal: Geschäftsstatus ist ein normaler Zustand, neutral (das Wort trägt die Bedeutung).
-const STATUS_TONE: Record<BusinessStatus, string> = { in_arbeit: "", gueltig: "", gekuendigt: "", beendet: "", geloescht: "" };
 
 const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
   initial_term: "Laufzeit",
@@ -558,7 +558,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           <p className="cw-muted">{register.has_ai_analysis ? "Werte aus der KI-Analyse sind gekennzeichnet und können bestätigt oder korrigiert werden." : "Manuell angelegter Vertrag ohne KI-Analyse."}</p>
         </div>
         <div className="rg-status-actions">
-          <span className={`cw-badge ${STATUS_TONE[register.business_status]}`}>{register.business_status_label}</span>
+          <StatusBadge label={register.business_status_label} tone={BUSINESS_STATUS_TONE[register.business_status] ?? "neutral"} />
           {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-ghost btn-danger" : "btn"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>→ {item.label}</button>)}
         </div>
       </div>

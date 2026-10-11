@@ -539,6 +539,8 @@ class ContractDetailResponse(BaseModel):
     register_facts: Optional[dict] = None
     # Laufzeit/Kuendigung aus der Extraktion als Anzeige-Text (Pruefung „Angaben“).
     extracted_terms: Optional[dict] = None
+    # Organisationszuordnung als Namen (Krankenhaus, Abteilungen, Kostenstelle, Verantwortliche).
+    assignment: Optional[dict] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
 

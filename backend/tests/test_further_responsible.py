@@ -139,3 +139,28 @@ def test_finance_shows_cost_center_from_assignment_without_split(monkeypatch):
     assert _patch(admin, slug, cid, hospital_id=str(ids["hospital"]), cost_center_id=str(ids["center"])).status_code == 200
     finance = admin.get(f"/api/contracts/{cid}/finance", params={"organization_slug": slug}).json()
     assert finance["primary_cost_center"]["code"] == "950000" and finance["primary_cost_center"]["name"] == "Radiologie"
+
+
+def test_contract_detail_shows_assignment_names_for_every_role(monkeypatch):
+    from app.api.routes.contracts import _build_augmented_detail
+
+    slug, ids = _seed()
+    admin = _client(monkeypatch, ids, "admin", "admin")
+    cid = _contract(admin, slug)
+    session = create_session()
+    try:
+        empty = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))["assignment"]
+    finally:
+        session.close()
+    assert empty == {"hospital": None, "responsible_department": None, "beneficiary_departments": [], "other_departments": [],
+                     "cost_center": None, "responsible": "Admin", "further_responsible": []}  # Anleger ist verantwortlich
+    _patch(admin, slug, cid, hospital_id=str(ids["hospital"]), cost_center_id=str(ids["center"]),
+           responsible_account_id=str(ids["main"]), further_responsible_account_ids=[str(ids["second"])])
+    session = create_session()
+    try:
+        assignment = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))["assignment"]
+    finally:
+        session.close()
+    assert assignment["hospital"] == "Klinikum"
+    assert assignment["cost_center"] == {"code": "950000", "name": "Radiologie"}
+    assert assignment["responsible"] == "Main" and assignment["further_responsible"] == ["Second"]

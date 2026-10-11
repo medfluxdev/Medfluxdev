@@ -30,8 +30,6 @@ import Signal from "@/components/ui/Signal";
 import ReviewQueueNav from "./ReviewQueueNav";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 
-// Ruhe & Signal: der Geschäftsstatus ist ein normaler Zustand und wird neutral gezeigt (das Wort trägt die Bedeutung).
-const BUSINESS_STATUS_TONE: Record<string, string> = { in_arbeit: "", gueltig: "", gekuendigt: "", beendet: "", geloescht: "" };
 import Dialog from "@/components/ui/Dialog";
 import ContractHistoryPanel from "./ContractHistoryPanel";
 import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
@@ -39,13 +37,15 @@ import ContractRenewalBrief from "./ContractRenewalBrief";
 import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
-import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
+import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
+import StatusBadge from "@/components/ui/StatusBadge";
 import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, documentSearchHref, MISSING_SEARCH, fixLabel, sectionAnchor, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
 import ContractGaps, { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
 import SourceCapture from "./SourceCapture";
 import AiReviewButton from "./AiReviewButton";
+import ContractAssignmentCard from "./ContractAssignmentCard";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
@@ -479,7 +479,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <p className="object-header-eyebrow">{[data.register_number ? `Vertrag ${data.register_number}` : "Vertrag ohne Nummer", data.contract_number ? `Nr. lt. Dokument ${data.contract_number}` : null].filter(Boolean).join(" · ")}</p>
           <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
           <div className="object-header-meta">
-            {data.business_status ? <button type="button" className={`badge badge-button ${BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? ""}`} onClick={() => setRoute("register")} title="Status in den Stammdaten ändern">{BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status}</button> : null}
+            {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
             {data.supplier ? <span className="object-header-partner">{data.supplier}</span> : null}
             <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={data.review.requires_manual_review} canEdit={canEditData} version={data} />
             {data.risk_level === "high" || data.risk_level === "medium" ? <Signal tone="warning">Risiko {riskLabel(data.risk_level).toLowerCase()}</Signal> : null}
@@ -539,6 +539,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         {activeTab === "overview" && <>
           <ContractGaps contractId={data.contract_id} gaps={gaps} searchHref={searchMissingHref} />
           <div className="cw-kpi-grid"><InfoCard label="Status" value={statusLabel(data.status)} origin="system" /><InfoCard label="Vertragsende" value={effectiveEnd ? formatDate(effectiveEnd) : "Nicht verfügbar"} origin={endOrigin} hint={<SourceButton evidence={data.dates.documented_end_date ? endEvidence : null} />} />{maintainedAnnual ? <InfoCard label="Jährliche Kosten (gepflegt)" value={moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)} origin="system" /> : <InfoCard label={aiAnnual ? "Jährliche Kosten (KI-Vorschlag)" : "Jährliche Kosten"} value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} />}<InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} origin={cancellationOrigin} hint={<SourceButton evidence={cancellationEvidence} />} /><InfoCard label="Risiko" value={riskLabel(data.risk_level)} origin="system" /></div>
+          <ContractAssignmentCard contractId={data.contract_id} assignment={data.assignment} canEdit={canEditData} />
           {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => { const target = workItemTarget(item.item_type, item.requires_review); return <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} disabled={!target} title={target ? fixLabel(target) : "Kein Ort zum Bearbeiten"} onClick={() => target && openTarget(target)}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>; })}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => openTarget(warningTarget(warning.warning_type, warning.requires_review) ?? { tab: "deadlines" })}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
           <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
         </>}

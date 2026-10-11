@@ -471,6 +471,8 @@ export interface ContractDetailResponse {
   register_number?: string | null;
   business_status?: string | null;
   register_facts?: { cancel_by: string | null; contract_end: string | null; annual_cost: { amount: string; currency: string } | null } | null;
+  /** Organisationszuordnung als Namen (für alle Rollen lesbar). */
+  assignment?: ContractAssignment | null;
   status: string | null;
   risk_level: string | null;
   identity: Record<string, unknown>;
@@ -550,3 +552,15 @@ export const SEVERITY_LABEL: Record<string, string> = {
   low: "Niedrig",
   info: "Info",
 };
+
+export interface ContractAssignment {
+  hospital: string | null;
+  responsible_department: string | null;
+  beneficiary_departments: string[];
+  /** Historische Zuordnungen ohne dokumentierte Rolle. */
+  other_departments: string[];
+  cost_center: { code: string; name: string } | null;
+  responsible: string | null;
+  further_responsible: string[];
+}
+

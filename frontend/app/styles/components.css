@@ -456,6 +456,7 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 .object-header-actions .shell-menu-panel .btn { justify-content: flex-start; width: 100%; }
 .badge-button { cursor: pointer; font-family: inherit; }
 .badge-button:hover { filter: brightness(0.97); text-decoration: underline; }
+.status-button { padding: 0; border: 0; background: none; border-radius: var(--radius-pill); }
 .object-tabs {
   position: sticky;
   top: var(--header-height);

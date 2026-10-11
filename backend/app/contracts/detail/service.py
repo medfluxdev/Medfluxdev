@@ -470,6 +470,7 @@ def build_contract_detail(
         "business_status": contract.business_status,
         "register_facts": register_facts(contract, today_local()),
         "extracted_terms": _extracted_terms(snapshot),
+        "assignment": _assignment(session, contract),
         "status": contract.status,
         "risk_level": contract.risk_level,
         "identity": _identity_section(
@@ -535,6 +536,34 @@ def build_contract_detail(
 # ---------------------------------------------------------------------------
 # Snapshot-Helfer
 # ---------------------------------------------------------------------------
+
+def _assignment(session: Session, contract) -> dict:
+    """Organisationszuordnung zum Lesen (Uebersicht): Namen statt Kennungen, fuer alle Rollen."""
+    from app.database.models import Account, ContractDepartment, CostCenter, Department, Hospital
+    from app.ownership.service import further_responsible_ids
+
+    hospital = session.get(Hospital, contract.hospital_id) if contract.hospital_id else None
+    links = session.execute(
+        select(ContractDepartment.relation_role, Department.name)
+        .join(Department, Department.id == ContractDepartment.department_id)
+        .where(ContractDepartment.contract_id == contract.id)
+        .order_by(Department.name)
+    ).all()
+    center = session.get(CostCenter, contract.cost_center_id) if contract.cost_center_id else None
+    further = further_responsible_ids(session, contract.id)
+    people = [value for value in (contract.responsible_account_id, *further) if value]
+    names = dict(session.execute(select(Account.id, Account.display_name).where(Account.id.in_(people))).all()) if people else {}
+    return {
+        "hospital": hospital.name if hospital else None,
+        "responsible_department": next((name for role, name in links if role == "responsible"), None),
+        "beneficiary_departments": [name for role, name in links if role == "beneficiary"],
+        # Historische Zuordnungen ohne Rolle: nicht als verantwortlich/nutzend ausgeben, aber zeigen.
+        "other_departments": [name for role, name in links if role is None],
+        "cost_center": {"code": center.code, "name": center.name} if center else None,
+        "responsible": names.get(contract.responsible_account_id) if contract.responsible_account_id else None,
+        "further_responsible": [names[value] for value in further if value in names],
+    }
+
 
 def _extracted_terms(snapshot) -> dict:
     """Angaben zu Laufzeit und Kuendigung aus der Extraktion (deutsche Anzeige) fuer die Pruefung."""
