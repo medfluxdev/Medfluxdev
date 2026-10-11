@@ -79,6 +79,8 @@
 .shell-sidebar-foot { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); }
 .shell-status { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--color-text-muted); font-size: var(--text-caption); }
 .shell-status-icon { width: 14px; height: 14px; color: var(--color-icon); }
+.shell-status-link { color: inherit; font-weight: 600; text-decoration: none; }
+.shell-status-link:hover { text-decoration: underline; }
 .shell-status--done .shell-status-icon { color: var(--color-success-fill); }
 .shell-status--warning .shell-status-icon { color: var(--color-warning-fill); }
 .shell-status--critical .shell-status-icon { color: var(--color-danger-fill); }

@@ -61,8 +61,11 @@ describe("Shell: Topbar-Eingaben", () => {
     render(<ClientNav>Inhalt</ClientNav>);
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/health"));
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/ai/status"));
-    expect(await screen.findByText("Lokale KI bereit (qwen)")).toBeInTheDocument();
+    expect(await screen.findByText("Lokale KI bereit (qwen)")).toHaveClass("sr-only");
     expect(document.querySelector(".shell-status")).toHaveClass("shell-status--done");
+    // Sichtbar nur „KI“; für Admins Link zu Einstellungen → Lokale KI
+    expect(screen.getByRole("link", { name: /Lokale KI bereit \(qwen\)/ })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: /Lokale KI bereit/ })).toHaveTextContent(/^KI$/);
   });
 
   it("KI-Ampel: orange ohne Modell, rot ohne Server", async () => {

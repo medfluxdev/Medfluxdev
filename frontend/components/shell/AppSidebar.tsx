@@ -86,9 +86,13 @@ export default function AppSidebar({ collapsed, mobileOpen, onToggleCollapsed, o
         </nav>
 
         <div className="shell-sidebar-foot">
-          <p className={`shell-status shell-status--${statusTone}`} role="status" title={statusText}>
+          {/* Nur Ampel + „KI“; die Erklärung steht im Tooltip und unter Einstellungen → Lokale KI. */}
+          <p className={`shell-status shell-status--${statusTone}`} title={statusText}>
             <SignalIcon tone={statusTone} className="shell-status-icon" />
-            <span className="shell-nav-text">{statusText}</span>
+            {role === "admin"
+              ? <Link href="/settings" className="shell-nav-text shell-status-link" aria-label={`${statusText} – Einstellungen Lokale KI öffnen`}>KI</Link>
+              : <span className="shell-nav-text" aria-hidden="true">KI</span>}
+            <span className="sr-only" role="status">{statusText}</span>
           </p>
           <p className="shell-org shell-nav-text">{membership?.organization_name ?? (account?.is_developer ? "Systemverwaltung" : "Krankenhaus")}</p>
         </div>
