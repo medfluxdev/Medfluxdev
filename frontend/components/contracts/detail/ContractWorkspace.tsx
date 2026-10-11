@@ -45,6 +45,7 @@ import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
 import SourceCapture from "./SourceCapture";
 import AiReviewButton from "./AiReviewButton";
+import RiskButton from "./RiskButton";
 import ContractAssignmentCard from "./ContractAssignmentCard";
 import { useAuth } from "@/components/auth/AuthProvider";
 
@@ -489,7 +490,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 : null}
             <ContractGaps contractId={data.contract_id} gaps={gaps} searchHref={searchMissingHref} />
             <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={data.review.requires_manual_review} canEdit={canEditData} version={data} />
-            {data.risk_level === "high" || data.risk_level === "medium" ? <Signal tone="warning">Risiko {riskLabel(data.risk_level).toLowerCase()}</Signal> : null}
+            <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>
         <dl className="object-header-facts">

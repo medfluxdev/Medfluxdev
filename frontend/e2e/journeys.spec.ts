@@ -233,23 +233,26 @@ test("14 – Direkt zur Stelle: Strg+K kennt, was dem offenen Vertrag fehlt", as
   });
   expect(created.ok()).toBeTruthy();
   const { contract_id: contractId } = await created.json();
-  await page.goto(`/contracts/${contractId}`);
-  await page.getByRole("button", { name: /Was fehlt · / }).click();
-  const gaps = page.getByRole("group", { name: "Was fehlt noch?" });
-  await expect(gaps).toBeVisible();
-  const first = (await gaps.getByRole("link").first().getAttribute("href"))!;
-  await page.keyboard.press("Control+k");
-  const palette = page.getByRole("dialog", { name: "Befehle und Suche" });
-  await expect(palette.getByText("Dieser Vertrag")).toBeVisible();
-  await page.keyboard.press("Enter");
-  await expect.poll(() => page.url()).toContain(first.split("?")[1]);
-  await expect(page.locator(":focus")).toHaveAttribute("id", /^rg-/);
-  // Aufräumen: archivieren, damit Liste und Bildreferenzen beim nächsten Lauf gleich bleiben.
-  await page.getByRole("button", { name: "Abbrechen" }).click();
-  const archived = await page.request.post(`${process.env.E2E_API_URL}/api/contracts/${contractId}/archive?organization_slug=${process.env.E2E_ORG_SLUG}`, {
-    headers: { Origin: process.env.E2E_BASE_URL ?? "" }, data: {},
-  });
-  expect(archived.ok()).toBeTruthy();
+  try {
+    await page.goto(`/contracts/${contractId}`);
+    await page.getByRole("button", { name: /Was fehlt · / }).click();
+    const gaps = page.getByRole("group", { name: "Was fehlt noch?" });
+    await expect(gaps).toBeVisible();
+    const first = (await gaps.getByRole("link").first().getAttribute("href"))!;
+    await page.keyboard.press("Control+k");
+    const palette = page.getByRole("dialog", { name: "Befehle und Suche" });
+    await expect(palette.getByText("Dieser Vertrag")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => page.url()).toContain(first.split("?")[1]);
+    await expect(page.locator(":focus")).toHaveAttribute("id", /^rg-/);
+    await page.getByRole("button", { name: /^Abbrechen/ }).first().click();
+  } finally {
+    // Aufräumen (auch bei einem Fehlschlag): archivieren, damit Liste und Bildreferenzen gleich bleiben.
+    const archived = await page.request.post(`${process.env.E2E_API_URL}/api/contracts/${contractId}/archive?organization_slug=${process.env.E2E_ORG_SLUG}`, {
+      headers: { Origin: process.env.E2E_BASE_URL ?? "" }, data: {},
+    });
+    expect(archived.ok()).toBeTruthy();
+  }
 });
 
 test("15 – Erneut aus dem Dokument erfassen: fehlende Angaben suchen, vergleichen, übernehmen", async ({ page }, info) => {
@@ -333,47 +336,50 @@ test("16 – Angabe aus dem Text übernehmen: Stelle markieren, Vorschau, speich
     multipart: { files: { name: "vertrag.pdf", mimeType: "application/pdf", buffer: Buffer.from(MINI_PDF) }, attachment_type: listing.attachment_types[0], analyze: "false" },
   });
   expect(uploaded.ok()).toBeTruthy();
+  // Aufräumen auch bei einem Fehlschlag, sonst verfälscht der Testvertrag Listen und Bildreferenzen.
+  try {
 
-  // Ohne KI-Analyse gibt es in der Testumgebung keinen gelesenen Seitentext: Text und Prüfung werden im
-  // Browser beantwortet (Prüfung, dass die Stelle auf der Seite steht, und das Lesen: pytest).
-  const cors = { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "content-type", "Access-Control-Allow-Methods": "GET,POST" };
-  const text = "§ 3 Laufzeit\nDer Vertrag beginnt am 01.01.2025 und läuft drei Jahre.";
-  const saved: Record<string, unknown>[] = [];
-  await page.route(/\/api\/contracts\/[^/]+\/(documents\/[^/]+\/pages\/\d+\/text|register\/from-document)/, async (route) => {
-    const request = route.request();
-    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
-    const json = (body: unknown) => route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
-    if (request.url().includes("/pages/")) return json({ page: 1, pages: [1], text, fields: [{ key: "term_start_date", label: "Vertragsbeginn" }, { key: "initial_term", label: "Laufzeit" }] });
-    const body = request.postDataJSON() as Record<string, unknown>;
-    if (body.dry_run) return json({ preview: "01.01.2025", page: 1, quote: body.quote });
-    saved.push(body);
-    return json({});
-  });
+    // Ohne KI-Analyse gibt es in der Testumgebung keinen gelesenen Seitentext: Text und Prüfung werden im
+    // Browser beantwortet (Prüfung, dass die Stelle auf der Seite steht, und das Lesen: pytest).
+    const cors = { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "content-type", "Access-Control-Allow-Methods": "GET,POST" };
+    const text = "§ 3 Laufzeit\nDer Vertrag beginnt am 01.01.2025 und läuft drei Jahre.";
+    const saved: Record<string, unknown>[] = [];
+    await page.route(/\/api\/contracts\/[^/]+\/(documents\/[^/]+\/pages\/\d+\/text|register\/from-document)/, async (route) => {
+      const request = route.request();
+      if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+      const json = (body: unknown) => route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
+      if (request.url().includes("/pages/")) return json({ page: 1, pages: [1], text, fields: [{ key: "term_start_date", label: "Vertragsbeginn" }, { key: "initial_term", label: "Laufzeit" }] });
+      const body = request.postDataJSON() as Record<string, unknown>;
+      if (body.dry_run) return json({ preview: "01.01.2025", page: 1, quote: body.quote });
+      saved.push(body);
+      return json({});
+    });
 
-  await page.goto(`/contracts/${contractId}?tab=documents&subtab=document`);
-  await page.getByRole("button", { name: "Angabe aus dem Text übernehmen" }).click();
-  const region = page.getByRole("region", { name: "Text der Seite 1, so wie MedFlux ihn gelesen hat" });
-  await expect(region).toContainText("beginnt am 01.01.2025");
-  // Stelle mit der Maus markieren (Auswahl im Text, dann loslassen).
-  await region.evaluate((element, wanted) => {
-    const node = element.firstChild!;
-    const start = (node.textContent ?? "").indexOf(wanted);
-    const range = document.createRange();
-    range.setStart(node, start);
-    range.setEnd(node, start + wanted.length);
-    window.getSelection()!.removeAllRanges();
-    window.getSelection()!.addRange(range);
-    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  }, "beginnt am 01.01.2025");
-  await expect(page.getByRole("textbox", { name: "Markierte Stelle (wörtlich)" })).toHaveValue("beginnt am 01.01.2025");
-  await page.getByRole("combobox", { name: "Übernehmen als" }).selectOption("term_start_date");
-  await expect(page.getByText("Wird gespeichert als: 01.01.2025")).toBeVisible();
-  await checkA11y(page, info, "angabe-aus-text");
-  await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
-  await expect.poll(() => saved.length).toBe(1);
-  expect(saved[0]).toMatchObject({ field_key: "term_start_date", page: 1, quote: "beginnt am 01.01.2025" });
-
-  const archived = await page.request.post(`${api}/api/contracts/${contractId}/archive?organization_slug=${org}`, { headers: { Origin: origin }, data: {} });
-  expect(archived.ok()).toBeTruthy();
+    await page.goto(`/contracts/${contractId}?tab=documents&subtab=document`);
+    await page.getByRole("button", { name: "Angabe aus dem Text übernehmen" }).click();
+    const region = page.getByRole("region", { name: "Text der Seite 1, so wie MedFlux ihn gelesen hat" });
+    await expect(region).toContainText("beginnt am 01.01.2025");
+    // Stelle mit der Maus markieren (Auswahl im Text, dann loslassen).
+    await region.evaluate((element, wanted) => {
+      const node = element.firstChild!;
+      const start = (node.textContent ?? "").indexOf(wanted);
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + wanted.length);
+      window.getSelection()!.removeAllRanges();
+      window.getSelection()!.addRange(range);
+      element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    }, "beginnt am 01.01.2025");
+    await expect(page.getByRole("textbox", { name: "Markierte Stelle (wörtlich)" })).toHaveValue("beginnt am 01.01.2025");
+    await page.getByRole("combobox", { name: "Übernehmen als" }).selectOption("term_start_date");
+    await expect(page.getByText("Wird gespeichert als: 01.01.2025")).toBeVisible();
+    await checkA11y(page, info, "angabe-aus-text");
+    await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
+    await expect.poll(() => saved.length).toBe(1);
+    expect(saved[0]).toMatchObject({ field_key: "term_start_date", page: 1, quote: "beginnt am 01.01.2025" });
+  } finally {
+    const archived = await page.request.post(`${api}/api/contracts/${contractId}/archive?organization_slug=${org}`, { headers: { Origin: origin }, data: {} });
+    expect(archived.ok()).toBeTruthy();
+  }
 });
 

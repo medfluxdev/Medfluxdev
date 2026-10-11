@@ -187,3 +187,47 @@ def test_contract_detail_carries_start_date_and_linked_partner(monkeypatch):
         assert detail["partner"] == {"id": str(partner.id), "name": "ABIOMED Europe GmbH", "short_name": "ABIOMED"}
     finally:
         session.close()
+
+
+def test_risk_confirm_override_reset(monkeypatch):
+    from app.api.routes.contracts import _build_augmented_detail
+
+    slug, ids = _seed()
+    admin = _client(monkeypatch, ids, "admin", "admin")
+    cid = _contract(admin, slug)
+    session = create_session()
+    try:
+        contract = session.get(Contract, UUID(cid))
+        contract.risk_computed = contract.risk_level = "high"
+        session.commit()
+    finally:
+        session.close()
+    url, query = f"/api/contracts/{cid}/risk", {"organization_slug": slug}
+
+    confirmed = admin.post(url, params=query, json={"action": "confirm"}).json()
+    assert confirmed["effective"] == "high" and confirmed["confirmed"]["by"] == "Admin"
+    assert admin.post(url, params=query, json={"action": "override", "level": "low"}).status_code == 422  # Begruendung fehlt
+    assert admin.post(url, params=query, json={"action": "override", "level": "extrem", "reason": "x" * 5}).status_code == 422
+    overridden = admin.post(url, params=query, json={"action": "override", "level": "low", "reason": "Gerät wird 2026 ersetzt"}).json()
+    assert overridden["effective"] == "low" and overridden["computed"] == "high"
+    assert overridden["override"]["reason"] == "Gerät wird 2026 ersetzt" and overridden["confirmed"] is None
+    assert admin.post(url, params=query, json={"action": "confirm"}).status_code == 422  # erst zuruecksetzen
+
+    session = create_session()
+    try:
+        # Neue Berechnung aendert das festgelegte Risiko nicht.
+        contract = session.get(Contract, UUID(cid))
+        contract.risk_computed = "medium"
+        contract.risk_level = contract.risk_override or contract.risk_computed
+        session.commit()
+        detail = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))
+        assert detail["risk_level"] == "low" and detail["risk"]["computed"] == "medium"
+    finally:
+        session.close()
+
+    reset = admin.post(url, params=query, json={"action": "reset"}).json()
+    assert reset["effective"] == "medium" and reset["override"] is None
+    assert reset["confirmed"] is None  # bestaetigt war „hoch“, berechnet ist jetzt „mittel“
+
+    viewer = _client(monkeypatch, ids, "second", "viewer")
+    assert viewer.post(url, params=query, json={"action": "confirm"}).status_code == 403

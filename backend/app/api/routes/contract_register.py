@@ -219,6 +219,33 @@ def accept_proposal(contract_id: UUID, field_key: str, request: Request, organiz
         session.close()
 
 
+class RiskDecision(BaseModel):
+    action: str = Field(pattern="^(confirm|override|reset)$")
+    level: Optional[str] = Field(default=None, max_length=24)
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+@router.post("/{contract_id}/risk")
+def decide_contract_risk(contract_id: UUID, payload: RiskDecision, request: Request, organization_slug: str):
+    """Risiko bestaetigen, mit Begruendung festlegen oder auf den berechneten Wert zuruecksetzen."""
+    from app.contracts.risk import RiskError, decide_risk
+
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            result = decide_risk(session, contract=contract, actor=actor, action=payload.action, level=payload.level, reason=payload.reason)
+        except RiskError as exc:
+            session.rollback()
+            raise HTTPException(status_code=422, detail=exc.detail_de) from exc
+        session.commit()
+        return result
+    finally:
+        session.close()
+
+
 class DocumentCapture(BaseModel):
     field_key: str = Field(max_length=64)
     document_version_id: UUID

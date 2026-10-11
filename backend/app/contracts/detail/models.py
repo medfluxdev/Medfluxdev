@@ -543,6 +543,8 @@ class ContractDetailResponse(BaseModel):
     assignment: Optional[dict] = None
     # Zugeordneter Vertragspartner aus den Stammdaten (None = nur Text aus dem Dokument).
     partner: Optional[dict] = None
+    # Risiko: berechnet / bestaetigt / von Hand festgelegt (mit Begruendung).
+    risk: Optional[dict] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
 

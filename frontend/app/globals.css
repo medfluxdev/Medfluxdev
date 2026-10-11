@@ -556,6 +556,8 @@ a:focus-visible {
   color: var(--text);
   cursor: pointer;
   min-width: 2.2rem;
+  /* WCAG 2.2 Zielgröße: mindestens 24px, hier bequem 32px. */
+  min-height: 2rem;
 }
 .pdf-controls button:disabled {
   opacity: 0.5;

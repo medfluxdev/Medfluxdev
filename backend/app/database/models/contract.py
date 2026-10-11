@@ -116,6 +116,16 @@ class Contract(OrgOwnedMixin, Base):
     end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
     risk_level: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    # Risiko: berechnet aus den aktiven Warnungen; eine Person kann es bestaetigen oder mit
+    # Begruendung festlegen (`risk_level` = festgelegt, sonst berechnet).
+    risk_computed: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    risk_override: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    risk_override_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    risk_override_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    risk_override_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    risk_confirmed_level: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    risk_confirmed_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    risk_confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # STEP 13: stored generated tsvector (Determinismus – immer synchron mit
     # Current-State). Abgeleitet aus contract_number (simple) + supplier (german)
     # + status (simple). Keine Stemmung auf Kennungen. Fuer FTS-Abfragen.

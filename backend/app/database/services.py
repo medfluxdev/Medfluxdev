@@ -605,7 +605,7 @@ def project_contract(
         contract.contract_number = contract_number
     if replace_missing or status is not None:
         contract.status = status.lower() if status is not None else None
-    if replace_missing or risk_level is not None:
+    if (replace_missing or risk_level is not None) and not contract.risk_override:
         contract.risk_level = risk_level.lower() if risk_level is not None else None
     start = _resolve_date(start_date)
     end = _resolve_date(end_date)
@@ -1205,7 +1205,9 @@ def run_warning_evaluation(
     contract = session.get(Contract, contract_id)
     if contract is not None:
         contract.status = _project_current_status(contract, result, calc_status)
-        contract.risk_level = _project_risk_level(result)
+        contract.risk_computed = _project_risk_level(result)
+        # Von einer Person festgelegtes Risiko gilt, bis es zurueckgesetzt wird.
+        contract.risk_level = contract.risk_override or contract.risk_computed
 
     session.flush()
     active_count = sum(1 for row in existing if row.active)

@@ -27,6 +27,7 @@ EVENT_LABELS: dict[str, str] = {
     "contract.status_changed": "Status geändert",
     "contract.remark_added": "Bemerkung hinzugefügt",
     "contract.value_from_document": "Angabe aus dem Dokument übernommen",
+    "contract.risk_decided": "Risiko bestätigt oder festgelegt",
     "contract.reextraction_started": "Erneute Erfassung gestartet",
     "contract.reextraction_applied": "Erneute Erfassung übernommen",
     "contract.reextraction_discarded": "Erneute Erfassung verworfen",

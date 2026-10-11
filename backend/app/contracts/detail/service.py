@@ -473,6 +473,7 @@ def build_contract_detail(
         "extracted_terms": _extracted_terms(snapshot),
         "assignment": _assignment(session, contract),
         "partner": _partner(session, contract),
+        "risk": _risk(contract),
         "status": contract.status,
         "risk_level": contract.risk_level,
         "identity": _identity_section(
@@ -538,6 +539,12 @@ def build_contract_detail(
 # ---------------------------------------------------------------------------
 # Snapshot-Helfer
 # ---------------------------------------------------------------------------
+
+def _risk(contract) -> dict:
+    from app.contracts.risk import risk_payload
+
+    return risk_payload(contract)
+
 
 def _partner(session: Session, contract) -> dict | None:
     """Zugeordneter Vertragspartner aus den Stammdaten (zum Oeffnen und Bearbeiten im Kopf)."""

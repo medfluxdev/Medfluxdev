@@ -16,7 +16,8 @@ export async function checkA11y(page: Page, testInfo: TestInfo, name: string) {
   await testInfo.attach(`axe-${name}.json`, { body: JSON.stringify(results.violations, null, 2), contentType: "application/json" });
   const severe = results.violations.filter((item) => item.impact === "critical" || item.impact === "serious");
   if (process.env.E2E_AXE_BASELINE === "1") return severe;
-  expect(severe.map((item) => `${item.id}: ${item.help} (${item.nodes.length})`)).toEqual([]);
+  // Mit den betroffenen Elementen, damit ein Fehlschlag sofort zeigt, wo er liegt.
+  expect(severe.map((item) => `${item.id}: ${item.help} (${item.nodes.map((node) => node.target.join(" ")).join(", ")})`)).toEqual([]);
   return severe;
 }
 
