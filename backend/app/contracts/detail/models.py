@@ -495,6 +495,7 @@ class FactReviewStateDto(BaseModel):
     reviewed_at: Optional[str] = None
     evidence_ref: Optional[str] = None
     has_history: bool = False
+    reopen_note: Optional[str] = None
     # UAT Defect Batch E/F: Fakten-getragene Evidenz + Material-Relevanz.
     evidence_count: int = 0
     linked_evidence: list[LinkedEvidenceDto] = Field(default_factory=list)
@@ -536,6 +537,8 @@ class ContractDetailResponse(BaseModel):
     business_status: Optional[str] = None
     # Fristen und gepflegte Jahreskosten aus dem Register (Vorrang im Vertragskopf).
     register_facts: Optional[dict] = None
+    # Laufzeit/Kuendigung aus der Extraktion als Anzeige-Text (Pruefung „Angaben“).
+    extracted_terms: Optional[dict] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
 

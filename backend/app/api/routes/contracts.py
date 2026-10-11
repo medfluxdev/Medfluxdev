@@ -444,6 +444,16 @@ def contract_fact_review(
                 system_value = (material_report(data).get(payload.fact_key) or {}).get(
                     "value"
                 )
+            # Vertragsdaten-Feld zur Angabe: Korrektur vorab lesen (nicht lesbar -> nichts speichern).
+            from app.register.fields import FieldValidationError
+            from app.register.service import review_register_changes
+
+            try:
+                register_base, register_changes = review_register_changes(
+                    payload.fact_key, payload.action, payload.corrected_value
+                )
+            except FieldValidationError as exc:
+                raise ReviewError(getattr(exc, "detail_de", str(exc))) from exc
             record_fact_action(
                 session,
                 organization_id=org.id,
@@ -467,6 +477,7 @@ def contract_fact_review(
                 cid,
                 {"fact_key": payload.fact_key},
             )
+            _review_into_register(request, organization_slug, session, cid, register_base, register_changes)
             session.commit()
         except ReviewConflict as exc:
             session.rollback()
@@ -485,6 +496,36 @@ def contract_fact_review(
         return ContractDetailResponse.model_validate(data)
     finally:
         session.close()
+
+
+def _review_into_register(request: Request, organization_slug: str, session, contract_id: UUID, base, changes) -> None:
+    """Pruefung und Vertragsdaten zeigen denselben Wert: Korrektur/Bestaetigung uebernehmen.
+
+    Nur mit Bearbeitungsrecht (Pruefer ohne `contract.edit` aendern die Vertragsdaten nicht);
+    von Hand gepflegte Werte werden bei einer Bestaetigung nicht beruehrt.
+    """
+    if base is None:
+        return
+    from app.api.routes.contract_register import _register_actor
+    from app.auth.permissions import can
+    from app.deadlines.system import sync_system_deadlines
+    from app.register.service import RegisterError, apply_review_to_register
+
+    try:
+        actor = _register_actor(request, organization_slug)
+    except HTTPException:
+        # Ohne angemeldetes Konto keine Rechtegrundlage: Vertragsdaten bleiben unveraendert.
+        return
+    if not can(actor, "contract.edit"):
+        return
+    contract = session.get(Contract, contract_id, with_for_update=True)
+    if contract is None or contract.business_status == "geloescht":
+        return
+    try:
+        if apply_review_to_register(session, contract=contract, actor=actor, base=base, changes=changes):
+            sync_system_deadlines(session, contract, today_local())
+    except RegisterError as exc:
+        raise ReviewError(exc.detail_de) from exc
 
 
 @router.post("/{contract_id}/review/start", response_model=ContractDetailResponse)

@@ -228,6 +228,44 @@ def record_fact_action(
     return row
 
 
+REEXTRACTION_REOPEN_NOTE = "Neuer Wert aus der erneuten Erfassung – bitte erneut prüfen."
+
+
+def reopen_after_reextraction(
+    session: Session, *, organization_id, contract_id, values: dict[str, object], reviewer_display_name: Optional[str],
+) -> list[str]:
+    """Bereits gepruefte Angaben, deren Wert eine erneute Erfassung geaendert hat, wieder oeffnen.
+
+    Der neue Wert wird Original- und wirksamer Wert; eine fruehere Bestaetigung oder Korrektur
+    gilt nicht fuer ihn. Angaben ohne Pruef-Historie sind ohnehin offen. Gibt die geoeffneten
+    Angaben zurueck.
+    """
+    reviewer = (reviewer_display_name or "").strip() or "Erneute Erfassung"
+    latest = _latest_fact_reviews(session, contract_id)
+    reopened: list[str] = []
+    for fact_key, value in values.items():
+        row = latest.get(fact_key)
+        if fact_key not in MATERIAL_FACT_KEYS or row is None or row.action == "reopened":
+            continue
+        session.add(FactReview(
+            contract_id=contract_id,
+            fact_key=fact_key,
+            action="reopened",
+            original_value=_effective_write(value=value),
+            previous_effective_value=row.new_effective_value,
+            new_effective_value=_effective_write(value=value),
+            reviewer_display_name=reviewer,
+            reviewer_identity_type="manual_unverified",
+            authenticated_actor_id=None,
+            note=REEXTRACTION_REOPEN_NOTE,
+        ))
+        reopened.append(fact_key)
+    if reopened:
+        session.flush()
+        _flag_material_change(session, organization_id, contract_id)
+    return reopened
+
+
 def _flag_material_change(session, organization_id, contract_id) -> None:
     """Materiale Änderung nach geprüftem Abschluss ⇒ „Änderung nach Prüfung"."""
     review = get_contract_review(
@@ -486,6 +524,8 @@ def build_fact_review_states(
                 "reviewed_at": reviewed_at,
                 "evidence_ref": row.evidence_ref if row is not None else None,
                 "has_history": fact_key in latest,
+                # Warum eine Angabe wieder offen ist (z. B. neuer Wert aus erneuter Erfassung).
+                "reopen_note": row.note if row is not None and row.action == "reopened" else None,
                 # UAT Defect Batch F: Fakten-getragene Evidenz sichtbar machen.
                 "evidence_count": len(evidence_list),
                 "linked_evidence": [

@@ -469,6 +469,7 @@ def build_contract_detail(
         "register_number": contract.register_number,
         "business_status": contract.business_status,
         "register_facts": register_facts(contract, today_local()),
+        "extracted_terms": _extracted_terms(snapshot),
         "status": contract.status,
         "risk_level": contract.risk_level,
         "identity": _identity_section(
@@ -534,6 +535,20 @@ def build_contract_detail(
 # ---------------------------------------------------------------------------
 # Snapshot-Helfer
 # ---------------------------------------------------------------------------
+
+def _extracted_terms(snapshot) -> dict:
+    """Angaben zu Laufzeit und Kuendigung aus der Extraktion (deutsche Anzeige) fuer die Pruefung."""
+    if not snapshot:
+        return {}
+    from app.models.contract import Contract as ExtractedContract
+    from app.reextract import facts
+
+    try:
+        model = ExtractedContract.model_validate(snapshot)
+    except Exception:
+        return {}
+    return {path: facts.display(facts.get_fact(model, path)) for path in facts.REVIEW_TERM_FACTS}
+
 
 def _snap(snapshot, *keys):
     if not snapshot:

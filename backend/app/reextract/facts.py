@@ -109,6 +109,56 @@ REGISTER_KEYS: dict[str, tuple[str, ...]] = {
     "costs.price_indexation": ("price_adjustment_kind", "price_adjustment_index_name"),
 }
 
+# Angaben zu Laufzeit/Kuendigung, die das Lesemodell fuer die Pruefung als Text liefert.
+REVIEW_TERM_FACTS = (
+    "dates.duration", "termination.cancellation_period", "termination.cancellation_condition", "termination.renewal_period",
+)
+
+# Uebernommener Fakt -> Pruef-Angaben, die dadurch einen neuen Wert bekommen (auch berechnete).
+REVIEW_FACTS: dict[str, tuple[str, ...]] = {
+    "identity.contract_number": ("identity.contract_number",),
+    "identity.supplier": ("identity.supplier",),
+    "dates.start_date": ("dates.start_date", "dates.end_date", "dates.latest_cancellation"),
+    "dates.start_condition": ("dates.event_start",),
+    "dates.end_date": ("dates.end_date", "dates.latest_cancellation"),
+    "dates.duration": ("dates.duration", "dates.end_date", "dates.latest_cancellation"),
+    "dates.minimum_duration": ("dates.minimum_duration", "dates.latest_cancellation"),
+    "termination.cancellation_period": ("termination.cancellation_period", "dates.latest_cancellation"),
+    "termination.cancellation_condition": ("termination.cancellation_condition", "dates.latest_cancellation"),
+    "termination.cancellation_to_contract_end": ("termination.cancellation_condition", "dates.latest_cancellation"),
+    "termination.automatic_renewal": ("termination.auto_renewal", "dates.latest_cancellation"),
+    "termination.renewal_period": ("termination.renewal_period",),
+    "costs.monthly_cost": ("costs.monthly_recurring", "costs.monthly_net", "costs.monthly_gross", "costs.annual"),
+    "costs.annual_cost": ("costs.annual",),
+    "costs.tax_rate_percent": ("costs.vat_rate", "costs.vat_amount", "costs.monthly_gross"),
+    "costs.price_indexation": ("costs.price_indexation",),
+    "costs.price_adjustment_clause": ("costs.price_fixed", "costs.price_indexation"),
+    "equipment": ("equipment.identity", "equipment.serial"),
+    "services.included_services": ("services.coverage",),
+    "services.excluded_services": ("services.coverage",),
+}
+
+# Pruef-Angabe -> Vertragsdaten-Feld (Basisname), das eine Korrektur in der Pruefung mit aendert.
+REVIEW_TO_REGISTER: dict[str, str] = {
+    "dates.start_date": "term_start_date",
+    "dates.end_date": "term_fixed_end_date",
+    "dates.duration": "initial_term",
+    "dates.minimum_duration": "minimum_term",
+    "termination.cancellation_period": "notice_period",
+    "termination.cancellation_condition": "notice_to",
+    "termination.renewal_period": "renewal_period",
+}
+
+
+def review_facts_for(keys: Iterable[str]) -> list[str]:
+    out: list[str] = []
+    for key in keys:
+        for fact in REVIEW_FACTS.get(key, ()):
+            if fact not in out:
+                out.append(fact)
+    return out
+
+
 # Umgekehrt: Vertragsdaten-Feld -> Fakten, die es fuellen (fuer "Nur fehlende Angaben").
 def facts_for_register_key(key: str) -> list[str]:
     base = key.removesuffix("_value").removesuffix("_unit")

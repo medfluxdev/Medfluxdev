@@ -56,4 +56,17 @@ describe("Faktprüfung – Anzeige Bestätigt vs Korrigiert",()=>{
   expect(p.queryByText("Bestätigt")).not.toBeInTheDocument();
   expect(p.queryByRole("button",{name:"Erneut öffnen"})).not.toBeInTheDocument();
  });
+ it("neuer Wert aus erneuter Erfassung: wieder offen, mit Grund, prüf- und korrigierbar",()=>{
+  const data=fixture();
+  const note="Neuer Wert aus der erneuten Erfassung – bitte erneut prüfen.";
+  data.fact_review_states=[{...fact("Kündigungsfrist","termination.cancellation_period","unreviewed","6 Monate"),state_label_de:"Ungeprüft",reopen_note:note}];
+  render(<FactReviewPanel data={data} orgSlug={ORG} onReload={()=>{}}/>);
+  const p=panel();
+  expect(p.getAllByText(note).length).toBeGreaterThan(0);
+  expect(p.getAllByText("6 Monate").length).toBeGreaterThan(0);
+  expect(p.getByRole("heading",{name:"Kündigungsfrist"})).toBeInTheDocument();
+  expect(p.getAllByRole("button",{name:/bestätigen/i}).length).toBeGreaterThan(0);
+  expect(p.getAllByRole("button",{name:/korrigieren/i}).length).toBeGreaterThan(0);
+ });
 });
+

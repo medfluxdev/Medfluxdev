@@ -85,6 +85,26 @@ MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
         lambda r: (r.get("dates") or {}).get("minimum_duration_months"),
     ),
     (
+        "dates.duration",
+        "Laufzeit",
+        lambda r: (r.get("extracted_terms") or {}).get("dates.duration"),
+    ),
+    (
+        "termination.cancellation_period",
+        "Kündigungsfrist",
+        lambda r: (r.get("extracted_terms") or {}).get("termination.cancellation_period"),
+    ),
+    (
+        "termination.cancellation_condition",
+        "Kündigungstermin",
+        lambda r: (r.get("extracted_terms") or {}).get("termination.cancellation_condition"),
+    ),
+    (
+        "termination.renewal_period",
+        "Verlängerungszeitraum",
+        lambda r: (r.get("extracted_terms") or {}).get("termination.renewal_period"),
+    ),
+    (
         "dates.end_date",
         "Vertragsende",
         lambda r: (r.get("dates") or {}).get("calculated_end_date")

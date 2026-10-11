@@ -45,7 +45,7 @@ from app.database.models.register import (
 )
 from app.models.contract import Contract as ExtractedContract
 from app.register.ai_mapping import proposals_from_extraction
-from app.register.fields import FIELD_SPECS, FIELDS, REQUIRED_FOR_VALID, coerce_value, to_json, validate_pairs
+from app.register.fields import FIELD_SPECS, FIELDS, REQUIRED_FOR_VALID, FieldValidationError, coerce_value, to_json, validate_pairs
 from app.register.status import STATUS_LABELS, TransitionError, allowed_targets, plan_transition
 from app.register.terms import TermInputs, compute_terms, period
 
@@ -744,6 +744,39 @@ def capture_from_document(session: Session, *, contract: Contract, actor: Regist
     })
     session.flush()
     return diffs
+
+
+def review_register_changes(fact_key: str, action: str, corrected_value: Any) -> tuple[Optional[str], dict[str, Any]]:
+    """Was eine Pruef-Aktion in den Vertragsdaten aendert: (Basisfeld, Werte).
+
+    Korrektur: der Text wird wie eine markierte Dokumentstelle gelesen („6 Monate“,
+    „01.04.2025“, „zum Quartalsende“); nicht lesbar -> FieldValidationError, bevor etwas
+    gespeichert wird. Bestaetigen: keine Werte, nur Bestaetigung der KI-Werte.
+    """
+    from app.reextract.facts import REVIEW_TO_REGISTER
+    from app.register.from_document import CaptureError, values_from_quote
+
+    base = REVIEW_TO_REGISTER.get(fact_key)
+    if base is None or action not in ("corrected", "confirmed"):
+        return None, {}
+    if action == "confirmed":
+        return base, {}
+    try:
+        return base, values_from_quote(base, str(corrected_value))
+    except CaptureError as exc:
+        raise FieldValidationError(base, f"Korrigierter Wert nicht lesbar: {exc.detail_de}") from exc
+
+
+def apply_review_to_register(
+    session: Session, *, contract: Contract, actor: RegisterActor, base: str, changes: dict[str, Any],
+) -> dict[str, dict]:
+    """Korrektur/Bestaetigung aus der Pruefung in den Vertragsdaten nachziehen."""
+    if changes:
+        return update_register(session, contract=contract, actor=actor, changes=changes, confirm=[])
+    keys = [key for key in (f"{base}_value", f"{base}_unit", base) if key in FIELDS]
+    provenance = _provenance(session, contract.id)
+    open_ai = [key for key in keys if provenance.get(key) is not None and provenance[key].origin == "ai"]
+    return update_register(session, contract=contract, actor=actor, changes={}, confirm=open_ai) if open_ai else {}
 
 
 def accept_ai_proposal(session: Session, *, contract: Contract, actor: RegisterActor, field_key: str) -> dict:

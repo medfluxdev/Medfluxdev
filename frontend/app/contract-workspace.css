@@ -62,3 +62,6 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Pruefung: Grund, warum eine Angabe wieder offen ist (z. B. erneute Erfassung) */
+.fr-reopen-note{display: block;margin: var(--space-1) 0 0;color: var(--color-ai);font-size: var(--text-small)}

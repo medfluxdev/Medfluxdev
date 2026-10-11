@@ -413,6 +413,8 @@ export interface FactReviewStateDto {
   reviewed_at: string | null;
   evidence_ref: string | null;
   has_history: boolean;
+  /** Warum die Angabe wieder offen ist (z. B. neuer Wert aus erneuter Erfassung). */
+  reopen_note?: string | null;
   /** UAT Re-Test (Defect Batch F): Fakten-getragene Evidenz + Material-Relevanz. */
   evidence_count: number;
   linked_evidence: LinkedEvidenceDto[];

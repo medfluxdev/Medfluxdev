@@ -178,10 +178,40 @@ async def apply_reextraction(request: Request, contract_id: UUID, run_id: UUID, 
         contract = _contract(session, actor, contract_id)
         run = service.get_run(session, contract, run_id, for_update=True)
         service.mark_applied(session, actor, run, keys)
+        reopened = _reopen_reviews(session, actor, contract, keys)
         session.commit()
     finally:
         session.close()
-    return {"applied": len(keys), "keys": keys, "message": f"{len(keys)} Angabe(n) übernommen."}
+    message = f"{len(keys)} Angabe(n) übernommen."
+    if reopened:
+        message += f" {len(reopened)} bereits geprüfte Angabe(n) sind wieder zur Prüfung offen."
+    return {"applied": len(keys), "keys": keys, "reopened": reopened, "message": message}
+
+
+def _reopen_reviews(session, actor, contract, keys: list[str]) -> list[str]:
+    """Neue Werte in der Pruefung: geaenderte, bereits gepruefte Angaben wieder oeffnen und die
+    Vertragsdaten danach neu abgleichen (eine fruehere Korrektur gilt nicht fuer den neuen Wert)."""
+    from app.api.routes.contracts import _build_augmented_detail
+    from app.contracts.review.material import material_report
+    from app.contracts.review.service import reopen_after_reextraction
+    from app.core.clock import today_local
+    from app.deadlines.system import sync_system_deadlines
+    from app.register.service import load_extracted, sync_from_extraction
+
+    detail = _build_augmented_detail(session, organization_id=contract.organization_id, contract_id=contract.id)
+    report = material_report(detail or {})
+    values = {fact: (report.get(fact) or {}).get("value") for fact in facts.review_facts_for(keys) if fact in report}
+    reopened = reopen_after_reextraction(
+        session, organization_id=contract.organization_id, contract_id=contract.id, values=values,
+        reviewer_display_name=actor.display_name,
+    )
+    if reopened:
+        session.refresh(contract, with_for_update=True)
+        extracted = load_extracted(session, contract.accepted_extraction_id)
+        if extracted is not None:
+            sync_from_extraction(session, contract=contract, extracted=extracted, extraction_id=contract.accepted_extraction_id)
+            sync_system_deadlines(session, contract, today_local())
+    return reopened
 
 
 @router.post("/{contract_id}/reextraction/{run_id}/discard")
