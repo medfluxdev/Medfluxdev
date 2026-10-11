@@ -19,12 +19,13 @@ from app.database.models import Contract, Department, Hospital
 from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
 from app.deadlines.system import sync_system_deadlines
-from app.register import catalogs
+from app.register import catalogs, from_document
 from app.register.service import (
     RegisterActor,
     RegisterError,
     accept_ai_proposal,
     add_remark,
+    capture_from_document,
     build_register,
     contract_hospitals,
     create_manual_contract,
@@ -208,6 +209,60 @@ def accept_proposal(contract_id: UUID, field_key: str, request: Request, organiz
         contract = _contract(session, actor, contract_id, for_update=True)
         try:
             accept_ai_proposal(session, contract=contract, actor=actor, field_key=field_key)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        sync_system_deadlines(session, contract, today_local())
+        session.commit()
+        return _register_payload(session, contract, actor)
+    finally:
+        session.close()
+
+
+class DocumentCapture(BaseModel):
+    field_key: str = Field(max_length=64)
+    document_version_id: UUID
+    page: int = Field(ge=1, le=10000)
+    quote: str = Field(min_length=1, max_length=4000)
+    # Nur lesen und zeigen, wie der Wert gespeichert wuerde (nichts speichern).
+    dry_run: bool = False
+
+
+@router.get("/{contract_id}/documents/{document_version_id}/pages/{page}/text")
+def document_page_text(contract_id: UUID, document_version_id: UUID, page: int, request: Request, organization_slug: str):
+    """Text einer Seite, so wie MedFlux sie gelesen hat (auch OCR) – zum Markieren einer Fundstelle."""
+    actor = _register_actor(request, organization_slug)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        result = from_document.page_text(session, contract=contract, document_version_id=document_version_id, page=page)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Dokument nicht gefunden.")
+        return result
+    finally:
+        session.close()
+
+
+@router.post("/{contract_id}/register/from-document")
+def capture_register_from_document(contract_id: UUID, payload: DocumentCapture, request: Request, organization_slug: str):
+    """Angabe aus einer markierten Dokumentstelle uebernehmen (Wert per Code gelesen, Fundstelle gespeichert)."""
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            capture = from_document.prepare_capture(
+                session, contract=contract, field_key=payload.field_key, document_version_id=payload.document_version_id,
+                page=payload.page, quote=payload.quote,
+            )
+            if payload.dry_run:
+                session.rollback()
+                return {"preview": from_document.preview(payload.field_key, capture.changes), "page": capture.page, "quote": capture.quote}
+            capture_from_document(session, contract=contract, actor=actor, capture=capture)
+        except from_document.CaptureError as exc:
+            session.rollback()
+            raise HTTPException(status_code=422, detail=exc.detail_de) from exc
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)

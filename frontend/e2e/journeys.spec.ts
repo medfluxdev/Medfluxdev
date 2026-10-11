@@ -313,3 +313,64 @@ test("15 – Erneut aus dem Dokument erfassen: fehlende Angaben suchen, vergleic
   await expect(section.getByText(/Zuletzt übernommen: 1 Angabe/)).toBeVisible();
 });
 
+test("16 – Angabe aus dem Text übernehmen: Stelle markieren, Vorschau, speichern", async ({ page }, info) => {
+  // Eigener Vertrag mit echtem PDF-Anhang über die API derselben Anmeldung.
+  const api = process.env.E2E_API_URL;
+  const org = process.env.E2E_ORG_SLUG;
+  const origin = process.env.E2E_BASE_URL ?? "";
+  await page.goto("/register");
+  const created = await page.request.post(`${api}/api/contracts?organization_slug=${org}`, {
+    headers: { Origin: origin }, data: { values: { short_description: `E2E Fundstelle ${Date.now() % 100000}` } },
+  });
+  expect(created.ok()).toBeTruthy();
+  const { contract_id: contractId } = await created.json();
+  const listing = await (await page.request.get(`${api}/api/contracts/${contractId}/documents?organization_slug=${org}`)).json();
+  const uploaded = await page.request.post(`${api}/api/contracts/${contractId}/documents?organization_slug=${org}`, {
+    headers: { Origin: origin },
+    multipart: { files: { name: "vertrag.pdf", mimeType: "application/pdf", buffer: Buffer.from(MINI_PDF) }, attachment_type: listing.attachment_types[0], analyze: "false" },
+  });
+  expect(uploaded.ok()).toBeTruthy();
+
+  // Ohne KI-Analyse gibt es in der Testumgebung keinen gelesenen Seitentext: Text und Prüfung werden im
+  // Browser beantwortet (Prüfung, dass die Stelle auf der Seite steht, und das Lesen: pytest).
+  const cors = { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "content-type", "Access-Control-Allow-Methods": "GET,POST" };
+  const text = "§ 3 Laufzeit\nDer Vertrag beginnt am 01.01.2025 und läuft drei Jahre.";
+  const saved: Record<string, unknown>[] = [];
+  await page.route(/\/api\/contracts\/[^/]+\/(documents\/[^/]+\/pages\/\d+\/text|register\/from-document)/, async (route) => {
+    const request = route.request();
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    const json = (body: unknown) => route.fulfill({ status: 200, headers: cors, contentType: "application/json", body: JSON.stringify(body) });
+    if (request.url().includes("/pages/")) return json({ page: 1, pages: [1], text, fields: [{ key: "term_start_date", label: "Vertragsbeginn" }, { key: "initial_term", label: "Laufzeit" }] });
+    const body = request.postDataJSON() as Record<string, unknown>;
+    if (body.dry_run) return json({ preview: "01.01.2025", page: 1, quote: body.quote });
+    saved.push(body);
+    return json({});
+  });
+
+  await page.goto(`/contracts/${contractId}?tab=documents&subtab=document`);
+  await page.getByRole("button", { name: "Angabe aus dem Text übernehmen" }).click();
+  const region = page.getByRole("region", { name: "Text der Seite 1, so wie MedFlux ihn gelesen hat" });
+  await expect(region).toContainText("beginnt am 01.01.2025");
+  // Stelle mit der Maus markieren (Auswahl im Text, dann loslassen).
+  await region.evaluate((element, wanted) => {
+    const node = element.firstChild!;
+    const start = (node.textContent ?? "").indexOf(wanted);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + wanted.length);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  }, "beginnt am 01.01.2025");
+  await expect(page.getByRole("textbox", { name: "Markierte Stelle (wörtlich)" })).toHaveValue("beginnt am 01.01.2025");
+  await page.getByRole("combobox", { name: "Übernehmen als" }).selectOption("term_start_date");
+  await expect(page.getByText("Wird gespeichert als: 01.01.2025")).toBeVisible();
+  await checkA11y(page, info, "angabe-aus-text");
+  await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
+  await expect.poll(() => saved.length).toBe(1);
+  expect(saved[0]).toMatchObject({ field_key: "term_start_date", page: 1, quote: "beginnt am 01.01.2025" });
+
+  const archived = await page.request.post(`${api}/api/contracts/${contractId}/archive?organization_slug=${org}`, { headers: { Origin: origin }, data: {} });
+  expect(archived.ok()).toBeTruthy();
+});
+

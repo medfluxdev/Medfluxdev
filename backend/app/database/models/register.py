@@ -62,6 +62,14 @@ class ContractFieldProvenance(OrgOwnedMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )
     updated_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Von Hand aus dem Dokument uebernommen: Fundstelle (Seite + woertliches Zitat).
+    source_document_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("document_version.id", ondelete="SET NULL", name="fk_contract_field_provenance_source_document"),
+        nullable=True,
+    )
+    source_page: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    source_quote: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("contract_id", "field_key", name="uq_contract_field_provenance_contract_field"),

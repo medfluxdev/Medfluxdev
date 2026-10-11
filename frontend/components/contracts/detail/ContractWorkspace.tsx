@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type {
@@ -44,6 +44,8 @@ import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, docum
 import ContractGaps, { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
+import SourceCapture from "./SourceCapture";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
 
@@ -209,6 +211,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const reextraction = useReextraction(data.contract_id, orgSlug);
+  const { role, account } = useAuth();
+  const canEditData = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
+  // „Angabe aus dem Text übernehmen“: Stelle auf der angezeigten PDF-Seite markieren.
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [pdfPage, setPdfPage] = useState(1);
+  const onPdfPage = useCallback((page: number) => setPdfPage(page), []);
   // „Fehlende Angaben im Dokument suchen“: nur mit Recht, ohne laufende Auswertung und wenn etwas fehlt.
   const reextractionBusy = reextraction.state?.run?.status === "queued" || reextraction.state?.run?.status === "running";
   const searchMissingHref = reextraction.state?.can_start && !reextractionBusy && (reextraction.state?.missing.length ?? 0) > 0
@@ -327,6 +335,19 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
   // „Direkt zur Stelle“ innerhalb der Vertragsakte: Reiter, Abschnitt oder Feld über die Adresse ansteuern.
   const mainDocumentId = data.documents[0]?.document_version_id ?? null;
+  function openCapture() {
+    setCaptureOpen(true);
+    setRoute("documents", "document");
+    window.setTimeout(() => document.getElementById("source-capture-heading")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  // Fundstelle eines von Hand aus dem Dokument übernommenen Werts zeigen.
+  function showSource(source: { document_version_id: string; page: number; quote: string }) {
+    setRoute("documents", "document");
+    setDocumentVersionId(source.document_version_id);
+    setNavTarget({ document_version_id: source.document_version_id, page: source.page, bbox: null, bbox_space: "pdf_points", supports_exact_navigation: false, label: source.quote });
+  }
+
   function showDocumentPage(page: number) {
     if (!mainDocumentId) return;
     setDocumentVersionId(mainDocumentId);
@@ -527,6 +548,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           onChanged={reload}
           searchableKeys={reextraction.state?.can_start ? new Set(fieldSearchMap(reextraction.state).keys()) : undefined}
           onSearchInDocument={(key) => router.replace(documentSearchHref(data.contract_id, key), { scroll: false })}
+          onShowSource={showSource}
         />{slots.register}</>}
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
@@ -576,8 +598,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onApplied={() => { reload(); reextraction.reload(); }}
             onShowPage={showDocumentPage}
             onEditManually={() => setRoute("register")}
+            onMarkInDocument={canEditData && mainDocumentId ? openCapture : undefined}
           />}
-          {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div>}
+          {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell">{canEditData && documentVersionId && !captureOpen ? <div className="source-capture-open"><button type="button" className="btn btn-sm" onClick={openCapture}>Angabe aus dem Text übernehmen</button></div> : null}<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} /></div></div>}
+          {documentTab === "document" && captureOpen && documentVersionId ? <SourceCapture
+            contractId={data.contract_id}
+            orgSlug={orgSlug}
+            documentVersionId={documentVersionId}
+            page={pdfPage}
+            onSaved={() => { reload(); reextraction.reload(); }}
+            onClose={() => setCaptureOpen(false)}
+          /> : null}
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
           {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
           {documentTab === "review" && <ReviewQueueNav contractId={data.contract_id} />}

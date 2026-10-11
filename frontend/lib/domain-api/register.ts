@@ -21,6 +21,8 @@ export interface RegisterField {
   confirmed_at: string | null;
   updated_by_name: string | null;
   updated_at: string | null;
+  /** Von Hand aus einer markierten Dokumentstelle übernommen: Fundstelle. */
+  document_source?: { document_version_id: string; page: number; quote: string } | null;
 }
 
 export interface RegisterTerms {
@@ -165,6 +167,36 @@ export function updateContractRegister(
     changes: payload.changes,
     confirm: payload.confirm ?? [],
   });
+}
+
+export interface DocumentPageText {
+  page: number;
+  /** Seiten mit gelesenem Text. */
+  pages: number[];
+  /** Text der Seite, so wie MedFlux sie gelesen hat (auch Texterkennung); null = nicht gelesen. */
+  text: string | null;
+  /** Felder, die aus einer markierten Stelle übernommen werden können. */
+  fields: { key: string; label: string }[];
+}
+
+export interface DocumentCapture {
+  field_key: string;
+  document_version_id: string;
+  page: number;
+  quote: string;
+}
+
+export function getDocumentPageText(organizationSlug: string, contractId: string, documentVersionId: string, page: number) {
+  return apiGet<DocumentPageText>(contractPath(contractId, `documents/${encodeURIComponent(documentVersionId)}/pages/${page}/text`, organizationSlug));
+}
+
+/** Nur lesen: wie der Wert aus der markierten Stelle gespeichert würde. */
+export function previewDocumentCapture(organizationSlug: string, contractId: string, body: DocumentCapture) {
+  return apiPost<{ preview: string; page: number; quote: string }>(contractPath(contractId, "register/from-document", organizationSlug), { ...body, dry_run: true });
+}
+
+export function captureFromDocument(organizationSlug: string, contractId: string, body: DocumentCapture) {
+  return apiPost<ContractRegister>(contractPath(contractId, "register/from-document", organizationSlug), body);
 }
 
 export function acceptRegisterProposal(organizationSlug: string, contractId: string, fieldKey: string) {

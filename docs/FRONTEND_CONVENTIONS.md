@@ -93,7 +93,7 @@ Jede Meldung, dass etwas fehlt, unbekannt ist oder geprüft werden muss, führt 
 - Aufgaben und Warnungen: `workItemTarget` / `warningTarget` (Backend: `app/work_queue/targets.py` – beide Zuordnungen gleich halten).
 - Gefilterte Listen öffnen Verträge dort, wo die gefilterte Lücke behoben wird (`listRowTarget`).
 - Was einer Vertragsakte fehlt, steht in „Was fehlt noch?“ und in Strg+K („Dieser Vertrag“, `lib/page-commands.ts`).
-- Kann eine fehlende Angabe im Vertragsdokument stehen, gibt es neben „Erfassen“ auch „Im Dokument suchen“ (`documentSearchHref(id, feld)`; alle fehlenden: `MISSING_SEARCH`). Die KI übernimmt dabei nie selbst: Ergebnisse gehen immer durch den Vergleich (`components/contracts/detail/Reextraction.tsx`).
+- Kann eine fehlende Angabe im Vertragsdokument stehen, gibt es neben „Erfassen“ auch „Im Dokument suchen“ (`documentSearchHref(id, feld)`; alle fehlenden: `MISSING_SEARCH`). Die KI übernimmt dabei nie selbst: Ergebnisse gehen immer durch den Vergleich (`components/contracts/detail/Reextraction.tsx`). Ohne KI: „Angabe aus dem Text übernehmen“ (`SourceCapture.tsx`); ein so übernommener Wert zeigt „S. n“ zur Fundstelle.
 - Gibt es keinen Ort zum Beheben (z. B. SLA-Hinweis), bleibt die Meldung Text – dann keinen Link vortäuschen.
 
 ## 6. Barrierefreiheit

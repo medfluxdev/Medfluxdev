@@ -110,10 +110,12 @@ interface PanelProps {
   onShowPage?: (page: number) => void;
   /** „Selbst erfassen“: zu den Vertragsdaten. */
   onEditManually?: () => void;
+  /** „Stelle im Dokument markieren“: Angabe aus dem Text übernehmen. */
+  onMarkInDocument?: () => void;
 }
 
 /** Abschnitt „Erneut aus dem Dokument erfassen“ (Dokumente → Dokument). */
-export default function ReextractionPanel({ contractId, orgSlug, state, reload, onApplied, onShowPage, onEditManually }: PanelProps) {
+export default function ReextractionPanel({ contractId, orgSlug, state, reload, onApplied, onShowPage, onEditManually, onMarkInDocument }: PanelProps) {
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -212,6 +214,7 @@ export default function ReextractionPanel({ contractId, orgSlug, state, reload, 
       onDiscard={() => act(() => discardReextraction(orgSlug, contractId, run.id), "Ergebnis verworfen.")}
       onRetry={() => setDialog({ advanced: true })}
       onEditManually={onEditManually}
+      onMarkInDocument={onMarkInDocument}
       onShowPage={onShowPage}
       nothingFound={selectable.length === 0}
     /> : null}
@@ -228,7 +231,7 @@ export default function ReextractionPanel({ contractId, orgSlug, state, reload, 
   </section>;
 }
 
-function Comparison({ rows, selected, onToggle, stale, busy, onSelectAllNew, onApply, onDiscard, onRetry, onEditManually, onShowPage, nothingFound }: {
+function Comparison({ rows, selected, onToggle, stale, busy, onSelectAllNew, onApply, onDiscard, onRetry, onEditManually, onMarkInDocument, onShowPage, nothingFound }: {
   rows: FactRow[];
   selected: Set<string>;
   onToggle: (key: string) => void;
@@ -239,6 +242,7 @@ function Comparison({ rows, selected, onToggle, stale, busy, onSelectAllNew, onA
   onDiscard: () => void;
   onRetry: () => void;
   onEditManually?: () => void;
+  onMarkInDocument?: () => void;
   onShowPage?: (page: number) => void;
   nothingFound: boolean;
 }) {
@@ -256,6 +260,7 @@ function Comparison({ rows, selected, onToggle, stale, busy, onSelectAllNew, onA
       <p><strong>Keine zusätzlichen Angaben gefunden.</strong> Die bisherigen Werte bleiben unverändert.</p>
       <div className="reextraction-actions">
         <Button size="sm" onClick={onRetry}>Mit anderen Einstellungen versuchen …</Button>
+        {onMarkInDocument ? <Button size="sm" onClick={onMarkInDocument}>Stelle im Dokument markieren</Button> : null}
         {onEditManually ? <Button size="sm" onClick={onEditManually}>Selbst erfassen</Button> : null}
         <Button size="sm" onClick={onDiscard} loading={busy}>Verwerfen</Button>
       </div>

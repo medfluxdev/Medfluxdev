@@ -47,9 +47,9 @@ function state(overrides: Partial<ReextractionState> = {}): ReextractionState {
   };
 }
 
-function panel(value: ReextractionState, extra: { onApplied?: () => void; onShowPage?: (page: number) => void } = {}) {
+function panel(value: ReextractionState, extra: { onApplied?: () => void; onShowPage?: (page: number) => void; onMarkInDocument?: () => void } = {}) {
   const reload = vi.fn();
-  const utils = render(<ReextractionPanel contractId="c-1" orgSlug="test-klinik" state={value} reload={reload} onApplied={extra.onApplied ?? vi.fn()} onShowPage={extra.onShowPage} />);
+  const utils = render(<ReextractionPanel contractId="c-1" orgSlug="test-klinik" state={value} reload={reload} onApplied={extra.onApplied ?? vi.fn()} onShowPage={extra.onShowPage} onMarkInDocument={extra.onMarkInDocument} />);
   return { ...utils, reload };
 }
 
@@ -124,10 +124,14 @@ describe("Erneut aus dem Dokument erfassen", () => {
     expect(screen.queryByRole("button", { name: /Ausgewählte übernehmen/ })).not.toBeInTheDocument();
   });
 
-  it("ohne neue Angaben: ehrliche Meldung und nächste Schritte", () => {
-    panel(state({ run: run({ summary: { missing_again: 1 } }), rows: [ROWS[2]] }));
+  it("ohne neue Angaben: ehrliche Meldung und nächste Schritte", async () => {
+    const user = userEvent.setup();
+    const onMarkInDocument = vi.fn();
+    panel(state({ run: run({ summary: { missing_again: 1 } }), rows: [ROWS[2]] }), { onMarkInDocument });
     expect(screen.getByText("Keine zusätzlichen Angaben gefunden.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mit anderen Einstellungen versuchen …" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stelle im Dokument markieren" }));
+    expect(onMarkInDocument).toHaveBeenCalled();
   });
 
   it("während der Auswertung: Wartestand und Abbrechen", async () => {

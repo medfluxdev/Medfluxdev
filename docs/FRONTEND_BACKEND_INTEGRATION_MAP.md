@@ -86,6 +86,7 @@ The following product paths enforce organization plus hospital/department visibi
 - CSV export.
 - Document retry/source-region/import.
 - Re-extraction from the contract document (`/api/contracts/{id}/reextraction`, candidate → compare → apply; `lib/domain-api/reextraction.ts`, `components/contracts/detail/Reextraction.tsx`).
+- Value from a marked passage (`/api/contracts/{id}/documents/{version}/pages/{n}/text`, `/api/contracts/{id}/register/from-document`; `lib/domain-api/register.ts`, `components/contracts/detail/SourceCapture.tsx`).
 - Activity feed.
 - Ownership reads/mutations and assignee selection.
 - Organization-structure and cost-center reads for non-admin users.

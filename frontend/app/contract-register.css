@@ -235,3 +235,11 @@
   .reextraction-table td:not(:first-child),.reextraction-table tbody th[scope="row"]{grid-column: 2}
   .reextraction-table tbody tr{border-bottom: 1px solid var(--color-border)}
 }
+
+/* Angabe aus dem Text übernehmen (markierte Fundstelle) */
+.source-capture{display: grid;gap: var(--space-3)}
+.source-capture-open{display: flex;justify-content: flex-end;margin-bottom: var(--space-2)}
+.source-capture-text{max-height: 22rem;overflow: auto;padding: var(--space-3);border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font-family: var(--font-mono);font-size: var(--text-small);line-height: 1.6;white-space: pre-wrap;user-select: text}
+.source-capture-text::selection{background: var(--color-accent);color: var(--color-accent-contrast)}
+.source-capture-form{display: grid;gap: var(--space-3);max-width: 40rem}
+.source-capture-form textarea{width: 100%}

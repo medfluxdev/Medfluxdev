@@ -177,6 +177,21 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
     expect(documentSearchHref("c-1", "notice_period_value")).toBe("/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=notice_period");
   });
 
+  it("ein aus dem Dokument übernommener Wert zeigt seine Fundstelle", async () => {
+    const user = userEvent.setup();
+    const onShowSource = vi.fn();
+    const source = { document_version_id: "dv-1", page: 4, quote: "beginnt am 01.01.2025" };
+    const base = register();
+    api.getContractRegister.mockResolvedValue(register({
+      fields: { ...base.fields, term_start_date: { ...field("Vertragsbeginn", "2025-01-01"), origin: "manual", document_source: source } },
+    }));
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" onShowSource={onShowSource} />);
+    const link = await screen.findByRole("button", { name: "Fundstelle von Vertragsbeginn: Seite 4" });
+    expect(link).toHaveAttribute("title", "„beginnt am 01.01.2025“");
+    await user.click(link);
+    expect(onShowSource).toHaveBeenCalledWith(source);
+  });
+
   it("ohne Bearbeitungsrecht gibt es den Knopf nicht", async () => {
     auth.role = "viewer";
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" searchableKeys={new Set(["term_start_date"])} onSearchInDocument={vi.fn()} />);

@@ -360,6 +360,7 @@ def sync_from_extraction(
             row.extraction_id = extraction_id
             row.source_field = source
             row.ai_proposed_value = None
+            _clear_document_source(row)
         actions[key] = "set"
     changed = {key: action for key, action in actions.items() if action in ("set", "cleared", "proposed")}
     if changed:
@@ -547,6 +548,11 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
             "display": labels.get(spec.key),
             "origin": row.origin if row else None,
             "source_field": row.source_field if row else None,
+            "document_source": (
+                {"document_version_id": str(row.source_document_version_id), "page": row.source_page, "quote": row.source_quote}
+                if row is not None and row.source_document_version_id is not None and row.source_page is not None
+                else None
+            ),
             "extraction_id": str(row.extraction_id) if row and row.extraction_id else None,
             "ai_proposed_value": row.ai_proposed_value if row else None,
             "confirmed_by_name": row.confirmed_by_name if row else None,
@@ -670,6 +676,8 @@ def update_register(
             row.ai_proposed_value = None
         row.updated_by_account_id = actor.account_id
         row.updated_by_name = actor.display_name
+        # Der neue Wert stammt nicht mehr aus der markierten Dokumentstelle.
+        _clear_document_source(row)
 
     for key in confirm:
         if key in diffs:
@@ -691,6 +699,50 @@ def update_register(
         from app.finance.service import refresh_maintained_cost
 
         refresh_maintained_cost(session, contract)
+    return diffs
+
+
+def _clear_document_source(row: ContractFieldProvenance) -> None:
+    row.source_document_version_id = None
+    row.source_page = None
+    row.source_quote = None
+
+
+def capture_from_document(session: Session, *, contract: Contract, actor: RegisterActor, capture) -> dict[str, dict]:
+    """Wert aus einer markierten Dokumentstelle (`register.from_document.Capture`) speichern.
+
+    Gespeichert wie eine Eingabe von Hand (Herkunft manual bzw. ai_confirmed, wenn der
+    KI-Wert gleich ist), zusaetzlich mit Fundstelle. Menschliche Pruefung bleibt: der Wert
+    gilt erst durch diese bewusste Auswahl.
+    """
+    diffs = update_register(session, contract=contract, actor=actor, changes=capture.changes, confirm=[])
+    provenance = _provenance(session, contract.id)
+    now = datetime.now(timezone.utc)
+    for key in capture.changes:
+        row = provenance.get(key)
+        if row is None:
+            row = ContractFieldProvenance(
+                organization_id=contract.organization_id, contract_id=contract.id, field_key=key, origin="manual",
+            )
+            session.add(row)
+        elif key not in diffs and row.origin == "ai":
+            # Gleicher Wert wie die KI: die Person hat ihn am Dokument bestaetigt.
+            row.origin = "ai_confirmed"
+            row.confirmed_by_account_id = actor.account_id
+            row.confirmed_by_name = actor.display_name
+            row.confirmed_at = now
+        row.source_document_version_id = capture.document_version_id
+        row.source_page = capture.page
+        row.source_quote = capture.quote
+        row.updated_by_account_id = actor.account_id
+        row.updated_by_name = actor.display_name
+    log_activity(session, actor, contract.id, "contract.value_from_document", {
+        "fields": {key: to_json(value) for key, value in capture.changes.items()},
+        "page": capture.page,
+        "quote": capture.quote[:300],
+        "document_version_id": str(capture.document_version_id),
+    })
+    session.flush()
     return diffs
 
 

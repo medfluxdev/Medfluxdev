@@ -17,6 +17,8 @@ interface Props {
   documentVersionId: string | null;
   active: boolean;
   navTarget: SourceNavigationTarget | null;
+  /** Meldet die angezeigte Seite (z. B. für „Angabe aus dem Text übernehmen“). */
+  onPageChange?: (page: number) => void;
 }
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -31,7 +33,7 @@ function sourceErrorMessage(status: number | null, aborted: boolean): string {
   return "Quelle konnte nicht geladen werden.";
 }
 
-export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget }: Props) {
+export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget, onPageChange }: Props) {
   const [status, setStatus] = useState<LoadStatus>("idle");
   const [errorText, setErrorText] = useState("Quelle konnte nicht geladen werden.");
   const [pageNumber, setPageNumber] = useState(1);
@@ -53,6 +55,10 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   const requestSeq = useRef(0);
   const renderSeq = useRef(0);
   const canRender = status === "ready";
+
+  useEffect(() => {
+    if (status === "ready") onPageChange?.(pageNumber);
+  }, [status, pageNumber, onPageChange]);
 
   useEffect(() => {
     if (!active || !documentVersionId) {
