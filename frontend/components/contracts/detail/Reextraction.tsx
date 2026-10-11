@@ -178,10 +178,12 @@ export default function ReextractionPanel({ contractId, orgSlug, state, reload, 
   return <section className="cw-section reextraction" aria-labelledby="rg-reextraction-heading">
     <div className="cw-section-head">
       <div>
-        <h2 id="rg-reextraction-heading">Erneut aus dem Dokument erfassen</h2>
-        <p>Hat die KI beim ersten Mal etwas übersehen? Lassen Sie das Dokument erneut auswerten. Ihre Vertragsdaten ändern sich erst, wenn Sie Ergebnisse übernehmen.</p>
+        <h2 id="rg-reextraction-heading">{state.first_analysis ? "Mit der KI aus dem Dokument erfassen" : "Erneut aus dem Dokument erfassen"}</h2>
+        <p>{state.first_analysis
+          ? "Dieser Vertrag wurde von Hand erfasst. Die lokale KI kann das Dokument auswerten; Sie sehen jeden gefundenen Wert und übernehmen nur, was Sie auswählen. Von Hand eingetragene Werte bleiben."
+          : "Hat die KI beim ersten Mal etwas übersehen? Lassen Sie das Dokument erneut auswerten. Ihre Vertragsdaten ändern sich erst, wenn Sie Ergebnisse übernehmen."}</p>
       </div>
-      {!active && !ready && state.can_start ? <Button variant="primary" onClick={() => setDialog({ advanced: false })}>Erneut erfassen …</Button> : null}
+      {!active && !ready && state.can_start ? <Button variant="primary" onClick={() => setDialog({ advanced: false })}>{state.first_analysis ? "Auswerten …" : "Erneut erfassen …"}</Button> : null}
     </div>
 
     {!state.can_start && state.blocked_reason && !run ? <p className="cw-muted">{state.blocked_reason}</p> : null}

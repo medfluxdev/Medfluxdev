@@ -41,6 +41,8 @@ export interface FactRow {
 export interface ReextractionState {
   can_start: boolean;
   blocked_reason: string | null;
+  /** Noch keine KI-Analyse (z. B. von Hand erfasst): der erste Lauf vergleicht gegen leere Angaben. */
+  first_analysis?: boolean;
   missing: { key: string; label: string }[];
   /** Vertragsdaten-Feld → Angaben, nach denen „Im Dokument suchen“ sucht. */
   field_search?: Record<string, { key: string; label: string }[]>;

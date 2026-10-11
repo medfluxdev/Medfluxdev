@@ -78,12 +78,10 @@ def reextraction_state(request: Request, contract_id: UUID, organization_slug: s
         version_id = service.main_document_version(session, contract)
         missing = service.missing_facts(session, contract) if contract.accepted_extraction_id else []
         return {
-            "can_start": bool(can(actor, "contract.reanalyze") and version_id and contract.accepted_extraction_id
-                              and contract.lifecycle_state == "active"),
-            "blocked_reason": (
-                None if version_id and contract.accepted_extraction_id else
-                ("Kein Vertragsdokument hinterlegt." if not version_id else "Für diesen Vertrag liegt noch keine KI-Analyse vor.")
-            ),
+            # Auch ohne frühere KI-Analyse: die erste Erfassung vergleicht gegen eine leere Grundlage.
+            "can_start": bool(can(actor, "contract.reanalyze") and version_id and contract.lifecycle_state == "active"),
+            "blocked_reason": None if version_id else "Kein Vertragsdokument hinterlegt.",
+            "first_analysis": contract.accepted_extraction_id is None,
             "missing": [{"key": key, "label": facts.LABELS.get(key, key)} for key in missing],
             "field_search": facts.register_search_map(),
             "reread_suggested": service.reread_suggested(session, version_id),

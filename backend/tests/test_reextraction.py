@@ -393,3 +393,42 @@ def test_missing_fields_run_passes_focus_and_pages_to_the_harness(tmp_path):
     assert call["focus_pages"] == [4, 6]
     assert call["reread"] is True and call["model_override"] == "qwen3:14b"
 
+
+
+def test_first_analysis_for_manually_captured_contract(tmp_path):
+    """Ohne frühere KI-Analyse: erste Erfassung gegen eine leere Grundlage, übernommen wird nur Ausgewähltes."""
+    from app.register.service import create_manual_contract
+
+    slug, ids = _seed()
+    processing = _service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE, model="erst"))
+    result = processing.import_for_manual_capture(
+        organization_slug=slug, original_filename="manuell.pdf", content_type="application/pdf", content=_pdf(),
+        create_contract=lambda session: create_manual_contract(session, actor=_actor(ids), hospital_id=None, values={"short_description": "Wartung CT (manuell)"}),
+        added_by_name="Manager",
+    )
+    contract_id = result.contract_id
+    assert contract_id and _state(contract_id)[0] is None
+
+    run_id = _start(contract_id, ids)
+    assert service.drain(processing) == 1
+    session = create_session()
+    try:
+        run = session.get(ContractReextraction, run_id)
+        assert run.status == "ready" and run.base_extraction_id is None
+        rows = {row["key"]: row for row in service.rows(session, run)}
+        assert rows["dates.start_date"]["group"] == "new"
+        contract = session.get(Contract, UUID(contract_id))
+        merged, keys = service.prepare_apply(session, contract, run, ["dates.start_date"])
+        version_id, candidate_id = run.document_version_id, run.candidate_extraction_id
+    finally:
+        session.close()
+
+    applied = processing.apply_candidate(
+        organization_id=ids["org"], contract_id=UUID(contract_id), document_version_id=version_id,
+        merged_model=merged, base_extraction_id=None, candidate_extraction_id=candidate_id, applied_keys=keys,
+    )
+    assert applied.status == "reanalyzed", applied.message
+    after_id, after, notice, start = _state(contract_id)
+    assert after_id is not None
+    assert start.isoformat() == "2025-01-01"   # gewählt: übernommen
+    assert notice is None                        # nicht gewählt: bleibt leer

@@ -1127,9 +1127,11 @@ class DocumentProcessingService:
                     None,
                 )
             if reanalysis_contract_id is not None:
-                if existing_contract is None or existing_contract.id != reanalysis_contract_id:
+                # Der Vertrag ist bekannt; auch ohne frühere KI-Analyse (von Hand erfasst) erlaubt.
+                target = self._contract_for_version(session, organization_id, version.id, reanalysis_contract_id)
+                if target is None:
                     raise RuntimeError("accepted contract for reanalysis not found")
-                expected_accepted_extraction_id = existing_contract.accepted_extraction_id
+                expected_accepted_extraction_id = target.accepted_extraction_id
 
             latest = session.scalars(
                 select(ProcessingRun)
@@ -1180,6 +1182,21 @@ class DocumentProcessingService:
             run_id = run.id
             session.commit()
             return None, run_id, expected_accepted_extraction_id
+
+    @staticmethod
+    def _contract_for_version(session, organization_id, version_id, contract_id):
+        """Aktiver Vertrag der Organisation, dem dieses Dokument zugeordnet ist (mit oder ohne KI-Analyse)."""
+        return session.scalars(
+            select(Contract)
+            .join(ContractDocument, ContractDocument.contract_id == Contract.id)
+            .where(
+                (Contract.id == contract_id)
+                & (Contract.organization_id == organization_id)
+                & (ContractDocument.organization_id == organization_id)
+                & (ContractDocument.document_version_id == version_id)
+                & (Contract.lifecycle_state == "active")
+            )
+        ).first()
 
     @staticmethod
     def _accepted_contract_for_version(session, organization_id, version_id):
@@ -1749,7 +1766,10 @@ class DocumentProcessingService:
                     raise RuntimeError("reanalysis contract/document link not found")
                 if contract.accepted_extraction_id != expected_accepted_extraction_id:
                     raise RuntimeError("reanalysis superseded by newer accepted state")
-                if contract.accepted_extraction_id is None or contract.accepted_calculation_run_id is None:
+                # Erste Analyse eines von Hand erfassten Vertrags: noch keine Extraktion (erwartet None).
+                if expected_accepted_extraction_id is not None and (
+                    contract.accepted_extraction_id is None or contract.accepted_calculation_run_id is None
+                ):
                     raise RuntimeError("reanalysis requires an accepted contract")
 
             snapshot, evidence = self._build_extraction(contract_model)

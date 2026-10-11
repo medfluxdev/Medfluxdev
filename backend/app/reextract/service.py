@@ -18,6 +18,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.contract import Contract as ExtractedContract
 from app.core.config import settings
 from app.database.models import Contract, ContractDocument, DocumentVersion, ProcessingRun
 from app.database.models.reextraction import REEXTRACTION_ACTIVE, ContractReextraction
@@ -105,8 +106,8 @@ def start(
 ) -> ContractReextraction:
     if contract.lifecycle_state != "active":
         raise ReextractError(409, "Dieser Vertrag kann nicht erneut erfasst werden.")
-    if contract.accepted_extraction_id is None:
-        raise ReextractError(409, "Für diesen Vertrag liegt noch keine KI-Analyse vor.")
+    # Ohne frühere KI-Analyse (z. B. von Hand erfasster Vertrag mit Dokument) ist die erste Erfassung
+    # ein Lauf gegen eine leere Grundlage: alles Gefundene ist „neu“, übernommen wird nur Ausgewähltes.
     version_id = main_document_version(session, contract)
     if version_id is None:
         raise ReextractError(409, "Kein Vertragsdokument hinterlegt.")
@@ -355,7 +356,7 @@ def prepare_apply(session: Session, contract: Contract, run: ContractReextractio
         raise ReextractError(422, "Bitte mindestens eine Angabe auswählen.")
     if any(key not in selectable for key in chosen):
         raise ReextractError(422, "Diese Angabe kann nicht übernommen werden.")
-    accepted = load_extracted(session, run.base_extraction_id)
+    accepted = load_extracted(session, run.base_extraction_id) if run.base_extraction_id else ExtractedContract()
     candidate = load_extracted(session, run.candidate_extraction_id)
     if accepted is None or candidate is None:
         raise ReextractError(409, "Das Ergebnis ist nicht mehr vollständig vorhanden.")

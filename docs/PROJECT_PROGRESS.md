@@ -5634,3 +5634,10 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Oberfläche:** „Übergeordnete Einheit“ ist ein Suchfeld (`components/ui/SearchSelect.tsx`, ARIA-Combobox) mit nur passenden Einheiten; „direkt im Krankenhaus“ nur, wo erlaubt; Hinweis mit Regel. Spalte „Einordnung“ zeigt „Prüfen“ mit Grund.
 - **Tests:** neu `backend/tests/test_department_placement.py` (2), `frontend/test/department-placement.test.tsx` (4); `master-data.test.tsx` angepasst.
 
+### Nachtrag 2026-10-11 – Offene Lücken geschlossen
+
+- **Aus dem Text übernommene Werte** stehen unter Dokumente → Nachweise (Feld, Wert, Seite, Zitat, „Im Dokument zeigen“) und kompakt unter Prüfung („keine KI-Prüfung nötig“); `components/contracts/detail/CapturedSources.tsx`.
+- **Vertragspartner-Filter über die Kennung** (`id:<uuid>`): Schnellfilter und Link aus den Stammdaten bleiben richtig bei Umbenennen und gleichen Namen; alte Namens-Links und Lieferanten ohne Stammdaten-Partner greifen weiter über den Text. Liste liefert `filter_labels`.
+- **Erste KI-Erfassung für von Hand erfasste Verträge:** „Mit der KI aus dem Dokument erfassen“ ohne frühere Analyse – Vergleich gegen leere Angaben, übernommen wird nur Ausgewähltes, Menschwerte bleiben. Die Verarbeitung sucht den Vertrag einer Neuanalyse direkt über seine Kennung (`_contract_for_version`); die Pflicht einer vorhandenen Analyse gilt nur noch, wenn eine erwartet wird.
+- **Tests:** `test_reextraction.py` (+1), `test_device_types.py` (+1 Partnerfilter), `captured-sources.test.tsx` neu.
+
