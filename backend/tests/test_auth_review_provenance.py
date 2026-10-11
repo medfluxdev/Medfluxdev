@@ -78,3 +78,21 @@ def test_manual_review_identity_remains_explicitly_unverified_without_auth_conte
     assert row.reviewer_display_name == "Manual Reviewer"
     assert row.reviewer_identity_type == "manual_unverified"
     assert row.authenticated_actor_id is None
+
+
+def test_contract_review_dto_serialises_authenticated_actor_id(monkeypatch):
+    """Ein angemeldet abgeschlossener Review darf die Vertragsakte nicht mit 500 brechen."""
+    from app.contracts.detail.models import ContractReviewDto
+    from app.contracts.review import service
+
+    actor = uuid.uuid4()
+    row = ContractReview(
+        contract_id=uuid.uuid4(),
+        status="reviewed",
+        reviewer_display_name="Authenticated Reviewer",
+        reviewer_identity_type="authenticated_local",
+        authenticated_actor_id=actor,
+    )
+    monkeypatch.setattr(service, "get_contract_review", lambda *a, **k: row)
+    dto = service.build_contract_review_dto(None, organization_id=uuid.uuid4(), contract_id=row.contract_id)
+    assert ContractReviewDto.model_validate(dto).authenticated_actor_id == str(actor)

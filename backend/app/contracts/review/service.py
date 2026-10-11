@@ -542,7 +542,9 @@ def build_contract_review_dto(session, *, organization_id, contract_id) -> dict:
         "status_label_de": CONTRACT_REVIEW_STATUS_LABELS.get(status, status),
         "reviewer_display_name": review.reviewer_display_name if review else None,
         "reviewer_identity_type": review.reviewer_identity_type if review else "manual_unverified",
-        "authenticated_actor_id": review.authenticated_actor_id if review else None,
+        "authenticated_actor_id": (
+            str(review.authenticated_actor_id) if review and review.authenticated_actor_id else None
+        ),
         "reviewed_at": review.reviewed_at.isoformat() if review and review.reviewed_at else None,
         "changed_noted_at": (
             review.change_noted_at.isoformat() if review and review.change_noted_at else None
