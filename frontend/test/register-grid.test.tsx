@@ -78,10 +78,16 @@ describe("Vertragsregister – Raster", () => {
   it("zeigt formatierte Werte mit Summen und ist barrierefrei", async () => {
     const { container } = render(<RegisterGrid organizationSlug="test-klinik" />);
     const table = await screen.findByRole("table");
-    expect(within(table).getByRole("link", { name: "000001" })).toHaveAttribute("href", "/contracts/c-1?tab=register");
+    // Nr. und Kurzbeschreibung erscheinen als eine Spalte „Vertrag“; der Link führt in die Vertragsakte.
+    expect(within(table).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1?tab=register");
+    expect(within(table).getByText("000001")).toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "Nach Nr. sortieren" })).toBeInTheDocument();
     expect(within(table).getByText("31.12.2026")).toBeInTheDocument();
     expect(within(table).getByText(/12\.000,00/)).toBeInTheDocument();
-    expect(screen.getByText(/Jährliche Kosten gesamt 18\.000,00/)).toBeInTheDocument();
+    // Ergebniszeile über der Tabelle: Anzahl und Summen über alle Treffer.
+    const summary = screen.getByText("2 Verträge").closest("p")!;
+    expect(summary).toHaveTextContent(/Jährliche Kosten \(netto\)\s*18\.000,00/);
+    expect(summary).toHaveTextContent(/Kosten lfd\. Jahr \(netto\)\s*15\.000,00/);
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -94,11 +100,14 @@ describe("Vertragsregister – Raster", () => {
     await waitFor(() => expect(api.getGrid).toHaveBeenLastCalledWith("test-klinik", expect.objectContaining({ filters: [{ column: "cancel_by", op: "within_days", value: 90 }] }), { offset: 0, limit: 100, includeTree: true }));
     expect(screen.getByText("Kündbar bis in den nächsten 90 Tagen")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: /Darstellung/ }));
     await user.selectOptions(screen.getByLabelText("Gruppieren nach"), "hospital");
     expect(await screen.findByText(/1 Verträge · 12\.000,00/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Filter hinzufügen" }));
-    const editor = screen.getByRole("form", { name: "Filter hinzufügen" });
+    await user.click(screen.getByRole("button", { name: /^Weitere Filter/ }));
+    const drawer = screen.getByRole("dialog", { name: "Weitere Filter" });
+    await user.click(within(drawer).getByRole("button", { name: "Bedingung hinzufügen" }));
+    const editor = within(drawer).getByRole("form", { name: "Filter hinzufügen" });
     await user.selectOptions(within(editor).getByLabelText("Spalte"), "hospital");
     await user.click(await within(editor).findByLabelText(/Klinikum B/));
     await user.click(within(editor).getByRole("button", { name: "Filter anwenden" }));
@@ -106,7 +115,10 @@ describe("Vertragsregister – Raster", () => {
       filters: [{ column: "cancel_by", op: "within_days", value: 90 }, { column: "hospital", op: "in", value: ["Klinikum B"] }],
       group_by: ["hospital"],
     }), expect.anything()));
+    await user.click(within(drawer).getByRole("button", { name: "Fertig" }));
 
+    // Krankenhaus → Abteilung (früher der Baum neben der Liste) ist jetzt der Schnellfilter „Abteilung“.
+    await user.click(screen.getByRole("button", { name: /^Krankenhaus: Klinikum B|^Abteilung/ }));
     await user.click(screen.getByRole("button", { name: /Radiologie/ }));
     await waitFor(() => expect(api.getGrid).toHaveBeenLastCalledWith("test-klinik", expect.objectContaining({
       filters: [{ column: "cancel_by", op: "within_days", value: 90 }, { column: "hospital", op: "in", value: ["Klinikum A"] }, { column: "department", op: "in", value: ["Radiologie"] }],
@@ -118,6 +130,7 @@ describe("Vertragsregister – Raster", () => {
     render(<RegisterGrid organizationSlug="test-klinik" />);
     await screen.findByRole("table");
     await user.click(screen.getByRole("button", { name: "Kündbar bis" }));
+    await user.click(screen.getByRole("button", { name: /Ansicht verwalten/ }));
     await user.click(screen.getByRole("button", { name: "Speichern unter…" }));
     expect(screen.queryByLabelText(/global/)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Name der Ansicht"), "Meine Fristen");

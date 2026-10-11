@@ -556,7 +556,7 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 :where(input, select, textarea) { max-width: 100%; }
 @media (max-width: 640px) {
   .btn { white-space: normal; }
-  .rg-form-grid, .reg-layout, .settings-layout, .org-settings-forms, .org-settings-page { grid-template-columns: minmax(0, 1fr); }
+  .rg-form-grid, .settings-layout, .org-settings-forms, .org-settings-page { grid-template-columns: minmax(0, 1fr); }
   .cw-section-head, .panel-head, .section-head, .org-settings-head { flex-wrap: wrap; }
   .cw-section-head > :not(:first-child), .section-head > :not(:first-child) { flex: 0 1 auto; max-width: 100%; }
   :where(.rg-table, .data-table) { display: block; max-width: 100%; overflow-x: auto; }
@@ -698,6 +698,26 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 .security-page { display: grid; gap: var(--space-4); }
 .security-page ul { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-5); }
 .security-page li { max-width: 75ch; }
+
+/* ---------- Aufklappfläche (components/ui/Popover.tsx) ---------- */
+.popover { position: relative; }
+.popover-trigger--active { border-color: var(--color-accent); background: var(--color-surface-accent); color: var(--color-text-accent); }
+.popover-panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  z-index: var(--z-dropdown);
+  width: max-content;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
+}
+.popover-panel--start { left: 0; }
+.popover-panel--end { right: 0; }
+.popover-panel--wide { max-width: min(640px, calc(100vw - 2 * var(--space-4))); }
 
 /* ---------- Vertrag hinzufügen ---------- */
 .add-contract { position: relative; }

@@ -72,27 +72,66 @@
 .hist-filters label{display: grid;gap: 4px;font-size: var(--text-small);font-weight: 600}
 .hist-table td,.hist-table th{vertical-align: top}
 @media (max-width:640px){.hist-list>li{grid-template-columns: 1fr;gap: 2px}}
-.reg-layout{display: grid;grid-template-columns: 240px minmax(0,1fr);gap: 16px;align-items: start}
-.reg-main{display: grid;grid-template-columns: minmax(0,1fr);gap: 12px;min-width: 0}
-.reg-tree h2{display: inline;font-size: var(--text-small);margin: 0}.reg-tree summary{margin-bottom: 8px;cursor: pointer}.reg-tree details:not([open]) summary{margin-bottom: 0}
-.reg-tree ul{list-style: none;margin: 0;padding: 0;display: grid;gap: 4px}
-.reg-tree ul ul{padding-left: 14px;margin-top: 4px}
-.reg-tree .rg-link{text-align: left}
-.reg-toolbar,.reg-controls{display: flex;flex-wrap: wrap;gap: 10px 14px;align-items: end}
-.reg-toolbar label,.reg-controls>label:not(.rg-check){display: grid;gap: 4px;font-size: var(--text-small);font-weight: 600}
-.reg-columns summary{cursor: pointer;font-weight: 600;padding: 6px 0}
-.reg-columns fieldset{border: 0;padding: 8px 0 0;display: grid;grid-template-columns: repeat(auto-fill,minmax(190px,1fr));gap: 4px 12px;max-width: 760px}
+/* Vertragsliste: Werkzeugleiste, Schnellfilter, Ergebniszeile, Tabelle über die volle Breite */
+.reg-page{display: grid;grid-template-columns: minmax(0,1fr);gap: var(--space-3);min-width: 0}
+.reg-bar{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2) var(--space-3)}
+.reg-search{flex: 1 1 320px;min-width: 0}
+.reg-search input{width: 100%;min-height: var(--control-height-md)}
+.reg-view{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2)}
+.reg-view>label{display: flex;align-items: center;gap: var(--space-2);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.reg-view select{min-height: var(--control-height-md);max-width: 260px}
+.reg-bar-actions{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2)}
+.reg-quick{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-2)}
+.reg-menu{display: grid;gap: var(--space-1)}
+.reg-menu .btn{justify-content: flex-start}
+.reg-checklist{display: grid;gap: var(--space-2);margin: 0;padding: 0;border: 0;min-width: 220px}
+.reg-checklist legend{padding: 0;margin-bottom: var(--space-2);font-weight: var(--weight-semibold)}
+.reg-checklist input[type="search"]{width: 100%}
+.reg-checklist-items{display: grid;gap: var(--space-1);max-height: 280px;overflow: auto}
+.reg-checklist .rg-link{justify-self: start}
+.reg-area{list-style: none;margin: 0;padding: 0;display: grid;gap: 2px;max-height: 360px;overflow: auto;min-width: 240px}
+.reg-area ul{list-style: none;margin: 0;padding: 0 0 var(--space-1) var(--space-4);display: grid;gap: 2px}
+.reg-area-option{display: block;width: 100%;padding: var(--space-1) var(--space-2);border: 0;border-radius: var(--radius-sm);background: transparent;color: var(--color-text);font: inherit;text-align: left;cursor: pointer}
+.reg-area-option:hover,.reg-area-option:focus-visible{background: var(--color-surface-muted)}
+.reg-area-option[aria-pressed="true"]{background: var(--color-surface-accent);color: var(--color-text-accent);font-weight: var(--weight-semibold)}
+.reg-area-hospital{font-weight: var(--weight-semibold)}
+.reg-display{display: grid;gap: var(--space-4)}
+.reg-columns{display: grid;gap: var(--space-2);margin: 0;padding: 0;border: 0}
+.reg-columns legend{padding: 0;margin-bottom: var(--space-2);font-weight: var(--weight-semibold)}
+.reg-columns-list{display: grid;grid-template-columns: repeat(auto-fill,minmax(190px,1fr));gap: var(--space-1) var(--space-3);max-height: 320px;overflow: auto}
+.reg-columns .btn{justify-self: start}
+.reg-grouping{display: flex;flex-wrap: wrap;gap: var(--space-3)}
+.reg-grouping label{display: grid;gap: var(--space-1);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.reg-more{display: grid;gap: var(--space-5)}
+.reg-more-section{display: grid;gap: var(--space-2)}
+.reg-more-section h3{margin: 0;font-size: var(--text-small);font-weight: var(--weight-semibold);color: var(--color-text-muted)}
+.reg-presets{display: flex;flex-wrap: wrap;gap: var(--space-2)}
+.reg-preset[aria-pressed="true"]{border-color: var(--color-accent);background: var(--color-surface-accent);color: var(--color-text-accent)}
+.reg-range{display: flex;flex-wrap: wrap;align-items: end;gap: var(--space-2)}
+.reg-range label{display: grid;gap: var(--space-1);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.reg-range input{width: 140px}
+.reg-summary{display: flex;flex-wrap: wrap;align-items: baseline;gap: var(--space-1) var(--space-4);margin: 0 0 var(--space-3);font-size: var(--text-small);color: var(--color-text-muted)}
+.reg-summary strong{color: var(--color-text);font-size: var(--text-body)}
+.reg-pager{display: flex;flex-wrap: wrap;align-items: center;justify-content: flex-end;gap: var(--space-2);margin-top: var(--space-3);font-size: var(--text-small);color: var(--color-text-muted)}
+.reg-chips-reset{background: transparent}
 .reg-chips{list-style: none;margin: 0;padding: 0;display: flex;flex-wrap: wrap;gap: 6px}
 .reg-chips li{display: inline-flex;align-items: center;gap: 6px;background: var(--surface-2,var(--color-surface-muted));border-radius: var(--radius-pill);padding: 4px 6px 4px 12px;font-size: var(--text-small)}
 .reg-chips button{border: 0;background: transparent;cursor: pointer;font-size: var(--text-body);line-height: 1;padding: 2px 6px}
 .reg-scroll{overflow-x: auto}
 .reg-table th,.reg-table td{white-space: nowrap}
+.reg-table td.reg-wrap{white-space: normal;min-width: 140px;max-width: 280px}
+.reg-table .reg-contract{white-space: normal;min-width: 220px;max-width: 420px}
+.reg-contract a{font-weight: var(--weight-semibold)}
+.reg-sub{display: flex;flex-wrap: wrap;gap: var(--space-2);margin-top: 2px;color: var(--color-text-muted);font-size: var(--text-caption);font-variant-numeric: tabular-nums}
+.reg-sub .reg-preview{font-size: var(--text-caption)}
+.reg-sort-divider{margin: 0 var(--space-1);color: var(--color-text-subtle)}
+.reg-sort-sub{font-weight: var(--weight-regular)}
+.reg-table th.num{text-align: right}
 .reg-table td.num{text-align: right;font-variant-numeric: tabular-nums}
 .reg-sort{border: 0;background: transparent;font: inherit;font-weight: 600;cursor: pointer;padding: 0;color: inherit}
 .reg-group th{background: var(--surface-2,var(--color-surface-muted));text-align: left}
 .reg-group-1 th{padding-left: 24px;background: transparent}
 .rg-values{max-height: 240px;overflow: auto}
-@media (max-width:960px){.reg-layout{grid-template-columns: minmax(0,1fr)}}
 /* Diagramme (Dataviz-Referenzpalette, Slots 1–2, validiert: CVD ΔE 24,7 / normal 33,6). Die App hat kein Dark-Theme. */
 .viz{margin: 0;display: grid;gap: 6px;--viz-grid:var(--color-border);--viz-axis:var(--color-border-strong);--viz-text:var(--color-text-muted);--viz-ink:var(--color-text)}
 .viz svg{width: 100%;height: auto;max-width: 720px;font-family: inherit}

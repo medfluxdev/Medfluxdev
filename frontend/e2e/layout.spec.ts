@@ -32,3 +32,16 @@ for (const [name, width, height] of [["Desktop", 1440, 900], ["Tablet", 900, 110
     }
   });
 }
+
+// Vertragsliste: Tabellenkopf und erste Zeile ohne Scrollen sichtbar (Suche, Schnellfilter und Ergebniszeile darüber).
+for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
+  test(`Vertragsliste ${width}×${height}: erste Zeile ohne Scrollen`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/register");
+    const firstRow = page.locator("table tbody tr").first();
+    await expect(firstRow).toBeVisible();
+    const box = await firstRow.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(height);
+  });
+}

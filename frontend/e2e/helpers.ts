@@ -23,7 +23,7 @@ export async function checkA11y(page: Page, testInfo: TestInfo, name: string) {
 export async function openContract(page: Page, title: string) {
   await page.goto("/register");
   await page.getByRole("searchbox", { name: /Suche/ }).fill(title);
-  const links = page.getByRole("link", { name: /^\d{6}$/ });
+  const links = page.locator("table tbody").getByRole("link");
   await expect(links).toHaveCount(1);
   await links.click();
   await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();

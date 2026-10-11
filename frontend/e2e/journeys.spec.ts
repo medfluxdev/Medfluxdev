@@ -14,7 +14,8 @@ test("1 – Start: Arbeitsuebersicht laedt nach der Anmeldung", async ({ page },
 test("2 – Vertrag finden: Suche in der Vertragsliste", async ({ page }, info) => {
   await page.goto("/register");
   await page.getByRole("searchbox", { name: /Suche/ }).fill("Reinigung");
-  await expect(page.getByRole("link", { name: /^\d{6}$/ })).toHaveCount(1);
+  // Eine Zeile, ein Link je Vertrag (Spalte „Vertrag“ = Beschreibung mit Nummer darunter).
+  await expect(page.locator("table tbody").getByRole("link")).toHaveCount(1);
   await checkA11y(page, info, "vertragsliste");
 });
 
@@ -182,7 +183,7 @@ test("11 – Vertragsregel anlegen und in der Vertragsliste nutzen", async ({ pa
   await expect(page.getByRole("rowheader", { name: label })).toBeVisible();
 
   await page.goto("/register");
-  await page.getByText(/^Spalten/).click();
+  await page.getByRole("button", { name: /Darstellung/ }).click();
   await expect(page.getByRole("checkbox", { name: "Vertragsregeln" })).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "Regelverstöße" })).toBeVisible();
 
