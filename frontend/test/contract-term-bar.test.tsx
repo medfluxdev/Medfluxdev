@@ -28,4 +28,13 @@ describe("Laufzeitleiste", () => {
     expect(remaining("2026-10-11", "2027-10-11")).toBe("noch 1 Jahr");
     expect(remaining("2026-10-11", "2027-01-11")).toBe("noch 3 Monate");
   });
+
+  it("feste Laufzeit: kein Kündigungstermin nötig; unbefristet: Text statt Leiste", () => {
+    const { rerender } = render(<ContractTermBar start="2025-05-05" end="2029-03-31" cancelBy={null} fixedTerm today="2026-10-11" />);
+    expect(screen.getByText("Feste Laufzeit – endet ohne Kündigung")).not.toHaveClass("signal");
+    expect(screen.queryByText("Kündigungsfrist fehlt")).not.toBeInTheDocument();
+    expect(screen.getByRole("img")).toHaveAccessibleName(/feste Laufzeit, endet ohne Kündigung/);
+    rerender(<ContractTermBar start="2025-05-05" end={null} cancelBy={null} openEnded today="2026-10-11" />);
+    expect(screen.getByText("Unbefristet seit 05.05.2025 – kein festes Ende.")).toBeInTheDocument();
+  });
 });

@@ -60,7 +60,7 @@ describe("Offene Punkte – Kündbar bis nicht berechenbar", () => {
   it("steht als erster kritischer Punkt, außer eine fristrelevante Lücke ist schon genannt", () => {
     const base = { tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10, slaMissing: [], cancelByUnknown: true };
     expect(buildOpenPoints({ ...base, gaps: [] }).map((point) => [point.word, point.title, point.action])).toEqual([
-      ["Kritisch", "Kündigungsfrist nicht berechenbar", "Laufzeit erfassen"],
+      ["Kritisch", "Kündigungstermin nicht berechenbar", "Kündigungsfrist erfassen"],
     ]);
     const withGap = buildOpenPoints({ ...base, gaps: [{ key: "notice_period_value", label: "Kündigungsfrist", reason: "nötig für die Fristberechnung", command: "Kündigungsfrist erfassen", target: { tab: "register", field: "notice_period_value" }, blocksDeadline: true }] });
     expect(withGap.map((point) => point.title)).toEqual(["Kündigungsfrist fehlt"]);

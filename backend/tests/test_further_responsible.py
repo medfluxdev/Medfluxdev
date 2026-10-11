@@ -177,6 +177,7 @@ def test_contract_detail_carries_start_date_and_linked_partner(monkeypatch):
     try:
         detail = _build_augmented_detail(session, organization_id=ids["org"], contract_id=UUID(cid))
         assert detail["register_facts"]["contract_start"] == "2025-04-01"
+        assert detail["register_facts"]["term_model"] is None
         assert detail["partner"] is None  # noch nicht zugeordnet
         partner = ContractPartner(organization_id=ids["org"], short_name="ABIOMED", name1="ABIOMED Europe GmbH")
         session.add(partner)

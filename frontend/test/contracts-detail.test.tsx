@@ -239,6 +239,14 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(within(header).getByRole("link", { name: "ABIOMED Europe GmbH" })).toHaveAttribute("href", "/stammdaten/vertragspartner?id=p-1");
   });
 
+  it("Kopf: feste Laufzeit braucht kein „Kündbar bis“ – nichts Kritisches dazu", async () => {
+    await renderWithData(detailFixture({ dates: { ...detailFixture().dates, latest_cancellation_date: null }, register_facts: { contract_start: "2025-05-05", term_model: "fixed_term", cancel_by: null, contract_end: "2029-03-31", annual_cost: null } }));
+    const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
+    expect(within(header).queryByText("Kündbar bis")).not.toBeInTheDocument();
+    expect(within(header).queryByText("Nicht berechenbar")).not.toBeInTheDocument();
+    expect(within(header).getByText("Feste Laufzeit – endet ohne Kündigung")).toBeInTheDocument();
+  });
+
   it("Kopf: nicht zugeordneter Vertragspartner führt zur Zuordnung, fehlender Beginn zum Feld", async () => {
     await renderWithData(detailFixture({ partner: null, supplier: "Siemens Healthineers", dates: { ...detailFixture().dates, start_date: null }, register_facts: { contract_start: null, cancel_by: null, contract_end: null, annual_cost: null } }));
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;

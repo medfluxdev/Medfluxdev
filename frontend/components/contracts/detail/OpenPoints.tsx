@@ -56,7 +56,7 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
   const points: OpenPoint[] = [];
   // Gleiche Aussage wie im Kopf; entfällt, wenn eine fristrelevante Lücke schon genannt ist.
   if (cancelByUnknown && !gaps.some((gap) => gap.blocksDeadline)) {
-    points.push({ key: "cancel-by", tone: "critical", word: "Kritisch", title: "Kündigungsfrist nicht berechenbar", why: "Laufzeit und Kündigungsregel fehlen – die Frist wird nicht überwacht.", action: "Laufzeit erfassen", target: { tab: "register", section: "term" }, rank: RANK.critical });
+    points.push({ key: "cancel-by", tone: "critical", word: "Kritisch", title: "Kündigungstermin nicht berechenbar", why: "Ohne Kündigungsfrist wird der Kündigungstermin nicht berechnet und nicht überwacht.", action: "Kündigungsfrist erfassen", target: { tab: "register", field: "notice_period_value" }, rank: RANK.critical });
   }
   for (const gap of gaps) {
     if (gap.key === "review") {

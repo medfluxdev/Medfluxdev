@@ -481,6 +481,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const contractStart = data.register_facts?.contract_start ?? data.dates.start_date ?? null;
   const headerEnd = data.register_facts?.contract_end ?? effectiveEnd ?? null;
   const headerCancelBy = data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date ?? null;
+  // Feste Laufzeit endet ohne Kündigung: kein „Kündbar bis“, nichts fehlt. Unbefristet: kein Ende.
+  const termModel = data.register_facts?.term_model ?? null;
+  const fixedTerm = termModel === "fixed_term";
+  const openEnded = termModel === "perpetual";
   const aiAnnual = data.costs.annual_recurring.amount != null;
   const cancellationOrigin = calculatedOrigin(data.dates.latest_cancellation_date, data.dates.latest_cancellation_basis);
 
@@ -500,7 +504,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     scopeToCheck: hasAi ? scopeCounts.unknown : 0,
     scopeTotal: scopeRows.length,
     slaMissing,
-    cancelByUnknown: !headerCancelBy,
+    cancelByUnknown: !headerCancelBy && !fixedTerm,
   });
   // Reiter zeigen, wo Arbeit wartet (Symbol mit Namen für Screenreader).
   const deadlineCritical = (openPoints ?? []).some((point) => point.tone === "critical" && (point.target?.tab === "deadlines" || point.target?.tab === "register"));
@@ -538,17 +542,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>
-        <dl className="object-header-facts">
+        <dl className={`object-header-facts${fixedTerm ? " object-header-facts--three" : ""}`}>
           <div><dt>Vertragsbeginn</dt><dd>{contractStart ? <span className="fact-value">{formatDate(contractStart)}<ValueOriginBadge kind={data.register_facts?.contract_start ? "system" : "extracted"} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></span>}</dd></div>
-          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value">{formatDate(headerEnd)}<ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} /><SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Vertragsende: Laufzeit erfassen">Laufzeit erfassen</button></span>}</dd></div>
-          <div className={headerCancelBy ? undefined : "fact--alert"}><dt>Kündbar bis</dt><dd>{headerCancelBy ? <span className="fact-value">{formatDate(headerCancelBy)}<ValueOriginBadge kind="calculated" /><SourceButton evidence={data.register_facts?.cancel_by ? null : cancellationEvidence} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Nicht berechenbar</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Kündbar bis: Laufzeit erfassen">Laufzeit erfassen</button></span>}</dd></div>
+          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value">{formatDate(headerEnd)}<ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} /><SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} /></span> : (openEnded ? <span className="fact-value">unbefristet</span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })}>Laufzeit &amp; Kündigung ergänzen</button></span>)}</dd></div>
+          {fixedTerm ? null : <div className={headerCancelBy ? undefined : "fact--alert"}><dt>Kündbar bis</dt><dd>{headerCancelBy ? <span className="fact-value">{formatDate(headerCancelBy)}<ValueOriginBadge kind="calculated" /><SourceButton evidence={data.register_facts?.cancel_by ? null : cancellationEvidence} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Nicht berechenbar</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "notice_period_value" })}>Kündigungsfrist erfassen</button></span>}</dd></div>}
           <div><dt>Jährliche Kosten</dt><dd className="num">{maintainedAnnual
             ? <span className="fact-value">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}<ValueOriginBadge kind="system" detail="Aus den gepflegten Finanzposten" /></span>
             : aiAnnual
               ? <span className="fact-value">{money(data.costs.annual_recurring)}<ValueOriginBadge kind="extracted" detail="Aus der KI-Analyse, noch nicht in die Finanzen übernommen" /><SourceButton evidence={annualCostEvidence} /><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
               : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} aria-label="Jährliche Kosten erfassen">Kosten erfassen</button></span>}</dd></div>
         </dl>
-        <div className="object-header-term"><ContractTermBar start={contractStart} end={headerEnd} cancelBy={headerCancelBy} /></div>
+        <div className="object-header-term"><ContractTermBar start={contractStart} end={headerEnd} cancelBy={headerCancelBy} fixedTerm={fixedTerm} openEnded={openEnded} /></div>
         <div className="object-header-actions">
           <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer"><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>Deckblatt (PDF)</a>
           <button type="button" className="btn" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>KI-Assistent</button>

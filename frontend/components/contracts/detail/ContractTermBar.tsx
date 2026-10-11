@@ -34,6 +34,10 @@ interface Props {
   start: string | null;
   end: string | null;
   cancelBy: string | null;
+  /** Feste Laufzeit: endet ohne Kündigung (kein Kündigungstermin nötig). */
+  fixedTerm?: boolean;
+  /** Unbefristet: kein Ende, keine Leiste. */
+  openEnded?: boolean;
   /** Nur für Tests; sonst der heutige Tag (lokal). */
   today?: string;
 }
@@ -42,7 +46,8 @@ interface Props {
  * Laufzeit als Leiste: Beginn → Ende, „Heute“ und der Kündigungstermin.
  * Nur mit bekanntem Beginn und Ende; alles steht zusätzlich als Text (aria-label und Legende).
  */
-export default function ContractTermBar({ start, end, cancelBy, today = localToday() }: Props) {
+export default function ContractTermBar({ start, end, cancelBy, fixedTerm = false, openEnded = false, today = localToday() }: Props) {
+  if (openEnded && start) return <p className="term-bar-open">Unbefristet seit {formatDate(start)} – kein festes Ende.</p>;
   if (!start || !end) return null;
   const from = parse(start);
   const to = parse(end);
@@ -66,7 +71,7 @@ export default function ContractTermBar({ start, end, cancelBy, today = localTod
   const description = [
     `Laufzeit vom ${formatDate(start)} bis ${formatDate(end)}`,
     ended ? "abgelaufen" : `heute ${Math.round(elapsed)} Prozent vergangen, ${left}`,
-    cancel ? cancel.text : "Kündigungsfrist fehlt",
+    cancel ? cancel.text : fixedTerm ? "feste Laufzeit, endet ohne Kündigung" : "Kündigungsfrist fehlt",
   ].join(", ");
 
   return <div className="term-bar" role="img" aria-label={description}>
@@ -80,7 +85,7 @@ export default function ContractTermBar({ start, end, cancelBy, today = localTod
       <span><b>Heute</b> · {left}</span>
       {cancel
         ? (cancel.tone === "neutral" ? <span className="term-bar-cancel-label">{cancel.text}</span> : <Signal tone={cancel.tone} size="sm">{cancel.text}</Signal>)
-        : <Signal tone="critical" size="sm">Kündigungsfrist fehlt</Signal>}
+        : fixedTerm ? <span className="term-bar-cancel-label">Feste Laufzeit – endet ohne Kündigung</span> : <Signal tone="critical" size="sm">Kündigungsfrist fehlt</Signal>}
       <span>{formatDate(end)}</span>
     </div>
   </div>;

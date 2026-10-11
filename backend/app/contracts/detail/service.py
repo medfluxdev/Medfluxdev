@@ -287,6 +287,8 @@ def register_facts(contract, as_of: date) -> dict:
     end = terms.actual_end or terms.possible_end
     return {
         "contract_start": contract.term_start_date.isoformat() if contract.term_start_date else None,
+        # Vertragsart: bei fester Laufzeit endet der Vertrag ohne Kündigung (kein „Kündbar bis“).
+        "term_model": contract.term_model,
         "cancel_by": terms.cancel_by.isoformat() if terms.cancel_by else None,
         "contract_end": end.isoformat() if end else None,
         "annual_cost": (
