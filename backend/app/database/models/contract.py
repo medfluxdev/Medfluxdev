@@ -290,6 +290,28 @@ class Contract(OrgOwnedMixin, Base):
     )
 
 
+class ContractDocumentRemoved(OrgOwnedMixin, Base):
+    """Aus einem Vertrag entferntes Dokument (Prüfpfad, wiederherstellbar).
+
+    Die Datei und ihre Versionen bleiben erhalten; nur die Zuordnung zum Vertrag
+    ist aufgehoben. Beim Wiederherstellen entsteht die Zuordnung neu.
+    """
+
+    __tablename__ = "contract_document_removed"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    contract_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("contract.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_version_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("document_version.id", ondelete="RESTRICT", name="fk_contract_document_removed_document_version"), nullable=False)
+    role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    attachment_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    added_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    added_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    removed_by_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    removed_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+
 class ContractDocument(OrgOwnedMixin, Base):
     """n:m-Zuordnung logischer Vertrag <-> Dokument(en) mit Rolle."""
 

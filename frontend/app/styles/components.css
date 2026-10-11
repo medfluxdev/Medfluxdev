@@ -932,3 +932,7 @@ body { background: var(--color-bg); }
 .term-bar-open { grid-column: 1 / -1; margin: var(--space-3) 0 0; color: var(--color-text-muted); font-size: var(--text-small); }
 
 .type-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--space-2); border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text); font-size: var(--text-small); font-weight: var(--weight-semibold); }
+.removed-documents { margin-top: var(--space-4); }
+.removed-documents summary { cursor: pointer; font-size: var(--text-small); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.removed-documents ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.removed-documents li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-small); }

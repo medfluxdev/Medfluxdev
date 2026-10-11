@@ -16,7 +16,7 @@ from app.database.models.calculation import (
     CalculationResult,
     CalculationReviewFlag,
 )
-from app.database.models.contract import Contract, ContractDocument, ContractEquipment
+from app.database.models.contract import Contract, ContractDocument, ContractDocumentRemoved, ContractEquipment
 from app.database.models.deadlines import (
     AccountDeputy,
     ContractDeadline,
@@ -90,6 +90,7 @@ __all__ = [
     "CalculationReviewFlag",
     "Contract",
     "ContractDocument",
+    "ContractDocumentRemoved",
     "ContractEquipment",
     "AccountDeputy",
     "ContractCostAllocation",

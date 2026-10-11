@@ -1,14 +1,20 @@
 "use client";
 
+import Dialog from "@/components/ui/Dialog";
+import StatusBadge from "@/components/ui/StatusBadge";
 import Signal from "@/components/ui/Signal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
 import {
   listContractDocuments,
+  removeContractDocument,
+  restoreContractDocument,
   updateContractDocument,
   uploadContractDocuments,
   type ContractDocumentDto,
+  type ContractDocumentsDto,
+  type RemovedDocumentDto,
   type UploadResultDto,
 } from "@/lib/domain-api/contractDocuments";
 
@@ -19,6 +25,9 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const [items, setItems] = useState<ContractDocumentDto[] | null>(null);
+  const [removed, setRemoved] = useState<RemovedDocumentDto[]>([]);
+  const [removing, setRemoving] = useState<ContractDocumentDto | null>(null);
+  const [reason, setReason] = useState("");
   const [types, setTypes] = useState<LookupDto[]>([]);
   const [attachmentType, setAttachmentType] = useState("nachtrag");
   const [title, setTitle] = useState("");
@@ -31,7 +40,9 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
 
   const load = useCallback(async () => {
     try {
-      setItems((await listContractDocuments(orgSlug, contractId)).items);
+      const data = await listContractDocuments(orgSlug, contractId);
+      setItems(data.items);
+      setRemoved(data.removed ?? []);
     } catch (caught) {
       setItems([]);
       setError(caught instanceof Error ? caught.message : "Dokumente konnten nicht geladen werden.");
@@ -77,6 +88,28 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
     }
   }
 
+  async function change(run: () => Promise<ContractDocumentsDto>, fallback: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await run();
+      setItems(data.items);
+      setRemoved(data.removed ?? []);
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : fallback);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmRemove() {
+    if (!removing) return;
+    const ok = await change(() => removeContractDocument(orgSlug, contractId, removing.link_id, reason.trim()), "Dokument konnte nicht entfernt werden.");
+    if (ok) { setRemoving(null); setReason(""); }
+  }
+
   return <section className="cw-section" aria-labelledby="attachments-heading">
     <div className="cw-section-head"><div><h2 id="attachments-heading">Dokumente zum Vertrag</h2><p>Hauptdokument, Nachträge, Kündigungen und weitere Anlagen. Analysierte Nachträge erzeugen nur Vorschläge in den Stammdaten.</p></div></div>
     {editable ? <form className="rg-transition" aria-label="Dokument hinzufügen" onSubmit={(event) => { event.preventDefault(); void upload(); }}>
@@ -96,12 +129,27 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
         <th scope="row">{item.title}{item.title !== item.original_filename ? <span className="contract-business-status">{item.original_filename}</span> : null}</th>
         <td>{editable ? <select aria-label={`Dokumentart von ${item.title}`} value={item.attachment_type ?? ""} disabled={busy} onChange={(event) => void update(item, { attachment_type: event.target.value })}><option value="" disabled>Ohne Art</option>{types.map((type) => <option key={type.id} value={type.code}>{type.label}</option>)}</select> : label(item.attachment_type)}</td>
         <td>{item.added_at ? timestamp.format(new Date(item.added_at)) : "–"}{item.added_by_name ? ` · ${item.added_by_name}` : ""}</td>
-        <td>{item.is_main ? <span className="cw-badge">Hauptdokument</span> : null}{!item.is_valid ? <Signal tone="warning">Ungültig</Signal> : null}</td>
+        <td>{item.is_main ? <StatusBadge label="Hauptdokument" tone="information" /> : null}{!item.is_valid ? <Signal tone="warning">Ungültig</Signal> : null}</td>
         {editable ? <td><span className="rg-actions">
           {!item.is_main && item.is_valid ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_main: true })}>Als Hauptdokument</button> : null}
           {!item.is_main ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_valid: !item.is_valid })}>{item.is_valid ? "Ungültig setzen" : "Wieder gültig"}</button> : null}
+          {item.is_main
+            ? <span className="cw-muted" title="Zuerst ein anderes Dokument als Hauptdokument festlegen.">Hauptdokument kann nicht entfernt werden</span>
+            : <button type="button" className="rg-link" disabled={busy} onClick={() => { setReason(""); setRemoving(item); }} aria-label={`${item.title} entfernen`}>Entfernen</button>}
         </span></td> : null}
       </tr>)}</tbody>
     </table></div>}
+    {removed.length ? <details className="removed-documents">
+      <summary>Entfernte Dokumente ({removed.length})</summary>
+      <ul>{removed.map((item) => <li key={item.removed_id}>
+        <span><strong>{item.title}</strong> · {label(item.attachment_type)} · entfernt {item.removed_at ? timestamp.format(new Date(item.removed_at)) : ""}{item.removed_by_name ? ` von ${item.removed_by_name}` : ""}{item.reason ? ` – „${item.reason}“` : ""}</span>
+        {editable ? <button type="button" className="rg-link" disabled={busy} onClick={() => void change(() => restoreContractDocument(orgSlug, contractId, item.removed_id), "Wiederherstellen fehlgeschlagen.")} aria-label={`${item.title} wiederherstellen`}>Wiederherstellen</button> : null}
+      </li>)}</ul>
+    </details> : null}
+    <Dialog open={removing !== null} title="Dokument entfernen?" onClose={() => setRemoving(null)}
+      description={removing ? <>„{removing.title}“ wird aus diesem Vertrag entfernt. Die Datei und der Verlauf bleiben erhalten; unter „Entfernte Dokumente“ lässt es sich wiederherstellen.</> : null}
+      actions={<><button type="button" className="btn" onClick={() => setRemoving(null)}>Abbrechen</button><button type="button" className="btn btn-danger" disabled={busy} onClick={() => void confirmRemove()}>{busy ? "Wird entfernt…" : "Entfernen"}</button></>}>
+      <label className="field">Grund (optional)<input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="z. B. falsch zugeordnet" /></label>
+    </Dialog>
   </section>;
 }

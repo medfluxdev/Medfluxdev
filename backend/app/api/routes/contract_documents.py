@@ -24,7 +24,10 @@ from app.register.documents import (
     framework_options,
     link_framework,
     list_documents,
+    list_removed_documents,
     relation_payloads,
+    remove_document,
+    restore_document,
     unlink_framework,
     update_document,
 )
@@ -37,6 +40,10 @@ _processing_service = DocumentProcessingService()
 
 class DocumentUpdate(BaseModel):
     values: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentRemoval(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 class FrameworkLink(BaseModel):
@@ -62,7 +69,11 @@ def get_documents(contract_id: UUID, request: Request, organization_slug: str):
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id)
-        return {"items": list_documents(session, contract), "attachment_types": sorted(_attachment_types(session, actor.organization_id))}
+        return {
+            "items": list_documents(session, contract),
+            "removed": list_removed_documents(session, contract),
+            "attachment_types": sorted(_attachment_types(session, actor.organization_id)),
+        }
     finally:
         session.close()
 
@@ -142,6 +153,43 @@ def patch_document(contract_id: UUID, link_id: UUID, payload: DocumentUpdate, re
             raise _http(exc)
         session.commit()
         return {"items": list_documents(session, contract)}
+    finally:
+        session.close()
+
+
+@router.post("/{contract_id}/documents/{link_id}/remove")
+def post_remove_document(contract_id: UUID, link_id: UUID, payload: DocumentRemoval, request: Request, organization_slug: str):
+    """Dokument aus dem Vertrag entfernen; Datei und Verlauf bleiben, wiederherstellbar."""
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "document.attach")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            remove_document(session, contract=contract, actor=actor, link_id=link_id, reason=payload.reason)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
+        return {"items": list_documents(session, contract), "removed": list_removed_documents(session, contract)}
+    finally:
+        session.close()
+
+
+@router.post("/{contract_id}/documents/removed/{removed_id}/restore")
+def post_restore_document(contract_id: UUID, removed_id: UUID, request: Request, organization_slug: str):
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "document.attach")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            restore_document(session, contract=contract, actor=actor, removed_id=removed_id)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
+        return {"items": list_documents(session, contract), "removed": list_removed_documents(session, contract)}
     finally:
         session.close()
 

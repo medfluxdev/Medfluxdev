@@ -16,7 +16,7 @@ import re
 import uuid
 from typing import Any, Optional
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.database.models import Contract, ContractDocument, DocumentFile, DocumentVersion
@@ -376,3 +376,80 @@ def framework_options(session: Session, contract: Contract, allowed: Optional[se
         {"contract_id": str(row.id), "register_number": row.register_number, "short_description": row.short_description or row.supplier}
         for row in session.scalars(stmt).all()
     ]
+
+
+# --------------------------------------------------------------------------- Entfernen / Wiederherstellen
+
+
+def list_removed_documents(session: Session, contract: Contract) -> list[dict]:
+    from app.database.models.contract import ContractDocumentRemoved
+
+    rows = session.execute(
+        select(ContractDocumentRemoved, DocumentFile.original_filename)
+        .join(DocumentVersion, DocumentVersion.id == ContractDocumentRemoved.document_version_id)
+        .join(DocumentFile, DocumentFile.id == DocumentVersion.document_file_id)
+        .where(ContractDocumentRemoved.contract_id == contract.id)
+        .order_by(ContractDocumentRemoved.created_at.desc())
+    ).all()
+    return [
+        {
+            "removed_id": str(row.id),
+            "title": row.title or filename,
+            "original_filename": filename,
+            "attachment_type": row.attachment_type,
+            "removed_by_name": row.removed_by_name,
+            "removed_at": row.created_at.isoformat() if row.created_at else None,
+            "reason": row.reason,
+        }
+        for row, filename in rows
+    ]
+
+
+def remove_document(session: Session, *, contract: Contract, actor: RegisterActor, link_id: uuid.UUID, reason: Optional[str]) -> None:
+    """Dokument aus dem Vertrag entfernen: Zuordnung wandert in den Prüfpfad, die Datei bleibt.
+
+    Das Hauptdokument lässt sich erst entfernen, wenn ein anderes Hauptdokument festgelegt ist.
+    """
+    from app.database.models.content_search import ContractTextPage
+    from app.database.models.contract import ContractDocumentRemoved
+
+    link = session.get(ContractDocument, link_id)
+    if link is None or link.contract_id != contract.id:
+        raise RegisterError(404, "Dokument nicht gefunden.")
+    if link.is_main:
+        raise RegisterError(409, "Das Hauptdokument kann nicht entfernt werden. Bitte zuerst ein anderes Hauptdokument festlegen.")
+    session.add(ContractDocumentRemoved(
+        organization_id=contract.organization_id, contract_id=contract.id, document_version_id=link.document_version_id,
+        role=link.role, attachment_type=link.attachment_type, title=link.title, added_by_name=link.added_by_name,
+        added_at=link.created_at, removed_by_account_id=actor.account_id, removed_by_name=actor.display_name,
+        reason=(reason or "").strip()[:500] or None,
+    ))
+    # Inhaltssuche: Seiten dieses Dokuments gehören nicht mehr zum Vertrag (beim Wiederherstellen neu gelesen).
+    session.execute(delete(ContractTextPage).where(
+        ContractTextPage.contract_id == contract.id, ContractTextPage.document_version_id == link.document_version_id,
+    ))
+    log_activity(session, actor, contract.id, "contract.document_removed", {
+        "title": link.title, "document_version_id": str(link.document_version_id), "reason": (reason or "").strip()[:500] or None,
+    })
+    session.delete(link)
+    session.flush()
+
+
+def restore_document(session: Session, *, contract: Contract, actor: RegisterActor, removed_id: uuid.UUID) -> None:
+    from app.database.models.contract import ContractDocumentRemoved
+
+    row = session.get(ContractDocumentRemoved, removed_id)
+    if row is None or row.contract_id != contract.id:
+        raise RegisterError(404, "Entferntes Dokument nicht gefunden.")
+    exists = session.scalar(select(ContractDocument.id).where(
+        ContractDocument.contract_id == contract.id, ContractDocument.document_version_id == row.document_version_id,
+    ))
+    if exists is None:
+        session.add(ContractDocument(
+            organization_id=contract.organization_id, contract_id=contract.id, document_version_id=row.document_version_id,
+            role=row.role, attachment_type=row.attachment_type, title=row.title, added_by_name=row.added_by_name,
+            is_main=False, is_valid=True, **({"created_at": row.added_at} if row.added_at else {}),
+        ))
+    log_activity(session, actor, contract.id, "contract.document_restored", {"title": row.title, "document_version_id": str(row.document_version_id)})
+    session.delete(row)
+    session.flush()

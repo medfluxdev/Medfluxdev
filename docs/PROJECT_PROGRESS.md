@@ -5566,3 +5566,10 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Organisationszuordnung:** Abteilung wählen setzt ihre Kostenstelle, Kostenstelle wählen setzt ihre Abteilung; alle Kostenstellen des Krankenhauses wählbar (passende zuerst).
 - **Tests:** neu `backend/tests/test_department_cost_center.py`; `contract-ownership-roles.test.tsx` (+1), `master-data.test.tsx` angepasst. Verifikation: pytest 1663 / 3 übersprungen; `npm run verify` grün; Playwright 187/187.
 
+
+### Nachtrag 2026-10-11 – Vertragstyp in der Zuordnung, Dokumente entfernen
+
+- **Vertragstyp:** In der Organisationszuordnung wählbar (gespeichert über die Vertragsdaten; eine nicht mehr passende Kategorie wird geleert). Steht im Kopf als Chip vor dem Vertragspartner und in der Karte „Zuständigkeit“ (mit Kategorie; fehlt er, „Festlegen“). Lesemodell `assignment.contract_type`/`contract_category`.
+- **Dokumente entfernen** (Entscheidung: Entfernen statt Löschen): „Entfernen“ für Admin/Vertragsmanagement (`document.attach`) mit Bestätigungsdialog und optionalem Grund. Die Zuordnung wandert in `contract_document_removed` (Migration `u3d5e7f89013`), Datei und Verlauf bleiben, die Inhaltssuche-Seiten des Dokuments werden aus dem Vertrag genommen. „Entfernte Dokumente (N)“ unter der Liste mit „Wiederherstellen“. Das Hauptdokument lässt sich erst nach Festlegen eines anderen entfernen (409). Routen `POST /api/contracts/{id}/documents/{link}/remove`, `POST …/documents/removed/{id}/restore`; `GET …/documents` liefert `removed`. Verlauf: „Dokument entfernt“/„Dokument wiederhergestellt“, das Hinzufügen bleibt sichtbar. Der Marker „Hauptdokument“ ist jetzt blau (Information).
+- **Tests:** `test_contract_documents.py` (+1), `test_further_responsible.py` erweitert; `contract-documents.test.tsx` (+1), `contract-ownership-roles.test.tsx` (+1), `contract-assignment.test.tsx` angepasst. Migration auf Wegwerf-DB auf/ab/auf.
+- **Nächster Schritt:** Alle Kästen einklappbar; danach Vertragslöschung (Rollen) und Abteilungsstruktur.

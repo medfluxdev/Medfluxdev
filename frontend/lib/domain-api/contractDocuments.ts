@@ -14,6 +14,22 @@ export interface ContractDocumentDto {
   analyzable: boolean;
 }
 
+/** Aus dem Vertrag entferntes Dokument (Datei bleibt erhalten, wiederherstellbar). */
+export interface RemovedDocumentDto {
+  removed_id: string;
+  title: string;
+  original_filename: string;
+  attachment_type: string | null;
+  removed_by_name: string | null;
+  removed_at: string | null;
+  reason: string | null;
+}
+
+export interface ContractDocumentsDto {
+  items: ContractDocumentDto[];
+  removed?: RemovedDocumentDto[];
+}
+
 export interface RelatedContractDto {
   relation_id: string;
   contract_id: string;
@@ -47,7 +63,15 @@ function path(contractId: string, suffix: string, organizationSlug: string) {
 }
 
 export function listContractDocuments(organizationSlug: string, contractId: string) {
-  return apiGet<{ items: ContractDocumentDto[]; attachment_types: string[] }>(path(contractId, "documents", organizationSlug));
+  return apiGet<ContractDocumentsDto & { attachment_types: string[] }>(path(contractId, "documents", organizationSlug));
+}
+
+export function removeContractDocument(organizationSlug: string, contractId: string, linkId: string, reason: string) {
+  return apiPost<ContractDocumentsDto>(path(contractId, `documents/${encodeURIComponent(linkId)}/remove`, organizationSlug), { reason: reason || null });
+}
+
+export function restoreContractDocument(organizationSlug: string, contractId: string, removedId: string) {
+  return apiPost<ContractDocumentsDto>(path(contractId, `documents/removed/${encodeURIComponent(removedId)}/restore`, organizationSlug), {});
 }
 
 export function uploadContractDocuments(

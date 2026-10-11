@@ -260,3 +260,59 @@ def test_document_metadata_main_valid_and_framework_links(tmp_path, monkeypatch)
 
     viewer = _client(monkeypatch, org_id, role="viewer")
     assert viewer.patch(f"/api/contracts/{member_id}/documents/{offer}", params=query, json={"values": {"title": "x"}}).status_code == 403
+
+
+def test_remove_and_restore_document(tmp_path, monkeypatch):
+    from app.database.models.activity_log import ActivityLog
+    from app.database.models.contract import ContractDocumentRemoved
+    from app.history.service import contract_history
+
+    slug, org_id, _framework_id, member_id = _seed()
+    query = {"organization_slug": slug}
+    service = _service(tmp_path, "Vertragstext", DomainContract.model_validate({}))
+    for name, kind in (("vertrag.pdf", "vertrag"), ("angebot.pdf", "angebot")):
+        service.attach_to_contract(
+            organization_slug=slug, contract_id=member_id, original_filename=name, content_type="application/pdf",
+            content=_pdf(), attachment_type=kind, title=None, added_by_name="Tester", analyze=False,
+        )
+    client = _client(monkeypatch, org_id)
+    items = client.get(f"/api/contracts/{member_id}/documents", params=query).json()["items"]
+    main_link, offer = items[0]["link_id"], items[1]["link_id"]
+
+    # Hauptdokument: erst ein anderes festlegen.
+    blocked = client.post(f"/api/contracts/{member_id}/documents/{main_link}/remove", params=query, json={})
+    assert blocked.status_code == 409 and "Hauptdokument" in blocked.json()["detail"]
+    # Lesende Rolle darf nicht entfernen.
+    viewer = _client(monkeypatch, org_id, role="viewer")
+    assert viewer.post(f"/api/contracts/{member_id}/documents/{offer}/remove", params=query, json={}).status_code == 403
+    client = _client(monkeypatch, org_id)
+
+    removed = client.post(f"/api/contracts/{member_id}/documents/{offer}/remove", params=query, json={"reason": "Falsch zugeordnet"})
+    assert removed.status_code == 200, removed.text
+    body = removed.json()
+    assert [item["link_id"] for item in body["items"]] == [main_link]
+    assert [(item["title"], item["reason"], item["removed_by_name"]) for item in body["removed"]] == [("angebot.pdf", "Falsch zugeordnet", "Tester")]
+    assert client.get(f"/api/contracts/{member_id}/documents", params=query).json()["removed"][0]["removed_id"] == body["removed"][0]["removed_id"]
+
+    session = create_session()
+    try:
+        history = contract_history(session, session.get(Contract, member_id))
+        events = [entry["event"] for entry in history]
+        assert "contract.document_removed" in events
+        assert events.count("contract.document_added") == 2  # Hinzufügen bleibt sichtbar
+    finally:
+        session.close()
+
+    restored = client.post(f"/api/contracts/{member_id}/documents/removed/{body['removed'][0]['removed_id']}/restore", params=query)
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["removed"] == []
+    assert [(item["title"], item["is_main"], item["is_valid"]) for item in restored.json()["items"]] == [("vertrag.pdf", True, True), ("angebot.pdf", False, True)]
+    assert client.post(f"/api/contracts/{member_id}/documents/removed/{body['removed'][0]['removed_id']}/restore", params=query).status_code == 404
+
+    check = create_session()
+    try:
+        assert check.scalars(select(ContractDocumentRemoved).where(ContractDocumentRemoved.contract_id == member_id)).all() == []
+        names = set(check.scalars(select(ActivityLog.event_name).where(ActivityLog.object_id == uuid.UUID(str(member_id)))).all())
+        assert {"contract.document_removed", "contract.document_restored"} <= names
+    finally:
+        check.close()

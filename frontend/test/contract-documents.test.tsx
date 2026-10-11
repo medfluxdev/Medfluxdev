@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({
   listContractDocuments: vi.fn(),
   uploadContractDocuments: vi.fn(),
   updateContractDocument: vi.fn(),
+  removeContractDocument: vi.fn(),
+  restoreContractDocument: vi.fn(),
   getContractRelations: vi.fn(),
   linkFramework: vi.fn(),
   unlinkFramework: vi.fn(),
@@ -73,6 +75,30 @@ describe("Anlagen", () => {
     expect(screen.getByLabelText(/Mit lokaler KI analysieren/)).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Als Hauptdokument" }));
     expect(api.updateContractDocument).toHaveBeenCalledWith("test-klinik", "c-1", "l-2", { is_main: true });
+  });
+
+  it("entfernt ein Dokument mit Bestätigung und stellt es wieder her; das Hauptdokument nicht", async () => {
+    const user = userEvent.setup();
+    const removedEntry = { removed_id: "x-1", title: "1. Nachtrag", original_filename: "n.pdf", attachment_type: "nachtrag", removed_by_name: "Admin", removed_at: "2026-10-11T09:00:00Z", reason: "falsch zugeordnet" };
+    api.removeContractDocument.mockResolvedValue({ items: [doc()], removed: [removedEntry] });
+    api.restoreContractDocument.mockResolvedValue({ items: [doc(), doc({ link_id: "l-3", title: "1. Nachtrag", is_main: false })], removed: [] });
+    render(<ContractAttachmentsPanel contractId="c-1" orgSlug="test-klinik" />);
+    await screen.findByText("1. Nachtrag");
+    expect(screen.getByText("Hauptdokument kann nicht entfernt werden")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "vertrag.pdf entfernen" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1. Nachtrag entfernen" }));
+    const dialog = await screen.findByRole("dialog", { name: "Dokument entfernen?" });
+    await user.type(within(dialog).getByLabelText("Grund (optional)"), "falsch zugeordnet");
+    await user.click(within(dialog).getByRole("button", { name: "Entfernen" }));
+    expect(api.removeContractDocument).toHaveBeenCalledWith("test-klinik", "c-1", "l-2", "falsch zugeordnet");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText("Entfernte Dokumente (1)")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Entfernte Dokumente (1)"));
+    await user.click(screen.getByRole("button", { name: "1. Nachtrag wiederherstellen" }));
+    expect(api.restoreContractDocument).toHaveBeenCalledWith("test-klinik", "c-1", "x-1");
+    await waitFor(() => expect(screen.queryByText(/Entfernte Dokumente/)).not.toBeInTheDocument());
   });
 });
 

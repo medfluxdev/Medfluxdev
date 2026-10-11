@@ -36,6 +36,8 @@ EVENT_LABELS: dict[str, str] = {
     "contract.document_updated": "Dokument geändert",
     "contract.document_added": "Dokument hinzugefügt",
     "contract.document_attached": "Dokumente hochgeladen",
+    "contract.document_removed": "Dokument entfernt",
+    "contract.document_restored": "Dokument wiederhergestellt",
     "contract.ai_values_applied": "KI-Werte in Stammdaten übernommen",
     "deadline.system_created": "Systemtermin angelegt",
     "deadline.system_updated": "Systemtermin angepasst",
@@ -235,6 +237,20 @@ def contract_history(session: Session, contract: Contract, limit: int = 500) -> 
             "document", link.id, _iso(link.created_at), link.added_by_name, "contract.document_added",
             "Hauptdokument hinzugefügt" if link.is_main else "Dokument hinzugefügt",
             {key: value for key, value in (("title", link.title or filename), ("attachment_type", link.attachment_type)) if value},
+        ))
+
+    # Entfernte Dokumente: das Hinzufügen bleibt im Verlauf sichtbar.
+    from app.database.models.contract import ContractDocumentRemoved
+
+    for removed, filename in session.execute(
+        select(ContractDocumentRemoved, DocumentFile.original_filename)
+        .join(DocumentVersion, DocumentVersion.id == ContractDocumentRemoved.document_version_id)
+        .join(DocumentFile, DocumentFile.id == DocumentVersion.document_file_id)
+        .where(ContractDocumentRemoved.contract_id == contract.id, ContractDocumentRemoved.added_at.is_not(None))
+    ).all():
+        entries.append(_entry(
+            "document", removed.id, _iso(removed.added_at), removed.added_by_name, "contract.document_added", "Dokument hinzugefügt",
+            {key: value for key, value in (("title", removed.title or filename), ("attachment_type", removed.attachment_type)) if value},
         ))
 
     for outbox, title in session.execute(
