@@ -91,6 +91,11 @@ def test_brief_for_auto_renewal_with_costs_partner_and_decision(monkeypatch):
     assert "12.360,00 €" in texts and "+3 %" in texts
     assert "1 weitere laufende Verträge" in texts
     assert all(hint["reason"] for hint in brief["hints"])
+    # Direkt zur Stelle: fehlende Angaben nennen ihren Ort, reine Information nicht.
+    targets = [hint["target"] for hint in brief["hints"]]
+    assert {"tab": "register", "field": "reminder_recipient_account_id"} in targets
+    assert {"tab": "documents", "subtab": "attachments"} in targets
+    assert all(hint["target"] is None for hint in brief["hints"] if hint["kind"] == "info")
     assert brief["decision"] is None
 
     session = create_session()

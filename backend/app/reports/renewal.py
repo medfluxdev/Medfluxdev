@@ -152,8 +152,9 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
 
     hints: list[dict] = []
 
-    def hint(kind: str, text: str, reason: str) -> None:
-        hints.append({"kind": kind, "text": text, "reason": reason})
+    def hint(kind: str, text: str, reason: str, target: Optional[dict] = None) -> None:
+        # target: wo die fehlende Angabe gepflegt wird („Direkt zur Stelle“), sonst None.
+        hints.append({"kind": kind, "text": text, "reason": reason, "target": target})
 
     fixed = contract.term_model == "fixed_term" and cancel_by is None
     level = urgency(cancel_by, as_of) if contract.business_status in RUNNING and not fixed else "none"
@@ -165,13 +166,15 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
              f"Noch {days_left} Tage bis zum Ende der Kündigungsfrist; es ist keine Entscheidung erfasst.")
     if unreviewed:
         hint("check", "Die KI-Werte des Vertrags sind noch nicht vollständig geprüft. Laufzeit und Kündigungsfrist vor der Entscheidung bestätigen.",
-             "Die Fristen beruhen auf Stammdaten, die teilweise aus der KI-Analyse stammen.")
+             "Die Fristen beruhen auf Stammdaten, die teilweise aus der KI-Analyse stammen.",
+             {"tab": "documents", "subtab": "review"})
     if renewal_cost is not None and renewal_cost > 0:
         hint("info", f"Bei Verlängerung entstehen bis {_de(next_end)} voraussichtlich {_euro(renewal_cost)} (netto).",
              "Hochrechnung aus den gepflegten Finanzposten über den Verlängerungszeitraum.")
     elif annual is None and contract.business_status in RUNNING:
         hint("check", "Keine Kosten gepflegt – ein Kostenvergleich für die Entscheidung ist nicht möglich.",
-             "Im Reiter Finanzen sind keine Ausgaben erfasst.")
+             "Im Reiter Finanzen sind keine Ausgaben erfasst.",
+             {"tab": "finance", "section": "entries"})
     if adjustment.kind == "percent" and adjustment.percent:
         hint("info", f"Vereinbarte Preisanpassung: +{str(adjustment.percent).rstrip('0').rstrip('.').replace('.', ',')} % ab {_de(adjustment.next_date)}. Verhandlungsspielraum prüfen.",
              "Aus den Stammdaten (Preisanpassung).")
@@ -186,9 +189,11 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
              "Aus den Laufzeitangaben.")
     if not contract.reminder_recipient_account_id and contract.business_status in RUNNING:
         hint("check", "Keinen Erinnerungsempfänger hinterlegt – Erinnerung an die Frist geht nur an die verantwortliche Person.",
-             "Feld „Erinnerung an“ ist leer.")
+             "Feld „Erinnerung an“ ist leer.",
+             {"tab": "register", "field": "reminder_recipient_account_id"})
     if documents == 0:
-        hint("check", "Kein Vertragsdokument hinterlegt – Kündigungsregelung im Original prüfen.", "Keine Dokumente am Vertrag.")
+        hint("check", "Kein Vertragsdokument hinterlegt – Kündigungsregelung im Original prüfen.", "Keine Dokumente am Vertrag.",
+             {"tab": "documents", "subtab": "attachments"})
 
     return {
         "contract_id": str(contract.id),

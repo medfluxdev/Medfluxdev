@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import Drawer from "@/components/ui/Drawer";
 import Skeleton from "@/components/ui/Skeleton";
+import MissingList from "@/components/ui/MissingList";
+import { REVIEW_TARGET, contractHref, registerField } from "@/lib/fix-targets";
 import { BUSINESS_STATUS_LABEL, TERM_MODEL_LABEL, getContractRegister, type ContractRegister, type TermModel } from "@/lib/domain-api/register";
 import { formatDate } from "@/lib/format";
 
@@ -50,7 +52,13 @@ export default function ContractQuickView({ organizationSlug, contractId, onClos
             <div><dt>Löschen ab</dt><dd>{formatDate(data.retention.deletion_from)}</dd></div>
             <div><dt>Vertraulich</dt><dd>{data.confidentiality.effective ? "Ja" : "Nein"}</dd></div>
           </dl>
-          {data.review_pending ? <p className="alert alert--warning">KI-Werte sind noch nicht vollständig geprüft.</p> : null}
+          {data.review_pending ? <p className="alert alert--warning">KI-Werte sind noch nicht vollständig geprüft. <Link href={contractHref(data.contract_id, REVIEW_TARGET)}>Jetzt prüfen</Link></p> : null}
+          <MissingList
+            className="rg-hint"
+            intro="Es fehlen noch:"
+            items={Array.from(new Set([...(data.business_status === "in_arbeit" ? data.missing_for_valid ?? [] : []), ...(data.terms?.missing ?? [])]))
+              .map((key) => ({ key, label: data.fields[key]?.label ?? key, href: contractHref(data.contract_id, registerField(key)) }))}
+          />
           <div className="btn-group">
             <Link href={`/contracts/${contractId}?tab=register`} className="btn btn-sm">Stammdaten</Link>
             <Link href={`/contracts/${contractId}?tab=deadlines`} className="btn btn-sm">Fristen & Entscheidung</Link>

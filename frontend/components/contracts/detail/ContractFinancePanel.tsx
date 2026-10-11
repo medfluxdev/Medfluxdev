@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { SECTION_PARAM, asFixTarget, contractHref, fixLabel } from "@/lib/fix-targets";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
 import { listCostCenters, type CostCenterDto } from "@/lib/domain-api/organizations";
 import {
@@ -69,6 +72,20 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
   const [entryForm, setEntryForm] = useState(EMPTY_ENTRY);
   const [serviceForm, setServiceForm] = useState(EMPTY_SERVICE);
   const [showEntryForm, setShowEntryForm] = useState(false);
+  // ?abschnitt=entries (z. B. „Kosten erfassen“): Formular für einen neuen Eintrag gleich öffnen.
+  const linkedSection = useSearchParams()?.get(SECTION_PARAM) ?? null;
+  const openedFromLink = useRef(false);
+  useEffect(() => {
+    if (linkedSection === "entries" && editable && !openedFromLink.current) {
+      openedFromLink.current = true;
+      setShowEntryForm(true);
+    }
+  }, [editable, linkedSection]);
+
+  function openEntryForm() {
+    setShowEntryForm(true);
+    window.requestAnimationFrame(() => document.getElementById("fin-entries-heading")?.scrollIntoView?.({ block: "start" }));
+  }
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [allocations, setAllocations] = useState<{ cost_center_id: string; share_percent: string; recharge_mode: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -201,11 +218,14 @@ export default function ContractFinancePanel({ contractId, orgSlug }: { contract
         <div><h2 id="fin-summary-heading">Finanzdaten</h2><p>Kalkulatorisch auf Basis ganzer Monate, aus den gepflegten Finanzeinträgen (Stand {formatDate(data.as_of)}).</p></div>
         {data.entries.length > 0 ? <div className="rg-actions"><button type="button" className="btn" onClick={() => void exportCsv(true, true)}>Export (CSV)</button><button type="button" className="btn" onClick={() => void exportCsv(true, false)}>Nur Ausgaben</button></div> : null}
       </div>
-      {data.summaries.length === 0 ? <p className="cw-muted">Noch keine Finanzeinträge. {suggestionCount > 0 ? "Die KI hat Vorschläge aus dem Vertrag – siehe unten." : "Bitte Einträge erfassen."}</p> : data.summaries.map((summary) => <div key={summary.currency}>
+      {data.summaries.length === 0 ? <p className="cw-muted">Noch keine Finanzeinträge. {suggestionCount > 0 ? "Die KI hat Vorschläge aus dem Vertrag – siehe unten." : "Bitte Einträge erfassen."}{editable ? <> <button type="button" className="rg-link" onClick={openEntryForm}>Eintrag erfassen</button></> : null}</p> : data.summaries.map((summary) => <div key={summary.currency}>
         <SummaryTable summary={summary} />
-        {summary.notes.length > 0 ? <ul className="rg-explanation">{summary.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
+        {summary.notes.length > 0 ? <ul className="rg-explanation">{(summary.note_items ?? summary.notes.map((text) => ({ text, target: null }))).map((note) => {
+          const target = asFixTarget(note.target);
+          return <li key={note.text}>{note.text}{target ? <> <Link className="rg-link" href={contractHref(contractId, target)}>{fixLabel(target)}</Link></> : null}</li>;
+        })}</ul> : null}
       </div>)}
-      {data.price_adjustment.kind ? <p className="cw-muted">Preisanpassung: {PRICE_ADJUSTMENT_LABEL[data.price_adjustment.kind] ?? data.price_adjustment.kind}{data.price_adjustment.percent ? ` ${Number(data.price_adjustment.percent).toLocaleString("de-DE")} %` : ""}{data.price_adjustment.index_name ? ` (${data.price_adjustment.index_name})` : ""}{data.price_adjustment.next_date ? `, nächste Anpassung ${formatDate(data.price_adjustment.next_date)}` : ""} – Pflege in den Stammdaten.</p> : null}
+      {data.price_adjustment.kind ? <p className="cw-muted">Preisanpassung: {PRICE_ADJUSTMENT_LABEL[data.price_adjustment.kind] ?? data.price_adjustment.kind}{data.price_adjustment.percent ? ` ${Number(data.price_adjustment.percent).toLocaleString("de-DE")} %` : ""}{data.price_adjustment.index_name ? ` (${data.price_adjustment.index_name})` : ""}{data.price_adjustment.next_date ? `, nächste Anpassung ${formatDate(data.price_adjustment.next_date)}` : ""} – Pflege in den <Link className="rg-link" href={contractHref(contractId, { tab: "register", field: "price_adjustment_kind" })}>Vertragsdaten (Preisanpassung)</Link>.</p> : null}
     </section>
 
     {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}

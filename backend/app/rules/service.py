@@ -59,9 +59,15 @@ class RuleResult:
     label: str
     outcome: str
     detail: str
+    # Wo die geprüfte Angabe gepflegt wird („Direkt zur Stelle“), z. B. {"tab": "register", "field": "notice_period"}.
+    target: Optional[dict] = None
+    rule_kind: Optional[str] = None
 
     def payload(self) -> dict:
-        return {"rule_id": str(self.rule_id), "label": self.label, "outcome": self.outcome, "detail": self.detail}
+        return {
+            "rule_id": str(self.rule_id), "label": self.label, "outcome": self.outcome, "detail": self.detail,
+            "rule_kind": self.rule_kind, "target": self.target,
+        }
 
 
 def _months(value: Optional[int], unit: Optional[str]) -> Optional[Decimal]:
@@ -99,9 +105,30 @@ def _limit(rule: ContractRule) -> Decimal:
     return Decimal(rule.threshold)
 
 
+def rule_target(rule: ContractRule, contract: Contract) -> Optional[dict]:
+    """Ort der Angabe, die eine Regel prüft – deterministisch je Regelart (keine Vermutung)."""
+    kind = rule.rule_kind
+    if kind == "required_field":
+        return {"tab": "register", "field": rule.field_key} if rule.field_key else None
+    if kind == "max_annual_cost":
+        return {"tab": "finance", "section": "entries"}
+    if kind in ("min_notice_months", "max_term_months", "max_renewal_months") and contract.term_model is None:
+        return {"tab": "register", "field": "term_model"}
+    if kind == "min_notice_months":
+        return {"tab": "register", "field": "notice_period"}
+    if kind == "max_term_months":
+        return {"tab": "register", "field": "minimum_term" if contract.term_model == "terminable_min_term" else "initial_term"}
+    if kind == "max_renewal_months":
+        return {"tab": "register", "field": "renewal_period"}
+    if kind == "max_price_increase_percent":
+        field_key = "price_adjustment_percent" if contract.price_adjustment_kind == "percent" else "price_adjustment_kind"
+        return {"tab": "register", "field": field_key}
+    return None
+
+
 def evaluate(rule: ContractRule, contract: Contract, annual_cost: Optional[Decimal]) -> RuleResult:
     def result(outcome: str, detail: str) -> RuleResult:
-        return RuleResult(rule.id, rule.label, outcome, detail)
+        return RuleResult(rule.id, rule.label, outcome, detail, rule_target(rule, contract), rule.rule_kind)
 
     types = [str(item) for item in (rule.contract_type_ids or [])]
     if types and str(contract.contract_type_id) not in types:

@@ -713,6 +713,9 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
   cursor: pointer;
 }
 .missing-link:hover { color: var(--color-accent-hover); text-decoration-thickness: 2px; }
+/* Signal oder Abzeichen als Link zum Ort der Prüfung: Form und Farbe bleiben, nur der Zeiger zeigt den Link. */
+.signal-link { display: inline-flex; border-radius: var(--radius-pill); text-decoration: none; }
+.signal-link:hover .signal-label, .signal-link:hover .status-badge { text-decoration: underline; }
 
 /* ---------- Aufklappfläche (components/ui/Popover.tsx) ---------- */
 .popover { position: relative; }

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { REVIEW_TARGET, contractHref } from "@/lib/fix-targets";
 import { useEffect, useMemo, useState } from "react";
 import {
   getContractActionProposals,
@@ -32,8 +34,8 @@ type IntelligenceState = {
 
 const EMPTY: IntelligenceState = { relations: [], obligations: [], policies: [], actions: [] };
 
-function reviewBadge(required: boolean) {
-  return required ? <StatusBadge tone="review" label="Prüfung erforderlich" /> : null;
+function reviewBadge(required: boolean, contractId: string) {
+  return required ? <Link className="signal-link" href={contractHref(contractId, REVIEW_TARGET)}><StatusBadge tone="review" label="Prüfung erforderlich" /></Link> : null;
 }
 
 function policyTone(outcome: string): "success" | "warning" | "critical" | "neutral" {
@@ -150,7 +152,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
             {state.relations.length === 0 ? <p className="cw-muted">Keine Beziehungen erkannt.</p> : (
               <ul className={styles.list}>
                 {state.relations.map((item) => <li key={item.id}>
-                  <div><strong>{item.relation_type}</strong>{reviewBadge(item.requires_review)}</div>
+                  <div><strong>{item.relation_type}</strong>{reviewBadge(item.requires_review, contractId)}</div>
                   {item.rationale ? <p>{item.rationale}</p> : null}
                   {item.authority ? <small>Quelle der Beziehung: {item.authority}</small> : null}
                   {evidenceButton(item.evidence_refs)}
@@ -164,7 +166,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
             {state.obligations.length === 0 ? <p className="cw-muted">Keine strukturierten Pflichten vorhanden.</p> : (
               <ul className={styles.list}>
                 {state.obligations.map((item) => <li key={item.id}>
-                  <div><strong>{item.title || item.key}</strong>{reviewBadge(item.requires_review)}</div>
+                  <div><strong>{item.title || item.key}</strong>{reviewBadge(item.requires_review, contractId)}</div>
                   {item.description ? <p>{item.description}</p> : null}
                   <small>{item.status}{item.due_date ? ` · fällig ${formatDate(item.due_date)}` : ""}{item.owner_role ? ` · verantwortlich: ${item.owner_role}` : ""}</small>
                   {evidenceButton([...item.evidence_refs, ...item.source_field_refs])}
@@ -178,7 +180,7 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
             {state.policies.length === 0 ? <p className="cw-muted">Keine Policy-Entscheidungen vorhanden.</p> : (
               <ul className={styles.list}>
                 {state.policies.map((item, index) => <li key={`${item.policy_key}-${item.policy_version}-${index}`}>
-                  <div><strong>{item.policy_key}</strong><StatusBadge tone={policyTone(item.outcome)} label={item.outcome} />{reviewBadge(item.requires_review)}</div>
+                  <div><strong>{item.policy_key}</strong><StatusBadge tone={policyTone(item.outcome)} label={item.outcome} />{reviewBadge(item.requires_review, contractId)}</div>
                   {item.explanation ? <p>{item.explanation}</p> : null}
                   <small>Version {item.policy_version}</small>
                   {evidenceButton(item.evidence_refs)}

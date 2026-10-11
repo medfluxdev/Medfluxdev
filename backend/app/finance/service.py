@@ -253,10 +253,12 @@ def finance_summary(session: Session, contract: Contract, as_of: date) -> list[d
         return []
     adjustment, notes = price_adjustment(contract, as_of)
     summaries = summarize(entry_inputs(rows), as_of=as_of, contract_end=contract_end(contract, as_of), adjustment=adjustment)
+    adjustment_items = [{"text": text, "target": {"tab": "register", "field": "price_adjustment_next_date"}} for text in notes]
     out = []
     for summary in summaries:
         data = summary.as_dict()
         data["notes"] = notes + data["notes"]
+        data["note_items"] = adjustment_items + data["note_items"]
         out.append(data)
     return out
 

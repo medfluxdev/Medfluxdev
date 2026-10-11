@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import StatusBadge, { type StatusTone } from "@/components/ui/StatusBadge";
 import { getContractRules, RULE_OUTCOME_LABEL, type ContractRuleResult, type RuleOutcome } from "@/lib/domain-api/rules";
 import { usePermissions } from "@/lib/use-permissions";
+import { asFixTarget, contractHref, fixLabel } from "@/lib/fix-targets";
 
 const TONE: Record<RuleOutcome, StatusTone> = { pass: "success", fail: "critical", unknown: "warning", na: "neutral" };
 const STATUS_TONE: Record<string, StatusTone> = { "Verstoß": "critical", "Unvollständig": "warning", "Erfüllt": "success" };
@@ -39,10 +40,15 @@ export default function ContractRulesSection({ organizationSlug, contractId, ver
       {data.status ? <StatusBadge label={data.status} tone={STATUS_TONE[data.status] ?? "neutral"} /> : null}
     </div>
     {relevant.length === 0 ? <p className="cw-muted">Keine der Regeln gilt für diesen Vertrag.</p> : <ul className="rules-list">
-      {relevant.map((item) => <li key={item.rule_id}>
-        <StatusBadge label={RULE_OUTCOME_LABEL[item.outcome]} tone={TONE[item.outcome]} />
-        <div><strong>{item.label}</strong><span>{item.detail}</span></div>
-      </li>)}
+      {relevant.map((item) => {
+        // Fehlende oder verletzte Angabe: direkt zur Stelle, an der sie gepflegt wird.
+        const target = item.outcome === "unknown" || item.outcome === "fail" ? asFixTarget(item.target) : null;
+        return <li key={item.rule_id}>
+          <StatusBadge label={RULE_OUTCOME_LABEL[item.outcome]} tone={TONE[item.outcome]} />
+          <div><strong>{item.label}</strong><span>{item.detail}</span></div>
+          {target ? <Link className="rg-link rules-fix" href={contractHref(contractId, target)} aria-label={`${item.label}: ${fixLabel(target)}`}>{fixLabel(target)}</Link> : null}
+        </li>;
+      })}
     </ul>}
     {notApplicable > 0 ? <p className="cw-muted">{notApplicable === 1 ? "1 Regel gilt" : `${notApplicable} Regeln gelten`} für diesen Vertrag nicht.</p> : null}
   </section>;

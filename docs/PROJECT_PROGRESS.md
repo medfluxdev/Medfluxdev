@@ -5457,3 +5457,11 @@ Plan: `docs/architecture/DIREKT_ZUR_STELLE_PLAN_20261011.md` (Entscheidungen: ga
 - **Tests:** neu `frontend/test/direct-jump.test.tsx` (9), Playwright-Journey 12; `contract-register.test.tsx` angepasst. Verifikation: `npm run verify` grün (56 Testdateien), Playwright 176 + Journey 12 grün. Keine Backend-Änderung.
 - **Nächster Schritt:** Phase 2 (übrige Vertragsakte, Ziele aus dem Backend, Karte „Was fehlt noch?“).
 
+### Nachtrag 2026-10-11 – „Direkt zur Stelle“, Phase 2 (übrige Vertragsakte)
+
+- **Backend nennt Ziele:** Vertragsregeln (`target`, `rule_kind`, je Regelart deterministisch: Kündigungsfrist, Laufzeit/Mindestlaufzeit, Verlängerung, Preisanpassung, Pflichtfeld, Kosten → Finanzen), Hinweise der Entscheidungsvorlage (Prüfung, Kosten, Erinnerungsempfänger, Dokument), Finanzhinweise (`note_items`: „Kein Vertragsende bekannt“ → Laufzeit, „Anpassungsdatum angenommen“ → Feld). Texte unverändert, keine Migration.
+- **Vertragsakte:** neue Karte **„Was fehlt noch?“** oben in „Übersicht“ (Pflichtfelder für „Gültig“, Laufzeit, Kosten, verantwortliche Person, KI-Prüfung, Dokument, Regeln ohne Angabe – jeder Eintrag ein Link; ohne Lücken unsichtbar). „Handlungsbedarf“ führt je Aufgabe/Warnung an den richtigen Ort (vorher taten Nicht-Prüf-Aufgaben nichts). Leere Kopf-Fakten (Vertragsende, Kündbar bis, Jährliche Kosten) haben „Laufzeit erfassen“ / „Kosten erfassen“. Aufgaben unter „Fristen & Aufgaben“, Finanz- und Regelhinweise, „nicht gepflegt“ / „Frist unbekannt“ in der Entscheidungsvorlage, „Basiert auf ungeprüften KI-Werten“, „Prüfung erforderlich“ und die Schnellansicht der Liste führen direkt zur Stelle. `?abschnitt=entries` öffnet das Formular „Finanzeintrag anlegen“.
+- **Technik:** Reiter folgt der Adresse (Links auf derselben Seite wechseln den Reiter); manueller Reiterwechsel entfernt `feld`/`abschnitt`; `lib/fix-targets.ts` mit `workItemTarget`, `warningTarget`, `asFixTarget`, `fixLabel`, `sectionAnchor`.
+- **Tests:** neu `backend/tests/test_direct_targets.py`, Erweiterung `test_renewal_brief.py`; `frontend/test/direct-jump-contract.test.tsx`; Playwright-Journey 13. Verifikation: pytest 1630 bestanden / 3 übersprungen; `npm run verify` grün (57 Testdateien); Playwright 178/178.
+- **Nächster Schritt:** Phase 3 (Mein Tag, Vertragsliste, Fristen & Aufgaben, Benachrichtigungen, Analysen, Import, Verwaltung, Geräte).
+

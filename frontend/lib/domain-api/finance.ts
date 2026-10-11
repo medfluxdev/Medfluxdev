@@ -62,6 +62,8 @@ export interface FinanceSummaryDto {
   contract_end: string | null;
   projected_adjustment: boolean;
   notes: string[];
+  /** Hinweise mit Ziel (gleiche Reihenfolge wie notes). */
+  note_items?: { text: string; target: unknown }[];
 }
 
 export interface AllocationDto {

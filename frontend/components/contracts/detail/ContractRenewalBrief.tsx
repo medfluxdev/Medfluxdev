@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FINANCE_ENTRIES_TARGET, asFixTarget, contractHref, fixLabel } from "@/lib/fix-targets";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { createContractLifecycleDecision, type ContractLifecycleDecisionKind } from "@/lib/domain-api/lifecycle";
@@ -88,10 +89,11 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
     <div className="rg-terms">
       <div><span>Kündbar bis</span><strong>{formatDate(brief.cancel_by)}</strong>{brief.days_left != null ? <small className="cw-muted">{brief.days_left >= 0 ? `noch ${brief.days_left} Tage` : `seit ${-brief.days_left} Tagen verstrichen`}</small> : null}</div>
       <div><span>Aktuelles Ende</span><strong>{formatDate(brief.current_end)}</strong></div>
-      <div><span>Jährliche Kosten</span><strong>{brief.annual_cost ? formatCurrency(brief.annual_cost, "EUR") : "nicht gepflegt"}</strong></div>
+      <div><span>Jährliche Kosten</span><strong>{brief.annual_cost ? formatCurrency(brief.annual_cost, "EUR") : "nicht gepflegt"}</strong>{brief.annual_cost ? null : <Link className="rg-link" href={contractHref(contractId, FINANCE_ENTRIES_TARGET)}>Kosten erfassen</Link>}</div>
       <div><span>Kosten bei Verlängerung</span><strong>{brief.renewal_cost ? formatCurrency(brief.renewal_cost, "EUR") : "–"}</strong>{brief.next_end_if_no_action ? <small className="cw-muted">bis {formatDate(brief.next_end_if_no_action)}</small> : null}</div>
     </div>
     <p><strong>Ohne Handeln:</strong> {brief.if_no_action}</p>
+    {brief.urgency === "unknown" ? <p className="cw-muted">Ohne vollständige Laufzeitangaben ist keine Frist berechenbar. <Link className="rg-link" href={contractHref(contractId, { tab: "register", section: "term" })}>Laufzeit erfassen</Link></p> : null}
 
     <div className="renewal-summary">
       <button type="button" className="btn" disabled={summary.loading} onClick={() => void summarize()}>{summary.loading ? "Kurzfassung wird erstellt…" : "Kurzfassung mit lokaler KI"}</button>
@@ -103,6 +105,7 @@ export default function ContractRenewalBrief({ contractId, orgSlug }: { contract
       {brief.hints.map((hint) => <li key={hint.text} className={`renewal-hint renewal-${hint.kind}`}>
         <span className="renewal-kind">{HINT_LABEL[hint.kind]}</span>
         <div>{hint.text}<small className="cw-muted">Grundlage: {hint.reason}</small></div>
+        {asFixTarget(hint.target) ? <Link className="rg-link" href={contractHref(contractId, asFixTarget(hint.target)!)}>{fixLabel(asFixTarget(hint.target)!)}</Link> : null}
       </li>)}
     </ul> : null}
 

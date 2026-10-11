@@ -40,6 +40,8 @@ import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
+import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, fixLabel, sectionAnchor, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
+import ContractGaps from "./ContractGaps";
 
 export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
 
@@ -204,6 +206,33 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  // Links auf derselben Seite (z. B. „Kosten erfassen“) ändern nur die Adresse: Reiter danach richten.
+  const urlTab = toTab(searchParams.get("tab")) ?? "overview";
+  const urlSubtab = searchParams.get("subtab");
+  const linkedSection = searchParams.get(SECTION_PARAM);
+  useEffect(() => {
+    setActiveTab(urlTab);
+    if (isDocumentTab(urlSubtab)) setDocumentTab(urlSubtab as DocumentTab);
+  }, [urlTab, urlSubtab]);
+
+  // ?abschnitt=…: zum Abschnitt scrollen, sobald er gerendert ist (Reiter laden teils nach).
+  useEffect(() => {
+    if (!linkedSection) return;
+    const anchor = sectionAnchor(linkedSection);
+    let tries = 0;
+    let timer = 0;
+    const seek = () => {
+      const element = document.getElementById(anchor);
+      if (element) {
+        const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        element.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
+        return;
+      }
+      if (tries++ < 30) timer = window.setTimeout(seek, 100);
+    };
+    seek();
+    return () => window.clearTimeout(timer);
+  }, [activeTab, linkedSection]);
 
   useEffect(() => {
     let active = true;
@@ -261,6 +290,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     params.delete("source_evidence_id");
     params.delete("source_document");
     params.delete("source_page");
+    // Ein Reiterwechsel von Hand beendet einen Sprung zu Feld oder Abschnitt.
+    params.delete(FIELD_PARAM);
+    params.delete(SECTION_PARAM);
     setSourceLinkError(false);
     if (tab === "overview") params.delete("tab");
     else params.set("tab", tab);
@@ -268,6 +300,11 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     else params.delete("subtab");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  // „Direkt zur Stelle“ innerhalb der Vertragsakte: Reiter, Abschnitt oder Feld über die Adresse ansteuern.
+  function openTarget(target: FixTarget) {
+    router.replace(contractHref(data.contract_id, target), { scroll: false });
   }
 
   function evidenceById(id: string | null | undefined): EvidenceRef | null {
@@ -396,13 +433,13 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           </div>
         </div>
         <dl className="object-header-facts">
-          <div><dt>Vertragsende</dt><dd>{formatDate(data.register_facts?.contract_end ?? effectiveEnd) ?? "–"}</dd></div>
-          <div><dt>Kündbar bis</dt><dd>{formatDate(data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date) ?? "–"}</dd></div>
+          <div><dt>Vertragsende</dt><dd>{data.register_facts?.contract_end ?? effectiveEnd ? formatDate(data.register_facts?.contract_end ?? effectiveEnd) : <>– <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Vertragsende: Laufzeit erfassen">Laufzeit erfassen</button></>}</dd></div>
+          <div><dt>Kündbar bis</dt><dd>{data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date ? formatDate(data.register_facts?.cancel_by ?? data.dates.latest_cancellation_date) : <>– <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })} aria-label="Kündbar bis: Laufzeit erfassen">Laufzeit erfassen</button></>}</dd></div>
           <div><dt>Jährliche Kosten</dt><dd className="num">{maintainedAnnual
             ? <span className="cw-value-origin">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}<span className="rg-origin rg-origin-manual" title="Aus den gepflegten Finanzposten">Gepflegt</span></span>
             : aiAnnual
               ? <span className="cw-value-origin">{money(data.costs.annual_recurring)}<span className="rg-origin rg-origin-ai" title="Aus der KI-Analyse, noch nicht in die Finanzen übernommen">KI-Vorschlag</span><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
-              : "–"}</dd></div>
+              : <>– <button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} aria-label="Jährliche Kosten erfassen">Kosten erfassen</button></>}</dd></div>
         </dl>
         <div className="object-header-actions">
           <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer">Deckblatt (PDF)</a>
@@ -446,8 +483,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
       <div className="cw-content" id="contract-tab-panel" role="tabpanel" aria-labelledby={`contract-tab-${activeTab}`} tabIndex={0}>
         {activeTab === "overview" && <>
+          <ContractGaps contractId={data.contract_id} orgSlug={orgSlug} hasAnnualCost={Boolean(maintainedAnnual)} reviewPending={data.review.requires_manual_review} documentCount={data.documents.length} />
           <div className="cw-kpi-grid"><InfoCard label="Status" value={statusLabel(data.status)} origin="system" /><InfoCard label="Vertragsende" value={effectiveEnd ? formatDate(effectiveEnd) : "Nicht verfügbar"} origin={endOrigin} hint={<SourceButton evidence={data.dates.documented_end_date ? endEvidence : null} />} />{maintainedAnnual ? <InfoCard label="Jährliche Kosten (gepflegt)" value={moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)} origin="system" /> : <InfoCard label={aiAnnual ? "Jährliche Kosten (KI-Vorschlag)" : "Jährliche Kosten"} value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} />}<InfoCard label="Kündigungsfrist" value={data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"} origin={cancellationOrigin} hint={<SourceButton evidence={cancellationEvidence} />} /><InfoCard label="Risiko" value={riskLabel(data.risk_level)} origin="system" /></div>
-          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} onClick={() => item.requires_review ? setRoute("documents", "review") : setRoute("overview")}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>)}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => warning.requires_review ? setRoute("documents", "review") : setRoute("deadlines")}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
+          {(openTasks.length > 0 || actionableWarnings.length > 0) && <Section title="Handlungsbedarf" description="Offene Aufgaben und relevante Warnungen"><div className="cw-task-list cw-action-list">{openTasks.slice(0, 6).map((item) => { const target = workItemTarget(item.item_type, item.requires_review); return <button type="button" className="cw-task cw-task-button cw-action-card" key={item.work_item_id} disabled={!target} title={target ? fixLabel(target) : "Kein Ort zum Bearbeiten"} onClick={() => target && openTarget(target)}><span className={`cw-priority cw-priority-${item.severity}`}>{severityLabel(item.severity)}</span><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : item.requires_review ? "Prüfung erforderlich" : "Keine Frist"}</span></button>; })}{actionableWarnings.slice(0, 4).map((warning, index) => <button type="button" className="cw-task cw-task-button cw-action-card" key={`${warning.warning_type}-${index}`} onClick={() => openTarget(warningTarget(warning.warning_type, warning.requires_review) ?? { tab: "deadlines" })}><span className={`cw-priority cw-priority-${warning.severity}`}>{severityLabel(warning.severity)}</span><div><strong>{warning.title_de}</strong></div><span>{warning.target_date ? formatDate(warning.target_date) : "Prüfung erforderlich"}</span></button>)}</div></Section>}
           <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
         </>}
 
@@ -457,7 +495,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
         {activeTab === "deadlines" && <><ContractRenewalBrief contractId={data.contract_id} orgSlug={orgSlug} /><ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />
           <Section title="Aufgaben zu diesem Vertrag" description="Dieselben Aufgaben wie unter Fristen & Aufgaben → Aufgaben, hier nur für diesen Vertrag.">
-            {openTasks.length === 0 ? <p className="cw-muted">Keine offenen Aufgaben.</p> : <ul className="cw-task-list">{openTasks.map((item) => <li key={item.work_item_id} className="cw-task"><Signal tone={item.requires_review ? "ai" : item.severity === "critical" ? "critical" : item.severity === "high" || item.severity === "medium" ? "warning" : "neutral"}>{item.requires_review ? "KI-Prüfung" : severityLabel(item.severity)}</Signal><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : "Keine Frist"}</span>{item.requires_review ? <button type="button" className="btn btn-sm" onClick={() => setRoute("documents", "review")}>Prüfen</button> : null}</li>)}</ul>}
+            {openTasks.length === 0 ? <p className="cw-muted">Keine offenen Aufgaben.</p> : <ul className="cw-task-list">{openTasks.map((item) => <li key={item.work_item_id} className="cw-task"><Signal tone={item.requires_review ? "ai" : item.severity === "critical" ? "critical" : item.severity === "high" || item.severity === "medium" ? "warning" : "neutral"}>{item.requires_review ? "KI-Prüfung" : severityLabel(item.severity)}</Signal><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : "Keine Frist"}</span>{(() => { const target = workItemTarget(item.item_type, item.requires_review); return target && target.tab !== "deadlines" ? <button type="button" className="btn btn-sm" onClick={() => openTarget(target)}>{item.requires_review ? "Prüfen" : fixLabel(target)}</button> : null; })()}</li>)}</ul>}
           </Section></>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
@@ -475,7 +513,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <h2 className="cw-subheading">KI-Analyse der Vertragskosten</h2>
           <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} /><InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} origin={data.costs.monthly_recurring.amount == null ? "missing" : monthlyCostEvidence ? "extracted" : "system"} hint={<SourceButton evidence={monthlyCostEvidence} />} /><InfoCard label="Steuersatz" value={data.costs.tax_rate_percent != null ? `${data.costs.tax_rate_percent} %` : "Nicht verfügbar"} origin={data.costs.tax_rate_percent != null ? (taxRateEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={taxRateEvidence} />} /><InfoCard label="Bezugsperiode" value={data.costs.source_period ?? "Nicht verfügbar"} origin={data.costs.source_period ? "system" : "missing"} /></div>
           {hasCalculationBasis(data.costs.annual_recurring_basis) ? <Section title="Kostenberechnung" description="Nachvollziehbare Grundlage des jährlichen Betrags"><CalculationBasisPanel title="Jährlich wiederkehrende Kosten" basis={data.costs.annual_recurring_basis} /></Section> : null}
-          {data.costs.availability && (data.costs.annual_recurring.amount == null || data.costs.availability.manual_input_required) ? <Section title="Warum Kosten noch nicht vollständig berechnet sind" description={data.costs.availability.summary_de}><div className="cw-finance-availability">{data.costs.availability.explanation_de ? <p>{data.costs.availability.explanation_de}</p> : null}{data.costs.availability.found_facts.length > 0 ? <div><strong>Gefundene Angaben</strong><ul>{data.costs.availability.found_facts.map((fact) => <li key={fact.key}>{fact.label_de}: {fact.value}{fact.period_hint ? ` · ${fact.period_hint}` : ""}</li>)}</ul></div> : null}{data.costs.availability.missing_inputs.length > 0 ? <div><strong>Noch benötigte Angaben</strong><ul>{data.costs.availability.missing_inputs.map((item) => <li key={item}>{item}</li>)}</ul></div> : null}</div></Section> : null}
+          {data.costs.availability && (data.costs.annual_recurring.amount == null || data.costs.availability.manual_input_required) ? <Section title="Warum Kosten noch nicht vollständig berechnet sind" description={data.costs.availability.summary_de}><div className="cw-finance-availability">{data.costs.availability.explanation_de ? <p>{data.costs.availability.explanation_de}</p> : null}{data.costs.availability.found_facts.length > 0 ? <div><strong>Gefundene Angaben</strong><ul>{data.costs.availability.found_facts.map((fact) => <li key={fact.key}>{fact.label_de}: {fact.value}{fact.period_hint ? ` · ${fact.period_hint}` : ""}</li>)}</ul></div> : null}{data.costs.availability.missing_inputs.length > 0 ? <div><strong>Noch benötigte Angaben</strong><ul>{data.costs.availability.missing_inputs.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)}>Finanzeintrag erfassen</button></div> : null}</div></Section> : null}
           <Section title="Abrechnung & Steuer"><dl className="cw-definition-grid"><div><dt>Steuerbasis <SourceButton evidence={taxBasisEvidence} /></dt><dd>{data.costs.tax_basis ?? "Nicht verfügbar"}</dd></div><div><dt>Währung</dt><dd>{data.costs.annual_recurring.currency ?? data.costs.monthly_recurring.currency ?? "Nicht verfügbar"}</dd></div><div><dt>Währungskonflikt</dt><dd>{data.costs.currency_conflict ? "Ja – prüfen" : "Nein"}</dd></div></dl></Section>
           {(data.costs.scheduled_prices ?? []).length > 0 && <Section title="Preisplan (Staffel)" description="Belegte Preisstufen je Vertragsjahr – nie annualisiert"><div className="cw-finance-schedule">{data.costs.scheduled_prices.map((row) => <div className="cw-finance-schedule-row" key={`${row.period_index ?? "x"}-${row.period_label ?? ""}`}><span>{row.period_index ? `${row.period_index}. Vertragsjahr` : row.period_label ?? "Vertragsjahr"}</span><strong>{moneyLike(row.amount, row.currency)}</strong></div>)}</div></Section>}
           {(data.costs.variable_charges ?? []).length > 0 && <Section title="Bedingte Kosten (nicht im Fixwert enthalten)" description="Verbrauchs- oder einsatzabhängige Positionen, getrennt vom wiederkehrenden Jahresbetrag"><div className="cw-finance-variable">{data.costs.variable_charges.map((item, idx) => <dl className="cw-definition-grid" key={`${item.label}-${idx}`}><div><dt>Position</dt><dd>{item.label}</dd></div><div><dt>Betrag</dt><dd>{moneyLike(item.amount, item.currency)}{item.unit_label_de ? ` ${item.unit_label_de}` : ""}</dd></div>{item.condition ? <div><dt>Bedingung</dt><dd>{item.condition}</dd></div> : null}<div><dt>Hinweis</dt><dd className="cw-muted">{item.note_de ?? "Wird nicht zum Fixwert addiert."}</dd></div></dl>)}</div></Section>}

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { REVIEW_TARGET, contractHref } from "@/lib/fix-targets";
 import { useCallback, useEffect, useState } from "react";
 import Signal from "@/components/ui/Signal";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -107,7 +109,7 @@ export default function ContractDeadlinesPanel({ contractId, orgSlug }: { contra
         {item.note ? <span className="cw-muted">Bemerkung: {item.note}</span> : null}
         <span className="rg-period">
           {item.source === "system" ? <span className="rg-origin">Aus den Vertragsdaten berechnet</span> : <span className="rg-origin rg-origin-manual">Manuell</span>}
-          {item.basis_unconfirmed ? <span title="Mindestens ein zugrunde liegender Wert stammt aus der KI und ist noch nicht bestätigt."><Signal tone="ai">Basiert auf ungeprüften KI-Werten</Signal></span> : null}
+          {item.basis_unconfirmed ? <Link className="signal-link" href={contractHref(contractId, REVIEW_TARGET)} title="Mindestens ein zugrunde liegender Wert stammt aus der KI und ist noch nicht bestätigt – jetzt prüfen."><Signal tone="ai">Basiert auf ungeprüften KI-Werten</Signal></Link> : null}
           {item.send_email ? <span className="rg-origin">E-Mail</span> : null}
           {item.send_ics ? <span className="rg-origin">Kalender</span> : null}
           {item.status === "done" ? <span className="rg-origin rg-origin-ai_confirmed">Erledigt{item.done_by_name ? ` von ${item.done_by_name}` : ""}</span> : null}
@@ -145,7 +147,7 @@ export default function ContractDeadlinesPanel({ contractId, orgSlug }: { contra
       <div className="rg-actions"><button type="button" className="btn" onClick={() => { setShowForm(false); setForm(EMPTY_FORM); }}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Termin anlegen</button></div>
     </form> : null}
     {items === null ? <p role="status">Termine werden geladen…</p> : <>
-      {open.length === 0 ? <p className="cw-muted">Keine offenen Termine. Fristen erscheinen automatisch, sobald Vertragsart, Beginn und Kündigungsfrist erfasst sind.</p> : <ul className="rg-deadlines">{open.map(renderItem)}</ul>}
+      {open.length === 0 ? <p className="cw-muted">Keine offenen Termine. Fristen erscheinen automatisch, sobald Vertragsart, Beginn und Kündigungsfrist erfasst sind. <Link className="rg-link" href={contractHref(contractId, { tab: "register", section: "term" })}>Laufzeitangaben ansehen</Link></p> : <ul className="rg-deadlines">{open.map(renderItem)}</ul>}
       {closed.length > 0 ? <details><summary>Erledigte und abgebrochene Termine ({closed.length})</summary><ul className="rg-deadlines">{closed.map(renderItem)}</ul></details> : null}
     </>}
   </section>;

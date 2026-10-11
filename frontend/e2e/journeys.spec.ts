@@ -211,3 +211,15 @@ test("12 – Direkt zur Stelle: fehlende Angabe anklicken setzt den Cursor ins F
   await page.getByRole("button", { name: "Abbrechen" }).click();
   await expect(page).not.toHaveURL(/feld=/);
 });
+
+test("13 – Direkt zur Stelle: Links in andere Reiter öffnen Abschnitt und Feld", async ({ page }) => {
+  await openContract(page, "Softwarepflege PACS");
+  const base = page.url().split("?")[0];
+  await page.goto(`${base}?tab=finance&abschnitt=entries`);
+  await expect(page.getByRole("form", { name: "Finanzeintrag anlegen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Finanzeinträge" })).toBeInViewport();
+  await page.goto(`${base}?tab=register&feld=term_start_date`);
+  await expect(page.getByRole("button", { name: "Speichern", exact: true })).toBeVisible();
+  await expect(page.locator(":focus")).toHaveAttribute("id", /^rg-term_(start_date|model)$/);
+  await page.getByRole("button", { name: "Abbrechen" }).click();
+});

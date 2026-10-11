@@ -27,6 +27,9 @@ export interface ContractRuleResult {
   label: string;
   outcome: RuleOutcome;
   detail: string;
+  /** Wo die geprüfte Angabe gepflegt wird (Direkt zur Stelle). */
+  target?: unknown;
+  rule_kind?: string | null;
 }
 
 export type RuleValues = Partial<Omit<ContractRuleDto, "id" | "updated_at" | "threshold">> & { threshold?: string | null };

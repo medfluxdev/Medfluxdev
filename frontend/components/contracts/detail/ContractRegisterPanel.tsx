@@ -44,7 +44,7 @@ import {
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 import { usePermissions } from "@/lib/use-permissions";
-import { FIELD_PARAM, SECTION_PARAM, baseFieldKey } from "@/lib/fix-targets";
+import { FIELD_PARAM, baseFieldKey } from "@/lib/fix-targets";
 
 type Draft = Record<string, RegisterValue>;
 type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo";
@@ -217,7 +217,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
   const handledLink = useRef<string | null>(null);
   const searchParams = useSearchParams();
   const linkedField = searchParams?.get(FIELD_PARAM) ?? null;
-  const linkedSection = searchParams?.get(SECTION_PARAM) ?? null;
   const { can } = usePermissions();
 
   const load = useCallback(async () => {
@@ -255,17 +254,16 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
     return () => { cancelled = true; };
   }, [editable, orgSlug]);
 
-  // Ziel aus der Adresse (?feld=…, ?abschnitt=…) einmal anspringen, sobald die Daten da sind.
+  // Ziel aus der Adresse (?feld=…) einmal anspringen, sobald die Daten da sind (?abschnitt= macht die Vertragsakte).
   useEffect(() => {
-    if (!register) return;
-    const link = linkedField ? `f:${linkedField}` : linkedSection ? `s:${linkedSection}` : null;
-    if (!link || handledLink.current === link) return;
+    if (!register || !linkedField) return;
+    const link = `f:${linkedField}`;
+    if (handledLink.current === link) return;
     handledLink.current = link;
-    if (linkedField) focusField(linkedField);
-    else document.getElementById(`rg-${linkedSection}-heading`)?.scrollIntoView?.({ block: "start" });
+    focusField(linkedField);
     // focusField liest den aktuellen Stand; neu auslösen soll nur ein neues Ziel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [register, linkedField, linkedSection]);
+  }, [register, linkedField]);
 
   // Nach dem Rendern (Bearbeitung offen): zum Feld scrollen, Cursor setzen, kurz hervorheben.
   useEffect(() => {

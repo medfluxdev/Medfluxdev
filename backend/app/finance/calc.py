@@ -123,6 +123,10 @@ def monthly_values(
     return out
 
 
+# Laufzeitangaben in „Vertragsdaten“ (Ziel für „Kein Vertragsende bekannt“).
+TERM_TARGET = {"tab": "register", "section": "term"}
+
+
 @dataclass
 class FinanceSummary:
     currency: str
@@ -131,6 +135,8 @@ class FinanceSummary:
     contract_end: Optional[date]
     projected_adjustment: bool
     notes: list[str]
+    # Ziel je Hinweis (gleiche Reihenfolge wie `notes`): wo die fehlende Angabe gepflegt wird, sonst None.
+    note_targets: list[Optional[dict]] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -140,6 +146,10 @@ class FinanceSummary:
             "contract_end": self.contract_end.isoformat() if self.contract_end else None,
             "projected_adjustment": self.projected_adjustment,
             "notes": list(self.notes),
+            "note_items": [
+                {"text": text, "target": self.note_targets[index] if index < len(self.note_targets) else None}
+                for index, text in enumerate(self.notes)
+            ],
         }
 
 
@@ -167,12 +177,16 @@ def summarize(
         else:
             horizon = max([year_last, as_of_month] + [month_index(e.valid_to) for e in group if e.valid_to])
         notes: list[str] = []
+        targets: list[Optional[dict]] = []
         if not term_known:
             notes.append("Kein Vertragsende bekannt: Beträge bis Vertragsende und für die Gesamtlaufzeit sind nicht berechenbar.")
+            targets.append(TERM_TARGET)
         if adjustment.kind == "index":
             notes.append("Preisanpassung nach Index: künftige Beträge können nicht vorausberechnet werden.")
+            targets.append(None)
         elif adjustment.kind == "negotiation":
             notes.append("Preisanpassung nach Verhandlung: künftige Beträge können nicht vorausberechnet werden.")
+            targets.append(None)
         summaries = {"expense": DirectionSummary(), "income": DirectionSummary()}
         projected = False
         for entry in group:
@@ -198,6 +212,7 @@ def summarize(
                 summary.total_term = None
         if projected:
             notes.append("Künftige Beträge enthalten die vereinbarte prozentuale Preisanpassung (Projektion).")
+            targets.append(None)
         results.append(FinanceSummary(
             currency=currency,
             expense=summaries["expense"],
@@ -205,6 +220,7 @@ def summarize(
             contract_end=contract_end,
             projected_adjustment=projected,
             notes=notes,
+            note_targets=targets,
         ))
     return results
 

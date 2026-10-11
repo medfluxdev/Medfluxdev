@@ -34,7 +34,8 @@ export function registerField(key: string): FixTarget {
 export const REVIEW_TARGET: FixTarget = { tab: "documents", subtab: "review" };
 export const FINANCE_ENTRIES_TARGET: FixTarget = { tab: "finance", section: "entries" };
 
-export function contractHref(contractId: string, target?: FixTarget): string {
+export function contractHref(contractId: string, raw?: FixTarget): string {
+  const target = raw ? normalizeTarget(raw) : undefined;
   const params = new URLSearchParams();
   if (target && target.tab !== "overview") params.set("tab", target.tab);
   if (target?.tab === "documents" && target.subtab) params.set("subtab", target.subtab);
@@ -50,4 +51,93 @@ export function registerHref(filters: GridFilter[], extra?: Record<string, strin
   if (filters.length) params.set("filter", JSON.stringify(filters));
   const query = params.toString();
   return `/register${query ? `?${query}` : ""}`;
+}
+
+// Felder, die nicht im Formular „Vertragsdaten“ stehen, sondern im Abschnitt „Zuständigkeit“ darunter.
+const OWNERSHIP_FIELDS = new Set(["responsible_account_id", "cost_center_id", "hospital_id", "department_id"]);
+
+/** Ziele vereinheitlichen: Zuständigkeitsfelder führen zum Abschnitt „Zuständigkeit“. */
+export function normalizeTarget(target: FixTarget): FixTarget {
+  if (target.field && OWNERSHIP_FIELDS.has(target.field)) return { tab: "register", section: "ownership" };
+  return target;
+}
+
+// Abschnitt → Element (Überschrift) auf dem Reiter; sonst die Überschrift eines Vertragsdaten-Abschnitts.
+const SECTION_ANCHORS: Record<string, string> = {
+  ownership: "cw-ownership-heading",
+  entries: "fin-entries-heading",
+  suggestions: "fin-ai-heading",
+  terms: "rg-terms-heading",
+  rules: "rules-heading",
+  renewal: "renewal-heading",
+  deadlines: "rg-deadlines-heading",
+};
+
+export function sectionAnchor(section: string): string {
+  return SECTION_ANCHORS[section] ?? `rg-${section}-heading`;
+}
+
+const TABS = new Set<ContractTab>(["overview", "register", "deadlines", "finance", "documents", "relations", "history"]);
+
+/** Ziel aus einer API-Antwort prüfen (unbekannte Werte werden ignoriert, nie geraten). */
+export function asFixTarget(value: unknown): FixTarget | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.tab !== "string" || !TABS.has(raw.tab as ContractTab)) return null;
+  return {
+    tab: raw.tab as ContractTab,
+    ...(typeof raw.subtab === "string" ? { subtab: raw.subtab as DocumentSubtab } : {}),
+    ...(typeof raw.field === "string" ? { field: raw.field } : {}),
+    ...(typeof raw.section === "string" ? { section: raw.section } : {}),
+  };
+}
+
+/** Kurze Beschriftung für einen Link „dorthin“, passend zum Ort. */
+export function fixLabel(target: FixTarget): string {
+  const normalized = normalizeTarget(target);
+  if (normalized.tab === "documents") return normalized.subtab === "review" ? "KI-Werte prüfen" : normalized.subtab === "attachments" ? "Dokument hinzufügen" : "Dokumente öffnen";
+  if (normalized.tab === "finance") return "Kosten erfassen";
+  if (normalized.section === "ownership") return "Zuständigkeit festlegen";
+  if (normalized.section === "term") return "Laufzeit erfassen";
+  if (normalized.field) return "Zum Feld";
+  return "Öffnen";
+}
+
+// Aufgaben und Warnungen: wo sie erledigt werden (gleiche Zuordnung wie im Backend für Benachrichtigungen).
+const DEADLINE_TARGET: FixTarget = { tab: "deadlines", section: "renewal" };
+const WORK_ITEM_TARGETS: Record<string, FixTarget | null> = {
+  manual_review: REVIEW_TARGET,
+  missing_cost: FINANCE_ENTRIES_TARGET,
+  equipment_coverage_review: { tab: "relations" },
+  equipment_relationship_ambiguous: { tab: "relations" },
+  cancellation_deadline: DEADLINE_TARGET,
+  contract_expiry: DEADLINE_TARGET,
+  automatic_renewal: DEADLINE_TARGET,
+  contract_expired: DEADLINE_TARGET,
+  sla_issue: null,
+};
+const WARNING_TARGETS: Record<string, FixTarget> = {
+  missing_cost_data: FINANCE_ENTRIES_TARGET,
+  cost_conflict: FINANCE_ENTRIES_TARGET,
+  currency_conflict: FINANCE_ENTRIES_TARGET,
+  unclear_contract_data: REVIEW_TARGET,
+  manual_review_required: REVIEW_TARGET,
+  calculation_conflict: REVIEW_TARGET,
+  cancellation_deadline_approaching: DEADLINE_TARGET,
+  cancellation_deadline_today: DEADLINE_TARGET,
+  cancellation_deadline_passed: DEADLINE_TARGET,
+  automatic_renewal_attention: DEADLINE_TARGET,
+  contract_end_approaching: DEADLINE_TARGET,
+  contract_expired: DEADLINE_TARGET,
+};
+
+/** Ziel einer Aufgabe; null = es gibt keinen Ort zum Beheben (z. B. SLA-Hinweis). */
+export function workItemTarget(itemType: string, requiresReview = false): FixTarget | null {
+  if (requiresReview) return REVIEW_TARGET;
+  return itemType in WORK_ITEM_TARGETS ? WORK_ITEM_TARGETS[itemType] : null;
+}
+
+export function warningTarget(warningType: string, requiresReview = false): FixTarget | null {
+  if (requiresReview) return REVIEW_TARGET;
+  return WARNING_TARGETS[warningType] ?? null;
 }

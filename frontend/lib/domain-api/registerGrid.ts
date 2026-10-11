@@ -289,7 +289,7 @@ export interface RenewalBrief {
   review_pending: boolean;
   open_deadlines: { due_date: string; title: string }[];
   decision: { id: string; decision: string; label: string; status: string; note: string | null; by: string; at: string | null } | null;
-  hints: { kind: "action" | "check" | "info"; text: string; reason: string }[];
+  hints: { kind: "action" | "check" | "info"; text: string; reason: string; target?: unknown }[];
   explanation: string[];
 }
 
