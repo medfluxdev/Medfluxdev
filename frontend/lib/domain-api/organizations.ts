@@ -27,7 +27,12 @@ export interface DepartmentDto {
   code: string;
   unit_type?: DepartmentUnitType | null;
   is_active: boolean;
+  /** Einordnung passt nicht zu den Strukturregeln (bestehende Daten); Text = Regel. */
+  placement_issue?: string | null;
 }
+
+/** Erlaubte übergeordnete Typen je Typ (`null` = direkt unter dem Krankenhaus). */
+export type PlacementRules = Partial<Record<DepartmentUnitType, { parents: (DepartmentUnitType | null)[]; text: string }>>;
 
 export interface CostCenterDto {
   id: string;
@@ -42,6 +47,7 @@ export interface OrganizationStructureDto {
   hospitals: HospitalDto[];
   departments: DepartmentDto[];
   unit_types?: DepartmentUnitType[];
+  placement_rules?: PlacementRules;
 }
 
 export interface StructureSearchHitDto {

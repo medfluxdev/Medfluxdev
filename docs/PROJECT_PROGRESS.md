@@ -5627,3 +5627,10 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Geschäftsstatus „Gelöscht“ → „Storniert“** (Code `geloescht` bleibt, keine Datenänderung): Beschriftungen, Filter „Stornierte einbeziehen“, Standardansicht „Stornierte Verträge“ (Namen von Standardansichten kommen jetzt immer aus dem Code), Rechte „Stornierte Verträge ansehen“ / „Als storniert markieren“.
 - **Tests:** `test_contract_delete_guard.py` angepasst (+Rollen-Tests), `contract-deletion-admin.test.tsx` neu, `register-filters.test.tsx` angepasst.
 
+### Nachtrag 2026-10-11 – Regeln für die Abteilungsstruktur
+
+- **Regeln** (`app/organization_structure/placement.py`, eine Quelle für Backend und Oberfläche): Klinik nur direkt unter dem Krankenhaus; Abteilung unter einer Klinik oder direkt unter dem Krankenhaus (IT, Haustechnik); Station und Funktionsbereich unter einer Klinik oder Abteilung. Bereich, Einheit und Einheiten ohne Typ haben keine Regel; ein übergeordneter Eintrag ohne Typ wird nicht beurteilt.
+- **API:** Anlegen, Umhängen und Typwechsel werden geprüft (422 mit Regeltext; ein Typwechsel, der Untereinheiten unpassend machte, nennt diese). Bestehende Abweichungen bleiben und werden markiert (`placement_issue` je Abteilung, `placement_rules` in `/api/organization-structure`); Umbenennen bleibt möglich.
+- **Oberfläche:** „Übergeordnete Einheit“ ist ein Suchfeld (`components/ui/SearchSelect.tsx`, ARIA-Combobox) mit nur passenden Einheiten; „direkt im Krankenhaus“ nur, wo erlaubt; Hinweis mit Regel. Spalte „Einordnung“ zeigt „Prüfen“ mit Grund.
+- **Tests:** neu `backend/tests/test_department_placement.py` (2), `frontend/test/department-placement.test.tsx` (4); `master-data.test.tsx` angepasst.
+

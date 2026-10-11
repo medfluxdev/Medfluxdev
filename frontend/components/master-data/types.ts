@@ -13,7 +13,7 @@ export interface FieldOption {
 export interface FieldDef {
   key: string;
   label: string;
-  kind?: "text" | "textarea" | "select" | "checkbox" | "number" | "checks" | "email" | "url";
+  kind?: "text" | "textarea" | "select" | "search" | "checkbox" | "number" | "checks" | "email" | "url";
   required?: boolean;
   maxLength?: number;
   min?: number;

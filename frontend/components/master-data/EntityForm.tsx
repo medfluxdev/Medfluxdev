@@ -1,5 +1,6 @@
 "use client";
 
+import SearchSelect from "@/components/ui/SearchSelect";
 import { useId } from "react";
 import Field from "@/components/ui/Field";
 import type { FieldDef, FormValues } from "./types";
@@ -60,7 +61,18 @@ export default function EntityForm({ fields, values, onChange, readOnly, editing
           "aria-invalid": errors[field.key] ? true : undefined,
           "aria-describedby": describedBy,
         };
-        const input = field.kind === "select"
+        const input = field.kind === "search"
+          ? <SearchSelect
+            id={id}
+            value={typeof value === "string" ? value : ""}
+            options={(field.options ?? []).map((option) => ({ value: option.value, label: option.label }))}
+            emptyLabel={field.emptyOption}
+            disabled={disabled}
+            describedBy={describedBy}
+            invalid={Boolean(errors[field.key])}
+            onChange={(next) => onChange(field.key, next)}
+          />
+          : field.kind === "select"
           ? <select {...common} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)}>
             {field.emptyOption !== undefined ? <option value="">{field.emptyOption}</option> : <option value="" disabled>Bitte wählen</option>}
             {(field.options ?? []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from app.organization_structure.placement import child_issues, placement_issue, rules_payload
 from app.auth.dependencies import current_actor
 from app.core.scope_context import current_scope_context
 from app.database.models.activity_log import ActivityLog
@@ -105,6 +106,24 @@ def _validate_department_parent(session, *, organization_id: UUID, hospital_id: 
     raise HTTPException(status_code=422, detail="Abteilungs-Hierarchie ist zu tief.")
 
 
+def _validate_placement(session, *, unit_type: str | None, parent_id: UUID | None, department_id: UUID | None = None) -> None:
+    """Typ-Regeln der Struktur (organization_structure/placement.py); Verstoß = 422 mit Regeltext."""
+    parent = session.get(Department, parent_id) if parent_id else None
+    issue = placement_issue(unit_type, parent_id is not None, parent.unit_type if parent else None)
+    if issue:
+        raise HTTPException(status_code=422, detail=f"{issue} Bitte eine passende übergeordnete Einheit wählen.")
+    if department_id is not None:
+        children = session.execute(
+            select(Department.name, Department.unit_type).where(Department.parent_id == department_id)
+        ).all()
+        broken = child_issues(unit_type, children)
+        if broken:
+            raise HTTPException(
+                status_code=422,
+                detail="Mit diesem Typ passen untergeordnete Einheiten nicht mehr: " + ", ".join(broken[:5]) + (" …" if len(broken) > 5 else "") + ".",
+            )
+
+
 def _hospital_code_taken(session, organization_id: UUID, code: str, exclude: UUID | None = None) -> None:
     stmt = select(Hospital.id).where(Hospital.organization_id == organization_id, func.upper(Hospital.code) == code.upper())
     if exclude is not None:
@@ -180,10 +199,16 @@ def structure(request: Request, organization_slug: str):
 
         hospitals = session.scalars(hospital_stmt.order_by(Hospital.name.asc())).all()
         departments = session.scalars(department_stmt.order_by(Department.name.asc())).all()
+        types = {row.id: row.unit_type for row in session.scalars(select(Department).where(Department.organization_id == organization.id)).all()}
+
+        def issue(row):
+            return placement_issue(row.unit_type, row.parent_id is not None, types.get(row.parent_id) if row.parent_id else None)
+
         return {
             "hospitals": [{"id": str(row.id), "name": row.name, "code": row.code, "address": row.address, "is_active": row.is_active} for row in hospitals],
-            "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "parent_id": str(row.parent_id) if row.parent_id else None, "name": row.name, "code": row.code, "unit_type": row.unit_type, "is_active": row.is_active} for row in departments],
+            "departments": [{"id": str(row.id), "hospital_id": str(row.hospital_id), "parent_id": str(row.parent_id) if row.parent_id else None, "name": row.name, "code": row.code, "unit_type": row.unit_type, "is_active": row.is_active, "placement_issue": issue(row)} for row in departments],
             "unit_types": list(DEPARTMENT_UNIT_TYPES),
+            "placement_rules": rules_payload(),
         }
     finally:
         session.close()
@@ -243,7 +268,9 @@ def add_department(payload: DepartmentCreate, request: Request, organization_slu
         _validate_department_parent(session, organization_id=organization.id, hospital_id=hospital.id, department_id=None, parent_id=payload.parent_id)
         name, code = _required(payload.name, "Name"), _required(payload.code, "Kürzel").upper()
         _department_code_taken(session, hospital.id, code)
-        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=name, code=code, unit_type=_normalize_unit_type(payload.unit_type), is_active=True)
+        unit_type = _normalize_unit_type(payload.unit_type)
+        _validate_placement(session, unit_type=unit_type, parent_id=payload.parent_id)
+        row = Department(organization_id=organization.id, hospital_id=hospital.id, parent_id=payload.parent_id, name=name, code=code, unit_type=unit_type, is_active=True)
         session.add(row)
         session.flush()
         center = _attach_cost_center(session, organization_id=organization.id, department=row, code=payload.cost_center_code)
@@ -302,6 +329,10 @@ def update_department(department_id: UUID, payload: DepartmentUpdate, request: R
             _department_code_taken(session, row.hospital_id, payload.code.strip(), row.id)
             row.code = payload.code.strip().upper()
         if "unit_type" in payload.model_fields_set: row.unit_type = _normalize_unit_type(payload.unit_type)
+        if {"unit_type", "parent_id"} & payload.model_fields_set:
+            # Nur geänderte Einordnungen werden geprüft; bestehende Abweichungen bleiben und werden markiert.
+            _validate_placement(session, unit_type=row.unit_type, parent_id=row.parent_id,
+                                department_id=row.id if "unit_type" in payload.model_fields_set else None)
         if payload.is_active is False and row.is_active:
             linked = _active_contract_link_count(session, organization_id=organization.id, department_id=row.id)
             if linked:

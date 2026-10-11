@@ -12,7 +12,9 @@ import {
   type DepartmentDto,
   type DepartmentUnitType,
   type HospitalDto,
+  type PlacementRules,
 } from "@/lib/domain-api/organizations";
+import Signal from "@/components/ui/Signal";
 import { departmentDescendantIds, departmentFullPath } from "@/lib/organization-tree";
 import { optional, text, type EntityDefinition, type FieldOption, type FilterDef } from "../types";
 
@@ -20,11 +22,13 @@ export interface OrganizationContext {
   hospitals: HospitalDto[];
   departments: DepartmentDto[];
   costCenters: CostCenterDto[];
+  /** Strukturregeln vom Backend (organization_structure/placement.py). */
+  placementRules?: PlacementRules;
 }
 
 export async function loadOrganization(organizationSlug: string): Promise<OrganizationContext> {
   const [structure, centers] = await Promise.all([getOrganizationStructure(organizationSlug), listCostCenters(organizationSlug)]);
-  return { hospitals: structure.hospitals, departments: structure.departments, costCenters: centers.items };
+  return { hospitals: structure.hospitals, departments: structure.departments, costCenters: centers.items, placementRules: structure.placement_rules };
 }
 
 function hospitalName(context: OrganizationContext, id: string | null | undefined) {
@@ -94,10 +98,13 @@ export const hospitalDefinition: EntityDefinition<HospitalDto, OrganizationConte
 
 // --------------------------------------------------------------------------- Abteilungen
 
-export function departmentParentOptions(context: OrganizationContext, hospitalId: string, self: DepartmentDto | null): FieldOption[] {
+export function departmentParentOptions(context: OrganizationContext, hospitalId: string, self: DepartmentDto | null, unitType?: string): FieldOption[] {
   const blocked = self ? departmentDescendantIds(self.id, context.departments) : new Set<string>();
+  // Nur erlaubte übergeordnete Typen; Einheiten ohne Typ werden nicht beurteilt (bleiben wählbar).
+  const allowed = unitType ? context.placementRules?.[unitType as DepartmentUnitType]?.parents : undefined;
   return context.departments
     .filter((item) => item.hospital_id === hospitalId && item.is_active && item.id !== self?.id && !blocked.has(item.id))
+    .filter((item) => !allowed || !item.unit_type || allowed.includes(item.unit_type))
     .map((item) => ({ value: item.id, label: departmentFullPath(item, context.departments) }))
     .sort((a, b) => a.label.localeCompare(b.label, "de"));
 }
@@ -133,16 +140,23 @@ export const departmentDefinition: EntityDefinition<DepartmentDto, OrganizationC
       return path === row.name ? row.name : <span className="md-path"><span>{row.name}</span><small>{path}</small></span>;
     } },
     { key: "type", label: "Typ", sortValue: (row) => row.unit_type ?? "", render: (row) => (row.unit_type ? DEPARTMENT_UNIT_TYPE_LABELS[row.unit_type] : "–") },
+    { key: "placement", label: "Einordnung", sortValue: (row) => (row.placement_issue ? 0 : 1), render: (row) => (row.placement_issue ? <span title={row.placement_issue}><Signal tone="warning" size="sm">Prüfen</Signal><span className="visually-hidden">: {row.placement_issue}</span></span> : "–") },
     { key: "hospital", label: "Krankenhaus", sortValue: (row) => hospitalName(context, row.hospital_id), render: (row) => hospitalName(context, row.hospital_id) },
     { key: "centers", label: "Kostenstelle", sortValue: (row) => departmentCenterCodes(context, row.id), render: (row) => departmentCenterCodes(context, row.id) || "–" },
   ],
   fields: (context, form, row) => [
     { key: "hospital_id", label: "Krankenhaus", kind: "select", required: true, createOnly: true, options: hospitalOptions(context, row?.hospital_id) },
-    {
-      key: "parent_id", label: "Übergeordnete Einheit", kind: "select", emptyOption: "Keine (direkt im Krankenhaus)",
-      options: departmentParentOptions(context, text(form, "hospital_id"), row),
-      hint: "Bildet die Struktur ab, z. B. Station unter Klinik.",
-    },
+    (() => {
+      // Strukturregeln: Klinik nur oben, Abteilung unter Klinik oder oben, Station/Funktionsbereich darunter.
+      const rule = context.placementRules?.[text(form, "unit_type") as DepartmentUnitType];
+      const topAllowed = !rule || rule.parents.includes(null);
+      return {
+        key: "parent_id", label: "Übergeordnete Einheit", kind: "search" as const,
+        emptyOption: topAllowed ? "Keine – direkt im Krankenhaus" : undefined,
+        options: departmentParentOptions(context, text(form, "hospital_id"), row, text(form, "unit_type")),
+        hint: rule ? `${rule.text} Es werden nur passende Einheiten angeboten.` : "Tippen zum Suchen. Mit einem Einheitentyp werden nur passende übergeordnete Einheiten angeboten.",
+      };
+    })(),
     { key: "name", label: "Name", required: true, maxLength: 255 },
     { key: "code", label: "Kürzel", required: true, maxLength: 40, hint: "Eindeutig im Krankenhaus." },
     { key: "unit_type", label: "Einheitentyp", kind: "select", emptyOption: "Nicht festgelegt", options: UNIT_TYPE_OPTIONS },

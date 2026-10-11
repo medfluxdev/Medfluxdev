@@ -295,7 +295,7 @@ describe("Organisation", () => {
     expect(await axe(container)).toHaveNoViolations();
     await user.click(screen.getByRole("button", { name: "Untereinheit unter Kardiologie anlegen" }));
     const drawer = screen.getByRole("dialog", { name: "Abteilung anlegen" });
-    expect(within(drawer).getByLabelText("Übergeordnete Einheit")).toHaveValue("d-1");
+    expect(within(drawer).getByRole("combobox", { name: "Übergeordnete Einheit" })).toHaveValue("Kardiologie");
     await user.type(within(drawer).getByLabelText("Name *"), "Herzkatheterlabor");
     await user.type(within(drawer).getByLabelText("Kürzel *"), "HKL");
     await user.selectOptions(within(drawer).getByLabelText("Einheitentyp"), "funktionsbereich");
