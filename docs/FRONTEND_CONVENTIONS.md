@@ -82,6 +82,19 @@ Keine Inline-Styles außer für wirklich dynamische Werte (z. B. Breite eines Ba
 - Fehlt in einem Formular ein Stammdaten-Eintrag, `QuickCreate` mit derselben Definition anbieten (Beispiel: „Neuer Partner“ in „Vertrag anlegen“).
 - CSV immer über `lib/csv.ts` lesen und schreiben.
 
+## 5b. Direkt zur Stelle
+
+Jede Meldung, dass etwas fehlt, unbekannt ist oder geprüft werden muss, führt mit einem Klick dorthin, wo es behoben wird. Plan: `docs/architecture/DIREKT_ZUR_STELLE_PLAN_20261011.md`.
+
+- Links nur über `lib/fix-targets.ts`: `contractHref(id, { tab, subtab, field, section })` für die Vertragsakte, `registerHref(filters)` für die Vertragsliste; keine Adressen von Hand bauen.
+- Mehrere fehlende Angaben als `MissingList` (jeder Eintrag ein Link oder Knopf, Screenreader „… erfassen“).
+- `?feld=<key>` öffnet „Vertragsdaten“ in der Bearbeitung und setzt den Cursor ins Feld (`#rg-<key>`); `?abschnitt=<id>` scrollt zum Abschnitt (`sectionAnchor`). Neue Abschnitte mit Sprungziel bekommen eine Überschrift mit stabiler `id` und einen Eintrag in `SECTION_ANCHORS`.
+- Hinweise aus dem Backend tragen ihr Ziel als `target` (`{tab, field?, section?, subtab?}`), gelesen mit `asFixTarget`; der Text bleibt unverändert. Unbekannte Ziele werden ignoriert, nie geraten.
+- Aufgaben und Warnungen: `workItemTarget` / `warningTarget` (Backend: `app/work_queue/targets.py` – beide Zuordnungen gleich halten).
+- Gefilterte Listen öffnen Verträge dort, wo die gefilterte Lücke behoben wird (`listRowTarget`).
+- Was einer Vertragsakte fehlt, steht in „Was fehlt noch?“ und in Strg+K („Dieser Vertrag“, `lib/page-commands.ts`).
+- Gibt es keinen Ort zum Beheben (z. B. SLA-Hinweis), bleibt die Meldung Text – dann keinen Link vortäuschen.
+
 ## 6. Barrierefreiheit
 
 - Zielgröße mindestens 24 × 24 px, besser 44 px bei Touch.

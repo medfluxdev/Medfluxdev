@@ -223,3 +223,30 @@ test("13 – Direkt zur Stelle: Links in andere Reiter öffnen Abschnitt und Fel
   await expect(page.locator(":focus")).toHaveAttribute("id", /^rg-term_(start_date|model)$/);
   await page.getByRole("button", { name: "Abbrechen" }).click();
 });
+
+test("14 – Direkt zur Stelle: Strg+K kennt, was dem offenen Vertrag fehlt", async ({ page }) => {
+  // Ein bewusst unvollständiger Vertrag (nur Kurzbeschreibung) über die API derselben Anmeldung.
+  await page.goto("/register");
+  const created = await page.request.post(`${process.env.E2E_API_URL}/api/contracts?organization_slug=${process.env.E2E_ORG_SLUG}`, {
+    headers: { Origin: process.env.E2E_BASE_URL ?? "" },
+    data: { values: { short_description: `E2E Lücken ${Date.now() % 100000}` } },
+  });
+  expect(created.ok()).toBeTruthy();
+  const { contract_id: contractId } = await created.json();
+  await page.goto(`/contracts/${contractId}`);
+  const gaps = page.getByRole("region", { name: "Was fehlt noch?" });
+  await expect(gaps).toBeVisible();
+  const first = (await gaps.getByRole("link").first().getAttribute("href"))!;
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Befehle und Suche" });
+  await expect(palette.getByText("Dieser Vertrag")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.url()).toContain(first.split("?")[1]);
+  await expect(page.locator(":focus")).toHaveAttribute("id", /^rg-/);
+  // Aufräumen: archivieren, damit Liste und Bildreferenzen beim nächsten Lauf gleich bleiben.
+  await page.getByRole("button", { name: "Abbrechen" }).click();
+  const archived = await page.request.post(`${process.env.E2E_API_URL}/api/contracts/${contractId}/archive?organization_slug=${process.env.E2E_ORG_SLUG}`, {
+    headers: { Origin: process.env.E2E_BASE_URL ?? "" }, data: {},
+  });
+  expect(archived.ok()).toBeTruthy();
+});

@@ -5475,3 +5475,9 @@ Plan: `docs/architecture/DIREKT_ZUR_STELLE_PLAN_20261011.md` (Entscheidungen: ga
 - **Offen:** Stammdaten „{n} ohne Vertrag“ (Partnerliste hat keinen Adressfilter); Balken in Analysen führen weiter zur Dimension, nicht zu „ohne Kosten“.
 - **Tests:** `test_direct_targets.py` (Benachrichtigungslinks), `frontend/test/direct-jump-lists.test.tsx`, `import.test.tsx` angepasst. Verifikation: pytest 1631 / 3 übersprungen; `npm run verify` grün (58 Testdateien); Playwright 177 + Analysen-Referenz bewusst aktualisiert (neuer Link).
 
+### Nachtrag 2026-10-11 – „Direkt zur Stelle“, Phase 4 (immer erreichbar)
+
+- **Strg+K:** Auf jeder Vertragsakte (alle Reiter) stehen die Lücken aus „Was fehlt noch?“ als Befehle ganz oben („Dieser Vertrag“: „Vertragsbeginn erfassen“, „Kosten erfassen“, „KI-Werte prüfen“ …); Enter springt zur Stelle. Mechanik: `lib/page-commands.ts`; Berechnung `useContractGaps` (lädt nach Änderungen an der Akte neu).
+- **Regel:** `docs/FRONTEND_CONVENTIONS.md` §5b „Direkt zur Stelle“; CLAUDE.md ergänzt.
+- **Tests:** neu `frontend/test/command-palette-page.test.tsx`; `direct-jump-contract.test.tsx` auf den Hook umgestellt; Playwright-Journey 14 (legt einen unvollständigen Vertrag an, springt per Strg+K, archiviert ihn wieder). Verifikation: pytest 1631 / 3 übersprungen; `npm run verify` grün (59 Testdateien); Playwright 179/179.
+

@@ -8,10 +8,11 @@ import { getGrid } from "@/lib/domain-api/registerGrid";
 import { useFocusTrap } from "@/components/ui/useFocusTrap";
 import { allowed, EXTRA_PAGES, Icon, NAV_GROUPS, type IconName } from "./navigation";
 import { usePreferences } from "./preferences";
+import { usePageCommands } from "@/lib/page-commands";
 
 interface Command {
   id: string;
-  section: "Aktionen" | "Seiten" | "Verträge" | "Vertragspartner" | "Inhalte";
+  section: "Dieser Vertrag" | "Aktionen" | "Seiten" | "Verträge" | "Vertragspartner" | "Inhalte";
   label: string;
   hint?: string;
   icon: IconName;
@@ -38,6 +39,12 @@ export default function CommandPalette({ open, onClose, onShowShortcuts }: { ope
 
   const go = (href: string) => () => { onClose(); router.push(href); };
   const isDeveloper = Boolean(account?.is_developer);
+  // Was der aktuellen Seite fehlt (z. B. „Vertragsbeginn erfassen“) steht ganz oben.
+  const pageCommands = usePageCommands();
+  const fromPage = useMemo<Command[]>(() => pageCommands.map((item) => ({
+    id: item.id, section: "Dieser Vertrag" as const, label: item.label, hint: item.hint, icon: "contracts" as const, run: go(item.href),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  })), [pageCommands]);
 
   const local = useMemo<Command[]>(() => {
     const pages = [...NAV_GROUPS.flatMap((group) => group.items), ...EXTRA_PAGES]
@@ -88,9 +95,10 @@ export default function CommandPalette({ open, onClose, onShowShortcuts }: { ope
 
   const results = useMemo(() => {
     const q = normalize(query.trim());
+    const page = q ? fromPage.filter((command) => normalize(`${command.label} ${command.hint ?? ""}`).includes(q)) : fromPage;
     const matches = q ? local.filter((command) => normalize(`${command.label} ${command.hint ?? ""}`).includes(q)) : local.filter((command) => command.section === "Aktionen" || command.section === "Seiten").slice(0, 12);
-    return [...matches.slice(0, 10), ...remote];
-  }, [local, query, remote]);
+    return [...page.slice(0, 8), ...matches.slice(0, 10), ...remote];
+  }, [fromPage, local, query, remote]);
 
   useEffect(() => { setActive(0); }, [query]);
 

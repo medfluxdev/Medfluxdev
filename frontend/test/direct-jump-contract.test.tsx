@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ContractGaps from "@/components/contracts/detail/ContractGaps";
+import ContractGaps, { useContractGaps } from "@/components/contracts/detail/ContractGaps";
 import ContractRulesSection from "@/components/contracts/detail/ContractRulesSection";
 import { asFixTarget, contractHref, fixLabel, normalizeTarget, warningTarget, workItemTarget } from "@/lib/fix-targets";
 
@@ -12,6 +12,12 @@ vi.mock("@/lib/domain-api/rules", async (importOriginal) => ({ ...(await importO
 vi.mock("@/lib/use-permissions", () => ({ usePermissions: () => ({ can: () => true, loaded: true }) }));
 
 const field = (label: string) => ({ value: null, label });
+
+// Karte über den Hook, so wie die Vertragsakte sie verwendet.
+function Gaps(props: { hasAnnualCost: boolean; reviewPending: boolean; documentCount: number }) {
+  const gaps = useContractGaps({ contractId: "c-1", orgSlug: "test-klinik", ...props });
+  return <ContractGaps contractId="c-1" gaps={gaps} />;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,7 +62,7 @@ describe("Direkt zur Stelle: Ziele für Aufgaben, Warnungen und API-Antworten", 
 
 describe("Direkt zur Stelle: Vertragsakte", () => {
   it("„Was fehlt noch?“ listet jede Lücke einmal, jede mit Link zur Stelle", async () => {
-    const { container } = render(<ContractGaps contractId="c-1" orgSlug="test-klinik" hasAnnualCost={false} reviewPending documentCount={0} />);
+    const { container } = render(<Gaps hasAnnualCost={false} reviewPending documentCount={0} />);
     const card = (await screen.findByRole("heading", { name: "Was fehlt noch?" })).closest("section")!;
     const links = within(card).getAllByRole("link");
     expect(links.map((link) => [link.textContent, link.getAttribute("href")])).toEqual([
@@ -77,7 +83,7 @@ describe("Direkt zur Stelle: Vertragsakte", () => {
     api.getContractRegister.mockResolvedValue({ business_status: "gueltig", fields: {}, missing_for_valid: [], terms: { missing: [] } });
     api.getContractOwnership.mockResolvedValue({ responsible_account_id: "a-1" });
     api.getContractRules.mockResolvedValue({ status: "Erfüllt", items: [] });
-    const { container } = render(<ContractGaps contractId="c-1" orgSlug="test-klinik" hasAnnualCost reviewPending={false} documentCount={1} />);
+    const { container } = render(<Gaps hasAnnualCost reviewPending={false} documentCount={1} />);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await Promise.resolve();
     expect(container).toBeEmptyDOMElement();
