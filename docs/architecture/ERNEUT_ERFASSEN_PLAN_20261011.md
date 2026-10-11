@@ -1,6 +1,6 @@
 # Plan: Re-extract from the document inside the contract ("Erneut aus dem Dokument erfassen")
 
-Date: 2026-10-11 · Status: proposal, decisions open (section 8) · Owner: product owner
+Date: 2026-10-11 · Status: decided 2026-10-11, all four phases approved (section 8) · Owner: product owner
 
 ## 1. Goal
 
@@ -100,7 +100,11 @@ If nothing new was found: "Keine zusätzlichen Angaben gefunden." plus next step
 - Per run: fields searched, found, applied, rejected → shows whether targeted search really helps.
 - Applied candidates become cases for the extraction benchmark (WP2.4), locally only.
 
-## 8. Decisions needed
+## 8. Decisions (product owner, 2026-10-11)
+
+All four answered with the recommended option: comparison screen always, admin + contract_manager only, model choice for the same roles, phase 4 included.
+
+Original questions:
 
 1. **Applying**: always via the comparison screen (recommended) – or automatically fill *empty* fields with newly found values?
 2. **Who may start it**: admin + contract_manager (recommended) – or also reviewers?
