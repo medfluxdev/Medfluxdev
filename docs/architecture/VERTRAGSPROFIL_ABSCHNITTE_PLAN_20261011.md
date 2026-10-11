@@ -36,5 +36,5 @@ Standardprofil je Vertragstyp (Code aus `register/defaults.py`):
 ## Umsetzung
 
 - Backend: `app/register/sections.py` (Schlüssel, Standardprofile, `sections_for_type(row)`); Migration `v4e6f8a90014` (Spalte `sections`); Typ-API liefert `sections` (wirksam) und `sections_default` (ob Standard) und nimmt `sections` (Liste oder `null`) an; Vertragsakte liefert `sections = {scope, sla, maintenance, equipment, type_label}` (`null` ohne Typ).
-- Frontend: `lib/contract-sections.ts` (`sectionVisible(key, sections, hasData)`); Übersicht (Leistungsumfang, SLA, Hinweis mit „Trotzdem anzeigen“), `OpenPoints`, Vertragsdaten (Kasten Wartung), Verknüpfungen (Geräte); Stammdaten-Formular für Vertragstypen mit Kontrollkästchen „Abschnitte“.
+- Frontend: `lib/contract-sections.ts` (`sectionVisible(key, sections, hasData)`); Übersicht (Leistungsumfang, SLA, Hinweis mit „Trotzdem anzeigen“), `OpenPoints`, Vertragsdaten (Kasten Wartung), Verknüpfungen (Geräte), Backend-Vollanalyse (Leistungsumfang/SLA und Geräte je Typ); Stammdaten-Formular für Vertragstypen mit Kontrollkästchen „Abschnitte“.
 - Tests: Backend (Standardprofil, Anpassung, Zurücksetzen, Detail), Frontend (Übersicht ausgeblendet/eingeblendet mit Daten/ohne Typ, OpenPoints, Formular).
