@@ -1,5 +1,6 @@
 "use client";
 
+import { revealBox } from "@/lib/box-collapse";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -265,6 +266,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       const element = document.getElementById(anchor);
       if (element) {
         const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+        revealBox(element);
         element.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" });
         return;
       }

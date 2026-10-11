@@ -56,6 +56,7 @@ Keine Inline-Styles außer für wirklich dynamische Werte (z. B. Breite eines Ba
 - Navigation in sechs Bereichen (`components/shell/navigation.tsx`). Neue Seite: dort eintragen (Rollen, Stichworte für die Befehlspalette), sonst ist sie weder im Menü noch in Strg+K auffindbar.
 - Filter, Reiter und Suchbegriffe, die man teilen oder mit „Zurück“ erreichen will, gehören in die Adresse (`?q=`, `?tab=`, Historienfilter).
 - Jeder Datenbereich hat vier Zustände: laden, leer, Fehler (mit „Erneut laden“), keine Berechtigung. Nie Beispielverträge oder Beträge hart einbauen.
+- Jeder Kasten lässt sich einklappen: `lib/box-collapse.ts` (in `ClientNav` eingehängt) versieht jeden Abschnitt im Inhaltsbereich (`section.cw-section`, `.card`, `.panel` u. a.) mit Überschrift als erstem Kind bzw. im Kopf mit einem Knopf rechts oben; der Zustand gilt je Seite (Kennungen in der Adresse zählen nicht) und Kasten. Kästen mit Aktionen im Kopf, die beim Einklappen verschwinden sollen, nutzen `CollapsibleSection`; `data-no-collapse` nimmt einen Kasten aus. Sprünge zu einem Abschnitt rufen vorher `revealBox(element)` auf.
 
 ## 4. Sprache
 

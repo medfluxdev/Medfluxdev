@@ -1,5 +1,6 @@
 "use client";
 
+import { revealBox } from "@/lib/box-collapse";
 import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
 import Signal, { type SignalTone } from "@/components/ui/Signal";
@@ -119,7 +120,7 @@ export default function OpenPoints({ contractId, points, searchHref, onOpen }: {
           {point.target
             ? <Link className={className} href={contractHref(contractId, point.target)} onClick={(event) => { event.preventDefault(); onOpen(point.target!); }}>{point.action}</Link>
             : point.anchor
-              ? <a className={className} href={`#${point.anchor}`} onClick={(event) => { event.preventDefault(); document.getElementById(point.anchor!)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{point.action}</a>
+              ? <a className={className} href={`#${point.anchor}`} onClick={(event) => { event.preventDefault(); const target = document.getElementById(point.anchor!); revealBox(target); target?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{point.action}</a>
               : null}
         </li>;
       })}

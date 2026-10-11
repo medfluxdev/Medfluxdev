@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { watchBoxes } from "@/lib/box-collapse";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AppSidebar from "@/components/shell/AppSidebar";
 import AppTopbar from "@/components/shell/AppTopbar";
@@ -17,6 +18,12 @@ import { ROLE_LABELS } from "@/lib/auth-types";
 // Anwendungsrahmen: Seitenleiste, Kopfzeile, Befehlspalette, Tastenkuerzel (UX-Plan U3).
 export default function ClientNav({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Jeder Kasten im Inhaltsbereich lässt sich einklappen (lib/box-collapse.ts).
+  const stopBoxes = useRef<(() => void) | null>(null);
+  const mainRef = useCallback((node: HTMLElement | null) => {
+    stopBoxes.current?.();
+    stopBoxes.current = node ? watchBoxes(node) : null;
+  }, []);
   const { account, organizationSlug, loading, role, previewOf, setPreviewRole } = useAuth();
   const [prefs, updatePrefs] = usePreferences();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -60,7 +67,7 @@ export default function ClientNav({ children }: { children: React.ReactNode }) {
             <button type="button" className="btn btn-sm" onClick={() => setPreviewRole(null)}>Vorschau beenden</button>
           </div>
         ) : null}
-        <main className="main shell-content" id="main-content" tabIndex={-1}>
+        <main ref={mainRef} className="main shell-content" id="main-content" tabIndex={-1}>
           {children}
         </main>
       </div>
