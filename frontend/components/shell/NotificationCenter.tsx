@@ -20,6 +20,7 @@ interface State {
 const EMPTY: State = { mine: [], unread: null, work: [], workTotal: null };
 
 function noteHref(item: InboxNotification) {
+  if (item.href) return item.href;
   return item.contract_id ? `/contracts/${item.contract_id}?tab=deadlines` : "/postfach";
 }
 

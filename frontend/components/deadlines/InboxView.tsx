@@ -90,7 +90,7 @@ export default function InboxView({ organizationSlug }: { organizationSlug: stri
             <strong>{NOTIFICATION_KIND_LABEL[item.kind]}{item.on_behalf_of_name ? ` · Vertretung für ${item.on_behalf_of_name}` : ""}{item.read_at ? "" : " · ungelesen"}</strong>
             <time dateTime={item.created_at ?? undefined}>{item.created_at ? timestamp.format(new Date(item.created_at)) : ""}</time>
           </div>
-          <p>{item.contract_id ? <Link href={`/contracts/${item.contract_id}?tab=deadlines`} onClick={() => { if (!item.read_at) void read(item.id); }}>{item.title}</Link> : item.title}</p>
+          <p>{item.contract_id ? <Link href={item.href ?? `/contracts/${item.contract_id}?tab=deadlines`} onClick={() => { if (!item.read_at) void read(item.id); }}>{item.title}</Link> : item.title}</p>
           {item.body ? <p className="cw-muted">{item.body}</p> : null}
           {!item.read_at ? <button type="button" className="rg-link" onClick={() => void read(item.id)}>Als gelesen markieren</button> : null}
         </li>)}</ol>}

@@ -162,6 +162,16 @@ PACKS: tuple[tuple[str, tuple[str, ...], tuple[str, ...], bool], ...] = (
     ("operations", ("equipment", "services.", "sla."), ("equipment", "services", "sla"), True),
 )
 
+# Erneute Erfassung: nur die gesuchten Felder, gruendlicher, aber nie geraten.
+_FOCUS_GUIDANCE = (
+    "FOCUSED SEARCH: an earlier extraction did not find the catalog fields below. "
+    "Read every page carefully, including annexes, tables, footnotes and signature blocks, "
+    "and consider German synonyms (e.g. Vertragsbeginn: 'tritt in Kraft', 'Beginn der Leistungen', "
+    "'gilt ab'; Laufzeit: 'Vertragsdauer', 'fest abgeschlossen fuer'; Kuendigungsfrist: "
+    "'kann mit einer Frist von', 'spaetestens ... vor Ablauf'). Return a field only with a "
+    "verbatim quote that states it; if it is not stated, omit it."
+)
+
 # Deterministic guidance for literal money values per pack.  The model interprets
 # contractual meaning; the harness only supplies stable terminology to prevent the
 # same literal from being sprayed across several cost fields.
@@ -3131,7 +3141,14 @@ class DirectContractHarness:
         self.ai = ai or AIService(settings)
 
     async def analyze(self, canonical, image_loader=None, page_image_loader=None,
-                      original_page_loader=None):
+                      original_page_loader=None, *, focus_fields=None, focus_pages=None):
+        """Analysiert ein kanonisches Dokument.
+
+        `focus_fields` / `focus_pages` (erneute Erfassung): nur die Packs mit diesen
+        Feldern, ein auf sie begrenzter Katalog und – statt der Seitenauswahl je Pack –
+        die genannten Seiten bzw. alle Seiten. Nachweis-, Normalisierungs- und
+        Validierungsregeln bleiben unveraendert.
+        """
         from app.ai.contract_extractor import ContractAnalysisResult
 
         started = time.monotonic()
@@ -3139,6 +3156,9 @@ class DirectContractHarness:
         document = DocumentModel.build(canonical)
         types = field_types()
         source_signals = collect_source_signals(document)
+        focus = {str(item) for item in (focus_fields or []) if str(item) in types}
+        known_pages = {page.page_number for page in canonical.pages}
+        hint_pages = sorted({int(page) for page in (focus_pages or []) if int(page) in known_pages})
         calls: list[dict] = []
         analysis_id = str(uuid.uuid4())
         rejected: list[dict] = []
@@ -3419,6 +3439,10 @@ class DirectContractHarness:
             # and structurally ambiguous scanned/OCR pages, while clean native-text
             # pages remain text-only. Routing decides compute only, never meaning.
             candidate_pages = visual_candidate_pages(canonical)
+            if hint_pages:
+                # Genannte Seiten zuerst (auch wenn sie sauberen Text haben): die Person
+                # weiss, wo die Angabe steht; Vision ergaenzt nur die Textschicht.
+                candidate_pages = hint_pages + [page for page in candidate_pages if page not in hint_pages]
             page_routes = route_summary(canonical)
             calls.append({
                 "purpose": "routing:hybrid-pages",
@@ -3473,14 +3497,23 @@ class DirectContractHarness:
             proposals: list[ProposedFact] = []
             for pack_name, selectors, topics, expand_keywords in PACKS:
                 catalog = _field_catalog(types, selectors)
-                pack_pages = _pack_pages(
-                    topics,
-                    canonical,
-                    source_signals,
-                    expand_keywords,
-                    page_limit=5 if pack_name == "payment" else None,
-                    fallback_all=pack_name != "payment",
-                )
+                if focus:
+                    catalog = {key: value for key, value in catalog.items() if key in focus}
+                    if not catalog:
+                        continue
+                if focus:
+                    # Gezielte Suche: der kleine Katalog laesst Platz fuer mehr Quelltext.
+                    # Genannte Seiten oder das ganze Dokument (Chunks teilen bei Bedarf).
+                    pack_pages = hint_pages or sorted(known_pages)
+                else:
+                    pack_pages = _pack_pages(
+                        topics,
+                        canonical,
+                        source_signals,
+                        expand_keywords,
+                        page_limit=5 if pack_name == "payment" else None,
+                        fallback_all=pack_name != "payment",
+                    )
                 pack_signals = [
                     signal
                     for signal in source_signals
@@ -3495,6 +3528,8 @@ class DirectContractHarness:
                     }
                 ]
                 guidance = _PACK_GUIDANCE.get(pack_name, "")
+                if focus:
+                    guidance = (guidance + " " if guidance else "") + _FOCUS_GUIDANCE
                 catalog_json = json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
 
                 def build_pack_prompt(pages: list[int], chunk_signals: list[dict]) -> str:
@@ -4438,7 +4473,7 @@ class DirectContractHarness:
             }
 
             error = None
-            if not supported_count:
+            if not supported_count and not focus:
                 error = (
                     "HarnessFailure purpose=delivery category=no_grounded_facts "
                     f"proposals={len(proposals)} rejected={len(rejected)} "
@@ -4447,7 +4482,8 @@ class DirectContractHarness:
 
             return ContractAnalysisResult(
                 document_id=canonical.document_id or "",
-                contract=contract if supported_count else None,
+                # Gezielte Suche ohne Fund ist ein gueltiges Ergebnis ("nicht im Dokument").
+                contract=contract if (supported_count or focus) else None,
                 status=status,
                 validation_status=validation_status,
                 requires_review=bool(issues) or not supported_count,

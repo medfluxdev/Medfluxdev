@@ -46,6 +46,7 @@ from app.database.models import (
     Contract,
     ContractDocument,
     ContractEquipment,
+    ContractExtraction,
     ContractWarning,
     DocumentArtifact,
     DocumentFile,
@@ -214,6 +215,38 @@ class ProcessedDocument:
     message: Optional[str] = None
     error: Optional[str] = None
     warnings: list[str] = field(default_factory=list)
+    # Nur bei erneuter Erfassung: gespeicherte, NICHT akzeptierte Kandidaten-Extraktion.
+    extraction_id: Optional[str] = None
+
+
+@dataclass
+class _MergedAnalysis:
+    """Metadaten einer zusammengefuehrten Extraktion (erneute Erfassung, Uebernahme).
+
+    Es findet kein neuer KI-Aufruf statt; die Felder spiegeln den Kandidaten.
+    """
+
+    status: ExtractionStatus
+    validation_status: ValidationStatus
+    requires_review: bool
+    model: Optional[str]
+    prompt_version: Optional[str]
+    message: str
+    error: Optional[str] = None
+    chunk_count: int = 0
+    processing_duration: float = 0.0
+    timeout_count: int = 0
+    retry_count: int = 0
+    truncated_chunks: int = 0
+    ai_call_count: int = 0
+    groups_processed: int = 0
+    evidence_issues: int = 0
+    verifier_issues: int = 0
+    normalization_issues: int = 0
+
+
+class ReextractionConflict(RuntimeError):
+    """Die Vertragswahrheit hat sich seit dem Start der erneuten Erfassung geaendert."""
 
 
 class DocumentProcessingService:
@@ -457,87 +490,218 @@ class DocumentProcessingService:
             organization_id,
         )
 
-    def reanalyze_document(
+    def _stored_for_contract(self, organization_id, contract_id, document_version_id):
+        """Gespeichertes Original eines Vertrags fuer die erneute Erfassung (ohne Re-Upload)."""
+        with create_session() as session:
+            version = session.scalars(
+                select(DocumentVersion).where(
+                    (DocumentVersion.id == document_version_id)
+                    & (DocumentVersion.organization_id == organization_id)
+                )
+            ).first()
+            if version is None:
+                return None
+            doc = session.scalars(
+                select(DocumentFile).where(
+                    (DocumentFile.id == version.document_file_id)
+                    & (DocumentFile.organization_id == organization_id)
+                )
+            ).first()
+            if doc is None or not self._storage.exists_reference(version.storage_key):
+                return None
+            stored = ProcessedDocument(
+                document_id=str(doc.id),
+                document_version_id=str(version.id),
+                sha256=version.sha256,
+                original_filename=doc.original_filename,
+                status="duplicate",
+                contract_id=str(contract_id),
+            )
+            return stored, version.storage_key
+
+    def extract_candidate(
         self,
         *,
-        organization_slug: str,
-        document_version_id: str,
+        organization_id,
+        contract_id,
+        document_version_id,
+        reread: bool = False,
+        model_override: Optional[str] = None,
+        focus_fields: Optional[list[str]] = None,
+        focus_pages: Optional[list[int]] = None,
         as_of_date: Optional[date] = None,
     ) -> ProcessedDocument:
-        """Reanalysiert einen bereits akzeptierten Vertrag ohne Re-Upload.
+        """Erneute Erfassung: neue Extraktion als Kandidat, die Vertragswahrheit bleibt unveraendert.
 
-        Import-Idempotenz und Retry-Semantik bleiben unverändert. Die neue Analyse
-        wird erst nach vollständiger Persistenz atomar als Current State akzeptiert;
-        bei Fehler bleibt die bisher akzeptierte Vertragswahrheit unverändert.
+        Gleicher Weg wie der Import (Claim, kanonisches Dokument, Harness, Nachweise,
+        Validierung); gespeichert wird nur eine nicht akzeptierte Extraktion.
         """
-        try:
-            version_id = uuid.UUID(str(document_version_id))
-        except (TypeError, ValueError):
+        resolved = self._stored_for_contract(organization_id, contract_id, document_version_id)
+        if resolved is None:
             return self._not_found_result()
+        stored, storage_key = resolved
+        ai = None
+        if model_override and self._analysis is None:
+            from app.ai.service import AIService
 
-        try:
-            with create_session() as session:
-                org = get_organization(session, organization_slug)
-                if org is None:
-                    return self._not_found_result()
-                version = session.scalars(
-                    select(DocumentVersion).where(
-                        (DocumentVersion.id == version_id)
-                        & (DocumentVersion.organization_id == org.id)
-                    )
-                ).first()
-                if version is None:
-                    return self._not_found_result()
-                doc = session.scalars(
-                    select(DocumentFile).where(
-                        (DocumentFile.id == version.document_file_id)
-                        & (DocumentFile.organization_id == org.id)
-                    )
-                ).first()
-                if doc is None or not self._storage.exists_reference(version.storage_key):
-                    return self._not_found_result()
-                contract = self._accepted_contract_for_version(session, org.id, version.id)
-                if contract is None:
-                    return ProcessedDocument(
-                        document_id=str(doc.id),
-                        document_version_id=str(version.id),
-                        sha256=version.sha256,
-                        original_filename=doc.original_filename,
-                        status="failed",
-                        message="Kein akzeptierter Vertrag für Reanalyse vorhanden.",
-                    )
-                stored = ProcessedDocument(
-                    document_id=str(doc.id),
-                    document_version_id=str(version.id),
-                    sha256=version.sha256,
-                    original_filename=doc.original_filename,
-                    status="duplicate",
-                    contract_id=str(contract.id),
-                )
-                organization_id = org.id
-                storage_key = version.storage_key
-                contract_id = contract.id
-        except Exception as exc:
-            logger.exception("Failed to resolve document reanalysis request")
-            return ProcessedDocument(
-                document_id="",
-                document_version_id=str(document_version_id),
-                sha256="",
-                original_filename="",
-                status="failed",
-                message=_SAFE_PROCESSING_FAILURE,
-                error=str(exc),
+            ai = AIService(settings, model_override=model_override)
+        return self._process_stored(
+            stored=stored,
+            organization_id=organization_id,
+            storage_key=storage_key,
+            as_of=as_of_date or today_local(),
+            reanalysis_contract_id=contract_id,
+            candidate=True,
+            reread=reread,
+            ai=ai,
+            focus_fields=focus_fields,
+            focus_pages=focus_pages,
+        )
+
+    def apply_candidate(
+        self,
+        *,
+        organization_id,
+        contract_id,
+        document_version_id,
+        merged_model,
+        base_extraction_id,
+        candidate_extraction_id,
+        applied_keys: list[str],
+        as_of_date: Optional[date] = None,
+    ) -> ProcessedDocument:
+        """Uebernimmt eine zusammengefuehrte Extraktion als neue Vertragswahrheit.
+
+        Derselbe Akzeptanzweg wie eine Analyse (`_persist_pipeline`): Berechnung,
+        Warnungen, Vertragsdaten-Sync (Menschwerte bleiben), Fristen, Aufgaben.
+        Hat sich die Vertragswahrheit seit dem Start geaendert, wird abgebrochen.
+        """
+        resolved = self._stored_for_contract(organization_id, contract_id, document_version_id)
+        if resolved is None:
+            return self._not_found_result()
+        stored, _storage_key = resolved
+        as_of = as_of_date or today_local()
+        completed, run_id, expected = self._claim_processing(
+            stored, organization_id, reanalysis_contract_id=contract_id
+        )
+        if completed is not None:
+            raise ReextractionConflict("Das Dokument wird gerade verarbeitet.")
+        if expected != base_extraction_id:
+            self._finalize_run(
+                stored=stored, organization_id=organization_id, run_id=run_id, status="failed",
+                canonical=None, canonical_artifact_id=None, success=False,
+                message="Vertragsdaten haben sich seit der erneuten Erfassung geaendert.",
             )
-
-        return self._finalize_visibility(
-            self._process_stored(
+            raise ReextractionConflict("Die Vertragsdaten haben sich seit dem Start geändert.")
+        try:
+            cached = self._load_cached_canonical(stored, organization_id)
+            canonical, canonical_artifact_id = cached if cached is not None else (None, None)
+            with create_session() as session:
+                candidate_row = session.get(ContractExtraction, candidate_extraction_id)
+                base_row = session.get(ContractExtraction, base_extraction_id) if base_extraction_id else None
+                analysis = _MergedAnalysis(
+                    status=ExtractionStatus(candidate_row.status) if candidate_row else ExtractionStatus.SUCCESS,
+                    validation_status=(
+                        ValidationStatus(candidate_row.validation_status) if candidate_row else ValidationStatus.UNKNOWN
+                    ),
+                    requires_review=bool(
+                        (base_row.requires_review if base_row else False)
+                        or (candidate_row.requires_review if candidate_row else False)
+                    ),
+                    model=candidate_row.model if candidate_row else None,
+                    prompt_version=candidate_row.prompt_version if candidate_row else None,
+                    message=f"Erneute Erfassung übernommen ({len(applied_keys)} Angaben).",
+                )
+            calc_result = calculate_contract(merged_model, as_of_date=as_of)
+            warn_result = evaluate_contract_warnings(merged_model, calc_result, WarningPolicy.default())
+            document_text = "\n".join(page.text or "" for page in (canonical.pages if canonical else []))
+            contract, _created = self._persist_pipeline(
                 stored=stored,
                 organization_id=organization_id,
-                storage_key=storage_key,
-                as_of=as_of_date or today_local(),
+                run_id=run_id,
+                canonical=canonical,
+                canonical_artifact_id=canonical_artifact_id,
+                contract_model=merged_model,
+                analysis=analysis,
+                calc_result=calc_result,
+                warn_result=warn_result,
+                as_of=as_of,
                 reanalysis_contract_id=contract_id,
-            ),
-            organization_id,
+                expected_accepted_extraction_id=expected,
+                document_text=document_text,
+            )
+        except Exception as exc:
+            logger.exception("Applying re-extraction failed for contract %s", contract_id)
+            try:
+                self._finalize_run(
+                    stored=stored, organization_id=organization_id, run_id=run_id, status="failed",
+                    canonical=None, canonical_artifact_id=None, success=False,
+                    message=_SAFE_PROCESSING_FAILURE, error=_sanitized_error(str(exc)),
+                )
+            except Exception:
+                logger.exception("Failed to persist re-extraction apply failure")
+            if "superseded" in str(exc):
+                raise ReextractionConflict("Die Vertragsdaten haben sich seit dem Start geändert.") from exc
+            raise
+        return self._copy_result(
+            stored,
+            status="reanalyzed",
+            analysis_status="success",
+            requires_review=bool(analysis.requires_review or calc_result.overall_review_required),
+            contract_id=str(contract.id),
+            message=analysis.message,
+        )
+
+    def _persist_candidate(
+        self,
+        *,
+        stored,
+        organization_id,
+        run_id,
+        canonical,
+        canonical_artifact_id,
+        contract_model,
+        analysis,
+        contract_id,
+    ) -> ProcessedDocument:
+        """Speichert die Kandidaten-Extraktion (mit Nachweisen), ohne sie zu akzeptieren."""
+        with create_session() as session:
+            snapshot, evidence = self._build_extraction(contract_model)
+            extraction = save_extraction(
+                session,
+                organization_id=organization_id,
+                document_version_id=uuid.UUID(stored.document_version_id),
+                snapshot=snapshot,
+                evidence=evidence,
+                status=analysis.status.value,
+                validation_status=analysis.validation_status.value,
+                requires_review=True,
+                model=analysis.model,
+                prompt_version=analysis.prompt_version,
+                message=analysis.message or None,
+                error=analysis.error or None,
+                **self._analysis_diagnostics(analysis),
+            )
+            extraction_id = extraction.id
+            self._finish_run_in_session(
+                session=session,
+                stored=stored,
+                organization_id=organization_id,
+                run_id=run_id,
+                status="succeeded",
+                canonical=canonical,
+                canonical_artifact_id=canonical_artifact_id,
+                success=True,
+            )
+            session.commit()
+        return self._copy_result(
+            stored,
+            status="candidate",
+            analysis_status="success" if not analysis.requires_review else "partial",
+            requires_review=True,
+            contract_id=str(contract_id),
+            message="Erneute Erfassung abgeschlossen.",
+            extraction_id=str(extraction_id),
         )
 
     def reconcile_legacy(
@@ -690,6 +854,11 @@ class DocumentProcessingService:
         as_of: date,
         reanalysis_contract_id=None,
         attachment: Optional[AttachmentTarget] = None,
+        candidate: bool = False,
+        reread: bool = False,
+        ai=None,
+        focus_fields: Optional[list[str]] = None,
+        focus_pages: Optional[list[int]] = None,
     ) -> ProcessedDocument:
         completed, run_id, expected_accepted_extraction_id = self._claim_processing(
             stored,
@@ -707,7 +876,7 @@ class DocumentProcessingService:
         canonical_artifact_id = None
         try:
             path = self._storage.safe_path(storage_key)
-            cached = self._load_cached_canonical(stored, organization_id)
+            cached = None if reread else self._load_cached_canonical(stored, organization_id)
             if cached is not None:
                 canonical, canonical_artifact_id = cached
                 extraction = self._canonical_to_extraction(canonical)
@@ -775,7 +944,7 @@ class DocumentProcessingService:
                     if using_v3 and getattr(settings, "hybrid_scanned_contracts_enabled", True)
                     else None
                 )
-                analysis = asyncio.run(harness_cls(settings).analyze(
+                analysis = asyncio.run((harness_cls(settings, ai=ai) if ai is not None else harness_cls(settings)).analyze(
                     canonical,
                     image_loader=(
                         hybrid_runtime.render_region
@@ -787,6 +956,9 @@ class DocumentProcessingService:
                         if hybrid_runtime is not None
                         else None
                     ),
+                    # Gezielte Suche gibt es nur in der produktiven Harness (v3).
+                    **({"focus_fields": focus_fields, "focus_pages": focus_pages}
+                       if using_v3 and (focus_fields or focus_pages) else {}),
                 ))
             if analysis.contract is None:
                 placeholder_id = self._persist_failed_analysis(
@@ -811,6 +983,17 @@ class DocumentProcessingService:
                 )
 
             contract_model = analysis.contract
+            if candidate:
+                return self._persist_candidate(
+                    stored=stored,
+                    organization_id=organization_id,
+                    run_id=run_id,
+                    canonical=canonical,
+                    canonical_artifact_id=canonical_artifact_id,
+                    contract_model=contract_model,
+                    analysis=analysis,
+                    contract_id=reanalysis_contract_id,
+                )
             document_text = "\n".join(unit.text for unit in extraction.units if unit.text)
             if attachment is not None:
                 return self._persist_attachment_analysis(
@@ -2195,6 +2378,7 @@ class DocumentProcessingService:
             "message": stored.message,
             "error": stored.error,
             "warnings": list(stored.warnings),
+            "extraction_id": stored.extraction_id,
         }
         values.update(changes)
         return ProcessedDocument(**values)

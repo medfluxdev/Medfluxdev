@@ -4,7 +4,7 @@ import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractRegisterPanel from "@/components/contracts/detail/ContractRegisterPanel";
 import MissingList from "@/components/ui/MissingList";
-import { baseFieldKey, contractHref, registerHref } from "@/lib/fix-targets";
+import { baseFieldKey, contractHref, documentSearchHref, registerHref } from "@/lib/fix-targets";
 import type { ContractRegister, RegisterField } from "@/lib/domain-api/register";
 
 const api = vi.hoisted(() => ({ getContractRegister: vi.fn(), updateContractRegister: vi.fn() }));
@@ -162,3 +162,26 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
     await waitFor(() => expect(document.getElementById("rg-retention_years_after_end")).toHaveFocus());
   });
 });
+
+describe("Im Dokument suchen (erneute Erfassung)", () => {
+  it("steht nur an leeren, im Dokument suchbaren Feldern und meldet das Feld", async () => {
+    const user = userEvent.setup();
+    const onSearch = vi.fn();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" searchableKeys={new Set(["term_start_date", "notice_period"])} onSearchInDocument={onSearch} />);
+    await user.click(await screen.findByRole("button", { name: "Vertragsbeginn im Dokument suchen" }));
+    expect(onSearch).toHaveBeenCalledWith("term_start_date");
+    expect(screen.getByRole("button", { name: "Kündigungsfrist im Dokument suchen" })).toBeInTheDocument();
+    // Nicht suchbar (keine Angabe im Dokument dafür) oder schon gefüllt: kein Knopf.
+    expect(screen.queryByRole("button", { name: "Vertragspartner im Dokument suchen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kurzbeschreibung im Dokument suchen" })).not.toBeInTheDocument();
+    expect(documentSearchHref("c-1", "notice_period_value")).toBe("/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=notice_period");
+  });
+
+  it("ohne Bearbeitungsrecht gibt es den Knopf nicht", async () => {
+    auth.role = "viewer";
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" searchableKeys={new Set(["term_start_date"])} onSearchInDocument={vi.fn()} />);
+    await screen.findAllByText("Vertragsbeginn");
+    expect(screen.queryByRole("button", { name: /im Dokument suchen/ })).not.toBeInTheDocument();
+  });
+});
+

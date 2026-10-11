@@ -30,6 +30,7 @@ from app.database.models.finance import (
     ContractServiceItem,
     ContractSuggestionDismissal,
 )
+from app.database.models.reextraction import ContractReextraction
 from app.database.models.register import (
     CatalogContractCategory,
     CatalogContractType,
@@ -107,6 +108,7 @@ __all__ = [
     "ContractPartner",
     "ContractRemark",
     "ContractRule",
+    "ContractReextraction",
     "LookupValue",
     "NumberAllocation",
     "NumberRange",

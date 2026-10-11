@@ -21,7 +21,7 @@ This is the canonical map between backend capabilities and frontend consumers on
 | Dashboard | `/api/dashboard/overview` | dashboard through `domain-api/dashboard.ts` | Connected + scope aware |
 | Contracts | portfolio/detail/review/archive/overrides/document content | portfolio/detail/workspace | Connected; accepted truth remains authoritative |
 | Contract lifecycle | `/api/lifecycle/contracts/*` | Contract 360 lifecycle panel | Connected + audited human decisions |
-| Documents | import/retry/reanalyze/source-region | import + PDF/evidence | Connected; scope validated before processing and persisted server-side |
+| Documents | import/retry/source-region | import + PDF/evidence | Connected; scope validated before processing and persisted server-side |
 | Processing diagnostics | `/api/processing-jobs*` | Developer processing page | Connected to canonical `ProcessingRun`, no second job truth |
 | Equipment | list/detail | `/equipment`, detail route, contract/work-queue links | Connected + dedicated master UI |
 | Equipment lifecycle | `/api/lifecycle/equipment/*` | equipment detail | Connected + audited operational state |
@@ -84,7 +84,8 @@ The following product paths enforce organization plus hospital/department visibi
 - Notifications and portfolio reports.
 - Processing-run diagnostics.
 - CSV export.
-- Document retry/reanalyze/source-region/import.
+- Document retry/source-region/import.
+- Re-extraction from the contract document (`/api/contracts/{id}/reextraction`, candidate → compare → apply; `lib/domain-api/reextraction.ts`, `components/contracts/detail/Reextraction.tsx`).
 - Activity feed.
 - Ownership reads/mutations and assignee selection.
 - Organization-structure and cost-center reads for non-admin users.

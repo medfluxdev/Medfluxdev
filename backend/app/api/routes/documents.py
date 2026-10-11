@@ -363,28 +363,6 @@ async def retry_document(
     )
 
 
-@router.post("/{document_version_id}/reanalyze", response_model=RetryDocumentResponse)
-async def reanalyze_document(
-    document_version_id: str,
-    organization_slug: str = Query(min_length=1),
-) -> RetryDocumentResponse:
-    _preflight_document(organization_slug, document_version_id)
-    processed = await run_in_threadpool(
-        _processing_service.reanalyze_document,
-        organization_slug=organization_slug,
-        document_version_id=document_version_id,
-    )
-    return RetryDocumentResponse(
-        document_id=processed.document_id or None,
-        document_version_id=processed.document_version_id or None,
-        status=str(processed.status),
-        analysis_status=processed.analysis_status,
-        requires_review=processed.requires_review,
-        contract_id=processed.contract_id,
-        message=(processed.message or _SAFE_FALLBACK_MESSAGES.get(str(processed.status), "")),
-    )
-
-
 @router.post("/import", response_model=ImportBatchResponse)
 async def import_documents(
     request: Request,

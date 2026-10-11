@@ -44,11 +44,13 @@ export interface DeadlineValues {
 
 export interface InboxNotification {
   id: string;
-  kind: "deadline_reminder" | "deadline_overdue" | "deadline_escalation" | "deadline_assigned";
+  kind: "deadline_reminder" | "deadline_overdue" | "deadline_escalation" | "deadline_assigned" | "reextraction";
   title: string;
   body: string | null;
   contract_id: string | null;
   deadline_id: string | null;
+  /** Wohin die Benachrichtigung führt (Direkt zur Stelle); ältere Server liefern es nicht. */
+  href?: string | null;
   on_behalf_of_name: string | null;
   created_at: string | null;
   read_at: string | null;
@@ -115,6 +117,7 @@ export const NOTIFICATION_KIND_LABEL: Record<InboxNotification["kind"], string> 
   deadline_overdue: "Überfällig",
   deadline_escalation: "Eskalation",
   deadline_assigned: "Neu zugewiesen",
+  reextraction: "Erneute Erfassung",
 };
 
 function orgQuery(organizationSlug: string) {

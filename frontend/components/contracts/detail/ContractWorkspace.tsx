@@ -40,9 +40,10 @@ import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
-import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, fixLabel, sectionAnchor, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
+import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, documentSearchHref, fixLabel, sectionAnchor, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
 import ContractGaps, { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
+import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
 
 export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
 
@@ -317,6 +318,15 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   }
 
   // „Direkt zur Stelle“ innerhalb der Vertragsakte: Reiter, Abschnitt oder Feld über die Adresse ansteuern.
+  const reextraction = useReextraction(data.contract_id, orgSlug);
+  const mainDocumentId = data.documents[0]?.document_version_id ?? null;
+  function showDocumentPage(page: number) {
+    if (!mainDocumentId) return;
+    setDocumentVersionId(mainDocumentId);
+    setNavTarget({ document_version_id: mainDocumentId, page, bbox: null, bbox_space: "pdf_points", supports_exact_navigation: false, label: `Fundstelle Seite ${page}` });
+    window.setTimeout(() => document.querySelector(".cw-pdf-shell")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
   function openTarget(target: FixTarget) {
     router.replace(contractHref(data.contract_id, target), { scroll: false });
   }
@@ -467,6 +477,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           </details>
         </div>
       </header>
+      <ReextractionBanner state={reextraction.state} onOpen={() => openTarget({ tab: "documents", subtab: "document", section: "reextraction" })} />
       <Dialog
         open={deleteDialogOpen}
         title="Vertragslöschung beantragen?"
@@ -503,7 +514,13 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <div className="cw-two-col"><Section title="Leistungsüberblick" description="Kurzer Überblick über den Vertragsumfang"><div className="cw-chip-list">{SCOPE_FIELDS.map(([key, label, prop]) => [label, scopeState(key, data.scope[prop])] as const).filter(([, state]) => state.label === "Enthalten").slice(0, 8).map(([label]) => <span className="cw-chip" key={label}>{label}</span>)}{SCOPE_FIELDS.every(([key, , prop]) => scopeState(key, data.scope[prop]).label !== "Enthalten") ? <span className="cw-muted">Keine eindeutig bestätigten Leistungen.</span> : null}</div></Section><Section title="Daten & Prüfung" description="Qualität und Nachvollziehbarkeit"><div className="cw-mini-stats"><button type="button" onClick={() => setRoute("documents", "evidence")}><strong>{data.evidence.length}</strong><span>Nachweise</span></button><button type="button" onClick={() => setRoute("documents", "document")}><strong>{data.documents.length}</strong><span>Dokumente</span></button><button type="button" onClick={() => setRoute("documents", "review")}><strong>{data.contract_review.unresolved_count}</strong><span>Offene Prüfungen</span></button></div></Section></div>
         </>}
 
-        {activeTab === "register" && <><ContractRegisterPanel contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload} />{slots.register}</>}
+        {activeTab === "register" && <><ContractRegisterPanel
+          contractId={data.contract_id}
+          orgSlug={orgSlug}
+          onChanged={reload}
+          searchableKeys={reextraction.state?.can_start ? new Set(fieldSearchMap(reextraction.state).keys()) : undefined}
+          onSearchInDocument={(key) => router.replace(documentSearchHref(data.contract_id, key), { scroll: false })}
+        />{slots.register}</>}
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 
@@ -544,6 +561,15 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         {activeTab === "documents" && <>
           <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Offene Prüfungen" value={String(data.contract_review.unresolved_count)} /></div>
           <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
+          {documentTab === "document" && <ReextractionPanel
+            contractId={data.contract_id}
+            orgSlug={orgSlug}
+            state={reextraction.state}
+            reload={reextraction.reload}
+            onApplied={() => { reload(); reextraction.reload(); }}
+            onShowPage={showDocumentPage}
+            onEditManually={() => setRoute("register")}
+          />}
           {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div>}
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
           {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}

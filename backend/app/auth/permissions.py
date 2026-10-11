@@ -33,6 +33,7 @@ PERMISSIONS: tuple[tuple[str, str, str, frozenset[str]], ...] = (
     ("contract.mark_deleted", "Als gelöscht markieren", "Verträge", _ADMIN),
     ("contract.view_deleted", "Gelöschte Verträge ansehen", "Verträge", _EDITORS),
     ("contract.review", "KI-Werte prüfen", "Verträge", _REVIEWERS),
+    ("contract.reanalyze", "Erneut aus dem Dokument erfassen", "Verträge", _EDITORS),
     ("contract.confidential_manage", "Vertraulichkeit und Freigaben verwalten", "Verträge", _ADMIN),
     ("document.attach", "Dokumente hinzufügen", "Dokumente", _EDITORS),
     ("finance.edit", "Finanzdaten pflegen", "Finanzen", _EDITORS),

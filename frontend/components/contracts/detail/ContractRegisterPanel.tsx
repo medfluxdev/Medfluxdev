@@ -189,7 +189,14 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }: { contractId: string; orgSlug: string; onChanged?: () => void }) {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument }: {
+  contractId: string;
+  orgSlug: string;
+  onChanged?: () => void;
+  /** Felder, die im Vertragsdokument gesucht werden können (erneute Erfassung). */
+  searchableKeys?: Set<string>;
+  onSearchInDocument?: (key: string) => void;
+}) {
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const toast = useToast();
@@ -647,6 +654,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged }
               {!editing && provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null}
               {!editing && editable && provenance?.origin === "ai" ? <button type="button" className="rg-link" disabled={busy} onClick={() => confirm(fieldKeys(def))}>Bestätigen</button> : null}
               {empty && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo(def.key)} aria-label={`${label} erfassen`}>Erfassen</button> : null}
+              {empty && editable && onSearchInDocument && searchableKeys?.has(def.key) && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => onSearchInDocument(def.key)} aria-label={`${label} im Dokument suchen`}>Im Dokument suchen</button> : null}
               {isTarget && target?.note ? <span className="rg-field-note" role="status">{target.note}</span> : null}
             </dd>
           </div>;

@@ -44,14 +44,6 @@ export function retryDocument(documentVersionId: string, organizationSlug: strin
   );
 }
 
-export function reanalyzeDocument(documentVersionId: string, organizationSlug: string) {
-  return apiPost<DocumentProcessResult>(
-    `/api/documents/${encodeURIComponent(documentVersionId)}/reanalyze?organization_slug=${encodeURIComponent(organizationSlug)}`,
-    {},
-    30 * 60 * 1000,
-  );
-}
-
 export function buildSourceRegionUrl(
   documentVersionId: string,
   organizationSlug: string,

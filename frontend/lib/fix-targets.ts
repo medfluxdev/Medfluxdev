@@ -45,6 +45,14 @@ export function contractHref(contractId: string, raw?: FixTarget): string {
   return `/contracts/${encodeURIComponent(contractId)}${query ? `?${query}` : ""}`;
 }
 
+/** Parameter: Dialog „Erneut aus dem Dokument erfassen“ für dieses Vertragsdaten-Feld öffnen. */
+export const SEARCH_PARAM = "suchen";
+
+/** „Im Dokument suchen“: Dokumente → Dokument, Dialog mit diesem Feld vorausgewählt. */
+export function documentSearchHref(contractId: string, fieldKey: string): string {
+  return `${contractHref(contractId, { tab: "documents", subtab: "document", section: "reextraction" })}&${SEARCH_PARAM}=${encodeURIComponent(baseFieldKey(fieldKey))}`;
+}
+
 /** Vertragsliste mit Filtern (und optional Reiter), gleiche Adressform wie die Liste selbst. */
 export function registerHref(filters: GridFilter[], extra?: Record<string, string>): string {
   const params = new URLSearchParams(extra);

@@ -32,10 +32,19 @@ TEST_SYSTEM_PROMPT = (
 class AIService:
     """Fasst die lokale KI zusammen und stellt eine schlanke Schnittstelle bereit."""
 
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: httpx.AsyncClient | None = None,
+        *,
+        model_override: str | None = None,
+    ) -> None:
         self.settings = settings
         self._client = client
         self._provider = None
+        # Nur fuer einen einzelnen Lauf (z. B. erneute Erfassung): anderes, installiertes
+        # Modell desselben gewaehlten Providers. Ohne gespeicherte Auswahl bleibt alles aus.
+        self._model_override = (model_override or "").strip() or None
 
     def active_provider_id(self) -> str | None:
         """Explizit gewählter Provider oder None."""
@@ -43,7 +52,10 @@ class AIService:
 
     def active_model_id(self) -> str | None:
         """Explizit gewähltes Modell oder None."""
-        return resolve_model_id(self.settings)
+        selected = resolve_model_id(self.settings)
+        if selected and self._model_override:
+            return self._model_override
+        return selected
 
     def _model_resolver(self):
         provider_id = self.active_provider_id()

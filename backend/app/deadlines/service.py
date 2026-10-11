@@ -288,6 +288,15 @@ def unread_count(session: Session, *, actor: RegisterActor, allowed_contract_ids
     return session.scalar(stmt) or 0
 
 
+def notification_href(note: Notification) -> str:
+    """Direkt zur Stelle: wohin eine Benachrichtigung fuehrt."""
+    if note.contract_id is None:
+        return "/postfach"
+    if note.kind == "reextraction":
+        return f"/contracts/{note.contract_id}?tab=documents&abschnitt=reextraction"
+    return f"/contracts/{note.contract_id}?tab=deadlines"
+
+
 def inbox(
     session: Session, *, actor: RegisterActor, as_of: date, allowed_contract_ids: Optional[set[uuid.UUID]], limit: int = 100,
     offset: int = 0, unread_only: bool = False,
@@ -330,6 +339,7 @@ def inbox(
                 "body": note.body,
                 "contract_id": str(note.contract_id) if note.contract_id else None,
                 "deadline_id": str(note.deadline_id) if note.deadline_id else None,
+                "href": notification_href(note),
                 "on_behalf_of_name": note.on_behalf_of_name,
                 "created_at": note.created_at.isoformat() if note.created_at else None,
                 "read_at": note.read_at.isoformat() if note.read_at else None,

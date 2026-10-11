@@ -39,7 +39,7 @@ from app.database.columns import OrgOwnedMixin, uuid_pk
 
 DEADLINE_STATUS_ALLOWED = ("open", "done", "cancelled")
 DEADLINE_SOURCE_ALLOWED = ("manual", "system")
-NOTIFICATION_KIND_ALLOWED = ("deadline_reminder", "deadline_overdue", "deadline_escalation", "deadline_assigned")
+NOTIFICATION_KIND_ALLOWED = ("deadline_reminder", "deadline_overdue", "deadline_escalation", "deadline_assigned", "reextraction")
 OUTBOX_STATUS_ALLOWED = ("pending", "sent", "failed")
 JOB_STATUS_ALLOWED = ("running", "succeeded", "failed")
 
