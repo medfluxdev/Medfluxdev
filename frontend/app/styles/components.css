@@ -674,7 +674,6 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 .rules-list li > .status-badge { flex: none; min-width: 112px; justify-content: center; }
 .rules-list li > div { display: grid; gap: 2px; flex: 1 1 220px; min-width: 0; font-size: var(--text-small); }
 .rules-list li span { color: var(--color-text-muted); }
-.rules-empty { margin: 0; font-size: var(--text-small); }
 
 /* ---------- KI-Assistent: häufige Fragen ---------- */
 .medflux-assistant-suggestions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }

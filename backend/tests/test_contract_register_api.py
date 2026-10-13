@@ -177,6 +177,21 @@ def test_status_workflow_and_remarks(monkeypatch):
     assert reactivated.status_code == 200
     assert reactivated.json()["fields"]["terminated_effective"]["value"] is None
 
+    admin = _client(monkeypatch, _actor(ids, "admin", "admin"))
+    assert admin.post(f"{base}/status", params=query, json={"target": "beendet", "effective_date": "2026-06-30"}).status_code == 200
+    cancelled = admin.post(f"{base}/status", params=query, json={"target": "geloescht"})
+    assert cancelled.status_code == 200, cancelled.text
+    assert [item["target"] for item in cancelled.json()["allowed_transitions"]] == ["beendet"]
+    assert admin.post(f"{base}/status", params=query, json={"target": "in_arbeit"}).status_code == 409
+    manager = _client(monkeypatch, _actor(ids, "manager", "contract_manager"))
+    assert manager.post(f"{base}/status", params=query, json={"target": "beendet"}).status_code == 403
+    admin = _client(monkeypatch, _actor(ids, "admin", "admin"))
+    restored = admin.post(f"{base}/status", params=query, json={"target": "beendet"})
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["business_status"] == "beendet"
+    assert restored.json()["ended_on"] == "2026-06-30"
+    client = _client(monkeypatch, _actor(ids, "manager", "contract_manager"))
+
     assert client.post(f"{base}/remarks", params=query, json={"body": "   "}).status_code == 422
     client.post(f"{base}/remarks", params=query, json={"body": "Erste Bemerkung"})
     remarks = client.post(f"{base}/remarks", params=query, json={"body": "Zweite Bemerkung"}).json()["items"]

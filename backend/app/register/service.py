@@ -573,7 +573,9 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
         "business_status_label": STATUS_LABELS.get(contract.business_status, contract.business_status),
         "allowed_transitions": [
             {"target": target, "label": STATUS_LABELS[target]}
-            for target in allowed_targets(contract.business_status, actor.role, actor.is_developer)
+            for target in allowed_targets(
+                contract.business_status, actor.role, actor.is_developer, status_before_storno(session, contract)
+            )
         ],
         "supplier_text": contract.supplier,
         "has_ai_analysis": contract.accepted_extraction_id is not None,
@@ -842,6 +844,25 @@ def create_manual_contract(
     return contract
 
 
+def status_before_storno(session: Session, contract: Contract) -> Optional[str]:
+    """Status vor der letzten Stornierung laut Verlauf (None, wenn nicht storniert oder unbekannt)."""
+    if contract.business_status != "geloescht":
+        return None
+    rows = session.scalars(
+        select(ActivityLog.context_data)
+        .where(
+            ActivityLog.organization_id == contract.organization_id,
+            ActivityLog.object_id == contract.id,
+            ActivityLog.event_name == "contract.status_changed",
+        )
+        .order_by(ActivityLog.created_at.desc(), ActivityLog.id.desc())
+    )
+    for context in rows:
+        if (context or {}).get("to") == "geloescht":
+            return (context or {}).get("from")
+    return None
+
+
 def transition_status(
     session: Session,
     *,
@@ -865,6 +886,7 @@ def transition_status(
             terminated_on=terminated_on,
             review_pending=review_pending(session, contract),
             acknowledge_unreviewed=acknowledge_unreviewed,
+            restore_to=status_before_storno(session, contract),
         )
     except TransitionError as exc:
         raise RegisterError(exc.status_code, exc.detail_de, missing=exc.missing)
@@ -883,6 +905,7 @@ def transition_status(
             "to": plan.target,
             "note": note,
             "acknowledged_unreviewed": bool(acknowledge_unreviewed and previous == "in_arbeit"),
+            "storno_cancelled": previous == "geloescht",
             "fields": {key: {"before": before[key], "after": to_json(value)} for key, value in plan.updates.items()},
         },
     )

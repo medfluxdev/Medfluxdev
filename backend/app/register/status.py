@@ -3,7 +3,8 @@
 In Arbeit -> Gueltig -> Gekuendigt / Beendet -> Geloescht, plus
 Reaktivierung (Beendet/Gekuendigt -> Gueltig). "Geloescht" ist nur eine
 Markierung; die echte Loeschung bleibt der bestehende, gesondert
-freizugebende Loeschablauf.
+freizugebende Loeschablauf. Eine Stornierung kann die Administration
+aufheben; der Vertrag kehrt dann in den Status vor der Stornierung zurueck.
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     "gueltig": ("gekuendigt", "beendet"),
     "gekuendigt": ("beendet", "gueltig"),
     "beendet": ("geloescht", "gueltig"),
-    "geloescht": (),
+    # Stornierung aufheben: nur zurueck in den Status vor der Stornierung (`restore_to`).
+    "geloescht": ("in_arbeit", "beendet"),
 }
 
 # Laufend = gueltig oder gekuendigt und am Stichtag innerhalb der Laufzeit.
@@ -66,10 +68,15 @@ class TransitionPlan:
     updates: dict[str, Any]
 
 
-def allowed_targets(current: str, role: str, is_developer: bool = False) -> list[str]:
+def allowed_targets(current: str, role: str, is_developer: bool = False, restore_to: Optional[str] = None) -> list[str]:
     effective = "admin" if is_developer else role
     if effective not in WRITE_ROLES:
         return []
+    if current == "geloescht":
+        if effective not in DELETE_ROLES:
+            return []
+        target = restore_to if restore_to in TRANSITIONS["geloescht"] else "in_arbeit"
+        return [target]
     return [
         target for target in TRANSITIONS.get(current, ())
         if target != "geloescht" or effective in DELETE_ROLES
@@ -87,6 +94,7 @@ def plan_transition(
     terminated_on: Optional[date],
     review_pending: bool,
     acknowledge_unreviewed: bool,
+    restore_to: Optional[str] = None,
 ) -> TransitionPlan:
     if target not in STATUS_LABELS:
         raise TransitionError(422, "Unbekannter Zielstatus.")
@@ -94,8 +102,15 @@ def plan_transition(
         raise TransitionError(
             409, f"Statuswechsel {STATUS_LABELS.get(current, current)} → {STATUS_LABELS[target]} ist nicht möglich."
         )
-    if target not in allowed_targets(current, role, is_developer):
+    if target not in allowed_targets(current, role, is_developer, restore_to):
+        if current == "geloescht" and (("admin" if is_developer else role) in DELETE_ROLES):
+            raise TransitionError(
+                409, f"Die Stornierung führt zurück nach „{STATUS_LABELS[allowed_targets(current, role, is_developer, restore_to)[0]]}“."
+            )
         raise TransitionError(403, "Keine Berechtigung für diesen Statuswechsel.")
+    if current == "geloescht":
+        # Aufheben stellt nur den frueheren Status wieder her; Daten bleiben unveraendert.
+        return TransitionPlan(target=target, updates={})
 
     updates: dict[str, Any] = {}
     if target == "gueltig":

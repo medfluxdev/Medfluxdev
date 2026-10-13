@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import StatusBadge, { type StatusTone } from "@/components/ui/StatusBadge";
 import { getContractRules, RULE_OUTCOME_LABEL, type ContractRuleResult, type RuleOutcome } from "@/lib/domain-api/rules";
-import { usePermissions } from "@/lib/use-permissions";
 import { asFixTarget, contractHref, fixLabel } from "@/lib/fix-targets";
 
 const TONE: Record<RuleOutcome, StatusTone> = { pass: "success", fail: "critical", unknown: "warning", na: "neutral" };
@@ -12,7 +11,6 @@ const STATUS_TONE: Record<string, StatusTone> = { "Verstoß": "critical", "Unvol
 
 // Ergebnis der Vertragsregeln der Organisation für diesen Vertrag (vom System geprüft, nicht von der KI).
 export default function ContractRulesSection({ organizationSlug, contractId, version }: { organizationSlug: string; contractId: string; version?: unknown }) {
-  const { can } = usePermissions();
   const [data, setData] = useState<{ status: string | null; items: ContractRuleResult[] } | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -26,11 +24,7 @@ export default function ContractRulesSection({ organizationSlug, contractId, ver
 
   if (failed) return null;
   if (!data) return null;
-  if (data.items.length === 0) {
-    return can("catalog.admin") ? <p className="cw-muted rules-empty">
-      Noch keine Vertragsregeln festgelegt. <Link href="/stammdaten/vertragsregeln">Regeln festlegen</Link>, um jeden Vertrag automatisch gegen Ihre Vorgaben zu prüfen.
-    </p> : null;
-  }
+  if (data.items.length === 0) return null;
 
   const relevant = data.items.filter((item) => item.outcome !== "na");
   const notApplicable = data.items.length - relevant.length;

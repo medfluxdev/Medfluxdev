@@ -3,7 +3,6 @@
 import StatusBadge from "@/components/ui/StatusBadge";
 import ReminderLeadsEditor from "./ReminderLeadsEditor";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -46,9 +45,9 @@ import {
   type TermModel,
 } from "@/lib/domain-api/register";
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
-import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 import { usePermissions } from "@/lib/use-permissions";
 import { FIELD_PARAM, baseFieldKey } from "@/lib/fix-targets";
+import { revealBox } from "@/lib/box-collapse";
 
 type Draft = Record<string, RegisterValue>;
 type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo" | "auto_number";
@@ -226,6 +225,16 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const [todos, setTodos] = useState<LookupDto[]>([]);
   const [assignees, setAssignees] = useState<AssigneeDto[]>([]);
   const [transition, setTransition] = useState<BusinessStatus | null>(null);
+  const transitionFormRef = useRef<HTMLFormElement | null>(null);
+
+  // Ein eingeklappter Statuskasten verbirgt das Formular: aufklappen und hineinspringen.
+  useEffect(() => {
+    const form = transitionFormRef.current;
+    if (!transition || !form) return;
+    revealBox(form);
+    form.scrollIntoView?.({ block: "nearest" });
+    form.querySelector<HTMLElement>("input, button[type='submit']")?.focus();
+  }, [transition]);
   const [transitionForm, setTransitionForm] = useState({ terminated_on: "", effective_date: "", note: "", acknowledge: false });
   const [confidentialDraft, setConfidentialDraft] = useState<{ is_confidential: boolean; grants: string[] } | null>(null);
   const [newPartner, setNewPartner] = useState<FormValues | null>(null);
@@ -596,7 +605,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         </div>
         <div className="rg-status-actions">
           <StatusBadge label={register.business_status_label} tone={BUSINESS_STATUS_TONE[register.business_status] ?? "neutral"} />
-          {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-ghost btn-danger" : "btn"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>→ {item.label}</button>)}
+          {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-ghost btn-danger" : "btn"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>{register.business_status === "geloescht" ? `Stornierung aufheben → ${item.label}` : `→ ${item.label}`}</button>)}
         </div>
       </div>
       {register.business_status === "in_arbeit" ? <MissingList
@@ -604,8 +613,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         intro="Für „Gültig“ fehlen noch:"
         items={register.missing_for_valid.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))}
       /> : null}
-      {transition ? <form className="rg-transition" onSubmit={(event) => { event.preventDefault(); void submitTransition(); }}>
-        <strong>Statuswechsel nach „{BUSINESS_STATUS_LABEL[transition]}“</strong>
+      {transition ? <form ref={transitionFormRef} className="rg-transition" onSubmit={(event) => { event.preventDefault(); void submitTransition(); }}>
+        <strong>{register.business_status === "geloescht" ? "Stornierung aufheben" : `Statuswechsel nach „${BUSINESS_STATUS_LABEL[transition]}“`}</strong>
+        {register.business_status === "geloescht" ? <p className="rg-hint">Der Vertrag kehrt in den Status vor der Stornierung zurück: „{BUSINESS_STATUS_LABEL[transition]}“. Die Daten bleiben unverändert.</p> : null}
         {transition === "gekuendigt" ? <>
           <label>Gekündigt am<input type="date" required value={transitionForm.terminated_on} onChange={(event) => setTransitionForm((form) => ({ ...form, terminated_on: event.target.value }))} /></label>
           <label>Gekündigt zum<input type="date" required value={transitionForm.effective_date} onChange={(event) => setTransitionForm((form) => ({ ...form, effective_date: event.target.value }))} /></label>
@@ -674,11 +684,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       onClose={() => setNewPartner(null)}
       onCreated={({ id }) => void partnerCreated(id)}
     /> : null}
-
-    <div className="rg-toolbar">
-        <a href={coverPdfUrl(orgSlug, contractId)} target="_blank" rel="noopener noreferrer" className="btn">Deckblatt (PDF)</a>
-      <Link href="/stammdaten/vertragspartner" className="rg-link">Vertragspartner verwalten</Link>
-    </div>
 
     {SECTIONS.map((section) => {
       const fields = section.id === "term" ? section.fields.filter((def) => visibleTermFields.has(def.key)) : section.fields;

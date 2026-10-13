@@ -145,7 +145,9 @@ def test_allowed_targets_by_role():
     assert allowed_targets("beendet", "contract_manager") == ["gueltig"]
     assert allowed_targets("gueltig", "viewer") == []
     assert allowed_targets("gueltig", "reviewer") == []
-    assert allowed_targets("geloescht", "admin") == []
+    assert allowed_targets("geloescht", "admin") == ["in_arbeit"]
+    assert allowed_targets("geloescht", "admin", restore_to="beendet") == ["beendet"]
+    assert allowed_targets("geloescht", "contract_manager", restore_to="beendet") == []
     assert allowed_targets("in_arbeit", "viewer", is_developer=True) == ["gueltig", "geloescht"]
 
 
@@ -210,3 +212,18 @@ def test_partner_similarity_detects_variants(left, right, minimum):
 def test_partner_similarity_keeps_distinct_vendors_apart():
     assert partner_similarity("Siemens Healthcare GmbH", "GE Healthcare GmbH") < 0.85
     assert partner_similarity("", "GE") == 0.0
+
+
+def test_cancel_storno_returns_to_previous_status_without_changes():
+    plan = _plan(current="geloescht", target="beendet", role="admin", restore_to="beendet")
+    assert plan.target == "beendet" and plan.updates == {}
+    assert _plan(current="geloescht", target="in_arbeit", role="admin").target == "in_arbeit"
+    with pytest.raises(TransitionError) as excinfo:
+        _plan(current="geloescht", target="in_arbeit", role="admin", restore_to="beendet")
+    assert excinfo.value.status_code == 409
+    with pytest.raises(TransitionError) as excinfo:
+        _plan(current="geloescht", target="gueltig", role="admin", restore_to="beendet")
+    assert excinfo.value.status_code == 409
+    with pytest.raises(TransitionError) as excinfo:
+        _plan(current="geloescht", target="beendet", role="contract_manager", restore_to="beendet")
+    assert excinfo.value.status_code == 403

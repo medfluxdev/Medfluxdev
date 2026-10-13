@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractRegisterPanel from "@/components/contracts/detail/ContractRegisterPanel";
 import ContractRemarksPanel from "@/components/contracts/detail/ContractRemarksPanel";
 import type { ContractRegister, RegisterField } from "@/lib/domain-api/register";
+import { enhanceBoxes } from "@/lib/box-collapse";
 
 const api = vi.hoisted(() => ({
   getContractRegister: vi.fn(),
@@ -175,6 +176,31 @@ describe("Vertragsregister – Stammdaten", () => {
     await user.click(screen.getByRole("button", { name: "Status ändern" }));
     await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "gueltig", acknowledge_unreviewed: true })));
     expect(await screen.findByText("Status auf „Gültig“ gesetzt.")).toBeInTheDocument();
+  });
+
+  it("hebt eine Stornierung auf und kehrt in den früheren Status zurück", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(register({ business_status: "geloescht", business_status_label: "Storniert", allowed_transitions: [{ target: "beendet", label: "Beendet" }] }));
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Stornierung aufheben → Beendet" }));
+    expect(screen.getByText(/kehrt in den Status vor der Stornierung zurück: „Beendet“/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Status ändern" }));
+    await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "beendet" })));
+  });
+
+  it("klappt einen eingeklappten Statuskasten auf, wenn ein Statuswechsel gewählt wird", async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem("medflux.collapsed-boxes");
+    api.getContractRegister.mockResolvedValue(register({ business_status: "geloescht", business_status_label: "Storniert", allowed_transitions: [{ target: "beendet", label: "Beendet" }] }));
+    const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const button = await screen.findByRole("button", { name: "Stornierung aufheben → Beendet" });
+    enhanceBoxes(container);
+    await user.click(screen.getByRole("button", { name: "Bearbeitungsstatus einklappen" }));
+    const box = screen.getByRole("heading", { name: "Bearbeitungsstatus" }).closest("section")!;
+    expect(box).toHaveAttribute("data-collapsed");
+    await user.click(button);
+    expect(box).not.toHaveAttribute("data-collapsed");
+    expect(screen.getByLabelText("Beendet am")).toHaveFocus();
   });
 });
 

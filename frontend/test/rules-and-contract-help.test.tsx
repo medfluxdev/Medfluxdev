@@ -106,10 +106,11 @@ describe("Vertragsseite", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("lädt Administratoren ein, Regeln festzulegen, wenn es noch keine gibt", async () => {
+  it("zeigt nichts, wenn es noch keine Vertragsregeln gibt", async () => {
     rules.getContractRules.mockResolvedValue({ status: null, items: [] });
-    render(<ContractRulesSection organizationSlug="test-klinik" contractId="c-1" />);
-    expect(await screen.findByRole("link", { name: "Regeln festlegen" })).toHaveAttribute("href", "/stammdaten/vertragsregeln");
+    const { container } = render(<ContractRulesSection organizationSlug="test-klinik" contractId="c-1" />);
+    await waitFor(() => expect(rules.getContractRules).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("bietet im Assistenten häufige Fragen zum Vertrag an und stellt sie per Klick", async () => {

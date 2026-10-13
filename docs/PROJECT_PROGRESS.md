@@ -5641,3 +5641,15 @@ Plan: `docs/architecture/ERNEUT_ERFASSEN_PLAN_20261011.md` (Entscheidungen: imme
 - **Erste KI-Erfassung für von Hand erfasste Verträge:** „Mit der KI aus dem Dokument erfassen“ ohne frühere Analyse – Vergleich gegen leere Angaben, übernommen wird nur Ausgewähltes, Menschwerte bleiben. Die Verarbeitung sucht den Vertrag einer Neuanalyse direkt über seine Kennung (`_contract_for_version`); die Pflicht einer vorhandenen Analyse gilt nur noch, wenn eine erwartet wird.
 - **Tests:** `test_reextraction.py` (+1), `test_device_types.py` (+1 Partnerfilter), `captured-sources.test.tsx` neu.
 
+
+### Nachtrag 2026-10-12 – Vertragsdaten ohne Hinweis- und Linkzeile
+
+- **Entfernt** aus dem Tab Vertragsdaten: der Hinweis „Noch keine Vertragsregeln festgelegt … Regeln festlegen“ (ohne Regeln zeigt `ContractRulesSection` nichts) und die Zeile „Deckblatt (PDF)“ / „Vertragspartner verwalten“ (`ContractRegisterPanel`). Das Deckblatt bleibt im Kopf der Vertragsakte; Regeln und Partner bleiben unter Stammdaten.
+- **Tests:** `rules-and-contract-help.test.tsx` angepasst; `contracts-detail.test.tsx` grün; tsc und ESLint sauber.
+
+### Nachtrag 2026-10-12 – Stornierung aufheben
+
+- **Neu:** Die Administration kann eine Stornierung aufheben. Der Vertrag kehrt in den Status **vor** der Stornierung zurück (In Arbeit oder Beendet, aus dem Verlauf `contract.status_changed`; ohne Verlaufseintrag „In Arbeit“). Daten bleiben unverändert (Beendet behält „Beendet am“); andere Ziele liefern 409, Vertragsmanagement 403. Verlauf vermerkt `storno_cancelled`.
+- **Code:** `register/status.py` (`TRANSITIONS["geloescht"]`, `restore_to`), `register/service.py` (`status_before_storno`), `ContractRegisterPanel.tsx` (Knopf „Stornierung aufheben → …“ mit Hinweis).
+- **Tests:** `test_register_units.py` (+1, angepasst), `test_contract_register_api.py` (Beendet → Storniert → Beendet), `contract-register.test.tsx` (+1). 84 Backend-Tests im Wegwerf-Container grün; tsc grün.
+- **Fehler behoben (gleicher Tag):** War der Kasten „Bearbeitungsstatus“ eingeklappt (Zustand gilt für alle Verträge), blieb das Formular eines Statuswechsels unsichtbar – ein Klick auf „Stornierung aufheben“ schien nichts zu tun. Die Wahl eines Statuswechsels klappt den Kasten jetzt auf und setzt den Fokus ins Formular (`revealBox`); Test in `contract-register.test.tsx`.
