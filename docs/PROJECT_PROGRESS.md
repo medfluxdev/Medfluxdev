@@ -5695,3 +5695,9 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 - **Pflichtangaben im Kopf:** Vertragstyp, Krankenhaus, verantwortliche Abteilung, Kostenstelle, Hauptverantwortlich (Liste aus der Anweisung übernommen). Vollständig → grüne Plakette „5 von 5 Pflichtangaben“ mit Ring; sonst Signal „X Angaben fehlen“ (Titel nennt die Felder, Klick öffnet Bearbeiten). Fehlende verantwortliche Abteilung zeigt jetzt „Nicht festgelegt“.
 - **Zuständigkeit (Übersicht):** dieselben Chips und `PersonTag`.
 - **Tests:** neu `test/tag-chip.test.tsx` (alle Arten, code, Knopf/Link, axe), vier neue Fälle in `contract-ownership-roles.test.tsx`, `contract-assignment.test.tsx` angepasst. `npm run verify` grün (363 Tests, Build ok). Nicht gelaufen: Playwright inkl. Sichtvergleich, eigene Farbfehlsichtigkeits-Simulation.
+
+### Nachtrag 2026-10-13 – Einklappen überall links; Suchfeld für viele Abteilungen
+
+- **Einklappen einheitlich:** Der globale Knopf aus `lib/box-collapse.ts` sitzt jetzt wie bei `CollapsibleSection` links vor der Überschrift (40 × 40, Pfeil nach unten, eingeklappt nach rechts gedreht, ohne Drehung bei „Bewegung reduzieren“). Position aus dem Innenabstand des Kastens und der Höhe der Überschrift (`--box-pad-left`, `--box-toggle-top`, neu berechnet bei DOM-Änderung und Größenänderung). Damit gibt es im ganzen Programm nur noch eine Knopfposition.
+- **Verantwortliche Abteilung:** ab 8 Abteilungen des Krankenhauses ein Suchfeld „Abteilung suchen …“ über der Auswahl (filtert nach dem ganzen Pfad, die gewählte bleibt immer drin, Hinweis bei keinem Treffer; wird beim Verlassen des Bearbeitens geleert). Nutzende Abteilungen hatten über `ChipPicker` schon eine Suche ab 8 Einträgen.
+- **Geprüft:** `npm run verify` grün (vor der Suche: 363 Tests; Ownership-Tests danach 21/21), Playwright 184/187 – die 3 Fehlschläge waren nur Sichtvergleiche wegen der Knopfposition; Referenzen neu geschrieben.

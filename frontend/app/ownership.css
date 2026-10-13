@@ -49,6 +49,7 @@
 .cw-of-optional { font-weight: var(--weight-regular); color: var(--color-text-subtle); }
 .cw-of select { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-ui); }
 .cw-of select:disabled { background: var(--color-surface-subtle); color: var(--color-text-muted); }
+.cw-of-search { width: 100%; min-height: 36px; padding: 0 12px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-small); }
 .cw-hint { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: var(--text-small); line-height: 1.45; color: var(--color-text-muted); }
 .cw-hint .cw-og-icon { width: 15px; height: 15px; margin-top: 2px; }
 .cw-hint a, .cw-hint-link { color: var(--color-link); font-weight: var(--weight-semibold); text-decoration: none; }

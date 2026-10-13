@@ -2,7 +2,7 @@
  * Einklappen für jeden Kasten im Programm.
  *
  * Statt jede Seite umzubauen, erhält jeder Kasten im Inhaltsbereich (Abschnitt mit Überschrift)
- * einen Knopf in der rechten oberen Ecke. Der Zustand wird je Seite und Kasten im Browser gemerkt.
+ * links vor der Überschrift einen Knopf (40 × 40, wie `CollapsibleSection`). Der Zustand wird je Seite und Kasten im Browser gemerkt.
  * Nur Attribute (`data-box`, `data-collapsed`) und ein eingefügter Knopf: React verwaltet die
  * Klassen der Kästen weiter selbst.
  *
@@ -17,8 +17,8 @@ const BOX_SELECTOR = [
   "section.md-usage", "section.md-hub-admin", "section.rg-panel", "section.user-list",
 ].join(", ");
 const HEADING = /^H[1-4]$/;
-const ICON_OPEN = "m6 15 6-6 6 6";
-const ICON_CLOSED = "m6 9 6 6 6-6";
+// Pfeil nach unten; eingeklappt per CSS nach rechts gedreht (wie `CollapsibleSection`).
+const ICON = "m6 9 6 6 6-6";
 
 const INTERACTIVE = "a, button, input, select, textarea, label, summary, [contenteditable], [role='button'], [role='link']";
 
@@ -82,7 +82,6 @@ function render(box: HTMLElement, button: HTMLButtonElement, collapsed: boolean,
   button.setAttribute("aria-expanded", String(!collapsed));
   button.setAttribute("aria-label", `${name} ${collapsed ? "aufklappen" : "einklappen"}`);
   button.title = collapsed ? "Aufklappen" : "Einklappen";
-  button.querySelector("path")?.setAttribute("d", collapsed ? ICON_CLOSED : ICON_OPEN);
 }
 
 function setCollapsed(box: HTMLElement, collapsed: boolean) {
@@ -107,8 +106,8 @@ function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "btn btn-ghost btn-icon btn-sm box-toggle";
-  button.innerHTML = `<svg viewBox="4 4 16 16" aria-hidden="true" width="16" height="16"><path d="${ICON_OPEN}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  button.className = "box-toggle";
+  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICON}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   button.addEventListener("click", () => setCollapsed(box, !box.hasAttribute("data-collapsed")));
   box.addEventListener("dblclick", (event) => {
     if (!isHeadDoubleClick(event, box.firstElementChild)) return;
@@ -118,6 +117,14 @@ function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
   // Direkt nach dem Kopf: in der Tab-Reihenfolge vor dem Inhalt.
   box.firstElementChild!.after(button);
   render(box, button, collapsedKeys.has(key), name);
+  place(box, head);
+}
+
+/** Knopf links auf Höhe der Überschrift, unabhängig vom Innenabstand des Kastens. */
+function place(box: HTMLElement, head: HTMLElement | null = heading(box)) {
+  const style = window.getComputedStyle(box);
+  box.style.setProperty("--box-pad-left", style.paddingLeft || "0px");
+  if (head) box.style.setProperty("--box-toggle-top", `${Math.max(0, head.offsetTop + head.offsetHeight / 2 - 20)}px`);
 }
 
 /** Alle Kästen unterhalb von `root` mit dem Einklapp-Knopf versehen (mehrfach aufrufbar). */
@@ -138,13 +145,16 @@ export function revealBox(element: Element | null) {
 /** Beobachtet den Inhaltsbereich und versieht neue Kästen; gibt die Aufräumfunktion zurück. */
 export function watchBoxes(root: HTMLElement): () => void {
   let frame = 0;
-  const run = () => { frame = 0; enhanceBoxes(root); };
+  const run = () => { frame = 0; enhanceBoxes(root); root.querySelectorAll<HTMLElement>("[data-box]").forEach((box) => place(box)); };
   run();
   const observer = new MutationObserver(() => { if (!frame) frame = window.requestAnimationFrame(run); });
   observer.observe(root, { childList: true, subtree: true });
   const onHash = () => revealBox(window.location.hash ? document.getElementById(decodeURIComponent(window.location.hash.slice(1))) : null);
   window.addEventListener("hashchange", onHash);
+  const onResize = () => { if (!frame) frame = window.requestAnimationFrame(run); };
+  window.addEventListener("resize", onResize);
   return () => {
+    window.removeEventListener("resize", onResize);
     observer.disconnect();
     if (frame) window.cancelAnimationFrame(frame);
     window.removeEventListener("hashchange", onHash);

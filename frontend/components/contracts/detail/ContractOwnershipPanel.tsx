@@ -79,6 +79,8 @@ function Hint({ id, children }: { id?: string; children: ReactNode }) {
 
 const optional = <span className="cw-of-optional"> · optional</span>;
 const LOAD_FAILED = "Zuordnung konnte nicht geladen werden.";
+/** Ab so vielen Abteilungen erscheint das Suchfeld (wie in `ChipPicker`). */
+const SEARCH_FROM = 8;
 const INTRO = {
   contract: "Art des Vertrags. Bestimmt Fristenregeln und Auswertungen.",
   cost: "Worauf die Kosten gebucht werden und welche Gerätearten der Vertrag abdeckt.",
@@ -119,6 +121,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   // Zugänglicher Name des Hinzufügen-Knopfs, der nach „+ … hinzufügen“ den Fokus bekommt.
   const [focusAdd, setFocusAdd] = useState<string | null>(null);
   useEffect(() => {
+    if (!editing) setDepartmentQuery("");
     if (!editing || !focusAdd) return;
     document.getElementById("cw-ownership-body")?.querySelector<HTMLElement>(`[aria-label="${focusAdd}"]`)?.focus();
     setFocusAdd(null);
@@ -193,6 +196,13 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     () => departments.filter((item) => item.hospital_id === hospitalId),
     [departments, hospitalId],
   );
+  // Viele Abteilungen: Suchfeld über der Auswahl (die gewählte bleibt immer in der Liste).
+  const [departmentQuery, setDepartmentQuery] = useState("");
+  const departmentOptions = useMemo(() => {
+    const term = departmentQuery.trim().toLocaleLowerCase("de");
+    if (!term) return visibleDepartments;
+    return visibleDepartments.filter((item) => item.id === responsibleDepartmentId || departmentFullPath(item, departments).toLocaleLowerCase("de").includes(term));
+  }, [departmentQuery, visibleDepartments, responsibleDepartmentId, departments]);
   const selectedDepartments = useMemo(
     () => new Set([responsibleDepartmentId, ...beneficiaryDepartmentIds].filter(Boolean)),
     [responsibleDepartmentId, beneficiaryDepartmentIds],
@@ -471,14 +481,24 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       <div className="cw-of">
         {hospitalId ? <>
           <label htmlFor="cw-own-responsible">Verantwortliche Abteilung</label>
+          {visibleDepartments.length >= SEARCH_FROM ? <input
+            type="search"
+            className="cw-of-search"
+            aria-label="Abteilungen durchsuchen"
+            aria-controls="cw-own-responsible"
+            placeholder="Abteilung suchen …"
+            value={departmentQuery}
+            onChange={(event) => setDepartmentQuery(event.target.value)}
+          /> : null}
           <select id="cw-own-responsible" value={responsibleDepartmentId} onChange={(event) => {
             const next = event.target.value;
             setResponsibleDepartmentId(next);
             setBeneficiaryDepartmentIds((list) => list.filter((id) => id !== next));
             // Kostenstelle der Abteilung automatisch übernehmen (falls hinterlegt).
             setCenterId(centers.find((item) => item.department_id === next && item.hospital_id === hospitalId)?.id ?? "");
-          }}><option value="">Bitte auswählen</option>{visibleDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select>
+          }}><option value="">Bitte auswählen</option>{departmentOptions.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select>
           {visibleDepartments.length === 0 ? <Hint>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</Hint> : null}
+          {departmentQuery.trim() && departmentOptions.every((item) => item.id === responsibleDepartmentId) ? <Hint>Keine Abteilung passt zu „{departmentQuery.trim()}“.</Hint> : null}
         </> : <><span className="cw-of-label">Verantwortliche Abteilung</span><Hint>{noHospital}</Hint></>}
       </div>
       <div className="cw-of">

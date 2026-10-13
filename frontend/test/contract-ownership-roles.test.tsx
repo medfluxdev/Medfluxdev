@@ -154,6 +154,22 @@ describe("Contract360 Organisationszuordnung", () => {
     expect(screen.queryByRole("button", { name: "Abteilung hinzufügen" })).not.toBeInTheDocument();
   });
 
+  it("Viele Abteilungen: Suchfeld filtert die verantwortliche Abteilung, die gewählte bleibt", async () => {
+    const user = userEvent.setup();
+    const extra = ["Kardiologie", "Endoskopie", "Haustechnik", "Röntgen", "Labor", "Apotheke"].map((name, index) => ({ id: `dept-x${index}`, hospital_id: "hospital-1", parent_id: null, name, code: `X${index}`, is_active: true }));
+    const structure = await mocks.getOrganizationStructure.getMockImplementation()?.();
+    mocks.getOrganizationStructure.mockResolvedValue({ ...structure, departments: [...structure.departments, ...extra] });
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await openEdit(user);
+    const select = screen.getByLabelText("Verantwortliche Abteilung");
+    await user.type(screen.getByRole("searchbox", { name: "Abteilungen durchsuchen" }), "kard");
+    const options = within(select).getAllByRole("option").map((option) => option.textContent);
+    expect(options).toEqual(["Bitte auswählen", "Medizintechnik › Radiologie", "Kardiologie"]);
+    await user.clear(screen.getByRole("searchbox", { name: "Abteilungen durchsuchen" }));
+    await user.type(screen.getByRole("searchbox", { name: "Abteilungen durchsuchen" }), "xyz");
+    expect(screen.getByText("Keine Abteilung passt zu „xyz“.")).toBeInTheDocument();
+  });
+
   it("Ohne Bearbeitungsrecht: kein Kasten und keine Hinzufügen-Knöpfe", async () => {
     mocks.role = "viewer";
     const { container } = render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
