@@ -5674,3 +5674,9 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 - **CSS:** `app/ownership.css` neu (alte Raster-/Kastenregeln entfernt), `components.css` (Kopf von `CollapsibleSection`, `ChipPicker`, `.cw-ownership-status` entfernt). Unter 860 px eine Spalte.
 - **Tests:** `contract-ownership-roles.test.tsx` neu gefasst (16: Ansicht + axe, Speicherleiste nur bei Änderung, Verwerfen, Strg+S, gesperrtes Krankenhaus, ohne Krankenhaus, `?abschnitt=ownership`, Esc in der Auswahl …), `contract-register.test.tsx` (+2 Kurzfassungen). Vitest 355 grün, ESLint/stylelint sauber, `next build` grün.
 - **Offen / nicht umgesetzt:** Die übrigen Kästen (Bearbeitungsstatus, Berechnete Fristen, Vertraulichkeit …) nutzen das allgemeine Einklappen aus `lib/box-collapse.ts` mit Knopf rechts – auf derselben Seite stehen damit zwei Knopfpositionen, bis diese Kästen ebenfalls `CollapsibleSection` nutzen. Stammdaten-Eintrag „Röntgen Diadgnostic“ ist ein Tippfehler in den Daten (nicht im Code) – in Stammdaten → Abteilungen korrigieren.
+
+### Nachtrag 2026-10-13 – Anmeldung über 127.0.0.1 schlug fehl
+
+- **Problem:** Wer die App unter `http://127.0.0.1:3000` öffnete, bekam bei der Anmeldung „Die Verbindung zum Server ist fehlgeschlagen“. Die API liegt auf `localhost:8000`; CORS erlaubt nur `localhost:3000`, und das Sitzungscookie gälte für den anderen Host ohnehin nicht.
+- **Lösung:** `frontend/middleware.ts` leitet Aufrufe über `127.0.0.1`/`[::1]` auf `localhost` um (gleicher Pfad und Parameter), solange die API-Basis `localhost` ist. Per `Refresh`-Kopf statt 307, weil Next die Location auf den Pfad kürzt. Mit eigener `NEXT_PUBLIC_API_URL` (z. B. Browser-Tests) greift sie nicht.
+- **Geprüft:** curl gegen den laufenden Entwicklungsserver (127.0.0.1 → Weiterleitung, localhost → 200), tsc und ESLint sauber.
