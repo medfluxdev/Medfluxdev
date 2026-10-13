@@ -29,6 +29,10 @@ interface Props {
   description?: ReactNode;
   /** Kurzfassung (2–3 Werte, Fehlendes als Signal); ersetzt im eingeklappten Zustand die Beschreibung. */
   summary?: ReactNode;
+  /** Kachel 40 × 40 zwischen Einklappen und Überschrift (Kennfarbe des Inhalts, dekorativ). */
+  icon?: ReactNode;
+  /** Kennfarbe der Kachel, z. B. `section-tile--type`. */
+  iconClassName?: string;
   /** Aktionen oben rechts neben dem Einklappen (z. B. Bearbeiten / Speichern). */
   actions?: ReactNode;
   /** Von außen aufklappen (z. B. Sprung zu einem Feld in diesem Kasten). */
@@ -42,7 +46,7 @@ interface Props {
  * Kurzfassung und Aktionen rechts. Nur der Knopf klappt (plus Doppelklick auf freie Kopffläche),
  * damit Aktionen im Kopf bedienbar bleiben. Eingeklappte Kästen merkt sich der Browser (je Kennung).
  */
-export default function CollapsibleSection({ id, title, description, summary, actions, forceOpen = false, className, children }: Props) {
+export default function CollapsibleSection({ id, title, description, summary, icon, iconClassName, actions, forceOpen = false, className, children }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => { setCollapsed(readCollapsed().has(id)); }, [id]);
   useEffect(() => {
@@ -63,10 +67,11 @@ export default function CollapsibleSection({ id, title, description, summary, ac
 
   const bodyId = `${id}-body`;
   return <section className={["cw-section collapsible", collapsed ? "is-collapsed" : "", className ?? ""].filter(Boolean).join(" ")} aria-labelledby={`${id}-heading`}>
-    <div className="cw-section-head collapsible-head" onDoubleClick={(event) => { if (!isHeadDoubleClick(event, event.currentTarget)) return; clearSelection(); toggle(); }}>
+    <div className={`cw-section-head collapsible-head${icon ? " has-icon" : ""}`} onDoubleClick={(event) => { if (!isHeadDoubleClick(event, event.currentTarget)) return; clearSelection(); toggle(); }}>
       <button type="button" className="collapsible-toggle" aria-expanded={!collapsed} aria-controls={bodyId} onClick={toggle} aria-label={`${title} ${collapsed ? "aufklappen" : "einklappen"}`} title={collapsed ? "Aufklappen" : "Einklappen"}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
+      {icon ? <span className={`collapsible-icon${iconClassName ? ` ${iconClassName}` : ""}`} aria-hidden="true">{icon}</span> : null}
       <div className="collapsible-title">
         <h2 id={`${id}-heading`}>{title}</h2>
         {collapsed

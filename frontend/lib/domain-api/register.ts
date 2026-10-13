@@ -145,7 +145,7 @@ export const DURATION_UNIT_LABEL: Record<DurationUnit, string> = {
 };
 
 export const ORIGIN_LABEL: Record<FieldOrigin, string> = {
-  ai: "KI-Vorschlag",
+  ai: "KI · Vorschlag",
   manual: "Manuell",
   ai_confirmed: "KI · bestätigt",
   ai_corrected: "KI · korrigiert",

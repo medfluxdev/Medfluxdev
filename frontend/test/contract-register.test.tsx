@@ -32,6 +32,9 @@ vi.mock("@/lib/domain-api/catalogs", async (importOriginal) => ({
   createPartner: vi.fn(),
 }));
 
+const docs = vi.hoisted(() => ({ listContractDocuments: vi.fn() }));
+vi.mock("@/lib/domain-api/contractDocuments", () => docs);
+
 vi.mock("@/lib/domain-api/ownership", () => ({
   listOwnershipAssignees: vi.fn().mockResolvedValue({ items: [{ id: "a-2", display_name: "Vera Viewer" }] }),
 }));
@@ -104,6 +107,7 @@ function register(overrides: Partial<ContractRegister> = {}): ContractRegister {
 describe("Vertragsregister – Stammdaten", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    docs.listContractDocuments.mockResolvedValue({ items: [], removed: [], attachment_types: [] });
     api.getContractRegister.mockResolvedValue(register());
     api.updateContractRegister.mockImplementation(async () => register());
     api.acceptRegisterProposal.mockResolvedValue(register());
@@ -114,10 +118,10 @@ describe("Vertragsregister – Stammdaten", () => {
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     expect(await screen.findByRole("heading", { name: "Bearbeitungsstatus" })).toBeInTheDocument();
     expect(screen.getByText("In Arbeit")).toBeInTheDocument();
-    const terms = screen.getByRole("heading", { name: "Berechnete Fristen" }).closest("section")!;
+    const terms = screen.getByRole("heading", { name: "Laufzeit, Fristen & Kündigung" }).closest("section")!;
     expect(within(terms).getByText("Kündbar bis").nextElementSibling).toHaveTextContent("30.06.2027");
     expect(within(terms).getByText("Erinnerung am").nextElementSibling).toHaveTextContent("30.03.2027");
-    expect(screen.getByText("KI-Vorschlag")).toHaveAttribute("title", "Quelle: identity.contract_title");
+    expect(screen.getByText("KI · Vorschlag")).toHaveAttribute("title", "Quelle: identity.contract_title");
     expect(screen.getByText("KI · korrigiert")).toBeInTheDocument();
     expect(screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
   });
@@ -127,17 +131,17 @@ describe("Vertragsregister – Stammdaten", () => {
     try {
       render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
       await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-      for (const title of ["Vertrag & Partner", "Laufzeit & Kündigung", "Erinnerung & Verantwortung"]) {
+      for (const title of ["Vertrag & Partner", "Laufzeit, Fristen & Kündigung", "Erinnerung & Verantwortung"]) {
         await user.click(screen.getByRole("button", { name: `${title} einklappen` }));
       }
       const head = (title: string) => screen.getByRole("heading", { level: 2, name: title }).parentElement!;
       expect(head("Vertrag & Partner")).toHaveTextContent("Vertragspartner fehlt");
       expect(head("Vertrag & Partner")).toHaveTextContent("Nr. 000042");
-      expect(head("Laufzeit & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
+      expect(head("Laufzeit, Fristen & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
       expect(head("Erinnerung & Verantwortung")).toHaveTextContent("Erinnerung 3 Monat(e) vor der Frist·an Hauptverantwortliche Person");
       // Bearbeiten bleibt auch eingeklappt erreichbar und klappt auf.
-      await user.click(screen.getByRole("button", { name: "Laufzeit & Kündigung bearbeiten" }));
-      expect(screen.getByRole("button", { name: "Laufzeit & Kündigung einklappen" })).toHaveAttribute("aria-expanded", "true");
+      await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
+      expect(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung einklappen" })).toHaveAttribute("aria-expanded", "true");
     } finally {
       window.localStorage.removeItem("medflux.collapsed-sections");
     }
@@ -149,8 +153,8 @@ describe("Vertragsregister – Stammdaten", () => {
     api.getContractRegister.mockResolvedValue({ ...base, terms: { ...base.terms, status: "incomplete", missing: ["notice_period_value"], cancel_by: null } });
     try {
       render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-      await user.click(await screen.findByRole("button", { name: "Laufzeit & Kündigung einklappen" }));
-      expect(screen.getByRole("heading", { level: 2, name: "Laufzeit & Kündigung" }).parentElement).toHaveTextContent("Kündigungsfrist fehlt");
+      await user.click(await screen.findByRole("button", { name: "Laufzeit, Fristen & Kündigung einklappen" }));
+      expect(screen.getByRole("heading", { level: 2, name: "Laufzeit, Fristen & Kündigung" }).parentElement).toHaveTextContent("Kündigungsfrist fehlt");
     } finally {
       window.localStorage.removeItem("medflux.collapsed-sections");
     }
@@ -242,32 +246,195 @@ describe("Vertragsregister – Stammdaten", () => {
   });
 });
 
-describe("Vertragsregister – Vertraulichkeit & Aufbewahrung", () => {
+const section = async (name: string) => (await screen.findByRole("heading", { level: 2, name })).closest("section")!;
+
+describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    api.getContractRegister.mockResolvedValue(register());
-    api.updateContractConfidentiality.mockResolvedValue(register({
-      confidentiality: { is_confidential: true, type_confidential: false, effective: true, grants: [{ account_id: "a-2", display_name: "Vera Viewer" }] },
-    }));
+    docs.listContractDocuments.mockResolvedValue({ items: [], removed: [], attachment_types: [] });
   });
 
-  it("zeigt Löschfrist aus dem Vertragstyp und setzt Vertraulichkeit mit Freigabe", async () => {
-    const user = userEvent.setup();
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    const section = (await screen.findByRole("heading", { name: "Vertraulichkeit & Aufbewahrung" })).closest("section")!;
-    expect(within(section).getByText("Löschen ab").nextElementSibling).toHaveTextContent("01.01.2038");
-    expect(within(section).getByText("aus Vertragstyp")).toBeInTheDocument();
-    expect(screen.getByText("Datenschutzrelevant (AVV erforderlich)")).toBeInTheDocument();
+  const fixed = (overrides: Partial<ContractRegister> = {}) => {
+    const base = register();
+    return register({
+      fields: {
+        ...base.fields,
+        term_model: field("Vertragsart", "fixed_term", { origin: "ai_confirmed" }),
+        term_fixed_end_date: field("Festes Vertragsende", "2029-03-31"),
+        initial_term_value: field("Laufzeit", 4),
+        initial_term_unit: field("Laufzeit (Einheit)", "years"),
+      },
+      terms: { ...base.terms, cancel_by: null, possible_end: "2029-03-31", earliest_end: "2029-03-31", reminder_date: "2028-11-30", reminder_dates: ["2028-11-30", "2029-01-06"], explanation: ["Feste Laufzeit: Ende = festes Vertragsende 31.03.2029."] },
+      ...overrides,
+    });
+  };
 
-    await user.click(within(section).getByRole("button", { name: "Vertraulichkeit bearbeiten" }));
-    await user.click(within(section).getByLabelText("Vertrag als vertraulich kennzeichnen"));
-    await user.click(await within(section).findByLabelText("Vera Viewer"));
-    await user.click(within(section).getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(api.updateContractConfidentiality).toHaveBeenCalledWith("test-klinik", "c-1", { is_confidential: true, grant_account_ids: ["a-2"] }));
-    expect(await within(section).findByText(/freigegeben für: Vera Viewer/)).toBeInTheDocument();
+  it("feste Laufzeit: nur passende Felder, Berechnet-Streifen ohne doppeltes Ende; ohne Verstöße (axe)", async () => {
+    api.getContractRegister.mockResolvedValue(fixed());
+    const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Laufzeit, Fristen & Kündigung");
+    for (const label of ["Vertragsart", "Vertragsbeginn", "Festes Vertragsende", "Laufzeit"]) expect(within(card).getByText(label)).toBeInTheDocument();
+    for (const label of ["Kündigungsfrist", "Kündigung zum", "Mindestlaufzeit", "Verlängerung um"]) expect(within(card).queryByText(label)).not.toBeInTheDocument();
+    expect(within(card).queryByText("Nicht erfasst")).not.toBeInTheDocument();
+    expect(within(card).getByText("Berechnet")).toBeInTheDocument();
+    expect(within(card).getByText("Automatisch aus den Angaben oben, Stand 04.10.2026")).toBeInTheDocument();
+    expect(within(card).queryByText("Kündbar bis")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Mögliches Vertragsende")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Vertragsende", { selector: "dt" })).not.toBeInTheDocument();
+    expect(within(card).getByText("Erinnerungen am").nextElementSibling).toHaveTextContent("30.11.2028, 06.01.2029");
+    expect(within(card).getByText("Feste Laufzeit: Ende = festes Vertragsende 31.03.2029.")).toBeInTheDocument();
+    expect(within(card).getByText("KI · bestätigt")).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("gekündigt: Zeile mit Daten, keine Eingabefelder dafür; „Status ändern“ führt zum Status", async () => {
+    const user = userEvent.setup();
+    const base = fixed();
+    api.getContractRegister.mockResolvedValue({ ...base, business_status: "gekuendigt", business_status_label: "Gekündigt", allowed_transitions: [{ target: "beendet", label: "Beendet" }],
+      fields: { ...base.fields, terminated_on: field("Gekündigt am", "2028-02-12"), terminated_effective: field("Gekündigt zum", "2029-03-31") } });
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Laufzeit, Fristen & Kündigung");
+    const row = within(card).getByText("Gekündigt").closest(".rg-termrow")!;
+    expect(row).toHaveTextContent("Gekündigtam 12.02.2028 · zum 31.03.2029");
+    expect(screen.queryByText("Gekündigt am")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gekündigt zum")).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Status ändern" }));
+    expect(screen.getByRole("button", { name: "→ Beendet" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
+    expect(screen.queryByLabelText("Gekündigt am")).not.toBeInTheDocument();
+  });
+
+  it("unvollständig: Hinweis statt Kacheln; der Link öffnet das Feld", async () => {
+    const user = userEvent.setup();
+    const base = register();
+    api.getContractRegister.mockResolvedValue({ ...base, terms: { ...base.terms, status: "incomplete", missing: ["notice_period_value"], cancel_by: null } });
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Laufzeit, Fristen & Kündigung");
+    expect(within(card).getByText(/Fristen noch nicht berechenbar/)).toBeInTheDocument();
+    expect(within(card).queryByText("Kündbar bis")).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Kündigungsfrist erfassen" }));
+    await waitFor(() => expect(document.getElementById("rg-notice_period")).toHaveFocus());
   });
 });
 
+describe("Vertragsregister – Aufbewahrung & Löschung", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    docs.listContractDocuments.mockResolvedValue({ items: [], removed: [], attachment_types: [] });
+    api.updateContractRegister.mockImplementation(async () => register());
+  });
+
+  it("aus Vertragstyp: Frist einmal, Löschen ab mit Rechnung; abweichend festlegen speichert am Vertrag", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(register());
+    const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Aufbewahrung & Löschung");
+    expect(within(card).getByText("aus Vertragstyp")).toBeInTheDocument();
+    expect(screen.getAllByText(/10 Jahre nach Vertragsende/)).toHaveLength(1);
+    expect(within(card).getByText("01.01.2038")).toBeInTheDocument();
+    expect(within(card).getByText("Vertragsende 30.09.2027 → Jahresende 2027 + 10 Jahre")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Erläuterung zu Löschen ab" })).toHaveAccessibleDescription(/§ 257 HGB/);
+    expect(screen.queryByText("Löschen nach Ende (Jahre)")).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(within(card).getByRole("button", { name: "Abweichend festlegen" }));
+    const input = within(card).getByLabelText("Aufbewahrung in Jahren");
+    expect(input).toHaveFocus();
+    await user.clear(input);
+    await user.type(input, "12");
+    await user.click(within(card).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { retention_years_after_end: 12 } }));
+  });
+
+  it("am Vertrag festgelegt: zurücksetzen auf den Standard; fällige Löschprüfung als Signal", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(register({ retention: { years: 12, source: "contract", contract_end: "2013-09-30", deletion_from: "2026-01-01" } }));
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Aufbewahrung & Löschung");
+    expect(within(card).getByText("am Vertrag festgelegt")).toBeInTheDocument();
+    expect(within(card).getByText("Löschprüfung fällig")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Festlegung am Vertrag entfernen" }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { retention_years_after_end: null } }));
+  });
+
+  it("nicht festgelegt und Ende unbekannt: „Festlegen“ und „erst nach bekanntem Vertragsende“", async () => {
+    api.getContractRegister.mockResolvedValue(register({ retention: { years: null, source: null, contract_end: null, deletion_from: null } }));
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Aufbewahrung & Löschung");
+    expect(within(card).getByText("Nicht festgelegt")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Aufbewahrung festlegen" })).toBeInTheDocument();
+    expect(within(card).getByText("erst nach bekanntem Vertragsende")).toBeInTheDocument();
+  });
+});
+
+describe("Vertragsregister – Zugriff & Datenschutz", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    docs.listContractDocuments.mockResolvedValue({ items: [], removed: [], attachment_types: [] });
+    api.updateContractConfidentiality.mockResolvedValue(register({
+      confidentiality: { is_confidential: true, type_confidential: false, effective: true, grants: [{ account_id: "a-2", display_name: "Vera Viewer" }] },
+    }));
+    api.updateContractRegister.mockImplementation(async () => register());
+  });
+
+  const withDp = (overrides: Partial<ContractRegister> = {}) => {
+    const base = register();
+    return register({ fields: { ...base.fields, data_protection_relevant: field("Datenschutzrelevant (AVV erforderlich)", true, { origin: "ai", source_field: "Dokumenttext: „personenbezogene Daten“" }) }, ...overrides });
+  };
+
+  it("vertraulich mit Freigaben, KI-Vorschlag mit Zitat, ohne AVV ein Hinweis mit Link; ohne Verstöße (axe)", async () => {
+    api.getContractRegister.mockResolvedValue(withDp({ confidentiality: { is_confidential: true, type_confidential: false, effective: true, grants: [{ account_id: "a-2", display_name: "Vera Viewer" }] } }));
+    const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Zugriff & Datenschutz");
+    expect(within(card).getByText("Sichtbar für: Administratoren, verantwortliche Person, Erinnerungsempfänger")).toBeInTheDocument();
+    expect(within(card).getByText("Vera Viewer").closest(".tag-person")).toBeInTheDocument();
+    expect(within(card).getByText("KI · Vorschlag")).toBeInTheDocument();
+    expect(within(card).getByText("Dokumenttext: „personenbezogene Daten“")).toBeInTheDocument();
+    expect(await within(card).findByText("Kein AVV hinterlegt")).toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "AVV hochladen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=attachments&dokumentart=avv");
+    expect(screen.queryAllByText("Datenschutzrelevant (AVV erforderlich)")).toHaveLength(1);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("mit hinterlegtem AVV kein Hinweis", async () => {
+    docs.listContractDocuments.mockResolvedValue({ items: [{ link_id: "l-1", attachment_type: "avv" }], removed: [], attachment_types: [] });
+    api.getContractRegister.mockResolvedValue(withDp());
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Zugriff & Datenschutz");
+    await waitFor(() => expect(docs.listContractDocuments).toHaveBeenCalled());
+    expect(within(card).queryByText("Kein AVV hinterlegt")).not.toBeInTheDocument();
+  });
+
+  it("Bearbeiten: vertraulich, Freigabe und Datenschutz speichern; ohne Verstöße (axe)", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(withDp());
+    const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Zugriff & Datenschutz");
+    await user.click(within(card).getByRole("button", { name: "Zugriff & Datenschutz bearbeiten" }));
+    expect(within(card).getByText("Vorschlag der KI: Ja – Dokumenttext: „personenbezogene Daten“.")).toBeInTheDocument();
+    await user.click(within(card).getByLabelText(/Vertrag als vertraulich kennzeichnen/));
+    await user.click(within(card).getByRole("button", { name: "Person freigeben" }));
+    await user.click(within(screen.getByRole("group", { name: "Person freigeben" })).getByRole("button", { name: "Vera Viewer" }));
+    await user.click(within(card).getByRole("button", { name: "Nein" }));
+    expect(within(card).getByRole("button", { name: "Nein" })).toHaveAttribute("aria-pressed", "true");
+    expect(await axe(container)).toHaveNoViolations();
+    await user.click(within(card).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(api.updateContractConfidentiality).toHaveBeenCalledWith("test-klinik", "c-1", { is_confidential: true, grant_account_ids: ["a-2"] }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { data_protection_relevant: false } }));
+  });
+
+  it("Vertragstyp vertraulich: Häkchen gesetzt und gesperrt, mit Hinweis", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(register({ confidentiality: { is_confidential: false, type_confidential: true, effective: true, grants: [] } }));
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Zugriff & Datenschutz");
+    expect(within(card).getByText("Ja (über Vertragstyp)")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "Zugriff & Datenschutz bearbeiten" }));
+    const box = within(card).getByLabelText(/Vertrag als vertraulich kennzeichnen/);
+    expect(box).toBeChecked();
+    expect(box).toBeDisabled();
+    expect(within(card).getByText(/Der Vertragstyp ist bereits vertraulich/)).toBeInTheDocument();
+  });
+});
 describe("Vertragsregister – Bemerkungen", () => {
   beforeEach(() => {
     vi.clearAllMocks();

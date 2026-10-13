@@ -4,15 +4,17 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import ReminderLeadsEditor from "./ReminderLeadsEditor";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { loadAllPartners } from "@/components/master-data/definitions/partners";
 import { QuickCreatePartner } from "@/components/master-data/lazy";
 import { REGISTER_CHANGED_EVENT } from "./AiReviewButton";
 import ContractRulesSection from "./ContractRulesSection";
+import ContractAccessCard, { type AccessChanges } from "./ContractAccessCard";
+import ContractRetentionCard from "./ContractRetentionCard";
 import type { FormValues } from "@/components/master-data/types";
 import MissingList from "@/components/ui/MissingList";
-import Signal from "@/components/ui/Signal";
+import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { formatDate } from "@/lib/format";
@@ -69,22 +71,21 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
       { key: "contract_type_id", kind: "type" },
       { key: "contract_category_id", kind: "category" },
       { key: "is_framework", kind: "bool" },
-      { key: "data_protection_relevant", kind: "bool" },
       { key: "subject_text", kind: "textarea" },
     ],
   },
   {
     id: "term",
-    title: "Laufzeit & Kündigung",
-    description: "Grundlage für die automatisch berechneten Fristen",
+    title: "Laufzeit, Fristen & Kündigung",
+    description: "Vertragslaufzeit und die daraus berechneten Fristen",
     fields: [
       { key: "term_model", kind: "term_model" },
       { key: "term_start_date", kind: "date" },
       { key: "term_fixed_end_date", kind: "date" },
       { key: "initial_term", kind: "period" },
-      { key: "minimum_term", kind: "period" },
       { key: "notice_period", kind: "period" },
       { key: "notice_to", kind: "notice_to" },
+      { key: "minimum_term", kind: "period" },
       { key: "renewal_period", kind: "period" },
     ],
   },
@@ -130,17 +131,16 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
       { key: "maintenance_interval_months", kind: "int" },
     ],
   },
-  {
-    id: "termination",
-    title: "Kündigung & Aufbewahrung",
-    description: "Dokumentierte Kündigung und Löschfrist",
-    fields: [
-      { key: "terminated_on", kind: "date" },
-      { key: "terminated_effective", kind: "date" },
-      { key: "retention_years_after_end", kind: "int" },
-    ],
-  },
 ];
+// Nicht in diesen Kästen: Kündigungsdaten setzt nur der Statuswechsel („Gekündigt“), die Aufbewahrung
+// pflegt „Aufbewahrung & Löschung“, Datenschutz „Zugriff & Datenschutz“ (je eine Stelle).
+const RETENTION_KEYS = new Set(["retention_years_after_end"]);
+const ACCESS_KEYS = new Set(["data_protection_relevant"]);
+const TERMINATION_KEYS = new Set(["terminated_on", "terminated_effective"]);
+
+const CALENDAR_ICON = <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>;
+const CALC_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></svg>;
+const FLAG_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="signal-icon"><path d="M5 21V4h11l-1.5 4L16 12H5" /></svg>;
 
 // Kurze Erklaerungen fuer schwierige Felder (nur im Bearbeitungsmodus sichtbar).
 const FIELD_HELP: Record<string, string> = {
@@ -150,10 +150,8 @@ const FIELD_HELP: Record<string, string> = {
   minimum_term: "Frühestens nach dieser Zeit ist eine Kündigung wirksam.",
   renewal_period: "Um wie viel sich der Vertrag ohne Kündigung jeweils verlängert.",
   reminder_lead_months: "Wie viele Monate vor dem Kündigungstermin (bei fester Laufzeit: vor dem Vertragsende) die erste Erinnerung kommt. Leer = Standard (4 Monate).",
-  retention_years_after_end: "Leer lassen, um die Aufbewahrungsfrist des Vertragstyps zu verwenden.",
   maintenance_next_date: "Ein Monat vorher entsteht der Termin „Wartung fällig“ unter Fristen & Aufgaben.",
   maintenance_interval_months: "Leer lassen für einen einmaligen Termin; sonst entsteht nach Erledigung der nächste Termin.",
-  data_protection_relevant: "Ja, wenn der Vertragspartner personenbezogene Daten verarbeitet (Auftragsverarbeitung nach Art. 28 DSGVO).",
 };
 
 const TERM_FIELDS: Record<TermModel, string[]> = {
@@ -239,7 +237,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     form.querySelector<HTMLElement>("input, button[type='submit']")?.focus();
   }, [transition]);
   const [transitionForm, setTransitionForm] = useState({ terminated_on: "", effective_date: "", note: "", acknowledge: false });
-  const [confidentialDraft, setConfidentialDraft] = useState<{ is_confidential: boolean; grants: string[] } | null>(null);
+  // Sprung zu Aufbewahrung bzw. Datenschutz öffnet die Eingabe in der jeweiligen Karte.
+  const [retentionRequest, setRetentionRequest] = useState(0);
+  const [accessRequest, setAccessRequest] = useState(0);
   const [newPartner, setNewPartner] = useState<FormValues | null>(null);
   // Sprungziel „Direkt zur Stelle“: Feld, zu dem gesprungen wird, mit optionalem Hinweis.
   const [target, setTarget] = useState<{ key: string; note?: string; at: number } | null>(null);
@@ -380,13 +380,26 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     setDraft((current) => ({ ...current, partner_id: id }));
   }
 
-  async function submitConfidentiality() {
-    if (!confidentialDraft) return;
-    const ok = await run(() => updateContractConfidentiality(orgSlug, contractId, {
-      is_confidential: confidentialDraft.is_confidential,
-      grant_account_ids: confidentialDraft.grants,
-    }), "Vertraulichkeit gespeichert.");
-    if (ok) setConfidentialDraft(null);
+  async function saveAccess(changes: AccessChanges) {
+    if (changes.confidentiality) {
+      const ok = await run(() => updateContractConfidentiality(orgSlug, contractId, changes.confidentiality!), changes.dataProtection === undefined ? "Vertraulichkeit gespeichert." : "Zugriff gespeichert.");
+      if (!ok) return false;
+    }
+    if (changes.dataProtection !== undefined) {
+      return run(() => updateContractRegister(orgSlug, contractId, { changes: { data_protection_relevant: changes.dataProtection ?? null } }), "Datenschutz gespeichert.");
+    }
+    return true;
+  }
+
+  function saveRetention(value: number | null) {
+    return run(() => updateContractRegister(orgSlug, contractId, { changes: { retention_years_after_end: value } }), value == null ? "Aufbewahrung auf Standard zurückgesetzt." : "Aufbewahrung gespeichert.");
+  }
+
+  // Kündigungsdaten ändert nur der Statuswechsel: zum Bearbeitungsstatus springen.
+  function openStatus() {
+    const status = document.getElementById("rg-status-heading")?.closest("section");
+    status?.scrollIntoView?.({ block: "start" });
+    status?.querySelector<HTMLElement>(".rg-status-actions button")?.focus();
   }
 
   async function submitTransition() {
@@ -426,6 +439,12 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   function focusField(rawKey: string) {
     if (!register) return;
     const key = baseFieldKey(rawKey);
+    if (RETENTION_KEYS.has(key) || ACCESS_KEYS.has(key)) {
+      if (RETENTION_KEYS.has(key)) setRetentionRequest(Date.now()); else setAccessRequest(Date.now());
+      window.requestAnimationFrame(() => document.getElementById(`rg-field-${key}`)?.scrollIntoView?.({ block: "center" }));
+      return;
+    }
+    if (TERMINATION_KEYS.has(key)) { openStatus(); return; }
     const model = (editing ? draft.term_model : register.fields.term_model?.value) as TermModel | null | undefined;
     const hidden = TERM_SECTION_KEYS.has(key) && !(model ? TERM_FIELDS[model] : ["term_model"]).includes(key);
     const canEdit = editable && register.business_status !== "geloescht";
@@ -640,6 +659,37 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     return null;
   }
 
+  // Kündigung ist eine Tatsache, kein Problem: neutral, nur lesbar; geändert wird sie über den Status.
+  const terminationRow = register.business_status === "gekuendigt" ? <div className="rg-termrow">
+    <Signal tone="neutral" icon={FLAG_ICON}>Gekündigt</Signal>
+    <span>
+      {register.fields.terminated_on?.value ? <>am <span className="mono">{formatDate(String(register.fields.terminated_on.value))}</span></> : null}
+      {register.fields.terminated_on?.value && register.fields.terminated_effective?.value ? " · " : null}
+      {register.fields.terminated_effective?.value ? <>zum <span className="mono">{formatDate(String(register.fields.terminated_effective.value))}</span></> : null}
+    </span>
+    {editable ? <button type="button" className="rg-link rg-termrow-link" onClick={openStatus}>Status ändern</button> : null}
+  </div> : null;
+
+  // Berechnet: sichtbar anders als Eingaben (gestrichelte Kacheln, schattierter Streifen); jede Angabe nur einmal.
+  const fixedEnd = register.fields.term_fixed_end_date?.value as string | null | undefined;
+  const effectiveEnd = register.fields.terminated_effective?.value as string | null | undefined;
+  const computedEnd = terms.actual_end ?? terms.possible_end;
+  const showEnd = Boolean(computedEnd && computedEnd !== fixedEnd && computedEnd !== effectiveEnd);
+  const reminders = terms.reminder_dates?.length ? terms.reminder_dates : terms.reminder_date ? [terms.reminder_date] : [];
+  const termCalc = <div className="rg-calc" aria-labelledby="rg-calc-label">
+    <div className="rg-calc-head"><span className="rg-calc-tag" id="rg-calc-label">{CALC_ICON}Berechnet</span><small>Automatisch aus den Angaben oben, Stand {formatDate(register.as_of)}</small></div>
+    {terms.status === "incomplete" ? <div className="rg-hintbar">
+      <SignalIcon tone="warning" />
+      <MissingList intro="Fristen noch nicht berechenbar. Es fehlen:" items={terms.missing.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))} />
+    </div> : <>
+      <dl className="rg-calc-tiles">
+        {!fixedTerm && terms.cancel_by ? <div className="rg-calc-tile"><dt>Kündbar bis</dt><dd className="mono">{formatDate(terms.cancel_by)}</dd></div> : null}
+        {showEnd ? <div className="rg-calc-tile"><dt>{terms.actual_end ? "Vertragsende" : "Mögliches Vertragsende"}</dt><dd className="mono">{formatDate(computedEnd)}</dd></div> : null}
+        {reminders.length ? <div className="rg-calc-tile"><dt>{reminders.length > 1 ? "Erinnerungen am" : "Erinnerung am"}</dt><dd className="mono">{reminders.map((value) => formatDate(value)).join(", ")}</dd></div> : null}
+      </dl>
+      {terms.explanation.map((line) => <p key={line} className="rg-calc-note">{line}</p>)}
+    </>}
+  </div>;
   return <div className="rg-panel">
     <section className="cw-section rg-status" aria-labelledby="rg-status-heading">
       <div className="rg-status-row">
@@ -676,42 +726,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
 
     <ContractRulesSection organizationSlug={orgSlug} contractId={contractId} version={register} />
 
-    <section className="cw-section" aria-labelledby="rg-terms-heading">
-      <div className="cw-section-head"><div><h2 id="rg-terms-heading">Berechnete Fristen</h2><p>Deterministisch aus den Stammdaten berechnet (Stand {formatDate(register.as_of)}).</p></div></div>
-      {terms.status === "incomplete" ? <MissingList
-        className="rg-hint"
-        intro="Fristen noch nicht berechenbar. Es fehlen:"
-        items={terms.missing.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))}
-      /> : null}
-      <div className="rg-terms">
-        {/* Feste Laufzeit endet ohne Kündigung: kein „Kündbar bis“, ein Vertragsende. */}
-        {fixedTerm ? null : <div><span>Kündbar bis</span><strong>{terms.cancel_by ? formatDate(terms.cancel_by) : "–"}</strong></div>}
-        <div><span>{terms.actual_end ? "Tatsächliches Ende" : fixedTerm ? "Vertragsende" : "Mögliches Vertragsende"}</span><strong>{formatDate(terms.actual_end ?? terms.possible_end)}</strong></div>
-        {fixedTerm ? null : <div><span>Frühestes / festes Ende</span><strong>{formatDate(terms.earliest_end)}</strong></div>}
-        <div><span>{(terms.reminder_dates?.length ?? 0) > 1 ? "Erinnerungen am" : "Erinnerung am"}</span><strong>{terms.reminder_dates?.length ? terms.reminder_dates.map((value) => formatDate(value)).join(", ") : formatDate(terms.reminder_date)}</strong></div>
-      </div>
-      {terms.explanation.length > 0 ? <ul className="rg-explanation">{terms.explanation.map((line) => <li key={line}>{line}</li>)}</ul> : null}
-    </section>
-
-    <section className="cw-section" aria-labelledby="rg-protection-heading">
-      <div className="cw-section-head"><div><h2 id="rg-protection-heading">Vertraulichkeit & Aufbewahrung</h2><p>Wer den Vertrag sehen darf und ab wann er gelöscht werden darf.</p></div></div>
-      <div className="rg-terms">
-        <div><span>Vertraulich</span><strong>{register.confidentiality.effective ? (register.confidentiality.type_confidential && !register.confidentiality.is_confidential ? "Ja (über Vertragstyp)" : "Ja") : "Nein"}</strong></div>
-        <div><span>Aufbewahrung</span><strong>{register.retention.years == null ? "Nicht festgelegt" : `${register.retention.years} Jahr(e) nach Vertragsende`}</strong>{register.retention.years == null && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo("retention_years_after_end")} aria-label="Aufbewahrung festlegen">Festlegen</button> : null}{register.retention.source ? <small className="cw-muted">{register.retention.source === "contract" ? "am Vertrag festgelegt" : "aus Vertragstyp"}</small> : null}</div>
-        <div><span>Löschen ab</span><strong>{register.retention.deletion_from ? formatDate(register.retention.deletion_from) : "–"}</strong>{!register.retention.deletion_from ? <small className="cw-muted">erst nach bekanntem Vertragsende</small> : null}</div>
-      </div>
-      {register.confidentiality.effective ? <p className="cw-muted">Sichtbar für Administratoren, die verantwortliche Person, die Erinnerungsempfänger{register.confidentiality.grants.length > 0 ? ` und freigegeben für: ${register.confidentiality.grants.map((item) => item.display_name).join(", ")}` : ""}.</p> : null}
-      {isAdmin && !confidentialDraft ? <div className="rg-actions"><button type="button" className="btn" disabled={busy} onClick={() => setConfidentialDraft({ is_confidential: register.confidentiality.is_confidential, grants: register.confidentiality.grants.map((item) => item.account_id) })}>Vertraulichkeit bearbeiten</button></div> : null}
-      {confidentialDraft ? <form className="rg-transition" aria-label="Vertraulichkeit bearbeiten" onSubmit={(event) => { event.preventDefault(); void submitConfidentiality(); }}>
-        <label className="rg-check"><input type="checkbox" checked={confidentialDraft.is_confidential} onChange={(event) => setConfidentialDraft((form) => form && ({ ...form, is_confidential: event.target.checked }))} />Vertrag als vertraulich kennzeichnen</label>
-        {register.confidentiality.type_confidential ? <p className="rg-hint">Der Vertragstyp ist bereits vertraulich. Der Vertrag bleibt deshalb auch ohne Kennzeichen geschützt.</p> : null}
-        <fieldset className="rg-grants"><legend>Zusätzlich freigeben für</legend>
-          {assignees.length === 0 ? <p className="cw-muted">Keine Benutzer verfügbar.</p> : assignees.map((item) => <label key={item.id} className="rg-check"><input type="checkbox" checked={confidentialDraft.grants.includes(item.id)} onChange={(event) => setConfidentialDraft((form) => form && ({ ...form, grants: event.target.checked ? [...form.grants, item.id] : form.grants.filter((id) => id !== item.id) }))} />{item.display_name}</label>)}
-        </fieldset>
-        <div className="rg-actions"><button type="button" className="btn" onClick={() => setConfidentialDraft(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button></div>
-      </form> : null}
-    </section>
-
     {editable && (register.partner_suggestions.length > 0 || register.type_suggestion || proposalKeys.length > 0) ? <section className="cw-section rg-ai" aria-labelledby="rg-ai-heading">
       <div className="cw-section-head"><div><h2 id="rg-ai-heading">KI-Vorschläge</h2><p>Nichts wird automatisch übernommen. Bitte prüfen und bestätigen.</p></div></div>
       <ul>
@@ -743,7 +757,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         : canEditHere
           ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`} data-shortcut="edit" aria-keyshortcuts="E" title="Bearbeiten (E)">Bearbeiten</button>
           : null;
-      return <CollapsibleSection key={section.id} id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))}>
+      const isTerm = section.id === "term";
+      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={isTerm ? CALENDAR_ICON : undefined} iconClassName={isTerm ? "section-tile--type" : undefined}>
+        {isTerm ? terminationRow : null}
         <dl className="rg-fields">{fields.map((def) => {
           if (def.kind === "auto_number") {
             const earlier = register.fields.internal_number?.value;
@@ -765,7 +781,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
             <dd>
               {editing ? input(def) : <span className="rg-value">{display(def)}</span>}
               {editing && FIELD_HELP[def.key] ? <span className="field-hint rg-help">{FIELD_HELP[def.key]}</span> : null}
-              {!editing && provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null}
+              {!editing && provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{provenance.origin === "ai" ? <SignalIcon tone="ai" /> : provenance.origin === "ai_confirmed" ? <SignalIcon tone="done" /> : null}{ORIGIN_LABEL[provenance.origin]}</span> : null}
               {!editing && provenance?.document_source && onShowSource ? <button type="button" className="rg-link" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>S. {provenance.document_source.page}</button> : null}
               {!editing && editable && provenance?.origin === "ai" ? <button type="button" className="rg-link" disabled={busy} onClick={() => confirm(fieldKeys(def))}>Bestätigen</button> : null}
               {empty && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo(def.key)} aria-label={`${label} erfassen`}>Erfassen</button> : null}
@@ -774,8 +790,32 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
             </dd>
           </div>;
         })}</dl>
+        {isTerm ? termCalc : null}
         {section.id === "reminder" ? <ReminderLeadsEditor contractId={contractId} orgSlug={orgSlug} register={register} editable={canEditHere} onSaved={(next) => { setRegister(next); onChanged?.(); }} /> : null}
-      </CollapsibleSection>;
+      </CollapsibleSection>
+      {isTerm ? <>
+        <ContractRetentionCard
+          register={register}
+          typeDefaultYears={types.find((item) => item.id === register.fields.contract_type_id?.value)?.retention_years ?? null}
+          canEdit={canEditHere}
+          busy={busy}
+          onSaveYears={saveRetention}
+          editRequest={retentionRequest}
+        />
+        <ContractAccessCard
+          register={register}
+          contractId={contractId}
+          orgSlug={orgSlug}
+          assignees={assignees}
+          isAdmin={isAdmin && register.business_status !== "geloescht"}
+          canEditData={canEditHere}
+          busy={busy}
+          onSave={saveAccess}
+          onConfirm={() => confirm(["data_protection_relevant"])}
+          editRequest={accessRequest}
+        />
+      </> : null}
+      </Fragment>;
     })}
   </div>;
 }

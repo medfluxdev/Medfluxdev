@@ -3,6 +3,7 @@
 import Dialog from "@/components/ui/Dialog";
 import StatusBadge from "@/components/ui/StatusBadge";
 import Signal from "@/components/ui/Signal";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
@@ -29,7 +30,9 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
   const [removing, setRemoving] = useState<ContractDocumentDto | null>(null);
   const [reason, setReason] = useState("");
   const [types, setTypes] = useState<LookupDto[]>([]);
-  const [attachmentType, setAttachmentType] = useState("nachtrag");
+  // „AVV hochladen“ (Zugriff & Datenschutz) kommt mit ?dokumentart=avv: Art vorwählen, Dateiauswahl fokussieren.
+  const presetType = useSearchParams()?.get("dokumentart") ?? null;
+  const [attachmentType, setAttachmentType] = useState(presetType || "nachtrag");
   const [title, setTitle] = useState("");
   const [analyze, setAnalyze] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
@@ -50,6 +53,9 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
   }, [contractId, orgSlug]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (presetType && editable) { setAttachmentType(presetType); fileInput.current?.focus(); }
+  }, [presetType, editable]);
   useEffect(() => {
     listLookups(orgSlug, "attachment_type").then((data) => setTypes(data.items)).catch(() => setTypes([]));
   }, [orgSlug]);

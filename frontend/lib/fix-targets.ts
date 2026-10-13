@@ -77,7 +77,7 @@ const SECTION_ANCHORS: Record<string, string> = {
   ownership: "cw-ownership-heading",
   entries: "fin-entries-heading",
   suggestions: "fin-ai-heading",
-  terms: "rg-terms-heading",
+  terms: "rg-term-heading",
   rules: "rules-heading",
   renewal: "renewal-heading",
   deadlines: "rg-deadlines-heading",

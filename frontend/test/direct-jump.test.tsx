@@ -109,7 +109,7 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
   it("Zeiträume: „Kündigungsfrist“ springt in das Anzahl-Feld", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Berechnete Fristen" });
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
     const terms = screen.getByText(/Fristen noch nicht berechenbar/).closest("p")!;
     await user.click(within(terms).getByRole("button", { name: "Kündigungsfrist erfassen" }));
     await waitFor(() => expect(document.getElementById("rg-notice_period")).toHaveFocus());
@@ -157,9 +157,21 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
   it("leere Felder haben für Bearbeitende ein „Erfassen“ direkt am Feld", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    const row = await waitFor(() => { const el = document.getElementById("rg-field-retention_years_after_end")!; expect(el).toBeTruthy(); return el; });
-    await user.click(within(row).getByRole("button", { name: "Löschen nach Ende (Jahre) erfassen" }));
+    const row = await waitFor(() => { const el = document.getElementById("rg-field-term_start_date")!; expect(el).toBeTruthy(); return el; });
+    await user.click(within(row).getByRole("button", { name: "Vertragsbeginn erfassen" }));
+    await waitFor(() => expect(document.getElementById("rg-term_start_date")).toHaveFocus());
+  });
+
+  it("Aufbewahrung: Ziel aus der Adresse öffnet die Eingabe in „Aufbewahrung & Löschung“", async () => {
+    window.history.replaceState(null, "", "/contracts/c-1?tab=register&feld=retention_years_after_end");
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await waitFor(() => expect(document.getElementById("rg-retention_years_after_end")).toHaveFocus());
+  });
+
+  it("Datenschutz: Ziel aus der Adresse öffnet „Zugriff & Datenschutz“ zum Bearbeiten", async () => {
+    window.history.replaceState(null, "", "/contracts/c-1?tab=register&feld=data_protection_relevant");
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    expect(await screen.findByRole("form", { name: "Zugriff & Datenschutz bearbeiten" })).toBeInTheDocument();
   });
 });
 
@@ -205,10 +217,10 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     await user.type(screen.getByLabelText("Kurzbeschreibung"), " Neu");
-    await user.click(screen.getByRole("button", { name: "Laufzeit & Kündigung bearbeiten" }));
+    await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
     await user.type(document.getElementById("rg-term_start_date") as HTMLInputElement, "2026-01-01");
     // Abbrechen im Laufzeit-Kasten verwirft nur dessen Eingabe.
-    await user.click(screen.getByRole("button", { name: "Abbrechen (Laufzeit & Kündigung)" }));
+    await user.click(screen.getByRole("button", { name: "Abbrechen (Laufzeit, Fristen & Kündigung)" }));
     expect(document.getElementById("rg-term_start_date")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { short_description: "Wartung MRT Neu" } }));

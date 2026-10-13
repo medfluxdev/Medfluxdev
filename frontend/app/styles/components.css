@@ -360,6 +360,11 @@
 @keyframes mf-slide-in { from { transform: translateX(24px); opacity: 0; } }
 
 /* ---------- Tooltip ---------- */
+/* ⓘ-Knopf (InfoTip): 24 × 24 Trefferfläche, Blase bis 380px breit */
+.info-tip-button { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-icon); cursor: help; }
+.info-tip-button:hover { color: var(--color-text); }
+.info-tip-button svg { width: 16px; height: 16px; fill: none; stroke: currentcolor; stroke-width: 1.8; stroke-linecap: round; }
+.info-tip .tooltip-bubble { max-width: min(380px, 80vw); font-weight: var(--weight-regular); text-align: left; white-space: normal; }
 .tooltip { position: relative; display: inline-flex; }
 .tooltip-bubble {
   position: absolute;
@@ -849,8 +854,17 @@ body { background: var(--color-bg); }
 .collapsible.is-collapsed .collapsible-toggle svg { transform: rotate(-90deg); }
 @media (prefers-reduced-motion: reduce) { .collapsible-toggle svg { transition: none; } }
 .collapsible.is-collapsed .cw-section-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+/* Kachel im Kopf (CollapsibleSection icon): Kennfarbe des Inhalts, dekorativ */
+.collapsible > .collapsible-head.has-icon { grid-template-columns: 40px 40px minmax(0, 1fr) auto; }
+.collapsible-icon { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--tile-border, var(--color-border)); border-radius: 10px; background: var(--tile-bg, var(--color-surface-subtle)); color: var(--tile-fg, var(--color-icon)); }
+.collapsible-icon svg { width: 20px; height: 20px; fill: none; stroke: currentcolor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.section-tile--type { --tile-fg: var(--color-tag-type); --tile-bg: var(--color-tag-type-bg); --tile-border: var(--color-tag-type-border); }
+.section-tile--device { --tile-fg: var(--color-tag-device); --tile-bg: var(--color-tag-device-bg); --tile-border: var(--color-tag-device-border); }
+.section-tile--accent { --tile-fg: var(--color-accent); --tile-bg: var(--color-surface-accent); --tile-border: var(--color-border); }
+@media (forced-colors: active) { .collapsible-icon { border-color: CanvasText; } }
 @media (max-width: 640px) {
   .collapsible > .collapsible-head { grid-template-columns: 40px minmax(0, 1fr); }
+  .collapsible > .collapsible-head.has-icon { grid-template-columns: 40px 40px minmax(0, 1fr); }
   .collapsible-head > .collapsible-corner { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
