@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import CollapsibleSection from "@/components/ui/CollapsibleSection";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import ChipPicker, { type ChipPickerGroup } from "@/components/ui/ChipPicker";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
+import InlineAlert from "@/components/ui/InlineAlert";
+import Signal from "@/components/ui/Signal";
+import { useToast } from "@/components/ui/Toast";
+import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { getOrganizationStructure, listCostCenters } from "@/lib/domain-api/organizations";
 import { listContractTypes, type ContractCategoryDto, type ContractTypeDto } from "@/lib/domain-api/catalogs";
 import { getContractRegister, updateContractRegister } from "@/lib/domain-api/register";
 import { departmentFullPath } from "@/lib/organization-tree";
-import { contractHref } from "@/lib/fix-targets";
+import { SECTION_PARAM, contractHref } from "@/lib/fix-targets";
 import { deviceTypeGroups } from "@/lib/device-type-match";
 import {
   getContractDeviceTypes,
@@ -31,6 +37,51 @@ type Item = { id: string; name: string; code: string; is_active: boolean };
 type Department = Item & { hospital_id: string; parent_id?: string | null };
 type Center = Item & { hospital_id: string; department_id: string | null };
 type Assignee = { id: string; display_name: string; role: string; hospital_id: string | null; department_id: string | null };
+/** Gespeicherter Stand: Grundlage für „Ungespeicherte Änderungen“ und „Verwerfen“. */
+type Snapshot = {
+  typeId: string;
+  hospitalId: string;
+  responsibleDepartmentId: string;
+  beneficiaryDepartmentIds: string[];
+  centerId: string;
+  responsibleId: string;
+  furtherIds: string[];
+  deviceIds: string[];
+};
+
+const EMPTY_SNAPSHOT: Snapshot = { typeId: "", hospitalId: "", responsibleDepartmentId: "", beneficiaryDepartmentIds: [], centerId: "", responsibleId: "", furtherIds: [], deviceIds: [] };
+
+const GROUP_ICONS: Record<string, ReactNode> = {
+  file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>,
+  building: <path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M2 21h20" />,
+  euro: <path d="M18 6.5A7 7 0 1 0 18 17.5M4 10h10M4 14h10" />,
+  users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6" /></>,
+};
+
+function Icon({ children }: { children: ReactNode }) {
+  return <svg className="cw-og-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{children}</svg>;
+}
+
+/** Gruppe: links Titel mit Symbol und Zweck, rechts die Felder bzw. Werte. */
+function Group({ id, icon, title, intro, children }: { id: string; icon: string; title: string; intro: string; children: ReactNode }) {
+  return <section className="cw-og" aria-labelledby={id}>
+    <div className="cw-og-intro"><h3 id={id}><Icon>{GROUP_ICONS[icon]}</Icon>{title}</h3><p>{intro}</p></div>
+    <div className="cw-og-body">{children}</div>
+  </section>;
+}
+
+/** Kurzer Hinweis mit ⓘ unter genau dem Feld, das er betrifft. */
+function Hint({ id, children }: { id?: string; children: ReactNode }) {
+  return <p className="cw-hint" id={id}><Icon><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5v.5" /></Icon><span>{children}</span></p>;
+}
+
+const optional = <span className="cw-of-optional"> · optional</span>;
+const LOAD_FAILED = "Zuordnung konnte nicht geladen werden.";
+const INTRO = {
+  contract: "Art des Vertrags. Bestimmt Fristenregeln und Auswertungen.",
+  cost: "Worauf die Kosten gebucht werden und welche Gerätearten der Vertrag abdeckt.",
+  people: "Erhalten Erinnerungen zu Fristen und sehen den Vertrag unter „Ich verantwortlich“ – auch wenn er vertraulich ist.",
+};
 
 export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }: { contractId: string; orgSlug: string; onSaved?: () => void }) {
   const { role, account } = useAuth();
@@ -60,6 +111,15 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [saved, setSaved] = useState<Snapshot>(EMPTY_SNAPSHOT);
+  const [editing, setEditing] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const toast = useToast();
+  // „Ändern“/„Festlegen“ (Karte Zuständigkeit, Kopf, Hinweise) führt mit ?abschnitt=ownership hierher: gleich bearbeiten.
+  const linkedSection = useSearchParams()?.get(SECTION_PARAM) ?? null;
+  useEffect(() => {
+    if (linkedSection === "ownership") { setEditing(true); setJustSaved(false); }
+  }, [linkedSection]);
 
   useEffect(() => {
     if (!editable) { setLoading(false); return; }
@@ -105,7 +165,17 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       setCenterId(ownership.cost_center_id ?? "");
       setResponsibleId(ownership.responsible_account_id ?? "");
       setFurtherIds(ownership.further_responsible_account_ids ?? []);
-    }).catch(() => { if (!cancelled) setMessage("Zuordnung konnte nicht geladen werden."); })
+      setSaved({
+        typeId: currentType,
+        hospitalId: ownership.hospital_id ?? "",
+        responsibleDepartmentId: departmentRoles.responsible_department_id ?? "",
+        beneficiaryDepartmentIds: departmentRoles.beneficiary_department_ids ?? [],
+        centerId: ownership.cost_center_id ?? "",
+        responsibleId: ownership.responsible_account_id ?? "",
+        furtherIds: ownership.further_responsible_account_ids ?? [],
+        deviceIds: (devices ?? []).map((item) => item.device_type_id),
+      });
+    }).catch(() => { if (!cancelled) setMessage(LOAD_FAILED); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [contractId, editable, orgSlug]);
@@ -204,6 +274,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         setSavedTypeId(typeId);
         if (!keepCategory) setSavedCategoryId("");
       }
+      let deviceIdsAfterSave = deviceIds;
       if (deviceCatalog && deviceIds.join() !== savedDevices.map((item) => item.device_type_id).join()) {
         const kept = new Map(savedDevices.map((item) => [item.device_type_id, item]));
         const devices = await saveContractDeviceTypes(orgSlug, contractId, deviceIds.map((id) => ({
@@ -211,10 +282,23 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         })));
         const items = Array.isArray(devices?.items) ? devices.items : [];
         setSavedDevices(items);
-        setDeviceIds(items.map((item) => item.device_type_id));
+        deviceIdsAfterSave = items.map((item) => item.device_type_id);
+        setDeviceIds(deviceIdsAfterSave);
       }
       setAssignment(ownership);
-      setMessage("Organisationszuordnung gespeichert.");
+      const nextFurther = furtherIds.filter((id) => id !== responsibleId);
+      const nextBeneficiaries = responsibleDepartmentId ? beneficiaryDepartmentIds.filter((id) => id !== responsibleDepartmentId) : [];
+      if (hospitalId && responsibleDepartmentId && roles) {
+        setRoles({ ...roles, responsible_department_id: responsibleDepartmentId, beneficiary_department_ids: nextBeneficiaries });
+      }
+      setFurtherIds(nextFurther);
+      setSaved({
+        typeId, hospitalId, responsibleDepartmentId, beneficiaryDepartmentIds: nextBeneficiaries, centerId, responsibleId,
+        furtherIds: nextFurther, deviceIds: deviceCatalog ? deviceIdsAfterSave : saved.deviceIds,
+      });
+      setEditing(false);
+      setJustSaved(true);
+      toast("Organisationszuordnung gespeichert.", "success");
       onSaved?.();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Zuordnung konnte nicht gespeichert werden.");
@@ -223,66 +307,227 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     }
   }
 
+  const current: Snapshot = { typeId, hospitalId, responsibleDepartmentId, beneficiaryDepartmentIds, centerId, responsibleId, furtherIds, deviceIds: deviceCatalog ? deviceIds : saved.deviceIds };
+  const dirty = editing && JSON.stringify(current) !== JSON.stringify(saved);
+  useUnsavedChanges(dirty);
+  useSaveShortcut(dirty && !saving, () => void save());
+
+  function startEdit() {
+    setEditing(true);
+    setJustSaved(false);
+    setMessage("");
+  }
+
+  function discard() {
+    setTypeId(saved.typeId);
+    setHospitalId(saved.hospitalId);
+    setResponsibleDepartmentId(saved.responsibleDepartmentId);
+    setBeneficiaryDepartmentIds(saved.beneficiaryDepartmentIds);
+    setCenterId(saved.centerId);
+    setResponsibleId(saved.responsibleId);
+    setFurtherIds(saved.furtherIds);
+    setDeviceIds(saved.deviceIds);
+    setMessage("");
+    setEditing(false);
+  }
+
   if (!editable) return null;
-  const actions = loading ? null : <><button type="button" className="btn btn-primary btn-sm" onClick={() => void save()} disabled={saving}>{saving ? "Wird gespeichert…" : "Zuordnung speichern"}</button></>;
-  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description="Verantwortlichen Bereich, nutzende Bereiche, Gerätearten und zuständige Person festlegen." actions={actions}>
-    {message ? <p className="cw-ownership-status" role="status">{message}</p> : null}
-    {loading ? <p role="status">Zuordnung wird geladen…</p> : <div className="cw-ownership-grid">
-      <p className="cw-ownership-group">Vertrag</p>
-      <label><span>Vertragstyp</span><select value={typeId} onChange={(event) => setTypeId(event.target.value)}><option value="">Nicht festgelegt</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>{types.length === 0 ? <small>Noch keine Vertragstypen angelegt. {isAdmin ? <Link href="/stammdaten/vertragstypen">Vertragstypen pflegen</Link> : null}</small> : null}</label>
-      <label><span>Krankenhaus</span><select value={hospitalId} disabled={hospitalLocked} onChange={(event) => {
-        setHospitalId(event.target.value);
-        setResponsibleDepartmentId("");
-        setBeneficiaryDepartmentIds([]);
-        setCenterId("");
-      }}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{hospitalLocked ? <small>Das Krankenhaus lässt sich erst nach Aufheben der Bereichsrollen ändern.</small> : null}</label>
-      <p className="cw-ownership-group">Abteilungen, Kostenstelle und Geräte</p>
-      <label><span>Verantwortliche Abteilung</span><select value={responsibleDepartmentId} disabled={!hospitalId} onChange={(event) => {
-        const next = event.target.value;
-        setResponsibleDepartmentId(next);
-        setBeneficiaryDepartmentIds((current) => current.filter((id) => id !== next));
-        // Kostenstelle der Abteilung automatisch übernehmen (falls hinterlegt).
-        setCenterId(centers.find((item) => item.department_id === next && item.hospital_id === hospitalId)?.id ?? "");
-      }}><option value="">Bitte auswählen</option>{visibleDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select></label>
-      <div className="cw-ownership-field"><span id="cw-beneficiary-label">Nutzende Abteilungen</span>
-        <div className="cw-multi">{beneficiaryDepartmentIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-beneficiary-label">{beneficiaryDepartmentIds.map((id) => {
-          const department = departments.find((item) => item.id === id);
-          const name = department ? departmentFullPath(department, departments) : "Unbekannter Bereich";
-          return <li key={id}><span>{name}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleBeneficiary(id)} aria-label={`${name} entfernen`}>✕</button></li>;
-        })}</ul> : null}
-        <select aria-label="Nutzende Abteilung hinzufügen" value="" disabled={!hospitalId || visibleDepartments.length === 0} onChange={(event) => { const id = event.target.value; if (id && !beneficiaryDepartmentIds.includes(id)) toggleBeneficiary(id); }}><option value="">+ Abteilung hinzufügen …</option>{visibleDepartments.filter((item) => item.id !== responsibleDepartmentId && !beneficiaryDepartmentIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select></div>
-        {hospitalId && visibleDepartments.length === 0 ? <small>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</small> : null}
+
+  const loadFailed = message === LOAD_FAILED;
+  const departmentName = (id: string) => {
+    const department = departments.find((item) => item.id === id);
+    return department ? departmentFullPath(department, departments) : "Unbekannter Bereich";
+  };
+  const hospitalName = (id: string) => hospitals.find((item) => item.id === id)?.name ?? "Unbekanntes Krankenhaus";
+  const centerLabel = (id: string) => {
+    const center = centers.find((item) => item.id === id);
+    return center ? <><span className="mono">{center.code}</span> · {center.name}</> : "Unbekannte Kostenstelle";
+  };
+  const typeLabel = (id: string) => types.find((item) => item.id === id)?.label ?? "Unbekannter Vertragstyp";
+  const deviceText = (id: string) => {
+    const quantity = savedDevices.find((item) => item.device_type_id === id)?.quantity;
+    return quantity ? `${deviceLabel(id)} (${quantity})` : deviceLabel(id);
+  };
+  const none = <span className="cw-ov-none">Keine</span>;
+  const notSet = <Signal tone="warning" size="sm">Nicht festgelegt</Signal>;
+  const tags = (values: string[]) => values.length ? <ul className="cw-ov-tags">{values.map((value) => <li key={value}>{value}</li>)}</ul> : none;
+  const row = (label: string, value: ReactNode) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>;
+
+  const summary = loading || loadFailed ? null : <>
+    <span>{saved.hospitalId ? <b>{hospitalName(saved.hospitalId)}</b> : "Organisationsweit"}</span>
+    {saved.responsibleDepartmentId ? <><span className="sep" aria-hidden="true">·</span><span>{departmentName(saved.responsibleDepartmentId)}</span></> : null}
+    <span className="sep" aria-hidden="true">·</span>
+    {saved.responsibleId ? <span>{assigneeName(saved.responsibleId)}</span> : <Signal tone="warning" size="sm">Hauptverantwortlich fehlt</Signal>}
+  </>;
+  const description = <>Wem der Vertrag gehört, wer ihn nutzt und wer zuständig ist{justSaved ? <> <Signal tone="done" size="sm">Gespeichert</Signal></> : null}</>;
+  const actions = loading || loadFailed
+    ? null
+    : !editing
+      ? <button type="button" className="btn btn-sm" onClick={startEdit} aria-label="Organisationszuordnung bearbeiten">
+        <svg className="btn-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>Bearbeiten
+      </button>
+      : dirty ? null : <button type="button" className="btn btn-ghost btn-sm" onClick={discard}>Abbrechen</button>;
+
+  const beneficiaryGroups: ChipPickerGroup[] = [{
+    label: hospitalId ? `Abteilungen · ${hospitalName(hospitalId)}` : "Abteilungen",
+    options: visibleDepartments
+      .filter((item) => item.id !== responsibleDepartmentId && !beneficiaryDepartmentIds.includes(item.id))
+      .map((item) => ({ value: item.id, label: departmentFullPath(item, departments) })),
+  }];
+  const exclude = new Set([responsibleId, ...furtherIds]);
+  const personGroups: ChipPickerGroup[] = [
+    { label: "Passend zur Zuordnung", options: visibleAssignees.filter((item) => !exclude.has(item.id)).map((item) => ({ value: item.id, label: item.display_name })) },
+    { label: "Weitere Benutzer der Organisation", options: otherAssignees.filter((item) => !exclude.has(item.id)).map((item) => ({ value: item.id, label: item.display_name })) },
+  ];
+  const noHospital = "Zuerst ein Krankenhaus wählen";
+  const orgIntro = "Wer den Vertrag verantwortet und welche Bereiche ihn nutzen.";
+
+  const view = <>
+    <Group id="cw-og-contract" icon="file" title="Vertrag" intro={INTRO.contract}>
+      <dl className="cw-ov">{row("Vertragstyp", saved.typeId ? typeLabel(saved.typeId) : notSet)}</dl>
+    </Group>
+    <Group id="cw-og-org" icon="building" title="Krankenhaus & Abteilungen" intro={orgIntro}>
+      <dl className="cw-ov">
+        {row("Krankenhaus", saved.hospitalId ? hospitalName(saved.hospitalId) : "Organisationsweit")}
+        {row("Verantwortliche Abteilung", saved.responsibleDepartmentId ? departmentName(saved.responsibleDepartmentId) : none)}
+        {row("Nutzende Abteilungen", tags(saved.beneficiaryDepartmentIds.map(departmentName)))}
+      </dl>
+    </Group>
+    <Group id="cw-og-cost" icon="euro" title="Kostenstelle & Geräte" intro={INTRO.cost}>
+      <dl className="cw-ov">
+        {row("Kostenstelle", saved.centerId ? centerLabel(saved.centerId) : notSet)}
+        {deviceCatalog ? row("Gerätearten", tags(saved.deviceIds.map(deviceText))) : null}
+      </dl>
+    </Group>
+    <Group id="cw-og-people" icon="users" title="Verantwortliche Personen" intro={INTRO.people}>
+      <dl className="cw-ov">
+        {row("Hauptverantwortlich", saved.responsibleId ? assigneeName(saved.responsibleId) : notSet)}
+        {row("Weitere Verantwortliche", tags(saved.furtherIds.map(assigneeName)))}
+      </dl>
+    </Group>
+  </>;
+
+  const edit = <>
+    <Group id="cw-og-contract" icon="file" title="Vertrag" intro={INTRO.contract}>
+      <div className="cw-of">
+        <label htmlFor="cw-own-type">Vertragstyp</label>
+        <select id="cw-own-type" value={typeId} onChange={(event) => setTypeId(event.target.value)}><option value="">Nicht festgelegt</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
+        {types.length === 0 ? <Hint>Noch keine Vertragstypen angelegt. {isAdmin ? <Link href="/stammdaten/vertragstypen">Vertragstypen pflegen</Link> : null}</Hint> : null}
       </div>
-      <label><span>Kostenstelle</span><select value={centerId} onChange={(event) => {
-        const next = event.target.value;
-        setCenterId(next);
-        // Kostenstelle einer verantwortlichen oder nutzenden Abteilung: Rollen bleiben, wie sie sind.
-        // Gehört sie einer noch nicht gewählten Abteilung, wird diese verantwortlich (falls noch keine gewählt ist).
-        const owner = centers.find((item) => item.id === next)?.department_id;
-        if (owner && !selectedDepartments.has(owner) && !responsibleDepartmentId) {
-          setResponsibleDepartmentId(owner);
-          setBeneficiaryDepartmentIds((current) => current.filter((id) => id !== owner));
-        }
-      }} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{centerGroups.map((group) => group.items.length ? <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</optgroup> : null)}</select>{hospitalId && centerGroups[0].items.length === 0 && centerGroups[1].items.length === 0 && selectedDepartments.size ? <small>Die gewählten Abteilungen haben keine eigene Kostenstelle; unten stehen die übrigen des Krankenhauses.</small> : null}</label>
-      {deviceCatalog ? <div className="cw-ownership-field"><span id="cw-devices-label">Gerätearten</span>
-        <div className="cw-multi">{deviceIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-devices-label">{deviceIds.map((id) => <li key={id}><span>{deviceLabel(id)}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => setDeviceIds((current) => current.filter((value) => value !== id))} aria-label={`${deviceLabel(id)} entfernen`}>✕</button></li>)}</ul> : null}
-        {deviceGroups.length ? <select aria-label="Geräteart hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setDeviceIds((current) => current.includes(id) ? current : [...current, id]); }}><option value="">+ Geräteart hinzufügen …</option>{deviceGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select> : null}</div>
-        <small>{selectedDepartments.size ? "Passende Gerätearten der gewählten Abteilungen stehen oben. " : ""}Anzahl und Notiz unter <Link href={contractHref(contractId, { tab: "relations" })}>Verknüpfungen → Geräte</Link>.</small>
+    </Group>
+    <Group id="cw-og-org" icon="building" title="Krankenhaus & Abteilungen" intro={`${orgIntro} Die Auswahl bestimmt die Vorschläge für Kostenstelle, Gerätearten und Personen.`}>
+      <div className="cw-of">
+        {hospitalLocked ? <>
+          <span className="cw-of-label" id="cw-own-hospital-label">Krankenhaus</span>
+          <div className="cw-locked" role="group" aria-labelledby="cw-own-hospital-label" aria-describedby="cw-own-hospital-hint">
+            <span><Icon><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Icon>{hospitalId ? hospitalName(hospitalId) : "Organisationsweit"}</span>
+            <span className="cw-locked-word">gesperrt</span>
+          </div>
+          <Hint id="cw-own-hospital-hint">Änderbar, sobald keine Abteilungen mehr zugeordnet sind. <button type="button" className="cw-hint-link" onClick={() => document.getElementById("cw-own-responsible")?.focus()}>Abteilungen ansehen</button></Hint>
+        </> : <>
+          <label htmlFor="cw-own-hospital">Krankenhaus</label>
+          <select id="cw-own-hospital" value={hospitalId} onChange={(event) => {
+            setHospitalId(event.target.value);
+            setResponsibleDepartmentId("");
+            setBeneficiaryDepartmentIds([]);
+            setCenterId("");
+          }}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+        </>}
+      </div>
+      <div className="cw-of">
+        {hospitalId ? <>
+          <label htmlFor="cw-own-responsible">Verantwortliche Abteilung</label>
+          <select id="cw-own-responsible" value={responsibleDepartmentId} onChange={(event) => {
+            const next = event.target.value;
+            setResponsibleDepartmentId(next);
+            setBeneficiaryDepartmentIds((list) => list.filter((id) => id !== next));
+            // Kostenstelle der Abteilung automatisch übernehmen (falls hinterlegt).
+            setCenterId(centers.find((item) => item.department_id === next && item.hospital_id === hospitalId)?.id ?? "");
+          }}><option value="">Bitte auswählen</option>{visibleDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select>
+          {visibleDepartments.length === 0 ? <Hint>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</Hint> : null}
+        </> : <><span className="cw-of-label">Verantwortliche Abteilung</span><Hint>{noHospital}</Hint></>}
+      </div>
+      <div className="cw-of">
+        <span className="cw-of-label" id="cw-beneficiary-label">Nutzende Abteilungen{optional}</span>
+        <ChipPicker
+          labelId="cw-beneficiary-label"
+          items={beneficiaryDepartmentIds.map((id) => ({ id, label: departmentName(id) }))}
+          onRemove={toggleBeneficiary}
+          groups={beneficiaryGroups}
+          onAdd={(id) => { if (!beneficiaryDepartmentIds.includes(id)) toggleBeneficiary(id); }}
+          addLabel="Abteilung"
+          addAriaLabel="Nutzende Abteilung hinzufügen"
+          disabledHint={hospitalId ? null : noHospital}
+        />
+      </div>
+    </Group>
+    <Group id="cw-og-cost" icon="euro" title="Kostenstelle & Geräte" intro={INTRO.cost}>
+      <div className="cw-of">
+        {hospitalId ? <>
+          <label htmlFor="cw-own-center">Kostenstelle</label>
+          <select id="cw-own-center" value={centerId} onChange={(event) => {
+            const next = event.target.value;
+            setCenterId(next);
+            // Kostenstelle einer verantwortlichen oder nutzenden Abteilung: Rollen bleiben, wie sie sind.
+            // Gehört sie einer noch nicht gewählten Abteilung, wird diese verantwortlich (falls noch keine gewählt ist).
+            const owner = centers.find((item) => item.id === next)?.department_id;
+            if (owner && !selectedDepartments.has(owner) && !responsibleDepartmentId) {
+              setResponsibleDepartmentId(owner);
+              setBeneficiaryDepartmentIds((list) => list.filter((id) => id !== owner));
+            }
+          }}><option value="">Keine Kostenstelle</option>{centerGroups.map((group) => group.items.length ? <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</optgroup> : null)}</select>
+          {centerGroups[0].items.length === 0 && centerGroups[1].items.length === 0 && selectedDepartments.size
+            ? <Hint>Die gewählten Abteilungen haben keine eigene Kostenstelle; unten stehen die übrigen des Krankenhauses.</Hint>
+            : selectedDepartments.size ? <Hint>Kostenstellen der gewählten Abteilungen stehen oben.</Hint> : null}
+        </> : <><span className="cw-of-label">Kostenstelle</span><Hint>{noHospital}</Hint></>}
+      </div>
+      {deviceCatalog ? <div className="cw-of">
+        <span className="cw-of-label" id="cw-devices-label">Gerätearten{optional}</span>
+        <ChipPicker
+          labelId="cw-devices-label"
+          items={deviceIds.map((id) => ({ id, label: deviceLabel(id) }))}
+          onRemove={(id) => setDeviceIds((list) => list.filter((value) => value !== id))}
+          groups={deviceGroups.map((group) => ({ label: group.label, options: group.items.map((item) => ({ value: item.id, label: item.label })) }))}
+          onAdd={(id) => setDeviceIds((list) => list.includes(id) ? list : [...list, id])}
+          addLabel="Geräteart"
+          addAriaLabel="Geräteart hinzufügen"
+        />
+        <Hint>Anzahl und Notiz je Geräteart: <Link href={contractHref(contractId, { tab: "relations" })}>Verknüpfungen › Geräte</Link></Hint>
       </div> : null}
-      <p className="cw-ownership-group">Verantwortliche Personen</p>
-      <div className="cw-ownership-field cw-ownership-people">
-        <label><span>Hauptverantwortlich</span><select value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((current) => current.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select></label>
-        <div className="cw-ownership-field"><span id="cw-further-label">Weitere Verantwortliche</span>
-          <div className="cw-multi">{furtherIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-further-label">{furtherIds.map((id) => <li key={id}><span>{assigneeName(id)}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => setFurtherIds((current) => current.filter((value) => value !== id))} aria-label={`${assigneeName(id)} entfernen`}>✕</button></li>)}</ul> : null}
-          {assignees.length ? <select aria-label="Weitere verantwortliche Person hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setFurtherIds((current) => current.includes(id) ? current : [...current, id]); }}><option value="">+ Person hinzufügen …</option>{personOptions(visibleAssignees, otherAssignees, new Set([responsibleId, ...furtherIds]))}</select> : null}</div>
-          <small>Erhalten dieselben Erinnerungen, sehen den Vertrag unter „Ich verantwortlich“ und dürfen ihn auch sehen, wenn er vertraulich ist.</small>
-        </div>
-        {assignees.length === 0 ? <p className="cw-ownership-note" role="note">In dieser Organisation gibt es noch keine Benutzer. {isAdmin ? <Link href="/settings/users">Benutzer anlegen</Link> : "Die Administration kann Benutzer anlegen."}</p> : null}
+    </Group>
+    <Group id="cw-og-people" icon="users" title="Verantwortliche Personen" intro={INTRO.people}>
+      <div className="cw-of">
+        <label htmlFor="cw-own-person">Hauptverantwortlich</label>
+        <select id="cw-own-person" value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((list) => list.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select>
+        {assignees.length === 0 ? <Hint>In dieser Organisation gibt es noch keine Benutzer. {isAdmin ? <Link href="/settings/users">Benutzer anlegen</Link> : "Die Administration kann Benutzer anlegen."}</Hint> : null}
       </div>
-      {roles?.unclassified_department_ids.length ? <p className="cw-ownership-note" role="note">Historische Zuordnung ohne dokumentierte Rolle: {roles.unclassified_department_ids.map((id) => {
-        const department = departments.find((item) => item.id === id);
-        return department ? departmentFullPath(department, departments) : "Unbekannter Bereich";
-      }).join(" · ")}. Sie wird nicht automatisch als verantwortlich oder nutzend eingestuft.</p> : null}
-    </div>}
+      <div className="cw-of">
+        <span className="cw-of-label" id="cw-further-label">Weitere Verantwortliche{optional}</span>
+        <ChipPicker
+          labelId="cw-further-label"
+          items={furtherIds.map((id) => ({ id, label: assigneeName(id) }))}
+          onRemove={(id) => setFurtherIds((list) => list.filter((value) => value !== id))}
+          groups={personGroups}
+          onAdd={(id) => setFurtherIds((list) => list.includes(id) ? list : [...list, id])}
+          addLabel="Person"
+          addAriaLabel="Weitere verantwortliche Person hinzufügen"
+        />
+      </div>
+    </Group>
+  </>;
+
+  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description={description} summary={summary} actions={actions} forceOpen={editing}>
+    {loading ? <p role="status" className="cw-ownership-loading">Zuordnung wird geladen…</p> : loadFailed ? <div className="cw-ownership-alert"><InlineAlert tone="critical" role="alert">{message}</InlineAlert></div> : <>
+      {editing ? edit : view}
+      {roles?.unclassified_department_ids.length ? <p className="cw-ownership-note" role="note">Historische Zuordnung ohne dokumentierte Rolle: {roles.unclassified_department_ids.map(departmentName).join(" · ")}. Sie wird nicht automatisch als verantwortlich oder nutzend eingestuft.</p> : null}
+      {editing && message ? <div className="cw-ownership-alert"><InlineAlert tone="critical" role="alert">{message}</InlineAlert></div> : null}
+      {dirty ? <div className="cw-savebar" role="region" aria-label="Änderungen speichern">
+        <div className="cw-savebar-msg"><Signal tone="info" size="sm">Ungespeicherte Änderungen</Signal><span><kbd>Strg</kbd> + <kbd>S</kbd> speichert</span></div>
+        <div className="cw-savebar-actions">
+          <button type="button" className="btn btn-ghost" onClick={discard} disabled={saving}>Verwerfen</button>
+          <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving} aria-keyshortcuts="Control+S">{saving ? "Wird gespeichert…" : "Zuordnung speichern"}</button>
+        </div>
+      </div> : null}
+    </>}
   </CollapsibleSection>;
 }

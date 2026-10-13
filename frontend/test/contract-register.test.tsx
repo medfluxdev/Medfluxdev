@@ -120,6 +120,40 @@ describe("Vertragsregister – Stammdaten", () => {
     expect(screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
   });
 
+  it("eingeklappt: Kurzfassung je Kasten, Fehlendes als Signal", async () => {
+    const user = userEvent.setup();
+    try {
+      render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+      await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+      for (const title of ["Vertrag & Partner", "Laufzeit & Kündigung", "Erinnerung & Verantwortung"]) {
+        await user.click(screen.getByRole("button", { name: `${title} einklappen` }));
+      }
+      const head = (title: string) => screen.getByRole("heading", { level: 2, name: title }).parentElement!;
+      expect(head("Vertrag & Partner")).toHaveTextContent("Vertragspartner fehlt");
+      expect(head("Vertrag & Partner")).toHaveTextContent("Nr. 000042");
+      expect(head("Laufzeit & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
+      expect(head("Erinnerung & Verantwortung")).toHaveTextContent("Erinnerung 3 Monat(e) vor der Frist·an Hauptverantwortliche Person");
+      // Bearbeiten bleibt auch eingeklappt erreichbar und klappt auf.
+      await user.click(screen.getByRole("button", { name: "Laufzeit & Kündigung bearbeiten" }));
+      expect(screen.getByRole("button", { name: "Laufzeit & Kündigung einklappen" })).toHaveAttribute("aria-expanded", "true");
+    } finally {
+      window.localStorage.removeItem("medflux.collapsed-sections");
+    }
+  });
+
+  it("eingeklappt: nicht berechenbare Fristen ohne Kündigungsfrist melden genau das", async () => {
+    const user = userEvent.setup();
+    const base = register();
+    api.getContractRegister.mockResolvedValue({ ...base, terms: { ...base.terms, status: "incomplete", missing: ["notice_period_value"], cancel_by: null } });
+    try {
+      render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+      await user.click(await screen.findByRole("button", { name: "Laufzeit & Kündigung einklappen" }));
+      expect(screen.getByRole("heading", { level: 2, name: "Laufzeit & Kündigung" }).parentElement).toHaveTextContent("Kündigungsfrist fehlt");
+    } finally {
+      window.localStorage.removeItem("medflux.collapsed-sections");
+    }
+  });
+
   it("ist barrierefrei in Ansicht und Bearbeitung", async () => {
     const user = userEvent.setup();
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);

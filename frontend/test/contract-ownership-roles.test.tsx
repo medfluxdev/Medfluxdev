@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractOwnershipPanel from "@/components/contracts/detail/ContractOwnershipPanel";
 
@@ -17,8 +18,12 @@ const mocks = vi.hoisted(() => ({
   listDeviceTypes: vi.fn(),
   getContractDeviceTypes: vi.fn(),
   saveContractDeviceTypes: vi.fn(),
+  toast: vi.fn(),
+  searchParams: new URLSearchParams(),
 }));
 
+vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.searchParams }));
+vi.mock("@/components/ui/Toast", () => ({ useToast: () => mocks.toast }));
 vi.mock("@/components/auth/AuthProvider", () => ({
   useAuth: () => ({ role: "contract_manager", account: { is_developer: false } }),
 }));
@@ -44,6 +49,7 @@ vi.mock("@/lib/domain-api/ownership", () => ({
 describe("Contract360 Organisationszuordnung", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.searchParams = new URLSearchParams();
     mocks.getOrganizationStructure.mockResolvedValue({
       hospitals: [{ id: "hospital-1", name: "Klinikum Heidelberg", code: "HD", is_active: true }],
       departments: [
@@ -78,48 +84,147 @@ describe("Contract360 Organisationszuordnung", () => {
     mocks.saveContractDeviceTypes.mockImplementation(async (_org: string, _id: string, items: { device_type_id: string }[]) => ({ items: items.map((item) => ({ ...item, label: item.device_type_id, area: "it", area_label: "IT" })), suggestions: [] }));
   });
 
+  async function openEdit(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "Organisationszuordnung bearbeiten" }));
+  }
+
+  async function pick(user: ReturnType<typeof userEvent.setup>, trigger: string, option: string) {
+    await user.click(screen.getByRole("button", { name: trigger }));
+    await user.click(within(screen.getByRole("group", { name: trigger })).getByRole("button", { name: option }));
+  }
+
+  it("Ansicht: Werte in vier Gruppen, Fehlendes als Signal, kein Speichern-Knopf; ohne Verstöße (axe)", async () => {
+    const { container } = render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect(await screen.findByRole("button", { name: "Organisationszuordnung bearbeiten" })).toBeInTheDocument();
+    for (const name of ["Vertrag", "Krankenhaus & Abteilungen", "Kostenstelle & Geräte", "Verantwortliche Personen"]) {
+      expect(screen.getByRole("heading", { level: 3, name })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Wartungsvertrag")).toBeInTheDocument();
+    expect(screen.getByText("Klinikum Heidelberg")).toBeInTheDocument();
+    expect(screen.getByText("Medizintechnik › Radiologie")).toBeInTheDocument();
+    expect(screen.getByText("CT (2)")).toBeInTheDocument();
+    // Ohne Kostenstelle und ohne Hauptverantwortliche: Signal statt leerem Feld.
+    expect(screen.getAllByText("Nicht festgelegt")).toHaveLength(2);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Zuordnung speichern" })).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("Bearbeiten: Speicherleiste erst nach einer Änderung; Verwerfen stellt die gespeicherten Werte wieder her", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await openEdit(user);
+    expect(screen.queryByRole("region", { name: "Änderungen speichern" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Abbrechen" })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+
+    await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-miete");
+    const bar = screen.getByRole("region", { name: "Änderungen speichern" });
+    expect(bar).toHaveTextContent("Ungespeicherte Änderungen");
+    expect(screen.queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();
+    // Zurück auf den gespeicherten Wert: keine Änderung mehr.
+    await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-wartung");
+    expect(screen.queryByRole("region", { name: "Änderungen speichern" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-miete");
+    await user.click(within(screen.getByRole("region", { name: "Änderungen speichern" })).getByRole("button", { name: "Verwerfen" }));
+    expect(screen.getByRole("button", { name: "Organisationszuordnung bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByText("Wartungsvertrag")).toBeInTheDocument();
+    expect(mocks.updateContractOwnership).not.toHaveBeenCalled();
+    await openEdit(user);
+    expect(screen.getByLabelText("Vertragstyp")).toHaveValue("t-wartung");
+  });
+
+  it("Strg+S speichert; danach Ansicht mit „Gespeichert“ und Toast", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await openEdit(user);
+    await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-1");
+    await user.keyboard("{Control>}s{/Control}");
+    await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalledWith("klinik", "contract-1", expect.objectContaining({ cost_center_id: "cc-1" })));
+    expect(await screen.findByText("Gespeichert")).toBeInTheDocument();
+    expect(mocks.toast).toHaveBeenCalledWith("Organisationszuordnung gespeichert.", "success");
+    expect(screen.getByRole("button", { name: "Organisationszuordnung bearbeiten" })).toBeInTheDocument();
+    expect(screen.getByText("4400")).toHaveClass("mono");
+  });
+
+  it("gesperrtes Krankenhaus: Grund und Sprung zu den Abteilungen statt stummem Feld", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await openEdit(user);
+    const locked = screen.getByRole("group", { name: "Krankenhaus" });
+    expect(locked).toHaveTextContent("Klinikum Heidelberg");
+    expect(locked).toHaveTextContent("gesperrt");
+    expect(locked).toHaveAccessibleDescription(/Änderbar, sobald keine Abteilungen mehr zugeordnet sind/);
+    await user.click(screen.getByRole("button", { name: "Abteilungen ansehen" }));
+    expect(screen.getByLabelText("Verantwortliche Abteilung")).toHaveFocus();
+  });
+
+  it("ohne Krankenhaus: abhängige Felder sagen, was zuerst nötig ist", async () => {
+    const user = userEvent.setup();
+    mocks.getContractDepartmentRoles.mockResolvedValue({ contract_id: "contract-1", responsible_department_id: null, beneficiary_department_ids: [], unclassified_department_ids: [] });
+    mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: null, department_ids: [], cost_center_id: null, responsible_account_id: null, scope_type: "organization" });
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await openEdit(user);
+    expect(screen.getAllByText("Zuerst ein Krankenhaus wählen")).toHaveLength(3);
+    expect(screen.queryByLabelText("Verantwortliche Abteilung")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Nutzende Abteilung hinzufügen" })).not.toBeInTheDocument();
+  });
+
+  it("Link mit ?abschnitt=ownership öffnet direkt die Bearbeitung", async () => {
+    mocks.searchParams = new URLSearchParams("tab=register&abschnitt=ownership");
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect(await screen.findByLabelText("Vertragstyp")).toHaveValue("t-wartung");
+  });
+
   it("Gerätearten: passende der Abteilungen zuerst, hinzufügen und entfernen, Anzahl und Notiz bleiben", async () => {
     const user = userEvent.setup();
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    expect(await screen.findByRole("list", { name: "Gerätearten" })).toHaveTextContent("CT");
-    const add = screen.getByLabelText("Geräteart hinzufügen");
+    await openEdit(user);
+    expect(screen.getByRole("list", { name: /^Gerätearten/ })).toHaveTextContent("CT");
+    await user.click(screen.getByRole("button", { name: "Geräteart hinzufügen" }));
+    const panel = screen.getByRole("group", { name: "Geräteart hinzufügen" });
     // Radiologie liegt unter Medizintechnik; Patientenmonitoring gehört der nutzenden Intensivmedizin.
-    const matching = within(add).getByRole("group", { name: "Passend zu den Abteilungen" });
-    expect(within(matching).getAllByRole("option").map((option) => option.textContent)).toEqual(["MRT", "Patientenmonitoring"]);
-    expect(within(add).getByRole("group", { name: "IT" })).toHaveTextContent("Server");
-    expect(within(add).queryByRole("option", { name: "CT" })).not.toBeInTheDocument();
+    const matching = within(panel).getByRole("group", { name: "Passend zu den Abteilungen" });
+    expect(within(matching).getAllByRole("button").map((option) => option.textContent)).toEqual(["MRT", "Patientenmonitoring"]);
+    expect(within(panel).getByRole("group", { name: "IT" })).toHaveTextContent("Server");
+    expect(within(panel).queryByRole("button", { name: "CT" })).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Server" }));
+    expect(screen.getByRole("button", { name: "Geräteart hinzufügen" })).toHaveFocus();
 
-    await user.selectOptions(add, "dt-server");
     await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
     await waitFor(() => expect(mocks.saveContractDeviceTypes).toHaveBeenCalledWith("klinik", "contract-1", [
       { device_type_id: "dt-ct", quantity: 2, note: "Haus A" },
       { device_type_id: "dt-server", quantity: null, note: null },
     ]));
-
-    mocks.saveContractDeviceTypes.mockClear();
-    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
-    await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalledTimes(2));
-    expect(mocks.saveContractDeviceTypes).not.toHaveBeenCalled();
   });
 
-  it("Gerätearten nicht ladbar: Feld fehlt, Zuordnung bleibt speicherbar", async () => {
+  it("Escape schließt die Auswahl und gibt den Fokus an den Knopf zurück", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await openEdit(user);
+    await user.click(screen.getByRole("button", { name: "Geräteart hinzufügen" }));
+    expect(screen.getByRole("group", { name: "Geräteart hinzufügen" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "Geräteart hinzufügen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Geräteart hinzufügen" })).toHaveFocus();
+  });
+
+  it("Gerätearten nicht ladbar: Feld fehlt, Zuordnung bleibt bearbeitbar", async () => {
+    const user = userEvent.setup();
     mocks.listDeviceTypes.mockRejectedValue(new Error("down"));
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    await screen.findByLabelText("Vertragstyp");
-    expect(screen.queryByLabelText("Geräteart hinzufügen")).not.toBeInTheDocument();
+    await openEdit(user);
+    expect(screen.queryByRole("button", { name: "Geräteart hinzufügen" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-1");
     expect(screen.getByRole("button", { name: "Zuordnung speichern" })).toBeEnabled();
   });
 
-  it("Vertragstyp: zeigt den aktuellen Typ und speichert einen neuen (unpassende Kategorie wird geleert)", async () => {
+  it("Vertragstyp: speichert einen neuen (unpassende Kategorie wird geleert)", async () => {
     const user = userEvent.setup();
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    const type = await screen.findByLabelText("Vertragstyp");
-    expect(type).toHaveValue("t-wartung");
-    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
-    await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalled());
-    expect(mocks.updateContractRegister).not.toHaveBeenCalled();
-
-    await user.selectOptions(type, "t-miete");
+    await openEdit(user);
+    await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-miete");
     await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
     await waitFor(() => expect(mocks.updateContractRegister).toHaveBeenCalledWith("klinik", "contract-1", {
       changes: { contract_type_id: "t-miete", contract_category_id: null },
@@ -129,11 +234,11 @@ describe("Contract360 Organisationszuordnung", () => {
   it("zeigt Verantwortlichen und nutzenden Bereich mit vollständigem Pfad und speichert beide Rollen", async () => {
     const user = userEvent.setup();
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-
-    const responsible = await screen.findByLabelText("Verantwortliche Abteilung");
+    await openEdit(user);
+    const responsible = screen.getByLabelText("Verantwortliche Abteilung");
     expect(responsible).toHaveValue("dept-rad");
     expect(screen.getByRole("option", { name: "Medizintechnik › Radiologie" })).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Nutzende Abteilungen" })).toHaveTextContent("Intensivmedizin");
+    expect(screen.getByRole("list", { name: /^Nutzende Abteilungen/ })).toHaveTextContent("Intensivmedizin");
 
     await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-1");
     await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
@@ -146,15 +251,17 @@ describe("Contract360 Organisationszuordnung", () => {
       department_ids: ["dept-rad", "dept-icu"],
       cost_center_id: "cc-1",
     }));
-    expect(screen.getByRole("status")).toHaveTextContent("Organisationszuordnung gespeichert.");
   });
 
-  it("nutzende Abteilung entfernen: Auswahlfeld bietet sie wieder an und speichert ohne sie", async () => {
+  it("nutzende Abteilung entfernen: Auswahl bietet sie wieder an und speichert ohne sie", async () => {
     const user = userEvent.setup();
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    await user.click(await screen.findByRole("button", { name: "Intensivmedizin entfernen" }));
-    expect(screen.queryByRole("list", { name: "Nutzende Abteilungen" })).not.toBeInTheDocument();
-    expect(within(screen.getByLabelText("Nutzende Abteilung hinzufügen")).getByRole("option", { name: "Intensivmedizin" })).toBeInTheDocument();
+    await openEdit(user);
+    await user.click(screen.getByRole("button", { name: "Intensivmedizin entfernen" }));
+    expect(screen.queryByRole("list", { name: /^Nutzende Abteilungen/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Nutzende Abteilung hinzufügen" }));
+    expect(within(screen.getByRole("group", { name: "Nutzende Abteilung hinzufügen" })).getByRole("button", { name: "Intensivmedizin" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
     await waitFor(() => expect(mocks.updateContractDepartmentRoles).toHaveBeenCalledWith("klinik", "contract-1", {
       responsible_department_id: "dept-rad",
@@ -163,9 +270,12 @@ describe("Contract360 Organisationszuordnung", () => {
   });
 
   it("ohne Benutzer: sagt es und verlinkt nicht auf eine leere Auswahl", async () => {
+    const user = userEvent.setup();
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    expect(await screen.findByText(/In dieser Organisation gibt es noch keine Benutzer/)).toBeInTheDocument();
+    await openEdit(user);
+    expect(screen.getByText(/In dieser Organisation gibt es noch keine Benutzer/)).toBeInTheDocument();
     expect(screen.getByLabelText("Hauptverantwortlich")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Weitere verantwortliche Person hinzufügen" })).not.toBeInTheDocument();
   });
 
   it("mehrere Verantwortliche: Haupt + weitere hinzufügen, entfernen, speichern; alle Benutzer wählbar", async () => {
@@ -177,12 +287,16 @@ describe("Contract360 Organisationszuordnung", () => {
     ] });
     mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: ["dept-rad"], cost_center_id: null, responsible_account_id: "u-1", further_responsible_account_ids: ["u-2"], scope_type: "department" });
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    expect(await screen.findByLabelText("Hauptverantwortlich")).toHaveValue("u-1");
-    expect(screen.getByRole("list", { name: "Weitere Verantwortliche" })).toHaveTextContent("Jonas Kurz");
+    await openEdit(user);
+    expect(screen.getByLabelText("Hauptverantwortlich")).toHaveValue("u-1");
+    expect(screen.getByRole("list", { name: /^Weitere Verantwortliche/ })).toHaveTextContent("Jonas Kurz");
     // Lea gehört zu einer anderen Abteilung – trotzdem wählbar (unter „Weitere Benutzer der Organisation“).
-    const add = screen.getByLabelText("Weitere verantwortliche Person hinzufügen");
-    await user.selectOptions(add, "u-3");
-    expect(screen.getByRole("list", { name: "Weitere Verantwortliche" })).toHaveTextContent("Lea Wolf");
+    await user.click(screen.getByRole("button", { name: "Weitere verantwortliche Person hinzufügen" }));
+    const people = screen.getByRole("group", { name: "Weitere verantwortliche Person hinzufügen" });
+    expect(within(within(people).getByRole("group", { name: "Weitere Benutzer der Organisation" })).getByRole("button", { name: "Lea Wolf" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await pick(user, "Weitere verantwortliche Person hinzufügen", "Lea Wolf");
+    expect(screen.getByRole("list", { name: /^Weitere Verantwortliche/ })).toHaveTextContent("Lea Wolf");
     await user.click(screen.getByRole("button", { name: "Jonas Kurz entfernen" }));
     await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
     await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalledWith("klinik", "contract-1", expect.objectContaining({
@@ -199,17 +313,18 @@ describe("Contract360 Organisationszuordnung", () => {
     mocks.getContractDepartmentRoles.mockResolvedValue({ contract_id: "contract-1", responsible_department_id: null, beneficiary_department_ids: [], unclassified_department_ids: [] });
     mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: [], cost_center_id: null, responsible_account_id: null, scope_type: "hospital" });
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    const department = await screen.findByLabelText("Verantwortliche Abteilung");
+    await openEdit(user);
+    const department = screen.getByLabelText("Verantwortliche Abteilung");
     await user.selectOptions(department, "dept-rad");
     expect(screen.getByLabelText("Kostenstelle")).toHaveValue("cc-rad");
     // Kostenstelle einer nutzenden Abteilung wählen: die verantwortliche Abteilung bleibt.
-    await user.selectOptions(screen.getByLabelText("Nutzende Abteilung hinzufügen"), "dept-icu");
+    await pick(user, "Nutzende Abteilung hinzufügen", "Intensivmedizin");
     const center = screen.getByLabelText("Kostenstelle");
     expect(within(center).getByRole("group", { name: "Verantwortliche Abteilung" })).toHaveTextContent("4400");
     expect(within(center).getByRole("group", { name: "Nutzende Abteilungen" })).toHaveTextContent("4500");
     await user.selectOptions(center, "cc-icu");
     expect(department).toHaveValue("dept-rad");
-    expect(screen.getByRole("list", { name: "Nutzende Abteilungen" })).toHaveTextContent("Intensivmedizin");
+    expect(screen.getByRole("list", { name: /^Nutzende Abteilungen/ })).toHaveTextContent("Intensivmedizin");
     expect(center).toHaveValue("cc-icu");
   });
 
@@ -219,8 +334,8 @@ describe("Contract360 Organisationszuordnung", () => {
     mocks.getContractDepartmentRoles.mockResolvedValue({ contract_id: "contract-1", responsible_department_id: null, beneficiary_department_ids: [], unclassified_department_ids: [] });
     mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: [], cost_center_id: null, responsible_account_id: null, scope_type: "hospital" });
     render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
-    await user.selectOptions(await screen.findByLabelText("Kostenstelle"), "cc-icu");
+    await openEdit(user);
+    await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-icu");
     expect(screen.getByLabelText("Verantwortliche Abteilung")).toHaveValue("dept-icu");
   });
 });
-

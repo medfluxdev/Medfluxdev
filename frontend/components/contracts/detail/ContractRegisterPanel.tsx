@@ -4,7 +4,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import ReminderLeadsEditor from "./ReminderLeadsEditor";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { loadAllPartners } from "@/components/master-data/definitions/partners";
 import { QuickCreatePartner } from "@/components/master-data/lazy";
@@ -12,6 +12,7 @@ import { REGISTER_CHANGED_EVENT } from "./AiReviewButton";
 import ContractRulesSection from "./ContractRulesSection";
 import type { FormValues } from "@/components/master-data/types";
 import MissingList from "@/components/ui/MissingList";
+import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { formatDate } from "@/lib/format";
@@ -596,6 +597,47 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const fixedTerm = register.fields.term_model?.value === "fixed_term";
   const proposalKeys = Object.entries(register.fields).filter(([, field]) => field.ai_proposed_value).map(([key]) => key);
 
+  // Kurzfassung je Kasten (sichtbar, wenn eingeklappt): 2–3 wichtige Werte, Fehlendes als Signal.
+  const allDefs = SECTIONS.flatMap((section) => section.fields);
+  const shown = (key: string) => {
+    const def = allDefs.find((item) => item.key === key);
+    const value = def ? display(def) : "Nicht erfasst";
+    return value === "Nicht erfasst" ? null : value;
+  };
+  const joinParts = (parts: ReactNode[]) => parts.filter(Boolean).map((part, index) => <span key={index} className="summary-part">{index > 0 ? <span className="sep" aria-hidden="true">·</span> : null}{part}</span>);
+  function summaryFor(sectionId: string): ReactNode {
+    if (!register) return null;
+    if (sectionId === "identity") {
+      const partner = shown("partner_id");
+      return joinParts([
+        partner ? <b>{partner}</b> : <Signal tone="warning" size="sm">Vertragspartner fehlt</Signal>,
+        shown("contract_type_id"),
+        register.register_number ? `Nr. ${register.register_number}` : null,
+      ]);
+    }
+    if (sectionId === "term") {
+      const model = shown("term_model");
+      if (terms.status === "incomplete") {
+        const noticeMissing = terms.missing.some((key) => key.startsWith("notice_period"));
+        return joinParts([model, <Signal key="missing" tone="critical" size="sm">{noticeMissing ? "Kündigungsfrist fehlt" : "Fristen nicht berechenbar"}</Signal>]);
+      }
+      const end = terms.actual_end ?? terms.possible_end;
+      return joinParts([
+        model,
+        fixedTerm
+          ? end ? <>Vertragsende <b>{formatDate(end)}</b></> : null
+          : terms.cancel_by ? <>Kündbar bis <b>{formatDate(terms.cancel_by)}</b></> : end ? <>Mögliches Ende <b>{formatDate(end)}</b></> : null,
+      ]);
+    }
+    if (sectionId === "reminder") {
+      const lead = allDefs.find((item) => item.key === "reminder_lead_months");
+      const recipient = shown("reminder_recipient_account_id");
+      // Ohne eigenen Empfänger geht die Erinnerung an die hauptverantwortliche Person (deadlines/system.py).
+      return joinParts([lead ? `Erinnerung ${display(lead)}` : null, recipient ? <>an <b>{recipient}</b></> : "an Hauptverantwortliche Person"]);
+    }
+    return null;
+  }
+
   return <div className="rg-panel">
     <section className="cw-section rg-status" aria-labelledby="rg-status-heading">
       <div className="rg-status-row">
@@ -696,7 +738,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         : canEditHere
           ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`}>Bearbeiten</button>
           : null;
-      return <CollapsibleSection key={section.id} id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))}>
+      return <CollapsibleSection key={section.id} id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))}>
         <dl className="rg-fields">{fields.map((def) => {
           if (def.kind === "auto_number") {
             const earlier = register.fields.internal_number?.value;

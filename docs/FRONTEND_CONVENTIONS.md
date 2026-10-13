@@ -43,6 +43,7 @@ Vor jedem neuen UI-Element in `components/ui/` nachsehen:
 | Bestätigung, Unterbrechung | `Dialog` (Fokusfalle, Esc, Rückgabe des Fokus) |
 | Vorschau, Details ohne Seitenwechsel | `Drawer` |
 | Auswahl unter einem Knopf (Filterwerte, Darstellung, kleines Menü) | `Popover`: nicht modal, Esc schließt und gibt den Fokus an den Knopf zurück, Klick daneben schließt; `active` hebt den Knopf bei aktiver Auswahl hervor |
+| Mehrfachauswahl im Formular (Abteilungen, Gerätearten, Personen) | `ChipPicker`: Chips 32 px mit Entfernen-Knopf 24 px (`aria-label` „<Name> entfernen“), gesonderter gestrichelter Knopf „+ …“ öffnet ein `Popover` mit gruppierter Liste (Vorschläge zuerst, ab 8 Einträgen Suchfeld); `disabledHint` sagt, was zuerst nötig ist |
 | Reiter | `Tabs` + `TabPanel` (Pfeiltasten, `aria-controls`) |
 | Kennzahl mit Ziel | `KpiTile`: mit `href` ist die ganze Kachel ein Link; die Kachel ist immer neutral; Aufmerksamkeit nur über `signal={{ tone, label }}`; `icon` = graues Liniensymbol vor der Beschriftung |
 | Einfache sortierbare Tabelle | `DataTable` |
@@ -56,7 +57,7 @@ Keine Inline-Styles außer für wirklich dynamische Werte (z. B. Breite eines Ba
 - Navigation in sechs Bereichen (`components/shell/navigation.tsx`). Neue Seite: dort eintragen (Rollen, Stichworte für die Befehlspalette), sonst ist sie weder im Menü noch in Strg+K auffindbar.
 - Filter, Reiter und Suchbegriffe, die man teilen oder mit „Zurück“ erreichen will, gehören in die Adresse (`?q=`, `?tab=`, Historienfilter).
 - Jeder Datenbereich hat vier Zustände: laden, leer, Fehler (mit „Erneut laden“), keine Berechtigung. Nie Beispielverträge oder Beträge hart einbauen.
-- Jeder Kasten lässt sich einklappen: `lib/box-collapse.ts` (in `ClientNav` eingehängt) versieht jeden Abschnitt im Inhaltsbereich (`section.cw-section`, `.card`, `.panel` u. a.) mit Überschrift als erstem Kind bzw. im Kopf mit einem Knopf rechts oben; der Zustand gilt je Seite (Kennungen in der Adresse zählen nicht) und Kasten. Kästen mit Aktionen im Kopf, die beim Einklappen verschwinden sollen, nutzen `CollapsibleSection`; `data-no-collapse` nimmt einen Kasten aus. Sprünge zu einem Abschnitt rufen vorher `revealBox(element)` auf.
+- Jeder Kasten lässt sich einklappen: `lib/box-collapse.ts` (in `ClientNav` eingehängt) versieht jeden Abschnitt im Inhaltsbereich (`section.cw-section`, `.card`, `.panel` u. a.) mit Überschrift als erstem Kind bzw. im Kopf mit einem Knopf rechts oben; der Zustand gilt je Seite (Kennungen in der Adresse zählen nicht) und Kasten. Kästen mit Aktionen im Kopf nutzen `CollapsibleSection` (seit 2026-10-13: Knopf 40 × 40 links, Titel 18 px, Aktionen rechts bleiben auch eingeklappt sichtbar; `summary` zeigt eingeklappt 2–3 Werte statt der Beschreibung, Fehlendes als `Signal`). Formulare darin: Ansicht zuerst, „Bearbeiten“ im Kopf, Speicherleiste nur bei Änderungen (Muster `ContractOwnershipPanel`); `data-no-collapse` nimmt einen Kasten aus. Sprünge zu einem Abschnitt rufen vorher `revealBox(element)` auf.
 
 ## 4. Sprache
 

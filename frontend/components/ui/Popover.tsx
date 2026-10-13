@@ -13,11 +13,17 @@ interface Props {
   align?: "start" | "end";
   wide?: boolean;
   className?: string;
+  /** Eigene Klasse des Knopfs statt `btn` (z. B. gestrichelter Hinzufügen-Knopf). */
+  triggerClassName?: string;
+  /** Zugänglicher Name des Knopfs, wenn der sichtbare Text allein nicht reicht. */
+  triggerLabel?: string;
+  /** Pfeil ▾ hinter dem Text (Standard: ja). */
+  caret?: boolean;
 }
 
 // Aufklappfläche unter einem Knopf (Filterauswahl, Darstellung): nicht modal, Escape schließt und
 // gibt den Fokus an den Knopf zurück, ein Klick daneben schließt.
-export default function Popover({ label, panelLabel, children, active = false, align = "start", wide = false, className }: Props) {
+export default function Popover({ label, panelLabel, children, active = false, align = "start", wide = false, className, triggerClassName, triggerLabel, caret = true }: Props) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -44,12 +50,13 @@ export default function Popover({ label, panelLabel, children, active = false, a
     <button
       ref={button}
       type="button"
-      className={`btn popover-trigger${active ? " popover-trigger--active" : ""}`}
+      className={`${triggerClassName ?? "btn"} popover-trigger${active ? " popover-trigger--active" : ""}`}
+      aria-label={triggerLabel}
       aria-expanded={open}
       aria-controls={open ? panelId : undefined}
       onClick={() => setOpen((value) => !value)}
     >
-      {label} <span aria-hidden="true">▾</span>
+      {label}{caret ? <> <span aria-hidden="true">▾</span></> : null}
     </button>
     {open ? <div id={panelId} role="group" aria-label={panelLabel} className={`popover-panel popover-panel--${align}${wide ? " popover-panel--wide" : ""}`}>
       {typeof children === "function" ? children(close) : children}

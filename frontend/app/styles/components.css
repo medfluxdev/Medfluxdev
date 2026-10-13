@@ -833,10 +833,26 @@ body { background: var(--color-bg); }
 
 
 /* Kasten mit Aktionen und Einklappen in der rechten oberen Ecke (CollapsibleSection) */
-.collapsible-corner { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: var(--space-2); flex: none; }
-.collapsible-toggle { min-width: 32px; min-height: 32px; }
+.collapsible > .collapsible-head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
+.collapsible-head > .collapsible-title, .collapsible-head > .collapsible-corner { align-self: center; }
+.collapsible-title { min-width: 0; }
+.collapsible-title h2 { font-size: var(--text-title-s); font-weight: var(--weight-semibold); line-height: 1.3; }
+.collapsible-title p { margin: 2px 0 0; font-size: var(--text-small); }
+.collapsible-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); margin-top: 2px; font-size: var(--text-small); color: var(--color-text-muted); }
+.collapsible-summary b { color: var(--color-text); font-weight: var(--weight-semibold); }
+.collapsible-summary .summary-part { display: inline-flex; align-items: center; gap: var(--space-3); }
+.collapsible-summary .sep { color: var(--color-text-subtle); }
+.collapsible-corner { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.collapsible-toggle { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
+.collapsible-toggle:hover { background: var(--color-surface-subtle); }
+.collapsible-toggle svg { transition: transform 0.15s; }
+.collapsible.is-collapsed .collapsible-toggle svg { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .collapsible-toggle svg { transition: none; } }
 .collapsible.is-collapsed .cw-section-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
-.cw-ownership-status { margin: 0 0 var(--space-3); color: var(--color-text-muted); font-size: var(--text-small); }
+@media (max-width: 640px) {
+  .collapsible > .collapsible-head { grid-template-columns: 40px minmax(0, 1fr); }
+  .collapsible-head > .collapsible-corner { grid-column: 1 / -1; justify-content: flex-start; }
+}
 
 /* „Was fehlt noch?“ im Kopf der Vertragsakte */
 .gaps-button .popover-trigger { border-color: var(--color-warning-border); background: var(--color-warning-bg); color: var(--color-warning); font-weight: var(--weight-semibold); }
@@ -1005,4 +1021,19 @@ body { background: var(--color-bg); }
 .captured-sources p { margin: 0; }
 .captured-sources ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
 .captured-sources blockquote { margin: var(--space-1) 0; padding-left: var(--space-3); border-left: 3px solid var(--color-border-strong); color: var(--color-text-muted); }
-
+/* Mehrfachauswahl als Chips (Form wie .chip) mit gesondertem Hinzufügen-Knopf (components/ui/ChipPicker.tsx). */
+.chip-picker .chip { min-height: 32px; font-weight: var(--weight-medium); }
+.chip-picker { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.chip-list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.chip-remove svg, .chip-add-trigger svg { width: 14px; height: 14px; fill: none; stroke: currentcolor; stroke-width: 2; stroke-linecap: round; }
+.chip-add-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-pill); background: transparent; color: var(--color-link); font: inherit; font-size: var(--text-small); font-weight: var(--weight-semibold); cursor: pointer; }
+.chip-add-trigger:hover, .chip-add-trigger[aria-expanded="true"] { border-style: solid; background: var(--color-surface-accent); }
+.chip-picker-hint { font-size: var(--text-small); color: var(--color-text-muted); }
+.chip-options { display: grid; gap: var(--space-2); max-height: 320px; overflow-y: auto; min-width: 240px; }
+.chip-options-search { min-height: 36px; padding: 0 10px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); font: inherit; font-size: var(--text-small); }
+.chip-options-label { margin: 0 0 2px; font-size: var(--text-caption); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
+.chip-options-group ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.chip-options-group button { width: 100%; min-height: 32px; padding: 4px 8px; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-text); font: inherit; font-size: var(--text-small); text-align: left; cursor: pointer; }
+.chip-options-group button:hover, .chip-options-group button:focus-visible { background: var(--color-surface-subtle); }
+.chip-options-empty { margin: 0; font-size: var(--text-small); color: var(--color-text-muted); }
+@media (forced-colors: active) { .chip-add-trigger { border-color: ButtonText; } }
