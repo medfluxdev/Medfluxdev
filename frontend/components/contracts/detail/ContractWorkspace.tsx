@@ -28,6 +28,7 @@ import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
 import Tabs from "@/components/ui/Tabs";
 import Signal from "@/components/ui/Signal";
+import TagChip, { TagIcon } from "@/components/ui/TagChip";
 import ReviewQueueNav from "./ReviewQueueNav";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 
@@ -554,15 +555,15 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <div className="object-header-meta object-header-who">
             {/* Hauptangaben mit eigener Kennfarbe, Symbol und Wort; jede führt zur Stelle, an der sie gepflegt wird. */}
             {data.assignment?.contract_type
-              ? <button type="button" className="tag-chip tag-chip--type" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Vertragstyp – in der Organisationszuordnung ändern"><TagIcon kind="type" /><span className="sr-only">Vertragstyp: </span>{data.assignment.contract_type}</button>
+              ? <TagChip kind="type" as="button" srLabel="Vertragstyp" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Vertragstyp – in der Organisationszuordnung ändern">{data.assignment.contract_type}</TagChip>
               : canEditData ? <button type="button" className="tag-chip tag-chip--missing" onClick={() => openTarget({ tab: "register", section: "ownership" })}><TagIcon kind="type" />Vertragstyp festlegen</button> : null}
             {data.partner
-              ? <Link className="tag-chip tag-chip--partner" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten"><TagIcon kind="partner" /><span className="sr-only">Vertragspartner: </span>{data.partner.name}</Link>
+              ? <TagChip kind="partner" as="link" srLabel="Vertragspartner" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten">{data.partner.name}</TagChip>
               : data.supplier
-                ? <button type="button" className="tag-chip tag-chip--partner tag-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet"><TagIcon kind="partner" />{data.supplier}<span className="partner-chip-hint">zuordnen</span></button>
+                ? <TagChip kind="partner" as="button" className="tag-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet">{data.supplier}<span className="partner-chip-hint">zuordnen</span></TagChip>
                 : null}
-            {data.assignment?.responsible_department ? <button type="button" className="tag-chip tag-chip--department" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Verantwortliche Abteilung – in der Organisationszuordnung ändern"><TagIcon kind="department" /><span className="sr-only">Verantwortliche Abteilung: </span>{data.assignment.responsible_department}</button> : null}
-            {data.assignment?.cost_center ? <button type="button" className="tag-chip tag-chip--cost" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Kostenstelle – in der Organisationszuordnung ändern"><TagIcon kind="cost" />Kostenstelle <span className="mono">{data.assignment.cost_center.code}</span> · {data.assignment.cost_center.name}</button> : null}
+            {data.assignment?.responsible_department ? <TagChip kind="department" as="button" srLabel="Verantwortliche Abteilung" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Verantwortliche Abteilung – in der Organisationszuordnung ändern">{data.assignment.responsible_department}</TagChip> : null}
+            {data.assignment?.cost_center ? <TagChip kind="cost" as="button" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Kostenstelle – in der Organisationszuordnung ändern">Kostenstelle <span className="mono">{data.assignment.cost_center.code}</span> · {data.assignment.cost_center.name}</TagChip> : null}
           </div>
           <div className="object-header-meta object-header-signals">
             {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
@@ -754,16 +755,4 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       </div>
     </div>
   );
-}
-
-const TAG_ICON_PATHS = {
-  type: "M7 3h7l5 5v13H7zM14 3v5h5",
-  partner: "M4 21V7l6-4 6 4v14M16 11h4v10M8 9h4M8 13h4M8 17h4",
-  department: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 20a6 6 0 0 0-3-5",
-  cost: "M9 4 7 20M17 4l-2 16M4 9h16M3 15h16",
-} as const;
-
-/** Symbol der Kennfarbe im Vertragskopf (Farbe nie allein). */
-function TagIcon({ kind }: { kind: keyof typeof TAG_ICON_PATHS }) {
-  return <svg className="tag-chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d={TAG_ICON_PATHS[kind]} /></svg>;
 }

@@ -8,6 +8,7 @@ import ChipPicker, { type ChipPickerGroup } from "@/components/ui/ChipPicker";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
+import TagChip, { PersonTag, TagIcon } from "@/components/ui/TagChip";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 import { getOrganizationStructure, listCostCenters } from "@/lib/domain-api/organizations";
@@ -51,24 +52,25 @@ type Snapshot = {
 
 const EMPTY_SNAPSHOT: Snapshot = { typeId: "", hospitalId: "", responsibleDepartmentId: "", beneficiaryDepartmentIds: [], centerId: "", responsibleId: "", furtherIds: [], deviceIds: [] };
 
-const GROUP_ICONS: Record<string, ReactNode> = {
-  file: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>,
-  building: <path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M8 7h4M8 11h4M8 15h4M2 21h20" />,
-  euro: <path d="M18 6.5A7 7 0 1 0 18 17.5M4 10h10M4 14h10" />,
-  users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6" /></>,
-};
+/** Gruppenkachel: Kennfarbe der Gruppe (Personen in der Kontofarbe, denn „partner“ ist der Lieferant). */
+type GroupKind = "type" | "department" | "cost" | "person";
+const PEOPLE_ICON = <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6" /></>;
 
 function Icon({ children }: { children: ReactNode }) {
   return <svg className="cw-og-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{children}</svg>;
 }
 
-/** Gruppe: links Titel mit Symbol und Zweck, rechts die Felder bzw. Werte. */
-function Group({ id, icon, title, intro, children }: { id: string; icon: string; title: string; intro: string; children: ReactNode }) {
+/** Gruppe: links Kachel, Titel und Zweck, rechts die Felder bzw. Werte. */
+function Group({ id, kind, title, intro, children }: { id: string; kind: GroupKind; title: string; intro: string; children: ReactNode }) {
   return <section className="cw-og" aria-labelledby={id}>
-    <div className="cw-og-intro"><h3 id={id}><span className={`cw-og-tile cw-og-tile-${icon}`}><Icon>{GROUP_ICONS[icon]}</Icon></span>{title}</h3><p>{intro}</p></div>
+    <div className="cw-og-intro">
+      <span className={`cw-og-tile cw-og-tile--${kind}`}>{kind === "person" ? <Icon>{PEOPLE_ICON}</Icon> : <TagIcon kind={kind} className="cw-og-icon" />}</span>
+      <div><h3 id={id}>{title}</h3><p>{intro}</p></div>
+    </div>
     <div className="cw-og-body">{children}</div>
   </section>;
 }
+
 
 /** Kurzer Hinweis mit ⓘ unter genau dem Feld, das er betrifft. */
 function Hint({ id, children }: { id?: string; children: ReactNode }) {
@@ -114,6 +116,13 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const [saved, setSaved] = useState<Snapshot>(EMPTY_SNAPSHOT);
   const [editing, setEditing] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  // Zugänglicher Name des Hinzufügen-Knopfs, der nach „+ … hinzufügen“ den Fokus bekommt.
+  const [focusAdd, setFocusAdd] = useState<string | null>(null);
+  useEffect(() => {
+    if (!editing || !focusAdd) return;
+    document.getElementById("cw-ownership-body")?.querySelector<HTMLElement>(`[aria-label="${focusAdd}"]`)?.focus();
+    setFocusAdd(null);
+  }, [editing, focusAdd]);
   const toast = useToast();
   // „Ändern“/„Festlegen“ (Karte Zuständigkeit, Kopf, Hinweise) führt mit ?abschnitt=ownership hierher: gleich bearbeiten.
   const linkedSection = useSearchParams()?.get(SECTION_PARAM) ?? null;
@@ -339,10 +348,6 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     return department ? departmentFullPath(department, departments) : "Unbekannter Bereich";
   };
   const hospitalName = (id: string) => hospitals.find((item) => item.id === id)?.name ?? "Unbekanntes Krankenhaus";
-  const centerLabel = (id: string) => {
-    const center = centers.find((item) => item.id === id);
-    return center ? <><span className="mono">{center.code}</span> · {center.name}</> : "Unbekannte Kostenstelle";
-  };
   const typeLabel = (id: string) => types.find((item) => item.id === id)?.label ?? "Unbekannter Vertragstyp";
   const deviceText = (id: string) => {
     const quantity = savedDevices.find((item) => item.device_type_id === id)?.quantity;
@@ -350,16 +355,32 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   };
   const none = <span className="cw-ov-none">Keine</span>;
   const notSet = <Signal tone="warning" size="sm">Nicht festgelegt</Signal>;
-  const tags = (values: string[]) => values.length ? <ul className="cw-ov-tags">{values.map((value) => <li key={value}>{value}</li>)}</ul> : none;
   const row = (label: string, value: ReactNode) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>;
 
+  // Pflichtangaben der Zuordnung; grün nur, wenn wirklich alle gepflegt sind.
+  const required: [string, string][] = [
+    ["Vertragstyp", saved.typeId],
+    ["Krankenhaus", saved.hospitalId],
+    ["Verantwortliche Abteilung", saved.responsibleDepartmentId],
+    ["Kostenstelle", saved.centerId],
+    ["Hauptverantwortlich", saved.responsibleId],
+  ];
+  const missing = required.filter(([, value]) => !value).map(([label]) => label);
+  const completeness = loading || loadFailed ? null : missing.length === 0
+    ? <span className="cw-complete" title={`${required.map(([label]) => label).join(", ")}: alle erfasst`}>
+      <svg className="cw-complete-ring" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle className="cw-complete-track" cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" /><path d="m8.5 12.3 2.3 2.3 4.7-4.8" /></svg>
+      {required.length} von {required.length} Pflichtangaben
+    </span>
+    : <button type="button" className="cw-missing" onClick={startEdit} title={`Es fehlen: ${missing.join(", ")}`}>
+      <Signal tone="warning" size="sm">{missing.length === 1 ? "1 Angabe fehlt" : `${missing.length} Angaben fehlen`}</Signal>
+    </button>;
   const summary = loading || loadFailed ? null : <>
     <span>{saved.hospitalId ? <b>{hospitalName(saved.hospitalId)}</b> : "Organisationsweit"}</span>
     {saved.responsibleDepartmentId ? <><span className="sep" aria-hidden="true">·</span><span>{departmentName(saved.responsibleDepartmentId)}</span></> : null}
-    <span className="sep" aria-hidden="true">·</span>
-    {saved.responsibleId ? <span>{assigneeName(saved.responsibleId)}</span> : <Signal tone="warning" size="sm">Hauptverantwortlich fehlt</Signal>}
+    {saved.responsibleId ? <><span className="sep" aria-hidden="true">·</span><span>{assigneeName(saved.responsibleId)}</span></> : null}
+    {completeness}
   </>;
-  const description = <>Wem der Vertrag gehört, wer ihn nutzt und wer zuständig ist{justSaved ? <> <Signal tone="done" size="sm">Gespeichert</Signal></> : null}</>;
+  const description = <>Wem der Vertrag gehört, wer ihn nutzt und wer zuständig ist{completeness ? <> {completeness}</> : null}{justSaved ? <> <Signal tone="done" size="sm">Gespeichert</Signal></> : null}</>;
   const actions = loading || loadFailed
     ? null
     : !editing
@@ -382,40 +403,53 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const noHospital = "Zuerst ein Krankenhaus wählen";
   const orgIntro = "Wer den Vertrag verantwortet und welche Bereiche ihn nutzen.";
 
-  const view = <>
-    <Group id="cw-og-contract" icon="file" title="Vertrag" intro={INTRO.contract}>
-      <dl className="cw-ov">{row("Vertragstyp", saved.typeId ? typeLabel(saved.typeId) : notSet)}</dl>
+  const savedCenter = centers.find((item) => item.id === saved.centerId);
+  const roleWord = (word: string) => <span className="cw-ov-role">{word}</span>;
+  // „+ … hinzufügen“ statt nur „Keine“: öffnet Bearbeiten und setzt den Fokus auf die Auswahl.
+  const addButton = (label: string, target: string) => editable
+    ? <button type="button" className="cw-ov-add" onClick={() => { startEdit(); setFocusAdd(target); }}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg>{label}
+    </button>
+    : null;
+
+  const view = <div className="cw-ov-groups">
+    <Group id="cw-og-contract" kind="type" title="Vertrag" intro={INTRO.contract}>
+      <dl className="cw-ov">{row("Vertragstyp", saved.typeId ? <TagChip kind="type">{typeLabel(saved.typeId)}</TagChip> : notSet)}</dl>
     </Group>
-    <Group id="cw-og-org" icon="building" title="Krankenhaus & Abteilungen" intro={orgIntro}>
+    <Group id="cw-og-org" kind="department" title="Krankenhaus & Abteilungen" intro={orgIntro}>
       <dl className="cw-ov">
-        {row("Krankenhaus", saved.hospitalId ? hospitalName(saved.hospitalId) : "Organisationsweit")}
-        {row("Verantwortliche Abteilung", saved.responsibleDepartmentId ? departmentName(saved.responsibleDepartmentId) : none)}
-        {row("Nutzende Abteilungen", tags(saved.beneficiaryDepartmentIds.map(departmentName)))}
+        {row("Krankenhaus", <span className="cw-ov-plain"><TagIcon kind="partner" className="cw-og-icon" />{saved.hospitalId ? hospitalName(saved.hospitalId) : "Organisationsweit"}</span>)}
+        {row("Verantwortliche Abteilung", saved.responsibleDepartmentId ? <><TagChip kind="department">{departmentName(saved.responsibleDepartmentId)}</TagChip>{roleWord("verantwortlich")}</> : notSet)}
+        {row("Nutzende Abteilungen", saved.beneficiaryDepartmentIds.length
+          ? <>{saved.beneficiaryDepartmentIds.map((id) => <TagChip key={id} kind="department">{departmentName(id)}</TagChip>)}{roleWord("nutzend")}</>
+          : <>{none}{addButton("Abteilung hinzufügen", "Nutzende Abteilung hinzufügen")}</>)}
       </dl>
     </Group>
-    <Group id="cw-og-cost" icon="euro" title="Kostenstelle & Geräte" intro={INTRO.cost}>
+    <Group id="cw-og-cost" kind="cost" title="Kostenstelle & Geräte" intro={INTRO.cost}>
       <dl className="cw-ov">
-        {row("Kostenstelle", saved.centerId ? centerLabel(saved.centerId) : notSet)}
-        {deviceCatalog ? row("Gerätearten", tags(saved.deviceIds.map(deviceText))) : null}
+        {row("Kostenstelle", saved.centerId ? savedCenter ? <TagChip kind="cost" code={savedCenter.code}>{savedCenter.name}</TagChip> : "Unbekannte Kostenstelle" : notSet)}
+        {deviceCatalog ? row("Gerätearten", saved.deviceIds.length ? saved.deviceIds.map((id) => <TagChip key={id} kind="device">{deviceText(id)}</TagChip>) : none) : null}
       </dl>
     </Group>
-    <Group id="cw-og-people" icon="users" title="Verantwortliche Personen" intro={INTRO.people}>
+    <Group id="cw-og-people" kind="person" title="Verantwortliche Personen" intro={INTRO.people}>
       <dl className="cw-ov">
-        {row("Hauptverantwortlich", saved.responsibleId ? assigneeName(saved.responsibleId) : notSet)}
-        {row("Weitere Verantwortliche", tags(saved.furtherIds.map(assigneeName)))}
+        {row("Hauptverantwortlich", saved.responsibleId ? <PersonTag name={assigneeName(saved.responsibleId)} /> : notSet)}
+        {row("Weitere Verantwortliche", saved.furtherIds.length
+          ? saved.furtherIds.map((id) => <PersonTag key={id} name={assigneeName(id)} />)
+          : <>{none}{addButton("Person hinzufügen", "Weitere verantwortliche Person hinzufügen")}</>)}
       </dl>
     </Group>
-  </>;
+  </div>;
 
   const edit = <>
-    <Group id="cw-og-contract" icon="file" title="Vertrag" intro={INTRO.contract}>
+    <Group id="cw-og-contract" kind="type" title="Vertrag" intro={INTRO.contract}>
       <div className="cw-of">
         <label htmlFor="cw-own-type">Vertragstyp</label>
         <select id="cw-own-type" value={typeId} onChange={(event) => setTypeId(event.target.value)}><option value="">Nicht festgelegt</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
         {types.length === 0 ? <Hint>Noch keine Vertragstypen angelegt. {isAdmin ? <Link href="/stammdaten/vertragstypen">Vertragstypen pflegen</Link> : null}</Hint> : null}
       </div>
     </Group>
-    <Group id="cw-og-org" icon="building" title="Krankenhaus & Abteilungen" intro={`${orgIntro} Die Auswahl bestimmt die Vorschläge für Kostenstelle, Gerätearten und Personen.`}>
+    <Group id="cw-og-org" kind="department" title="Krankenhaus & Abteilungen" intro={`${orgIntro} Die Auswahl bestimmt die Vorschläge für Kostenstelle, Gerätearten und Personen.`}>
       <div className="cw-of">
         {hospitalLocked ? <>
           <span className="cw-of-label" id="cw-own-hospital-label">Krankenhaus</span>
@@ -461,7 +495,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         />
       </div>
     </Group>
-    <Group id="cw-og-cost" icon="euro" title="Kostenstelle & Geräte" intro={INTRO.cost}>
+    <Group id="cw-og-cost" kind="cost" title="Kostenstelle & Geräte" intro={INTRO.cost}>
       <div className="cw-of">
         {hospitalId ? <>
           <label htmlFor="cw-own-center">Kostenstelle</label>
@@ -495,7 +529,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         <Hint>Anzahl und Notiz je Geräteart: <Link href={contractHref(contractId, { tab: "relations" })}>Verknüpfungen › Geräte</Link></Hint>
       </div> : null}
     </Group>
-    <Group id="cw-og-people" icon="users" title="Verantwortliche Personen" intro={INTRO.people}>
+    <Group id="cw-og-people" kind="person" title="Verantwortliche Personen" intro={INTRO.people}>
       <div className="cw-of">
         <label htmlFor="cw-own-person">Hauptverantwortlich</label>
         <select id="cw-own-person" value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((list) => list.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select>

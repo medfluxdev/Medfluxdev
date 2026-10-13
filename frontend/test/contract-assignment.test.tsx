@@ -13,13 +13,17 @@ describe("Übersicht: Zuständigkeit (Seitenleiste)", () => {
   it("zeigt Krankenhaus, Abteilungen, Kostenstelle und Verantwortliche", async () => {
     const { container } = render(<ContractAssignmentCard contractId="c-1" assignment={FULL} canEdit />);
     expect(screen.getByRole("heading", { name: "Zuständigkeit" })).toBeInTheDocument();
-    expect(screen.getByText("Vertragstyp").closest("div")).toHaveTextContent("Wartungsvertrag · Medizintechnik");
+    expect(screen.getByText("Wartungsvertrag").closest(".tag-chip")).toHaveClass("tag-chip--type");
+    expect(screen.getByText("Vertragstyp").closest("div")).toHaveTextContent("Medizintechnik");
+    expect(screen.getByText("Haustechnik").closest(".tag-chip")).toHaveClass("tag-chip--department");
+    expect(screen.getByText("Maria Becker").closest(".tag-person")?.querySelector(".tag-avatar")).toHaveTextContent("M");
     for (const text of ["Nordwest Krankenhaus", "Medizintechnik", "Haustechnik", "Maria Becker"]) {
-      expect(screen.getByText(text)).toBeInTheDocument();
+      expect(screen.getAllByText(text).length).toBeGreaterThan(0);
     }
     expect(screen.queryByText("Weitere Verantwortliche")).not.toBeInTheDocument();
     expect(screen.getByText("950000")).toHaveClass("mono");
-    expect(screen.getByText("950000").closest("dd")).toHaveTextContent("950000 · Radiologie");
+    expect(screen.getByText("950000").closest(".tag-chip")).toHaveClass("tag-chip--cost");
+    expect(screen.getByText("950000").closest("dd")).toHaveTextContent("950000 Radiologie");
     expect(screen.getByRole("link", { name: "Zuordnung ändern" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=ownership");
     expect(await axe(container)).toHaveNoViolations();
   });

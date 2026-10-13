@@ -140,15 +140,6 @@
   --color-ai: #6941c6;
   --color-ai-bg: #f2edfd;
   --color-ai-border: #d4c6f5;   /* Ruhe & Signal: Rahmen fuer KI-Plaketten */
-  /* Gruppensymbole (Organisationszuordnung): nur Orientierung, keine Statusbedeutung */
-  --color-group-contract: #1d64c2;
-  --color-group-contract-bg: #e9f2fb;
-  --color-group-org: #0b7368;
-  --color-group-org-bg: #e6f6f4;
-  --color-group-cost: #a4521b;
-  --color-group-cost-bg: #fbeee4;
-  --color-group-people: #5b4bc4;
-  --color-group-people-bg: #efedfb;
   /* Kennfarben der Hauptangaben im Vertragskopf (Ausnahme in VISUAL_IDENTITY.md): immer mit Symbol + Text. */
   --color-tag-type: #0b5e66;
   --color-tag-type-bg: #e2f2f3;
@@ -162,6 +153,9 @@
   --color-tag-cost: #8a3b62;
   --color-tag-cost-bg: #f8e9f0;
   --color-tag-cost-border: #e2b6cb;
+  --color-tag-device: #3f5873;
+  --color-tag-device-bg: #eaeff5;
+  --color-tag-device-border: #b9c7d6;
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
@@ -282,14 +276,6 @@
     --color-ai: #c4b2f7;
     --color-ai-bg: #2a2340;
     --color-ai-border: #4a3d73;
-    --color-group-contract: #8cc0f2;
-    --color-group-contract-bg: #16304a;
-    --color-group-org: #5fd4c4;
-    --color-group-org-bg: #113a36;
-    --color-group-cost: #f0a877;
-    --color-group-cost-bg: #3d2416;
-    --color-group-people: #b3a8f5;
-    --color-group-people-bg: #29244a;
     --color-tag-type: #7fd3da;
     --color-tag-type-bg: #10302f;
     --color-tag-type-border: #245a5d;
@@ -302,6 +288,9 @@
     --color-tag-cost: #eeaccb;
     --color-tag-cost-bg: #37202c;
     --color-tag-cost-border: #6b3c53;
+    --color-tag-device: #a9c1dc;
+    --color-tag-device-bg: #1c2836;
+    --color-tag-device-border: #3a4c62;
     --color-success-fill: #3fae86;
     --color-warning-fill: #d99a2b;
     --color-danger-fill: #d9605a;
@@ -367,14 +356,6 @@
   --color-ai: #c4b2f7;
   --color-ai-bg: #2a2340;
   --color-ai-border: #4a3d73;
-  --color-group-contract: #8cc0f2;
-  --color-group-contract-bg: #16304a;
-  --color-group-org: #5fd4c4;
-  --color-group-org-bg: #113a36;
-  --color-group-cost: #f0a877;
-  --color-group-cost-bg: #3d2416;
-  --color-group-people: #b3a8f5;
-  --color-group-people-bg: #29244a;
   --color-tag-type: #7fd3da;
   --color-tag-type-bg: #10302f;
   --color-tag-type-border: #245a5d;
@@ -387,6 +368,9 @@
   --color-tag-cost: #eeaccb;
   --color-tag-cost-bg: #37202c;
   --color-tag-cost-border: #6b3c53;
+  --color-tag-device: #a9c1dc;
+  --color-tag-device-bg: #1c2836;
+  --color-tag-device-border: #3a4c62;
   --color-success-fill: #3fae86;
   --color-warning-fill: #d99a2b;
   --color-danger-fill: #d9605a;

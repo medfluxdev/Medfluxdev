@@ -44,6 +44,7 @@ Vor jedem neuen UI-Element in `components/ui/` nachsehen:
 | Vorschau, Details ohne Seitenwechsel | `Drawer` |
 | Auswahl unter einem Knopf (Filterwerte, Darstellung, kleines Menü) | `Popover`: nicht modal, Esc schließt und gibt den Fokus an den Knopf zurück, Klick daneben schließt; `active` hebt den Knopf bei aktiver Auswahl hervor |
 | Mehrfachauswahl im Formular (Abteilungen, Gerätearten, Personen) | `ChipPicker`: Chips 32 px mit Entfernen-Knopf 24 px (`aria-label` „<Name> entfernen“), gesonderter gestrichelter Knopf „+ …“ öffnet ein `Popover` mit gruppierter Liste (Vorschläge zuerst, ab 8 Einträgen Suchfeld); `disabledHint` sagt, was zuerst nötig ist |
+| Hauptangabe mit Kennfarbe (Vertragstyp, Vertragspartner, Abteilung, Kostenstelle, Geräteart) | `TagChip kind=…` (`code` für die Kostenstellennummer, `as="button"`/`"link"` wenn anklickbar, `srLabel` als Präfix für Screenreader); Personen mit `PersonTag` (Initiale). Kennfarben zeigen die Art der Angabe, nie einen Zustand – Zustände nur mit `Signal` |
 | Reiter | `Tabs` + `TabPanel` (Pfeiltasten, `aria-controls`) |
 | Kennzahl mit Ziel | `KpiTile`: mit `href` ist die ganze Kachel ein Link; die Kachel ist immer neutral; Aufmerksamkeit nur über `signal={{ tone, label }}`; `icon` = graues Liniensymbol vor der Beschriftung |
 | Einfache sortierbare Tabelle | `DataTable` |

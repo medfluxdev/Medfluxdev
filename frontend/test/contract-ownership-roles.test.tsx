@@ -20,12 +20,13 @@ const mocks = vi.hoisted(() => ({
   saveContractDeviceTypes: vi.fn(),
   toast: vi.fn(),
   searchParams: new URLSearchParams(),
+  role: "contract_manager",
 }));
 
 vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.searchParams }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => mocks.toast }));
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useAuth: () => ({ role: "contract_manager", account: { is_developer: false } }),
+  useAuth: () => ({ role: mocks.role, account: { is_developer: false } }),
 }));
 vi.mock("@/lib/domain-api/organizations", () => ({
   getOrganizationStructure: mocks.getOrganizationStructure,
@@ -50,6 +51,7 @@ describe("Contract360 Organisationszuordnung", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.searchParams = new URLSearchParams();
+    mocks.role = "contract_manager";
     mocks.getOrganizationStructure.mockResolvedValue({
       hospitals: [{ id: "hospital-1", name: "Klinikum Heidelberg", code: "HD", is_active: true }],
       departments: [
@@ -108,6 +110,55 @@ describe("Contract360 Organisationszuordnung", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Zuordnung speichern" })).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("Ansicht: Kennfarben-Chips je Art, Person mit Initiale, Pflichtangaben fehlen als Signal, das Bearbeiten öffnet", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect((await screen.findByText("Wartungsvertrag")).closest(".tag-chip")).toHaveClass("tag-chip--type");
+    expect(screen.getByText("Medizintechnik › Radiologie").closest(".tag-chip")).toHaveClass("tag-chip--department");
+    expect(screen.getByText("Intensivmedizin").closest(".tag-chip")).toHaveClass("tag-chip--department");
+    expect(screen.getByText("verantwortlich")).toBeInTheDocument();
+    expect(screen.getByText("nutzend")).toBeInTheDocument();
+    expect(screen.getByText("CT (2)").closest(".tag-chip")).toHaveClass("tag-chip--device");
+    // Kostenstelle und Hauptverantwortlich fehlen: kein Grün, sondern Signal mit Liste im Titel.
+    expect(screen.queryByText(/Pflichtangaben/)).not.toBeInTheDocument();
+    const missing = screen.getByRole("button", { name: "2 Angaben fehlen" });
+    expect(missing).toHaveAttribute("title", "Es fehlen: Kostenstelle, Hauptverantwortlich");
+    await user.click(missing);
+    expect(screen.getByLabelText("Vertragstyp")).toBeInTheDocument();
+  });
+
+  it("Ansicht: alle Pflichtangaben gepflegt → grüne Plakette „5 von 5“, Kostenstelle mit Nummer, Person mit Initiale", async () => {
+    mocks.getContractOwnership.mockResolvedValue({ contract_id: "contract-1", hospital_id: "hospital-1", department_ids: ["dept-rad", "dept-icu"], cost_center_id: "cc-1", responsible_account_id: "u-1", further_responsible_account_ids: [], scope_type: "department" });
+    mocks.listOwnershipAssignees.mockResolvedValue({ items: [{ id: "u-1", display_name: "Dana Weber", role: "contract_manager", hospital_id: null, department_id: null }] });
+    const { container } = render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect(await screen.findByText("5 von 5 Pflichtangaben")).toBeInTheDocument();
+    expect(screen.queryByText(/Angaben? fehl/)).not.toBeInTheDocument();
+    const center = screen.getByText("4400").closest(".tag-chip");
+    expect(center).toHaveClass("tag-chip--cost");
+    expect(center).toHaveTextContent("Radiologie");
+    const person = screen.getByText("Dana Weber");
+    expect(person.closest(".tag-person")?.querySelector(".tag-avatar")).toHaveTextContent("D");
+    expect(person.closest(".tag-person")?.querySelector(".tag-avatar")).toHaveAttribute("aria-hidden", "true");
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("Ansicht: „+ Person hinzufügen“ statt nur „Keine“ öffnet Bearbeiten mit Fokus auf der Auswahl", async () => {
+    const user = userEvent.setup();
+    mocks.listOwnershipAssignees.mockResolvedValue({ items: [{ id: "u-1", display_name: "Dana Weber", role: "contract_manager", hospital_id: null, department_id: null }] });
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Person hinzufügen" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Weitere verantwortliche Person hinzufügen" })).toHaveFocus());
+    // Nutzende Abteilungen sind gepflegt: dort kein Hinzufügen-Knopf in der Ansicht.
+    expect(screen.queryByRole("button", { name: "Abteilung hinzufügen" })).not.toBeInTheDocument();
+  });
+
+  it("Ohne Bearbeitungsrecht: kein Kasten und keine Hinzufügen-Knöpfe", async () => {
+    mocks.role = "viewer";
+    const { container } = render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(screen.queryByRole("button", { name: /hinzufügen/ })).not.toBeInTheDocument();
   });
 
   it("Bearbeiten: Speicherleiste erst nach einer Änderung; Verwerfen stellt die gespeicherten Werte wieder her", async () => {
