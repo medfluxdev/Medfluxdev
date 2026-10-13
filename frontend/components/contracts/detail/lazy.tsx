@@ -12,4 +12,3 @@ export const ContractIntelligencePanel = dynamic(() => import("./ContractIntelli
 export const ContractBackendAnalysisPanel = dynamic(() => import("./ContractBackendAnalysisPanel"), { loading: loading("Analyse wird geladen…") });
 export const ContractOwnershipPanel = dynamic(() => import("./ContractOwnershipPanel"), { loading: loading("Verantwortliche werden geladen…") });
 export const ContractBillingPanel = dynamic(() => import("./ContractBillingPanel"), { loading: loading("Abrechnung wird geladen…") });
-export const ContractLifecyclePanel = dynamic(() => import("./ContractLifecyclePanel"), { loading: loading("Entscheidungen werden geladen…") });

@@ -41,3 +41,16 @@ test("Ansicht vertragsakte", async ({ page }) => {
   });
 });
 
+// Vertragsakte: Fristen & Aufgaben (Entscheidung, Zeitachse) und Vertragsdaten (Berechnet-Streifen, Erinnern).
+const DATE_DEPENDENT = /^\d+ Tage?$|^Frist (heute|in \d+ Tagen?)$|^noch \d+ Tage$|^seit \d+ Tagen verstrichen$/;
+for (const [name, tab] of [["vertragsakte-fristen", "Fristen & Aufgaben"], ["vertragsakte-vertragsdaten", "Vertragsdaten"]] as const) {
+  test(`Ansicht ${name}`, async ({ page }) => {
+    await openContract(page, "Softwarepflege PACS");
+    await page.getByRole("tab", { name: tab }).click();
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveScreenshot(`${name}.png`, {
+      fullPage: true,
+      mask: [page.locator("time"), page.locator(".term-bar"), page.locator(".badge"), page.locator(".tl-row--today"), page.getByText(/Stand \d{2}\.\d{2}\.\d{4}/), page.getByText(DATE_DEPENDENT)],
+    });
+  });
+}

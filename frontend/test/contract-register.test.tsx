@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   updateContractConfidentiality: vi.fn(),
   listContractRemarks: vi.fn(),
   addContractRemark: vi.fn(),
+  saveReminderLeads: vi.fn(),
 }));
 
 const toast = vi.hoisted(() => vi.fn());
@@ -120,7 +121,9 @@ describe("Vertragsregister – Stammdaten", () => {
     expect(screen.getByText("In Arbeit")).toBeInTheDocument();
     const terms = screen.getByRole("heading", { name: "Laufzeit, Fristen & Kündigung" }).closest("section")!;
     expect(within(terms).getByText("Kündbar bis").nextElementSibling).toHaveTextContent("30.06.2027");
-    expect(within(terms).getByText("Erinnerung am").nextElementSibling).toHaveTextContent("30.03.2027");
+    expect(within(terms).queryByText(/Erinnerung/)).not.toBeInTheDocument();
+    const reminder = screen.getByRole("heading", { name: "Erinnerung & Verantwortung" }).closest("section")!;
+    expect(within(reminder).getByText("Nächste Erinnerungen:").parentElement).toHaveTextContent("Nächste Erinnerungen: 30.03.2027");
     expect(screen.getByText("KI · Vorschlag")).toHaveAttribute("title", "Quelle: identity.contract_title");
     expect(screen.getByText("KI · korrigiert")).toBeInTheDocument();
     expect(screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
@@ -138,7 +141,7 @@ describe("Vertragsregister – Stammdaten", () => {
       expect(head("Vertrag & Partner")).toHaveTextContent("Vertragspartner fehlt");
       expect(head("Vertrag & Partner")).toHaveTextContent("Nr. 000042");
       expect(head("Laufzeit, Fristen & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
-      expect(head("Erinnerung & Verantwortung")).toHaveTextContent("Erinnerung 3 Monat(e) vor der Frist·an Hauptverantwortliche Person");
+      expect(head("Erinnerung & Verantwortung")).toHaveTextContent("Erinnern 3 Monate vorher·an Hauptverantwortliche Person");
       // Bearbeiten bleibt auch eingeklappt erreichbar und klappt auf.
       await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
       expect(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung einklappen" })).toHaveAttribute("aria-expanded", "true");
@@ -269,7 +272,7 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     });
   };
 
-  it("feste Laufzeit: nur passende Felder, Berechnet-Streifen ohne doppeltes Ende; ohne Verstöße (axe)", async () => {
+  it("feste Laufzeit: nur passende Felder, Berechnet-Streifen mit Vertragsende und Restlaufzeit; ohne Verstöße (axe)", async () => {
     api.getContractRegister.mockResolvedValue(fixed());
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     const card = await section("Laufzeit, Fristen & Kündigung");
@@ -279,12 +282,56 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     expect(within(card).getByText("Berechnet")).toBeInTheDocument();
     expect(within(card).getByText("Automatisch aus den Angaben oben, Stand 04.10.2026")).toBeInTheDocument();
     expect(within(card).queryByText("Kündbar bis")).not.toBeInTheDocument();
-    expect(within(card).queryByText("Mögliches Vertragsende")).not.toBeInTheDocument();
-    expect(within(card).queryByText("Vertragsende", { selector: "dt" })).not.toBeInTheDocument();
-    expect(within(card).getByText("Erinnerungen am").nextElementSibling).toHaveTextContent("30.11.2028, 06.01.2029");
-    expect(within(card).getByText("Feste Laufzeit: Ende = festes Vertragsende 31.03.2029.")).toBeInTheDocument();
+    expect(within(card).getByText("Vertragsende", { selector: "dt" }).nextElementSibling).toHaveTextContent("31.03.2029");
+    expect(within(card).getByText("Restlaufzeit", { selector: "dt" }).nextElementSibling).toHaveTextContent("909 Tage");
+    expect(within(card).queryByText(/Erinnerung/)).not.toBeInTheDocument();
+    expect(within(card).getByText("Wie berechnet?").closest("details")).toHaveTextContent("Feste Laufzeit: Ende = festes Vertragsende 31.03.2029.");
+    const reminder = screen.getByRole("heading", { name: "Erinnerung & Verantwortung" }).closest("section")!;
+    expect(within(reminder).getByText("Nächste Erinnerungen:").parentElement).toHaveTextContent("30.11.2028, 06.01.2029");
     expect(within(card).getByText("KI · bestätigt")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("Bearbeiten: Streifen zeigt die aktuellen Werte mit „Wird nach dem Speichern neu berechnet“, Speichern unten", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(fixed());
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Laufzeit, Fristen & Kündigung");
+    await user.click(within(card).getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
+    expect(within(card).getByText("Wird nach dem Speichern neu berechnet")).toBeInTheDocument();
+    expect(within(card).queryByText("Wie berechnet?")).not.toBeInTheDocument();
+    expect(within(card).getByText("Vertragsende", { selector: "dt" }).nextElementSibling).toHaveTextContent("31.03.2029");
+    const bar = within(card).getByRole("region", { name: "Laufzeit, Fristen & Kündigung speichern" });
+    expect(within(bar).getByRole("button", { name: "Speichern" })).toBeInTheDocument();
+    expect(within(card).getByText("KI · bestätigt")).toBeInTheDocument();
+  });
+
+  it("Erinnern: Chips, hinzufügen und entfernen; gespeichert über erste + weitere Erinnerungen", async () => {
+    const user = userEvent.setup();
+    const base = fixed();
+    api.getContractRegister.mockResolvedValue({ ...base, fields: { ...base.fields, reminder_lead_months: field("Erinnerung (Monate vor Frist)", null) }, reminders: { default_lead_months: 4, lead_months: null, extra_leads: [{ value: 12, unit: "weeks" }] } });
+    api.saveReminderLeads.mockResolvedValue(base);
+    const onOpenDeadlines = vi.fn();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" onOpenDeadlines={onOpenDeadlines} />);
+    const card = await section("Erinnerung & Verantwortung");
+    const chips = () => within(within(card).getByRole("list", { name: "Erinnerungen" })).getAllByRole("listitem").map((item) => item.textContent);
+    expect(chips()).toEqual(["4 Monate vorher (Standard)", "12 Wochen vorher"]);
+    await user.click(within(card).getByRole("button", { name: "In Fristen & Aufgaben ansehen" }));
+    expect(onOpenDeadlines).toHaveBeenCalled();
+
+    await user.click(within(card).getByRole("button", { name: "Erinnerung & Verantwortung bearbeiten" }));
+    expect(within(card).getByText(/Standard des Vertragstyps: 4 Monate vorher/)).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: "4 Monate vorher (Standard) entfernen" })).not.toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "+ Erinnerung" }));
+    await user.type(within(card).getByLabelText("Anzahl"), "6");
+    await user.selectOptions(within(card).getByLabelText("Einheit"), "months");
+    await user.click(within(card).getByRole("button", { name: "Hinzufügen" }));
+    expect(chips().slice(0, 2)).toEqual(["12 Wochen vorher", "6 Monate vorher"]);
+    await user.click(within(card).getByRole("button", { name: "12 Wochen vorher entfernen" }));
+    expect(chips()[0]).toBe("6 Monate vorher");
+    await user.click(within(within(card).getByRole("region", { name: "Erinnerung & Verantwortung speichern" })).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { reminder_lead_months: 6 } }));
+    await waitFor(() => expect(api.saveReminderLeads).toHaveBeenCalledWith("test-klinik", "c-1", []));
   });
 
   it("gekündigt: Zeile mit Daten, keine Eingabefelder dafür; „Status ändern“ führt zum Status", async () => {
@@ -470,7 +517,7 @@ describe("Vertragsregister – Formularschutz", () => {
     await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     await user.type(screen.getByLabelText("Vertragsgegenstand"), "INT-9");
-    expect(screen.getByText(/Ungespeicherte Änderungen/)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Vertrag & Partner speichern" })).getByText("Ungespeicherte Änderungen")).toBeInTheDocument();
     await user.keyboard("{Control>}s{/Control}");
     await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { subject_text: "INT-9" } }));
   });

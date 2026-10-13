@@ -1,7 +1,6 @@
 "use client";
 
 import StatusBadge from "@/components/ui/StatusBadge";
-import ReminderLeadsEditor from "./ReminderLeadsEditor";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -37,6 +36,7 @@ import {
   acceptRegisterProposal,
   changeContractStatus,
   getContractRegister,
+  saveReminderLeads,
   updateContractConfidentiality,
   updateContractRegister,
   type BusinessStatus,
@@ -45,6 +45,8 @@ import {
   type NoticeTo,
   type RegisterField,
   type RegisterValue,
+  type ReminderLead,
+  type ReminderUnit,
   type TermModel,
 } from "@/lib/domain-api/register";
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
@@ -53,7 +55,7 @@ import { FIELD_PARAM, baseFieldKey } from "@/lib/fix-targets";
 import { revealBox } from "@/lib/box-collapse";
 
 type Draft = Record<string, RegisterValue>;
-type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo" | "auto_number";
+type FieldKind = "reminders" | "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo" | "auto_number";
 type FieldDef = { key: string; kind: FieldKind };
 
 const PERIODS = ["initial_term", "minimum_term", "notice_period", "renewal_period"] as const;
@@ -94,7 +96,7 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
     title: "Erinnerung & Verantwortung",
     description: "Wer wird wann an die Frist erinnert",
     fields: [
-      { key: "reminder_lead_months", kind: "int" },
+      { key: "reminder_lead_months", kind: "reminders" },
       { key: "reminder_recipient_account_id", kind: "account" },
       { key: "escalation_recipient_account_id", kind: "account" },
       { key: "reminder_todo", kind: "todo" },
@@ -139,6 +141,7 @@ const ACCESS_KEYS = new Set(["data_protection_relevant"]);
 const TERMINATION_KEYS = new Set(["terminated_on", "terminated_effective"]);
 
 const CALENDAR_ICON = <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>;
+const BELL_ICON = <svg viewBox="0 0 24 24" focusable="false"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16M10 20a2 2 0 0 0 4 0" /></svg>;
 const CALC_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></svg>;
 const FLAG_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="signal-icon"><path d="M5 21V4h11l-1.5 4L16 12H5" /></svg>;
 
@@ -149,7 +152,6 @@ const FIELD_HELP: Record<string, string> = {
   notice_to: "Zu welchem Termin gekündigt werden kann – z. B. „zum Quartalsende“ = 31.03., 30.06., 30.09. oder 31.12.",
   minimum_term: "Frühestens nach dieser Zeit ist eine Kündigung wirksam.",
   renewal_period: "Um wie viel sich der Vertrag ohne Kündigung jeweils verlängert.",
-  reminder_lead_months: "Wie viele Monate vor dem Kündigungstermin (bei fester Laufzeit: vor dem Vertragsende) die erste Erinnerung kommt. Leer = Standard (4 Monate).",
   maintenance_next_date: "Ein Monat vorher entsteht der Termin „Wartung fällig“ unter Fristen & Aufgaben.",
   maintenance_interval_months: "Leer lassen für einen einmaligen Termin; sonst entsteht nach Erledigung der nächste Termin.",
 };
@@ -172,6 +174,39 @@ const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
   renewal_period: "Verlängerung um",
 };
 
+const LEAD_UNIT: Record<ReminderUnit, [string, string]> = { days: ["Tag", "Tage"], weeks: ["Woche", "Wochen"], months: ["Monat", "Monate"] };
+const LEAD_MAX: Record<ReminderUnit, number> = { days: 365, weeks: 104, months: 60 };
+
+export function leadText(lead: ReminderLead): string {
+  const [singular, plural] = LEAD_UNIT[lead.unit];
+  return `${lead.value} ${lead.value === 1 ? singular : plural} vorher`;
+}
+
+/** Eigene Erinnerungen: erste (Monate, leer = Standard) und weitere, als eine Liste. */
+function leadsOf(register: ContractRegister): ReminderLead[] {
+  const first = register.fields.reminder_lead_months?.value;
+  return [...(first != null && first !== "" ? [{ value: Number(first), unit: "months" as const }] : []), ...(register.reminders?.extra_leads ?? [])];
+}
+
+/** Die längste Erinnerung in Monaten wird die erste (eigenes Feld), alle übrigen sind weitere Erinnerungen. */
+function splitLeads(leads: ReminderLead[]): { first: number | null; extra: ReminderLead[] } {
+  const months = leads.filter((lead) => lead.unit === "months");
+  if (!months.length) return { first: null, extra: leads };
+  const longest = months.reduce((best, lead) => (lead.value > best.value ? lead : best));
+  const index = leads.indexOf(longest);
+  return { first: longest.value, extra: leads.filter((_, position) => position !== index) };
+}
+
+function sameLeads(left: ReminderLead[], right: ReminderLead[]) {
+  const key = (leads: ReminderLead[]) => leads.map((lead) => `${lead.value}${lead.unit}`).sort().join(",");
+  return key(left) === key(right);
+}
+
+// Tage zwischen zwei ISO-Daten (ohne Uhrzeit, unabhängig von der Zeitzone).
+function daysBetween(from: string, to: string) {
+  return Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 86_400_000);
+}
+
 function fieldKeys(def: FieldDef): string[] {
   return def.kind === "period" ? [`${def.key}_value`, `${def.key}_unit`] : [def.key];
 }
@@ -190,8 +225,10 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus }: {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus, onOpenDeadlines }: {
   contractId: string;
+  /** „In Fristen & Aufgaben ansehen“ (Reiterwechsel). */
+  onOpenDeadlines?: () => void;
   /** Direkt unter dem Bearbeitungsstatus (Organisationszuordnung). */
   afterStatus?: ReactNode;
   /** Kästen, die der Vertragstyp nicht vorsieht; sie bleiben sichtbar, sobald ein Wert gepflegt ist. */
@@ -241,6 +278,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const [retentionRequest, setRetentionRequest] = useState(0);
   const [accessRequest, setAccessRequest] = useState(0);
   const [newPartner, setNewPartner] = useState<FormValues | null>(null);
+  // „Erinnern“ im Bearbeitungsmodus: alle eigenen Erinnerungen; Hinzufügen über Anzahl + Einheit.
+  const [leadDraft, setLeadDraft] = useState<ReminderLead[] | null>(null);
+  const [leadAdd, setLeadAdd] = useState<{ value: string; unit: ReminderUnit } | null>(null);
   // Sprungziel „Direkt zur Stelle“: Feld, zu dem gesprungen wird, mit optionalem Hinweis.
   const [target, setTarget] = useState<{ key: string; note?: string; at: number } | null>(null);
   const handledLink = useRef<string | null>(null);
@@ -341,24 +381,36 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     }
   }
 
+  const extraDraft = leadDraft ? splitLeads(leadDraft).extra : null;
+  const extrasChanged = Boolean(register && extraDraft && !sameLeads(extraDraft, register.reminders?.extra_leads ?? []));
+
   async function save() {
     if (!register) return;
     const changes: Draft = {};
     for (const [key, field] of Object.entries(register.fields)) {
       if (!same(draft[key], field.value)) changes[key] = draft[key] ?? null;
     }
-    if (Object.keys(changes).length === 0) {
-      setEditSections(new Set());
-      leaveTarget();
+    const extras = extrasChanged ? extraDraft : null;
+    if (Object.keys(changes).length === 0 && !extras) {
+      closeAllEdits();
       return;
     }
-    if (await run(() => updateContractRegister(orgSlug, contractId, { changes }), "Stammdaten gespeichert.")) {
-      setEditSections(new Set());
-      leaveTarget();
-    }
+    // Erste Erinnerung ist ein Feld der Vertragsdaten, weitere Erinnerungen haben einen eigenen Endpunkt.
+    if (await run(async () => {
+      let next = Object.keys(changes).length ? await updateContractRegister(orgSlug, contractId, { changes }) : register;
+      if (extras) next = await saveReminderLeads(orgSlug, contractId, extras);
+      return next;
+    }, "Stammdaten gespeichert.")) closeAllEdits();
   }
 
-  const dirty = editing && Boolean(register) && Object.entries(register?.fields ?? {}).some(([key, field]) => !same(draft[key], field.value));
+  function closeAllEdits() {
+    setEditSections(new Set());
+    setLeadDraft(null);
+    setLeadAdd(null);
+    leaveTarget();
+  }
+
+  const dirty = editing && Boolean(register) && (extrasChanged || Object.entries(register?.fields ?? {}).some(([key, field]) => !same(draft[key], field.value)));
   useUnsavedChanges(dirty);
   useSaveShortcut(editing, () => { if (!busy) void save(); });
 
@@ -468,7 +520,21 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       setDraft(draftFrom(register));
       setMessage(null);
     }
+    if (sectionId === "reminder" && !editSections.has("reminder")) setLeadDraft(leadsOf(register));
     setEditSections((current) => current.has(sectionId) ? current : new Set([...current, sectionId]));
+  }
+
+  function changeLeads(next: ReminderLead[]) {
+    setLeadDraft(next);
+    setDraft((current) => ({ ...current, reminder_lead_months: splitLeads(next).first }));
+  }
+
+  function addLead() {
+    if (!leadAdd || !leadDraft) return;
+    const value = Number(leadAdd.value);
+    if (!Number.isInteger(value) || value < 1 || value > LEAD_MAX[leadAdd.unit]) return;
+    if (!leadDraft.some((lead) => lead.value === value && lead.unit === leadAdd.unit)) changeLeads([...leadDraft, { value, unit: leadAdd.unit }]);
+    setLeadAdd(null);
   }
 
   function cancelEdit(sectionId: string) {
@@ -480,6 +546,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     const next = new Set(editSections);
     next.delete(sectionId);
     setEditSections(next);
+    if (sectionId === "reminder") { setLeadDraft(null); setLeadAdd(null); }
     if (next.size === 0) {
       setDraft(fresh);
       setNewPartner(null);
@@ -510,7 +577,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     }
     const field = register.fields[def.key];
     const value = field?.value;
-    if ((value == null || value === "") && def.key === "reminder_lead_months") return `${register.reminders?.default_lead_months ?? 4} Monate vor der Frist (Standard)`;
+    if (def.kind === "reminders") return reminderChips(leadsOf(register)).map((chip) => chip.label).join(", ");
     if (value == null || value === "") return def.kind === "bool" ? "Nein" : "Nicht erfasst";
     switch (def.kind) {
       case "bool": return value ? "Ja" : "Nein";
@@ -520,13 +587,20 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       case "price_adjustment": return PRICE_ADJUSTMENT_LABEL[String(value)] ?? String(value);
       case "decimal": return `${Number(value).toLocaleString("de-DE")} %`;
       case "storage": return register.storage_location_label ?? storage.find((item) => item.code === value)?.label ?? String(value);
-      case "int": return def.key === "reminder_lead_months" ? `${value} Monat(e) vor der Frist` : def.key === "retention_years_after_end" ? `${value} Jahr(e) nach Vertragsende` : def.key === "price_adjustment_interval_months" || def.key === "maintenance_interval_months" ? `alle ${value} Monat(e)` : String(value);
+      case "int": return def.key === "retention_years_after_end" ? `${value} Jahr(e) nach Vertragsende` : def.key === "price_adjustment_interval_months" || def.key === "maintenance_interval_months" ? `alle ${value} Monat(e)` : String(value);
       case "partner":
       case "type":
       case "category":
       case "account": return field.display ?? "Auswahl nicht mehr verfügbar";
       default: return String(value);
     }
+  }
+
+  // Ohne eigene Erinnerung in Monaten gilt der Standard des Vertragstyps als erste Erinnerung.
+  function reminderChips(leads: ReminderLead[]): { label: string; lead: ReminderLead | null }[] {
+    const standard = register?.reminders?.default_lead_months ?? 4;
+    const chips = leads.map((lead) => ({ label: leadText(lead), lead }));
+    return leads.some((lead) => lead.unit === "months") ? chips : [{ label: `${leadText({ value: standard, unit: "months" })} (Standard)`, lead: null }, ...chips];
   }
 
   function originOf(def: FieldDef): RegisterField | undefined {
@@ -647,14 +721,13 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         model,
         fixedTerm
           ? end ? <>Vertragsende <b>{formatDate(end)}</b></> : null
-          : terms.cancel_by ? <>Kündbar bis <b>{formatDate(terms.cancel_by)}</b></> : end ? <>Mögliches Ende <b>{formatDate(end)}</b></> : null,
+          : terms.cancel_by ? <>Kündbar bis <b>{formatDate(terms.cancel_by)}</b></> : end ? <>Vertragsende <b>{formatDate(end)}</b></> : null,
       ]);
     }
     if (sectionId === "reminder") {
-      const lead = allDefs.find((item) => item.key === "reminder_lead_months");
       const recipient = shown("reminder_recipient_account_id");
       // Ohne eigenen Empfänger geht die Erinnerung an die hauptverantwortliche Person (deadlines/system.py).
-      return joinParts([lead ? `Erinnerung ${display(lead)}` : null, recipient ? <>an <b>{recipient}</b></> : "an Hauptverantwortliche Person"]);
+      return joinParts([`Erinnern ${reminderChips(leadsOf(register)).map((chip) => chip.label).join(", ")}`, recipient ? <>an <b>{recipient}</b></> : "an Hauptverantwortliche Person"]);
     }
     return null;
   }
@@ -663,33 +736,74 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const terminationRow = register.business_status === "gekuendigt" ? <div className="rg-termrow">
     <Signal tone="neutral" icon={FLAG_ICON}>Gekündigt</Signal>
     <span>
-      {register.fields.terminated_on?.value ? <>am <span className="mono">{formatDate(String(register.fields.terminated_on.value))}</span></> : null}
+      {register.fields.terminated_on?.value ? <>am <span className="num">{formatDate(String(register.fields.terminated_on.value))}</span></> : null}
       {register.fields.terminated_on?.value && register.fields.terminated_effective?.value ? " · " : null}
-      {register.fields.terminated_effective?.value ? <>zum <span className="mono">{formatDate(String(register.fields.terminated_effective.value))}</span></> : null}
+      {register.fields.terminated_effective?.value ? <>zum <span className="num">{formatDate(String(register.fields.terminated_effective.value))}</span></> : null}
     </span>
     {editable ? <button type="button" className="rg-link rg-termrow-link" onClick={openStatus}>Status ändern</button> : null}
   </div> : null;
 
-  // Berechnet: sichtbar anders als Eingaben (gestrichelte Kacheln, schattierter Streifen); jede Angabe nur einmal.
-  const fixedEnd = register.fields.term_fixed_end_date?.value as string | null | undefined;
-  const effectiveEnd = register.fields.terminated_effective?.value as string | null | undefined;
-  const computedEnd = terms.actual_end ?? terms.possible_end;
-  const showEnd = Boolean(computedEnd && computedEnd !== fixedEnd && computedEnd !== effectiveEnd);
-  const reminders = terms.reminder_dates?.length ? terms.reminder_dates : terms.reminder_date ? [terms.reminder_date] : [];
+  // Berechnet: sichtbar anders als Eingaben (gestrichelte Kacheln, schattierter Streifen). Erinnerungsdaten stehen
+  // nur unter „Erinnerung & Verantwortung“.
+  const contractEnd = terms.actual_end ?? terms.possible_end;
+  const remaining = contractEnd ? daysBetween(register.as_of, contractEnd) : null;
+  const termEditing = editSections.has("term");
   const termCalc = <div className="rg-calc" aria-labelledby="rg-calc-label">
-    <div className="rg-calc-head"><span className="rg-calc-tag" id="rg-calc-label">{CALC_ICON}Berechnet</span><small>Automatisch aus den Angaben oben, Stand {formatDate(register.as_of)}</small></div>
+    <div className="rg-calc-head"><span className="rg-calc-tag" id="rg-calc-label">{CALC_ICON}Berechnet</span><small>{termEditing ? "Wird nach dem Speichern neu berechnet" : `Automatisch aus den Angaben oben, Stand ${formatDate(register.as_of)}`}</small></div>
     {terms.status === "incomplete" ? <div className="rg-hintbar">
       <SignalIcon tone="warning" />
       <MissingList intro="Fristen noch nicht berechenbar. Es fehlen:" items={terms.missing.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))} />
     </div> : <>
       <dl className="rg-calc-tiles">
-        {!fixedTerm && terms.cancel_by ? <div className="rg-calc-tile"><dt>Kündbar bis</dt><dd className="mono">{formatDate(terms.cancel_by)}</dd></div> : null}
-        {showEnd ? <div className="rg-calc-tile"><dt>{terms.actual_end ? "Vertragsende" : "Mögliches Vertragsende"}</dt><dd className="mono">{formatDate(computedEnd)}</dd></div> : null}
-        {reminders.length ? <div className="rg-calc-tile"><dt>{reminders.length > 1 ? "Erinnerungen am" : "Erinnerung am"}</dt><dd className="mono">{reminders.map((value) => formatDate(value)).join(", ")}</dd></div> : null}
+        {contractEnd ? <div className="rg-calc-tile"><dt>Vertragsende</dt><dd className="num">{formatDate(contractEnd)}</dd></div> : null}
+        {!fixedTerm && terms.cancel_by ? <div className="rg-calc-tile"><dt>Kündbar bis</dt><dd className="num">{formatDate(terms.cancel_by)}</dd></div> : null}
+        {remaining != null && remaining >= 0 ? <div className="rg-calc-tile"><dt>Restlaufzeit</dt><dd className="num">{remaining === 1 ? "1 Tag" : `${remaining} Tage`}</dd></div> : null}
       </dl>
-      {terms.explanation.map((line) => <p key={line} className="rg-calc-note">{line}</p>)}
+      {!termEditing && terms.explanation.length ? <details className="rg-how"><summary>Wie berechnet?</summary><p>{terms.explanation.join(" ")}</p></details> : null}
     </>}
   </div>;
+
+  // „Nächste Erinnerungen“: einzige Stelle in den Vertragsdaten mit Erinnerungsdaten.
+  const nextReminders = (terms.reminder_dates?.length ? terms.reminder_dates : terms.reminder_date ? [terms.reminder_date] : []).filter((value) => value >= register.as_of);
+  const reminderEditing = editSections.has("reminder");
+  const nextLine = <div className="rg-next">
+    <span><strong>Nächste Erinnerungen:</strong> {nextReminders.length ? <span className="num">{nextReminders.map((value) => formatDate(value)).join(", ")}</span> : <span className="cw-muted">{terms.status === "incomplete" ? "erst berechenbar, wenn die Laufzeit vollständig ist" : "keine"}</span>}</span>
+    {reminderEditing ? <span className="field-hint">werden nach dem Speichern neu berechnet</span> : onOpenDeadlines ? <button type="button" className="rg-link" onClick={onOpenDeadlines}>In Fristen &amp; Aufgaben ansehen</button> : null}
+  </div>;
+
+  function remindersRow(editing: boolean) {
+    if (!register) return null;
+    const leads = editing && leadDraft ? leadDraft : leadsOf(register);
+    const chips = reminderChips(leads);
+    const isTarget = target?.key === "reminder_lead_months";
+    return <div key="reminders" id="rg-field-reminder_lead_months" className={`rg-field rg-field--wide${isTarget ? " rg-field--target" : ""}`} tabIndex={isTarget ? -1 : undefined}>
+      <dt>Erinnern</dt>
+      <dd>
+        <ul className="rg-chips" aria-label="Erinnerungen">
+          {chips.map((chip) => <li key={chip.label} className={`rg-chip${editing && chip.lead ? " rg-chip--edit" : ""}`}>{chip.label}
+            {editing && chip.lead ? <button type="button" aria-label={`${chip.label} entfernen`} onClick={() => changeLeads(leads.filter((lead) => lead !== chip.lead))}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18" /></svg></button> : null}
+          </li>)}
+          {editing && !leadAdd && leads.length < 11 ? <li><button type="button" className="rg-chip-add" onClick={() => setLeadAdd({ value: "", unit: "weeks" })}>+ Erinnerung</button></li> : null}
+        </ul>
+        {editing && leadAdd ? <span className="rg-lead-add" role="group" aria-label="Erinnerung hinzufügen">
+          <label className="visually-hidden" htmlFor="rg-reminder_lead_months">Anzahl</label>
+          <input id="rg-reminder_lead_months" type="number" min={1} max={LEAD_MAX[leadAdd.unit]} inputMode="numeric" value={leadAdd.value} autoFocus
+            onChange={(event) => setLeadAdd((current) => current && ({ ...current, value: event.target.value }))}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addLead(); } }} />
+          <label className="visually-hidden" htmlFor="rg-reminder-unit">Einheit</label>
+          <select id="rg-reminder-unit" value={leadAdd.unit} onChange={(event) => setLeadAdd((current) => current && ({ ...current, unit: event.target.value as ReminderUnit }))}>
+            <option value="weeks">Wochen</option><option value="months">Monate</option>
+          </select>
+          <span>vorher</span>
+          <button type="button" className="btn btn-sm" onClick={addLead}>Hinzufügen</button>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setLeadAdd(null)}>Abbrechen</button>
+        </span> : null}
+        {editing ? <span className="field-hint rg-help">Standard des Vertragstyps: {leadText({ value: register.reminders?.default_lead_months ?? 4, unit: "months" })}. Jede Erinnerung erzeugt einen Termin in „Fristen &amp; Aufgaben“.</span> : null}
+        {isTarget && target?.note ? <span className="rg-field-note" role="status">{target.note}</span> : null}
+      </dd>
+    </div>;
+  }
+
   return <div className="rg-panel">
     <section className="cw-section rg-status" aria-labelledby="rg-status-heading">
       <div className="rg-status-row">
@@ -753,14 +867,15 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       if (hiddenSections?.has(section.id) && !editing && fields.every((def) => register.fields[def.key]?.value == null)) return null;
       const canEditHere = editable && register.business_status !== "geloescht";
       const actions = editing
-        ? <><button type="button" className="btn btn-sm" disabled={busy} onClick={() => cancelEdit(section.id)} aria-label={`Abbrechen (${section.title})`}>Abbrechen</button><button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button></>
+        ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => cancelEdit(section.id)} aria-label={`Abbrechen (${section.title})`}>Abbrechen</button>
         : canEditHere
           ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`} data-shortcut="edit" aria-keyshortcuts="E" title="Bearbeiten (E)">Bearbeiten</button>
           : null;
       const isTerm = section.id === "term";
-      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={isTerm ? CALENDAR_ICON : undefined} iconClassName={isTerm ? "section-tile--type" : undefined}>
+      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={isTerm ? CALENDAR_ICON : section.id === "reminder" ? BELL_ICON : undefined} iconClassName={isTerm ? "section-tile--type" : section.id === "reminder" ? "section-tile--dept" : undefined}>
         {isTerm ? terminationRow : null}
         <dl className="rg-fields">{fields.map((def) => {
+          if (def.kind === "reminders") return remindersRow(editing);
           if (def.kind === "auto_number") {
             const earlier = register.fields.internal_number?.value;
             return <div key={def.key} id="rg-field-register_number" className="rg-field">
@@ -776,13 +891,14 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           const label = def.kind === "period" ? PERIOD_LABEL[def.key as (typeof PERIODS)[number]] : register.fields[def.key]?.label ?? def.key;
           const isTarget = target?.key === def.key;
           const empty = !editing && def.kind !== "bool" && display(def) === "Nicht erfasst";
+          const originBadge = provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{provenance.origin === "ai" ? <SignalIcon tone="ai" /> : provenance.origin === "ai_confirmed" ? <SignalIcon tone="done" /> : null}{ORIGIN_LABEL[provenance.origin]}</span> : null;
+          const sourceChip = provenance?.document_source && onShowSource ? <button type="button" className="cw-source-button" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>Quelle</button> : null;
           return <div key={def.key} id={`rg-field-${def.key}`} className={isTarget ? "rg-field rg-field--target" : "rg-field"} tabIndex={isTarget ? -1 : undefined}>
-            <dt>{editing && def.kind !== "period" ? <label htmlFor={`rg-${def.key}`}>{label}</label> : label}</dt>
+            <dt>{editing && def.kind !== "period" ? <label htmlFor={`rg-${def.key}`}>{label}</label> : label}{editing && isTerm ? <>{originBadge}{sourceChip}</> : null}</dt>
             <dd>
               {editing ? input(def) : <span className="rg-value">{display(def)}</span>}
               {editing && FIELD_HELP[def.key] ? <span className="field-hint rg-help">{FIELD_HELP[def.key]}</span> : null}
-              {!editing && provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{provenance.origin === "ai" ? <SignalIcon tone="ai" /> : provenance.origin === "ai_confirmed" ? <SignalIcon tone="done" /> : null}{ORIGIN_LABEL[provenance.origin]}</span> : null}
-              {!editing && provenance?.document_source && onShowSource ? <button type="button" className="rg-link" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>S. {provenance.document_source.page}</button> : null}
+              {!editing ? <>{originBadge}{sourceChip}</> : null}
               {!editing && editable && provenance?.origin === "ai" ? <button type="button" className="rg-link" disabled={busy} onClick={() => confirm(fieldKeys(def))}>Bestätigen</button> : null}
               {empty && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo(def.key)} aria-label={`${label} erfassen`}>Erfassen</button> : null}
               {empty && editable && onSearchInDocument && searchableKeys?.has(def.key) && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => onSearchInDocument(def.key)} aria-label={`${label} im Dokument suchen`}>Im Dokument suchen</button> : null}
@@ -791,7 +907,14 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           </div>;
         })}</dl>
         {isTerm ? termCalc : null}
-        {section.id === "reminder" ? <ReminderLeadsEditor contractId={contractId} orgSlug={orgSlug} register={register} editable={canEditHere} onSaved={(next) => { setRegister(next); onChanged?.(); }} /> : null}
+        {section.id === "reminder" ? nextLine : null}
+        {editing ? <div className="cw-savebar" role="region" aria-label={`${section.title} speichern`}>
+          <div className="cw-savebar-msg">{dirty ? <><Signal tone="info" size="sm">Ungespeicherte Änderungen</Signal><span><kbd>Strg</kbd> + <kbd>S</kbd> speichert</span></> : <span>Keine Änderungen</span>}</div>
+          <div className="cw-savebar-actions">
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => cancelEdit(section.id)}>Verwerfen</button>
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>
+          </div>
+        </div> : null}
       </CollapsibleSection>
       {isTerm ? <>
         <ContractRetentionCard

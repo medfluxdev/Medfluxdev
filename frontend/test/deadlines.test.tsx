@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ContractDeadlinesPanel from "@/components/contracts/detail/ContractDeadlinesPanel";
+import ContractTimeline from "@/components/contracts/detail/ContractTimeline";
 import InboxView from "@/components/deadlines/InboxView";
 import NotificationCenter from "@/components/shell/NotificationCenter";
 import type { DeadlineDto, InboxDto } from "@/lib/domain-api/deadlines";
@@ -27,6 +27,10 @@ vi.mock("@/lib/domain-api/catalogs", () => ({
 }));
 vi.mock("@/lib/domain-api/ownership", () => ({
   listOwnershipAssignees: vi.fn().mockResolvedValue({ items: [{ id: "u-2", display_name: "Vertretung", email: "v@x", role: "contract_manager", hospital_id: null, department_id: null }] }),
+}));
+vi.mock("@/lib/domain-api/register", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/domain-api/register")>()),
+  getContractRegister: vi.fn().mockResolvedValue({ as_of: "2026-10-04", terms: { reminder_dates: [] } }),
 }));
 vi.mock("@/lib/domain-api/notifications", () => ({
   listNotifications: vi.fn().mockResolvedValue({
@@ -67,22 +71,23 @@ describe("Termine eines Vertrags", () => {
 
   it("zeigt berechnete Fristen mit KI-Hinweis und erledigt sie", async () => {
     const user = userEvent.setup();
-    const { container } = render(<ContractDeadlinesPanel contractId="c-1" orgSlug="test-klinik" />);
-    expect(await screen.findByText("Kündigungsfrist")).toBeInTheDocument();
-    expect(screen.getByText("Aus den Vertragsdaten berechnet")).toBeInTheDocument();
-    expect(screen.getByText("Basiert auf ungeprüften KI-Werten")).toBeInTheDocument();
-    expect(screen.getAllByText(/Eskalation: Chefin/)[0]).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();
-    expect(screen.getByText("Erledigte und abgebrochene Termine (1)")).toBeInTheDocument();
+    const { container } = render(<ContractTimeline contractId="c-1" orgSlug="test-klinik" workItems={[]} onOpenTarget={vi.fn()} />);
+    const list = await screen.findByRole("list", { name: "Termine und Aufgaben" });
+    const row = within(list).getAllByRole("listitem").find((item) => item.textContent?.startsWith("30.06.2027"))!;
+    expect(row).toHaveTextContent("Kündbar bis");
+    expect(within(row).getByText("Basiert auf ungeprüften KI-Werten")).toBeInTheDocument();
+    expect(row).toHaveTextContent("Eskalation an Chefin");
+    expect(within(row).queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();
+    expect(screen.getByText("Erledigte und abgebrochene (1)")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: "Erledigt" }));
+    await user.click(within(row).getByRole("button", { name: "Erledigt" }));
     expect(api.deadlineAction).toHaveBeenCalledWith("test-klinik", "d-1", "done");
   });
 
   it("legt einen manuellen Termin mit Zuständigkeit an", async () => {
     const user = userEvent.setup();
-    render(<ContractDeadlinesPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByText("Kündigungsfrist");
+    render(<ContractTimeline contractId="c-1" orgSlug="test-klinik" workItems={[]} onOpenTarget={vi.fn()} />);
+    await screen.findByRole("list", { name: "Termine und Aufgaben" });
     await user.click(screen.getByRole("button", { name: "Termin hinzufügen" }));
     const form = screen.getByRole("form", { name: "Neuer Termin" });
     await user.type(within(form).getByLabelText("Bezeichnung *"), "Wartungsprotokoll anfordern");

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ContractWorkspace from "@/components/contracts/detail/ContractWorkspace";
-import { ContractBackendAnalysisPanel, ContractBillingPanel, ContractIntelligencePanel, ContractLifecyclePanel, ContractOwnershipPanel, PdfViewer } from "@/components/contracts/detail/lazy";
+import { ContractBackendAnalysisPanel, ContractBillingPanel, ContractIntelligencePanel, ContractOwnershipPanel, PdfViewer } from "@/components/contracts/detail/lazy";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getContract } from "@/lib/domain-api/contracts";
 import type { ContractDetailResponse, EvidenceRef, SourceNavigationTarget } from "@/lib/contract-detail-types";
@@ -161,7 +161,6 @@ export default function ContractDetailPage() {
                 ) : null}
               </>,
               register: <ContractOwnershipPanel contractId={data.contract_id} orgSlug={organizationSlug} onSaved={load} />,
-              deadlines: <ContractLifecyclePanel contractId={data.contract_id} organizationSlug={organizationSlug} />,
               finance: <ContractBillingPanel contractId={data.contract_id} organizationSlug={organizationSlug} />,
             }}
           />

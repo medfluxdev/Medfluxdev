@@ -860,6 +860,7 @@ body { background: var(--color-bg); }
 .collapsible-icon svg { width: 20px; height: 20px; fill: none; stroke: currentcolor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .section-tile--type { --tile-fg: var(--color-tag-type); --tile-bg: var(--color-tag-type-bg); --tile-border: var(--color-tag-type-border); }
 .section-tile--device { --tile-fg: var(--color-tag-device); --tile-bg: var(--color-tag-device-bg); --tile-border: var(--color-tag-device-border); }
+.section-tile--dept { --tile-fg: var(--color-tag-department); --tile-bg: var(--color-tag-department-bg); --tile-border: var(--color-tag-department-border); }
 .section-tile--accent { --tile-fg: var(--color-accent); --tile-bg: var(--color-surface-accent); --tile-border: var(--color-border); }
 @media (forced-colors: active) { .collapsible-icon { border-color: CanvasText; } }
 @media (max-width: 640px) {

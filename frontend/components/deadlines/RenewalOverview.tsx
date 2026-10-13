@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FINANCE_ENTRIES_TARGET, contractHref, notEvaluableLink } from "@/lib/fix-targets";
 import { useEffect, useState } from "react";
-import { URGENCY } from "@/components/contracts/detail/ContractRenewalBrief";
+import { URGENCY } from "@/components/contracts/detail/ContractDecisionCard";
 import { listRenewals, type NotEvaluableItem, type RenewalListItem } from "@/lib/domain-api/registerGrid";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";

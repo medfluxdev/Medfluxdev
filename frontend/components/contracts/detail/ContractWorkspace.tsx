@@ -13,12 +13,11 @@ import type {
 } from "@/lib/contract-detail-types";
 import {
   RISK_LABEL_DETAIL,
-  SEVERITY_LABEL,
-  STATUS_LABEL_DETAIL,
 } from "@/lib/contract-detail-types";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { removeWarningsRepresentedByTasks } from "@/lib/action-dedup";
-import { archiveContract, getContractDeletionCapabilities, requestContractDeletion } from "@/lib/domain-api/contracts";
+import { archiveContract, getContractDeletionCapabilities, requestContractDeletion, reviewContractFact } from "@/lib/domain-api/contracts";
+import { updateContractRegister } from "@/lib/domain-api/register";
 import { PdfViewer } from "./lazy";
 import EvidencePane from "./EvidencePane";
 import FactReviewPanel from "./FactReviewPanel";
@@ -34,14 +33,14 @@ import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 
 import Dialog from "@/components/ui/Dialog";
 import ContractHistoryPanel from "./ContractHistoryPanel";
-import ContractDeadlinesPanel from "./ContractDeadlinesPanel";
-import ContractRenewalBrief from "./ContractRenewalBrief";
+import ContractDecisionCard from "./ContractDecisionCard";
+import ContractTimeline, { type EndCheck } from "./ContractTimeline";
 import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import StatusBadge from "@/components/ui/StatusBadge";
-import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, documentSearchHref, MISSING_SEARCH, fixLabel, sectionAnchor, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
+import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
 import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
@@ -130,19 +129,12 @@ function yesNo(value: boolean | null): string {
   return value ? "Ja" : "Nein";
 }
 
-function statusLabel(value: string | null): string {
-  if (!value) return "Unbekannt";
-  return STATUS_LABEL_DETAIL[value] ?? value;
-}
 
 function riskLabel(value: string | null): string {
   if (!value) return "Unbekannt";
   return RISK_LABEL_DETAIL[value] ?? value;
 }
 
-function severityLabel(value: string): string {
-  return SEVERITY_LABEL[value] ?? value;
-}
 
 function evidenceTarget(ref: EvidenceRef): SourceNavigationTarget {
   return {
@@ -457,10 +449,6 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
   const startEvidence = evidenceById(data.dates.start_date_evidence) ?? findExactEvidence("dates.start_date", "start_date");
   const endEvidence = evidenceById(data.dates.documented_end_evidence) ?? findExactEvidence("dates.documented_end_date", "dates.calculated_end_date", "termination.end_date");
-  const durationEvidence = evidenceById(data.dates.duration_evidence) ?? findExactEvidence("dates.duration_years", "duration");
-  const renewalEvidence = evidenceById(data.dates.auto_renewal_evidence) ?? findExactEvidence("dates.automatic_renewal", "termination.automatic_renewal");
-  const paymentStartEvidence = evidenceById(data.dates.payment_start_evidence) ?? findExactEvidence("dates.payment_start_rule", "payment.start");
-  const minimumDurationEvidence = evidenceById(data.dates.minimum_duration_evidence) ?? findExactEvidence("dates.minimum_duration_months", "duration.minimum");
   const cancellationEvidence = findExactEvidence("dates.latest_cancellation_date", "termination.latest_cancellation_date", "termination.notice_period");
   const contractNumberEvidence = findExactEvidence("identity.contract_number", "contract_number");
   const annualCostEvidence = findExactEvidence("costs.annual_recurring", "cost.annual_recurring", "payment.annual_cost", "annual_cost");
@@ -494,7 +482,29 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const fixedTerm = termModel === "fixed_term";
   const openEnded = termModel === "perpetual";
   const aiAnnual = data.costs.annual_recurring.amount != null;
-  const cancellationOrigin = calculatedOrigin(data.dates.latest_cancellation_date, data.dates.latest_cancellation_basis);
+
+  // KI-Prüfung „Abweichung beim Vertragsende“: Dokument und Vertragsdaten widersprechen sich, und noch hat
+  // niemand die Angabe geprüft. „Beibehalten“ hält die Prüfung fest, „Übernehmen“ setzt das feste Vertragsende.
+  const endFact = (data.fact_review_states ?? []).find((fact) => fact.fact_key === "dates.end_date");
+  const endUnreviewed = !endFact || endFact.state === "unreviewed" || endFact.state === "needs_review";
+  const maintainedEnd = data.register_facts?.contract_end ?? null;
+  const documentedEnd = data.dates.documented_end_date ?? null;
+  const endDiffers = documentedEnd ? documentedEnd !== maintainedEnd : fixedTerm;
+  const endCheck: EndCheck | null = hasAi && maintainedEnd && endUnreviewed && endDiffers ? {
+    documented: documentedEnd,
+    maintained: maintainedEnd,
+    fixedTerm,
+    onShowSource: endEvidence ? () => openEvidence(endEvidence) : undefined,
+    onAdopt: async () => {
+      await updateContractRegister(orgSlug, data.contract_id, { changes: { term_fixed_end_date: documentedEnd } });
+      await reviewContractFact(data.contract_id, orgSlug, { fact_key: "dates.end_date", action: "confirmed", system_value: endFact?.original_value ?? documentedEnd, note: "Vertragsende aus dem Dokument übernommen." });
+      reload();
+    },
+    onKeep: async () => {
+      await reviewContractFact(data.contract_id, orgSlug, { fact_key: "dates.end_date", action: "corrected", corrected_value: maintainedEnd, system_value: endFact?.original_value ?? documentedEnd, note: "Vertragsende aus den Vertragsdaten beibehalten." });
+      reload();
+    },
+  } : null;
 
   // Leistungsumfang: Zustand je Leistung und Zusammenfassung (nur mit analysiertem Dokument).
   const scopeRows = SCOPE_FIELDS.map(([key, label, prop]) => ({ key, label, state: scopeState(key, data.scope[prop]) }));
@@ -685,24 +695,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           onShowSource={showSource}
           hiddenSections={!showAllSections && data.sections && !data.sections.maintenance ? new Set(["maintenance"]) : undefined}
           afterStatus={slots.register}
+          onOpenDeadlines={() => setRoute("deadlines")}
         /></>}
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 
-        {activeTab === "deadlines" && <><ContractRenewalBrief contractId={data.contract_id} orgSlug={orgSlug} /><ContractDeadlinesPanel contractId={data.contract_id} orgSlug={orgSlug} />
-          <Section title="Aufgaben zu diesem Vertrag" description="Dieselben Aufgaben wie unter Fristen & Aufgaben → Aufgaben, hier nur für diesen Vertrag.">
-            {openTasks.length === 0 ? <p className="cw-muted">Keine offenen Aufgaben.</p> : <ul className="cw-task-list">{openTasks.map((item) => <li key={item.work_item_id} className="cw-task"><Signal tone={item.requires_review ? "ai" : item.severity === "critical" ? "critical" : item.severity === "high" || item.severity === "medium" ? "warning" : "neutral"}>{item.requires_review ? "KI-Prüfung" : severityLabel(item.severity)}</Signal><div><strong>{item.title_de}</strong>{item.why_de ? <p>{item.why_de}</p> : null}</div><span>{item.target_date ? formatDate(item.target_date) : "Keine Frist"}</span>{(() => { const target = workItemTarget(item.item_type, item.requires_review); return target && target.tab !== "deadlines" ? <button type="button" className="btn btn-sm" onClick={() => openTarget(target)}>{item.requires_review ? "Prüfen" : fixLabel(target)}</button> : null; })()}</li>)}</ul>}
-          </Section></>}
+        {activeTab === "deadlines" && <div className="stack-4">
+          <ContractDecisionCard contractId={data.contract_id} orgSlug={orgSlug} />
+          <ContractTimeline contractId={data.contract_id} orgSlug={orgSlug} workItems={data.work_items} endCheck={endCheck} onOpenTarget={openTarget} />
+        </div>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
-
-        {activeTab === "deadlines" && hasAi && <>
-          <h2 className="cw-subheading">Aus dem Vertragsdokument (KI-Analyse)</h2>
-          <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Beginn" value={data.dates.start_date ? formatDate(data.dates.start_date) : "Nicht verfügbar"} origin={data.dates.start_date ? (startEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={startEvidence} />} /><InfoCard label="Dokumentiertes Ende" value={data.dates.documented_end_date ? formatDate(data.dates.documented_end_date) : "Nicht verfügbar"} origin={data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={endEvidence} />} /><InfoCard label="Berechnetes Ende" value={data.dates.calculated_end_date ? formatDate(data.dates.calculated_end_date) : "Nicht verfügbar"} origin={calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis)} /><InfoCard label="Restlaufzeit" value={data.dates.days_until_end != null ? `${data.dates.days_until_end} Tage` : "Nicht verfügbar"} origin={data.dates.days_until_end != null ? "calculated" : "missing"} /></div>
-          <Section title="Kündigung & Verlängerung"><dl className="cw-definition-grid"><div><dt>Spätester Kündigungstermin <SourceButton evidence={cancellationEvidence} /></dt><dd><span className="cw-value-origin">{data.dates.latest_cancellation_date ? formatDate(data.dates.latest_cancellation_date) : "Nicht verfügbar"}<OriginBadge origin={cancellationOrigin} /></span></dd></div><div><dt>Automatische Verlängerung <SourceButton evidence={renewalEvidence} /></dt><dd>{yesNo(data.dates.automatic_renewal)}</dd></div><div><dt>Nächste Verlängerung</dt><dd><span className="cw-value-origin">{data.dates.next_renewal_date ? formatDate(data.dates.next_renewal_date) : "Nicht verfügbar"}<OriginBadge origin={calculatedOrigin(data.dates.next_renewal_date, data.dates.next_renewal_basis)} /></span></dd></div><div><dt>Mindestlaufzeit <SourceButton evidence={minimumDurationEvidence ?? durationEvidence} /></dt><dd>{data.dates.minimum_duration_months != null ? `${data.dates.minimum_duration_months} Monate` : "Nicht verfügbar"}</dd></div><div><dt>Zahlungsbeginn <SourceButton evidence={paymentStartEvidence} /></dt><dd>{data.dates.payment_start_rule ?? "Nicht verfügbar"}</dd></div><div><dt>Aktueller Status</dt><dd>{statusLabel(data.dates.current_status)}</dd></div></dl></Section>
-          {(hasCalculationBasis(data.dates.calculated_end_basis) || hasCalculationBasis(data.dates.latest_cancellation_basis) || hasCalculationBasis(data.dates.next_renewal_basis)) && <Section title="Berechnungsgrundlage" description="Rechenweg der Termine"><div className="cw-calc-grid"><CalculationBasisPanel title="Berechnetes Vertragsende" basis={data.dates.calculated_end_basis} /><CalculationBasisPanel title="Spätester Kündigungstermin" basis={data.dates.latest_cancellation_basis} /><CalculationBasisPanel title="Nächste Verlängerung" basis={data.dates.next_renewal_basis} /></div></Section>}
-        </>}
-
         {activeTab === "finance" && <>
           <ContractFinancePanel contractId={data.contract_id} orgSlug={orgSlug} />
           {hasAi && <>

@@ -179,16 +179,19 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: "erinnerung",
         question: "Wer bekommt eine Erinnerung?",
-        answer: ["Die im Vertrag eingetragene Empfängerin bzw. der Empfänger. Ist niemand eingetragen, geht die Erinnerung an die hauptverantwortliche Person. Benachrichtigungen erscheinen in der Glocke oben rechts."],
+        answer: [
+          "Die im Vertrag eingetragene Empfängerin bzw. der Empfänger. Ist niemand eingetragen, geht die Erinnerung an die hauptverantwortliche Person. Benachrichtigungen erscheinen in der Glocke oben rechts.",
+          "Wann erinnert wird, legen Sie in den Vertragsdaten unter „Erinnerung & Verantwortung“ → „Erinnern“ fest, z. B. „4 Monate vorher“ und „12 Wochen vorher“. Jede Erinnerung erscheint als Termin unter „Fristen & Aufgaben“.",
+        ],
         links: [{ label: "Benachrichtigungen", href: "/postfach" }],
-        keywords: "benachrichtigung glocke e-mail empfänger",
+        keywords: "benachrichtigung glocke e-mail empfänger erinnern vorher wochen monate",
       },
       {
         id: "kuendigungsentscheidung",
         question: "Wie bereite ich eine Kündigungsentscheidung vor?",
         answer: [
-          "Steht eine Kündigungsfrist an, zeigt die Entscheidungsvorlage „Kündbar bis“, das aktuelle Ende, die jährlichen Kosten und was ohne Handeln passiert. Fakten und Beträge sind berechnet; die Hinweise sind nur Beratung – entscheiden und die Entscheidung erfassen tun Sie.",
-          "Alle anstehenden Entscheidungen stehen unter „Fristen & Aufgaben“ → „Kündigungsentscheidungen“.",
+          "Im Vertrag unter Fristen & Aufgaben zeigt die Karte „Entscheidung“ „Kündbar bis“, das Vertragsende, die jährlichen Kosten und was ohne Handeln passiert. Fakten und Beträge sind berechnet; die Hinweise sind nur Beratung. Entscheiden Sie mit Verlängern, Neu verhandeln, Kündigen oder Beobachten, optional mit „Wirksam am“ und Notiz – frühere Entscheidungen stehen darunter.",
+          "Alle anstehenden Entscheidungen aller Verträge stehen unter „Fristen & Aufgaben“ → „Kündigungsentscheidungen“.",
         ],
         links: [{ label: "Kündigungsentscheidungen", href: "/fristen?ansicht=entscheidungen" }],
         keywords: "verlängerung verlängern kündigen entscheidungsvorlage",

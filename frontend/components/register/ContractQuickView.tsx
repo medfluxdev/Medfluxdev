@@ -45,7 +45,7 @@ export default function ContractQuickView({ organizationSlug, contractId, onClos
           <dl className="quick-facts">
             <div><dt>Vertragsart</dt><dd>{data.fields.term_model?.value ? TERM_MODEL_LABEL[data.fields.term_model.value as TermModel] : "–"}</dd></div>
             <div><dt>Kündbar bis</dt><dd>{formatDate(data.terms.cancel_by)}</dd></div>
-            <div><dt>Mögliches Ende</dt><dd>{formatDate(data.terms.actual_end ?? data.terms.possible_end)}</dd></div>
+            <div><dt>Vertragsende</dt><dd>{formatDate(data.terms.actual_end ?? data.terms.possible_end)}</dd></div>
             <div><dt>Erinnerung am</dt><dd>{formatDate(data.terms.reminder_date)}</dd></div>
             <div><dt>Erinnerung an</dt><dd>{field("reminder_recipient_account_id")}</dd></div>
             <div><dt>Vertragstyp</dt><dd>{field("contract_type_id")}</dd></div>

@@ -50,7 +50,7 @@ test("5 – Termin anlegen", async ({ page }, info) => {
 
   // Aufraeumen ueber die Oberflaeche (prueft zugleich „Abbrechen“): offene Testtermine schliessen,
   // damit Folgelaeufe und Bildvergleich denselben Datenstand sehen.
-  const open = page.locator("li.rg-deadline:not(.rg-inactive)").filter({ hasText: "Angebot einholen" });
+  const open = page.getByRole("list", { name: "Termine und Aufgaben" }).getByRole("listitem").filter({ hasText: "Angebot einholen" });
   while (await open.count()) {
     const before = await open.count();
     await open.first().getByRole("button", { name: "Abbrechen" }).click();

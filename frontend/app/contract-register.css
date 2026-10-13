@@ -310,3 +310,99 @@
 @media (max-width:900px){.rt-tiles,.ac-row{grid-template-columns: 1fr}}
 @media (max-width:640px){.rg-calc{margin-inline: -12px;padding-inline: 12px}}
 @media (forced-colors: active){.rg-calc-tile,.rt-tile,.ac-seg{border-color: CanvasText}.ac-seg button[aria-pressed="true"]{outline: 2px solid Highlight}}
+
+/* Fristen & Aufgaben: Karte „Entscheidung“ */
+.dec-body{display: grid;gap: var(--space-4)}
+.dec-kpis{display: grid;grid-template-columns: repeat(4,minmax(0,1fr));gap: 12px;margin: 0}
+.dec-kpi{padding: 12px 14px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface)}
+.dec-kpi dt{margin-bottom: 2px;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.dec-kpi dd{display: grid;gap: 2px;margin: 0}
+.dec-kpi small{color: var(--color-text-muted);font-size: var(--text-small)}
+.dec-value{font-size: var(--text-title-s);font-weight: var(--weight-semibold)}
+.dec-none{color: var(--color-text-subtle);font-weight: var(--weight-medium)}
+.dec-sentence{display: flex;flex-wrap: wrap;align-items: center;justify-content: space-between;gap: 10px 16px}
+.dec-summary{margin: 0;padding: 10px 14px;border-left: 3px solid var(--color-border-strong);background: var(--color-surface-subtle)}
+.dec-hints{display: grid;gap: 6px;margin: 0;padding: 0;list-style: none;font-size: var(--text-small)}
+.dec-hints li{display: flex;flex-wrap: wrap;align-items: baseline;gap: 6px 10px}
+.dec-hint-kind{font-weight: var(--weight-semibold)}
+.dec-partners summary{cursor: pointer;font-size: var(--text-small);font-weight: var(--weight-semibold);color: var(--color-text-muted)}
+.dec-partners ul{margin: 6px 0 0;padding-left: 18px}
+.dec-seg{display: inline-flex;justify-self: start;overflow: hidden;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm)}
+.dec-seg button{min-height: 40px;padding: 0 18px;border: 0;background: var(--color-surface);color: var(--color-text);font: inherit;font-weight: var(--weight-semibold);cursor: pointer}
+.dec-seg button + button{border-left: 1px solid var(--color-border-strong)}
+.dec-seg button:hover{background: var(--color-surface-subtle)}
+.dec-seg button[aria-pressed="true"]{background: var(--color-accent);color: var(--color-accent-contrast)}
+.dec-form{display: grid;grid-template-columns: 220px minmax(0,1fr);gap: 14px 16px;max-width: 760px;padding: 16px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
+.dec-field{display: grid;gap: 6px}
+.dec-field label{font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.dec-field input,.dec-field textarea{min-height: 40px;padding: 6px 12px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit}
+.dec-full{grid-column: 1 / -1}
+.dec-form .rg-actions{justify-content: flex-end}
+.dec-history h3{margin: 0 0 6px;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.dec-history ul{margin: 0;padding: 0;list-style: none}
+.dec-history-row{display: grid;grid-template-columns: 110px 150px 180px minmax(0,1fr) auto;align-items: center;gap: 12px;padding: 8px 0;border-top: 1px solid var(--color-border-subtle);font-size: var(--text-small)}
+.dec-history-actions{display: flex;gap: 12px}
+
+/* Fristen & Aufgaben: Zeitachse „Termine & Aufgaben“ */
+.tl{position: relative;margin: 0;padding: 0;list-style: none}
+.tl::before{content: "";position: absolute;top: 18px;bottom: 18px;left: 7px;width: 2px;background: var(--color-border-subtle)}
+.tl-row{position: relative;display: grid;grid-template-columns: 16px 96px 132px minmax(0,1fr) 170px auto;align-items: center;gap: 12px;padding: 10px 0}
+.tl-row + .tl-row{border-top: 1px solid var(--color-border-subtle)}
+.tl-row--ai{margin: 0 -12px;padding-right: 12px;padding-left: 12px;border-radius: var(--radius-sm);background: var(--color-ai-bg)}
+.tl-row--ai + .tl-row,.tl-row + .tl-row--ai{border-top-color: transparent}
+.tl-dot{position: relative;width: 16px;height: 16px;border: 2px solid var(--color-border-strong);border-radius: 50%;background: var(--color-surface)}
+.tl-dot--warning{border-color: var(--color-warning);background: var(--color-warning-bg)}
+.tl-dot--critical{border-color: var(--color-danger);background: var(--color-danger-bg)}
+.tl-dot--ai{border-color: var(--color-ai);background: var(--color-ai-bg)}
+.tl-dot--today{border-color: var(--color-accent);background: var(--color-accent)}
+.tl-date{font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.tl-title{font-weight: var(--weight-medium)}
+.tl-title small{display: block;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-regular)}
+.tl-who{color: var(--color-text-muted);font-size: var(--text-small)}
+.tl-act,.tl-actions{display: flex;justify-content: flex-end;gap: 6px}
+.tl-today{color: var(--color-accent);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.tl-compare{display: grid;grid-column: 2 / -1;gap: 12px;padding: 14px 16px;border: 1px solid var(--color-ai-border);border-radius: var(--radius-sm);background: var(--color-surface)}
+.tl-compare-cols{display: grid;grid-template-columns: 1fr 1fr;gap: 12px;margin: 0}
+.tl-cmp{padding: 12px 14px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
+.tl-cmp dt{display: flex;align-items: center;gap: 6px;margin-bottom: 4px;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.tl-cmp dd{margin: 0;font-size: var(--text-title-s);font-weight: var(--weight-semibold)}
+.tl-cmp small{display: block;margin-top: 4px;color: var(--color-text-muted);font-size: var(--text-small)}
+.tl-none{color: var(--color-text-subtle)}
+.tl-compare .rg-actions{justify-content: flex-end}
+.tl-done{margin-top: var(--space-3)}
+.tl-done summary{cursor: pointer;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.tl--closed{margin-top: 10px;opacity: .75}
+
+/* Vertragsdaten: „Wie berechnet?“, „Erinnern“, „Nächste Erinnerungen“ */
+.rg-how summary{display: inline;color: var(--color-link);font-size: var(--text-small);font-weight: var(--weight-semibold);cursor: pointer}
+.rg-how p{margin: 8px 0 0;font-size: var(--text-small)}
+.rg-field--wide{grid-column: 1 / -1}
+.rg-chips{display: flex;flex-wrap: wrap;align-items: center;gap: 8px;margin: 0;padding: 0;list-style: none}
+.rg-chip{display: inline-flex;align-items: center;gap: 4px;min-height: 32px;padding: 0 12px;border: 1px solid var(--color-border);border-radius: var(--radius-pill);background: var(--color-surface-subtle);font-size: var(--text-small);font-weight: var(--weight-medium)}
+.rg-chip--edit{padding-right: 4px}
+.rg-chip button{display: grid;place-items: center;width: 24px;height: 24px;border: 0;border-radius: 50%;background: transparent;color: var(--color-icon);cursor: pointer}
+.rg-chip button:hover{background: var(--color-surface)}
+.rg-chip svg{width: 14px;height: 14px;fill: none;stroke: currentcolor;stroke-width: 2;stroke-linecap: round}
+.rg-chip-add{min-height: 32px;padding: 0 12px;border: 1px dashed var(--color-border-strong);border-radius: var(--radius-pill);background: transparent;color: var(--color-link);font: inherit;font-size: var(--text-small);font-weight: var(--weight-semibold);cursor: pointer}
+.rg-lead-add{display: flex;flex-wrap: wrap;align-items: center;gap: 8px}
+.rg-lead-add input{width: 90px}
+.rg-next{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 14px;margin-top: var(--space-3);padding: 10px 14px;border-radius: var(--radius-sm);background: var(--color-surface-subtle);font-size: var(--text-small)}
+
+@media (max-width: 1100px){
+  .dec-kpis{grid-template-columns: repeat(2,minmax(0,1fr))}
+  .dec-form{grid-template-columns: 1fr}
+  .dec-history-row{grid-template-columns: 100px minmax(0,1fr)}
+  .tl-row{grid-template-columns: 16px 96px minmax(0,1fr)}
+  .tl-kind,.tl-title,.tl-who,.tl-act{grid-column: 3}
+  .tl-compare{grid-column: 1 / -1}
+  .tl-compare-cols{grid-template-columns: 1fr}
+}
+@media (forced-colors: active){
+  .tl-dot,.dec-seg button[aria-pressed="true"]{forced-color-adjust: none;border-color: CanvasText}
+  .dec-seg button[aria-pressed="true"]{background: Highlight;color: HighlightText}
+}
+@media (max-width: 640px){
+  .dec-seg{display: grid;grid-template-columns: 1fr 1fr;justify-self: stretch}
+  .dec-seg button:nth-child(3){border-left: 0}
+  .dec-seg button:nth-child(n+3){border-top: 1px solid var(--color-border-strong)}
+}
