@@ -69,6 +69,7 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
         {account?.is_developer && prefs.developerMode && onOpenDeveloper ? (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenDeveloper} aria-label="Entwicklerdetails öffnen">DEV</button>
         ) : null}
+        <Link className="btn btn-ghost btn-icon" href="/hilfe" aria-label="Hilfe" title="Hilfe und Tastenkürzel"><Icon name="help" /></Link>
         <ThemeToggle />
         {account && membership ? <NotificationCenter /> : null}
         {account && role ? (
@@ -82,6 +83,7 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
             <div className="shell-menu-panel">
               <div className="shell-menu-head"><strong>{account.display_name}</strong><small>{account.email}</small></div>
               <Link href="/profile">Mein Profil</Link>
+              <Link href="/hilfe">Hilfe & Tastenkürzel</Link>
               {role === "admin" || account.is_developer ? <Link href="/admin">Verwaltung</Link> : null}
               {account.is_developer ? <Link href="/developer">Entwicklung</Link> : null}
               {previewOf || role === "admin" ? (

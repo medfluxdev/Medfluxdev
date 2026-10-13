@@ -26,6 +26,7 @@ import "./release-gate.css";
 import "./brand-identity.css";
 import "./assistant.css";
 import "./master-data.css";
+import "./help.css";
 import "./styles/components.css";
 import "./styles/shell.css";
 

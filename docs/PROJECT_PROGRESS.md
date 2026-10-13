@@ -5710,3 +5710,11 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 
 - Taste **E** (nicht beim Tippen, ohne Strg/Alt) löst „Bearbeiten“ im aktuellen Kasten aus: Vorrang hat der Kasten mit dem Fokus, sonst der oberste Kasten, dessen Knopf gerade im Bild ist; danach Fokus ins erste Feld. Knöpfe melden sich mit `data-shortcut="edit"` an (`aria-keyshortcuts="E"`, Titel „Bearbeiten (E)“): Organisationszuordnung und die Kästen der Vertragsdaten. Logik `triggerEditShortcut` in `components/shell/useShortcuts.ts`; steht in der Kürzel-Übersicht (?).
 - Tests: `test/edit-shortcut.test.tsx` (Kasten mit Fokus, Fokus ins Feld, nicht beim Tippen, ohne Knopf nichts). Vitest 367 bestanden.
+
+### Nachtrag 2026-10-13 – Hilfe-Seite mit Tastenkürzeln
+
+- **Neu `/hilfe`** (`app/hilfe/page.tsx`, `app/help.css`): Themen links (springen per `#id`), Suche über Fragen, Antworten und Stichwörter (Treffer öffnen sich), Antworten als aufklappbare Einträge mit Links direkt zur Stelle, Abschnitt „Tastenkürzel“.
+- **Inhalte pflegen:** `lib/help-content.ts` (`HELP_SECTIONS`) – neues Thema = ein Eintrag; Sprungmarken `/hilfe#<id>`. Startinhalt: Erste Schritte, Verträge bearbeiten, KI und Prüfung, Fristen und Erinnerungen, Farben und Zeichen, Stammdaten und Verwaltung.
+- **Tastenkürzel aus einer Quelle:** `SHORTCUTS` hat jetzt Gruppen (Überall, Springen, Bearbeiten, Bedienung) und `g dann h` → Hilfe; `components/shell/ShortcutTable.tsx` zeigt sie im Dialog „?“ (mit Knopf „Zur Hilfe“) und auf der Seite.
+- **Erreichbar:** Fragezeichen-Symbol in der Kopfleiste, Kontomenü „Hilfe & Tastenkürzel“, Strg+K („Hilfe“), `g h`.
+- **Tests:** `test/help-page.test.tsx` (alle Themen und Kürzel, Suche, eindeutige Sprungmarken, Link im Dialog, axe). `npm run verify` grün (371 Tests, Build ok).

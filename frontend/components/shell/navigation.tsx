@@ -6,7 +6,7 @@ import { MASTER_DATA_SECTIONS } from "@/lib/master-data";
 
 export type IconName =
   | "home" | "inbox" | "contracts" | "partners" | "equipment" | "deadlines" | "renewal" | "tasks"
-  | "import" | "review" | "evidence" | "archive" | "analytics" | "history" | "admin" | "settings" | "search" | "developer" | "masterdata";
+  | "import" | "review" | "evidence" | "archive" | "analytics" | "history" | "admin" | "settings" | "search" | "developer" | "masterdata" | "help";
 
 export const ICONS: Record<IconName, ReactNode> = {
   home: <><path d="M4 11 12 4l8 7" /><path d="M6 10v10h12V10" /></>,
@@ -27,6 +27,7 @@ export const ICONS: Record<IconName, ReactNode> = {
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
   developer: <><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16" /></>,
+  help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" /></>,
   masterdata: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" /></>,
 };
 
@@ -79,6 +80,7 @@ export const EXTRA_PAGES: NavItem[] = [
   { label: "Einstellungen", href: "/settings", icon: "settings", roles: ["admin"] },
   { label: "Mein Profil", href: "/profile", icon: "settings" },
   { label: "Benutzer", href: "/settings/users", icon: "admin", roles: ["admin"] },
+  { label: "Hilfe", href: "/hilfe", icon: "help", keywords: "hilfe fragen anleitung faq tastenkürzel tastatur kürzel shortcuts", shortcut: "g h" },
   { label: "Sicherheit & Datenschutz", href: "/sicherheit", icon: "admin", keywords: "datenschutz dsgvo it sicherheit verschlüsselung ki lokal" },
   { label: "Nummernkreis", href: "/settings/nummernkreis", icon: "admin", roles: ["admin"], keywords: "vertragsnummer nummern" },
   { label: "Rollen & Rechte", href: "/settings/roles", icon: "admin" },

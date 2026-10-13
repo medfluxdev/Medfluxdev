@@ -3,21 +3,30 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-export const SHORTCUTS: { keys: string; label: string }[] = [
-  { keys: "Strg + K", label: "Suche und Befehle öffnen" },
-  { keys: "/", label: "Suche öffnen" },
-  { keys: "g dann s", label: "Mein Tag" },
-  { keys: "g dann v", label: "Vertragsliste" },
-  { keys: "g dann t", label: "Fristen & Aufgaben" },
-  { keys: "g dann p", label: "Benachrichtigungen" },
-  { keys: "g dann d", label: "Stammdaten" },
-  { keys: "e", label: "Bearbeiten im aktuellen Kasten (wo verfügbar)" },
-  { keys: "Strg + S", label: "Formular speichern (wo verfügbar)" },
-  { keys: "?", label: "Diese Übersicht" },
-  { keys: "Esc", label: "Dialog oder Seitenleiste schließen" },
+export type ShortcutGroup = "Überall" | "Springen" | "Bearbeiten" | "Bedienung";
+
+/** Einzige Liste der Tastenkürzel: Dialog „?“ und Hilfe-Seite lesen beide von hier. */
+export const SHORTCUTS: { keys: string; label: string; group: ShortcutGroup }[] = [
+  { keys: "Strg + K", label: "Suche und Befehle öffnen", group: "Überall" },
+  { keys: "/", label: "Suche öffnen", group: "Überall" },
+  { keys: "?", label: "Tastenkürzel anzeigen", group: "Überall" },
+  { keys: "Esc", label: "Dialog oder Seitenleiste schließen", group: "Überall" },
+  { keys: "g dann s", label: "Mein Tag", group: "Springen" },
+  { keys: "g dann v", label: "Vertragsliste", group: "Springen" },
+  { keys: "g dann t", label: "Fristen & Aufgaben", group: "Springen" },
+  { keys: "g dann p", label: "Benachrichtigungen", group: "Springen" },
+  { keys: "g dann d", label: "Stammdaten", group: "Springen" },
+  { keys: "g dann h", label: "Hilfe", group: "Springen" },
+  { keys: "e", label: "Bearbeiten im aktuellen Kasten (wo verfügbar)", group: "Bearbeiten" },
+  { keys: "Strg + S", label: "Formular speichern (wo verfügbar)", group: "Bearbeiten" },
+  { keys: "← / →", label: "Zwischen Reitern wechseln, wenn ein Reiter den Fokus hat", group: "Bedienung" },
+  { keys: "Pos1 / Ende", label: "Zum ersten bzw. letzten Reiter", group: "Bedienung" },
+  { keys: "↑ / ↓, Enter", label: "In der Suche (Strg + K) auswählen und öffnen", group: "Bedienung" },
 ];
 
-const ROUTES: Record<string, string> = { s: "/", v: "/register", t: "/fristen", p: "/postfach", d: "/stammdaten" };
+export const SHORTCUT_GROUPS: ShortcutGroup[] = ["Überall", "Springen", "Bearbeiten", "Bedienung"];
+
+const ROUTES: Record<string, string> = { s: "/", v: "/register", t: "/fristen", p: "/postfach", d: "/stammdaten", h: "/hilfe" };
 
 function typing(target: EventTarget | null) {
   const element = target as HTMLElement | null;

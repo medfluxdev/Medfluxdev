@@ -1,0 +1,230 @@
+/**
+ * Inhalte der Hilfe-Seite (/hilfe). Neues Thema: einen Eintrag in `HELP_SECTIONS` ergänzen –
+ * Suche, Inhaltsverzeichnis und Sprungmarken (`/hilfe#<id>`) entstehen daraus.
+ * Nur Aussagen, die das Programm wirklich einlöst; Links mit `href` führen direkt zur Stelle.
+ */
+
+export interface HelpEntry {
+  /** Stabile Sprungmarke, z. B. `/hilfe#vertrag-importieren`. */
+  id: string;
+  question: string;
+  /** Absätze. */
+  answer: string[];
+  /** Optionale Schritte als nummerierte Liste. */
+  steps?: string[];
+  links?: { label: string; href: string }[];
+  /** Zusätzliche Suchbegriffe (Synonyme). */
+  keywords?: string;
+}
+
+export interface HelpSection {
+  id: string;
+  title: string;
+  description: string;
+  entries: HelpEntry[];
+}
+
+export const HELP_SECTIONS: HelpSection[] = [
+  {
+    id: "erste-schritte",
+    title: "Erste Schritte",
+    description: "Wo Sie anfangen und wie ein Vertrag ins System kommt.",
+    entries: [
+      {
+        id: "mein-tag",
+        question: "Was zeigt „Mein Tag“?",
+        answer: [
+          "Die Startseite sammelt, was heute Aufmerksamkeit braucht: anstehende Fristen, offene Aufgaben und Verträge mit fehlenden Angaben. Jeder Punkt führt direkt zur Stelle, an der er erledigt wird.",
+        ],
+        links: [{ label: "Mein Tag öffnen", href: "/" }],
+        keywords: "start dashboard übersicht",
+      },
+      {
+        id: "vertrag-importieren",
+        question: "Wie importiere ich einen Vertrag?",
+        answer: [
+          "Der Import führt in fünf Schritten durch: Ziel, Dateien, Erfassung, Prüfen & starten, Ergebnis. PDF- und Word-Dateien (DOCX) werden angenommen.",
+          "Bei der Erfassung wählen Sie, ob die lokale KI die Angaben ausliest und eine Person sie prüft, ob die KI direkt übernimmt (nur wenn Ihre Organisation das erlaubt) oder ob Sie alles von Hand erfassen.",
+        ],
+        links: [{ label: "Vertrag importieren", href: "/import" }],
+        keywords: "hochladen upload pdf docx dokument assistent",
+      },
+      {
+        id: "vertrag-anlegen",
+        question: "Kann ich einen Vertrag ohne Dokument anlegen?",
+        answer: ["Ja. Unter „Vertrag anlegen“ erfassen Sie die Angaben von Hand. Das Dokument kann später unter Dokumente ergänzt werden."],
+        links: [{ label: "Vertrag anlegen", href: "/contracts/new" }],
+        keywords: "manuell neu",
+      },
+    ],
+  },
+  {
+    id: "vertraege",
+    title: "Verträge bearbeiten",
+    description: "Vertragsliste, Vertragsakte und Zuständigkeit.",
+    entries: [
+      {
+        id: "vertragsliste",
+        question: "Wie finde ich Verträge in der Liste?",
+        answer: [
+          "Die Vertragsliste hat die Reiter Bestand, Zu prüfen und Archiv. Suche, Schnellfilter (Status, Vertragspartner, Abteilung) und „Weitere Filter“ wirken zusammen.",
+          "Der Zustand der Liste steht in der Adresse – Sie können eine gefilterte Liste als Lesezeichen speichern oder weitergeben. Mit „Excel exportieren“ speichern Sie die aktuelle Auswahl als Tabelle.",
+        ],
+        links: [{ label: "Vertragsliste", href: "/register" }],
+        keywords: "suchen filtern export excel register bestand",
+      },
+      {
+        id: "bearbeiten",
+        question: "Wie bearbeite ich Vertragsdaten?",
+        answer: [
+          "Jeder Kasten in den Vertragsdaten hat einen eigenen Knopf „Bearbeiten“. Mehrere Kästen können gleichzeitig offen sein; „Speichern“ speichert alle offenen Änderungen.",
+          "Schneller geht es mit der Tastatur: E öffnet das Bearbeiten im aktuellen Kasten, Strg + S speichert. Verlassen Sie die Seite mit ungespeicherten Änderungen, fragt MedFlux nach.",
+        ],
+        keywords: "ändern editieren speichern tastatur",
+      },
+      {
+        id: "organisationszuordnung",
+        question: "Was gehört in die Organisationszuordnung?",
+        answer: [
+          "Sie legt fest, wem der Vertrag gehört und wer ihn nutzt: Vertragstyp, Krankenhaus, verantwortliche und nutzende Abteilungen, Kostenstelle, Gerätearten und verantwortliche Personen.",
+          "Im Kopf des Kastens sehen Sie, ob die Pflichtangaben vollständig sind (Vertragstyp, Krankenhaus, verantwortliche Abteilung, Kostenstelle, Hauptverantwortlich). Fehlt etwas, öffnet ein Klick auf den Hinweis das Bearbeiten.",
+          "Das Krankenhaus lässt sich erst ändern, wenn keine Abteilungen mehr zugeordnet sind.",
+        ],
+        keywords: "zuständigkeit abteilung kostenstelle verantwortlich geräteart pflichtangaben",
+      },
+      {
+        id: "status",
+        question: "Welche Bearbeitungsstatus gibt es?",
+        answer: [
+          "Ein Vertrag beginnt „In Arbeit“. Sind alle nötigen Angaben da, setzen Sie ihn auf „Gültig“; später auf „Gekündigt“ oder „Beendet“. „Storniert“ markiert einen Vertrag als ungültig, die Daten bleiben erhalten.",
+          "Was für „Gültig“ noch fehlt, steht direkt unter dem Status – jeder Eintrag springt zum Feld. Eine Stornierung kann die Administration aufheben; der Vertrag kehrt dann in seinen früheren Status zurück.",
+        ],
+        keywords: "gültig gekündigt beendet storniert in arbeit freigabe",
+      },
+      {
+        id: "was-fehlt",
+        question: "Wo sehe ich, was an einem Vertrag noch fehlt?",
+        answer: ["Auf der Übersicht eines Vertrags zeigt „Was fehlt noch?“ alle Lücken. Jeder Hinweis führt direkt zu dem Feld, in dem er behoben wird; dieselbe Liste erreichen Sie über Strg + K."],
+        keywords: "lücken fehlend offene punkte",
+      },
+      {
+        id: "einklappen",
+        question: "Kann ich Kästen einklappen?",
+        answer: ["Ja: mit dem Pfeil links neben der Überschrift oder per Doppelklick auf eine freie Stelle im Kopf. MedFlux merkt sich eingeklappte Kästen in Ihrem Browser."],
+        keywords: "zuklappen ausblenden kasten",
+      },
+    ],
+  },
+  {
+    id: "ki",
+    title: "KI und Prüfung",
+    description: "Was die lokale KI tut – und was sie nicht tut.",
+    entries: [
+      {
+        id: "ki-grundsatz",
+        question: "Was macht die KI, was das System?",
+        answer: [
+          "Die KI liest Fakten aus dem Dokument, zum Beispiel Laufzeit, Kündigungsfrist oder Kosten. Fristen, Kosten, Warnungen und Vertragsregeln berechnet das System selbst – nachvollziehbar und ohne KI.",
+          "Die KI läuft lokal auf Ihrem Server; Vertragsinhalte verlassen Ihr Haus nicht. Fehlt eine Angabe im Dokument, bleibt das Feld leer – es wird nichts erfunden.",
+        ],
+        links: [{ label: "Sicherheit & Datenschutz", href: "/sicherheit" }],
+        keywords: "künstliche intelligenz lokal ollama datenschutz",
+      },
+      {
+        id: "ki-werte-pruefen",
+        question: "Wie prüfe ich Werte der KI?",
+        answer: [
+          "KI-Werte sind gekennzeichnet und nennen ihre Fundstelle im Dokument. Ein Klick zeigt die Stelle im PDF. Bestätigen oder korrigieren Sie den Wert; danach gilt er als von einer Person geprüft.",
+          "Verträge mit offenen Prüfungen stehen in der Vertragsliste unter „Zu prüfen“.",
+        ],
+        links: [{ label: "Zu prüfen", href: "/register?ansicht=review" }],
+        keywords: "bestätigen korrigieren fundstelle nachweis quelle",
+      },
+      {
+        id: "erneut-erfassen",
+        question: "Kann die KI ein Dokument erneut auslesen?",
+        answer: [
+          "Ja, unter Dokumente → Dokument: „Erneut aus dem Dokument erfassen“. Das Ergebnis ist zunächst nur ein Vorschlag; Sie wählen aus, welche Angaben übernommen werden. Von Personen gepflegte Werte werden nie überschrieben.",
+          "Ohne KI können Sie einen Wert auch selbst aus dem Text übernehmen: Stelle im Text markieren – Seite und Zitat werden als Nachweis gespeichert.",
+        ],
+        keywords: "neu analysieren reanalyse vorschlag markieren text",
+      },
+    ],
+  },
+  {
+    id: "fristen",
+    title: "Fristen und Erinnerungen",
+    description: "Wie Fristen entstehen und wer erinnert wird.",
+    entries: [
+      {
+        id: "fristen-berechnung",
+        question: "Woher kommen die Fristen?",
+        answer: [
+          "Aus den gepflegten Vertragsdaten: Laufzeitmodell, Beginn, Ende, Kündigungsfrist und Verlängerung. Daraus berechnet MedFlux „Kündbar bis“, das mögliche Vertragsende und die Erinnerung. Fehlt eine nötige Angabe, sagt der Kasten „Berechnete Fristen“, welche.",
+          "Alle Fristen und Aufgaben finden Sie unter „Fristen & Aufgaben“; „Nur meine“ zeigt Ihre persönliche Wiedervorlage.",
+        ],
+        links: [{ label: "Fristen & Aufgaben", href: "/fristen" }],
+        keywords: "kündigung kündbar bis vertragsende laufzeit wiedervorlage",
+      },
+      {
+        id: "erinnerung",
+        question: "Wer bekommt eine Erinnerung?",
+        answer: ["Die im Vertrag eingetragene Empfängerin bzw. der Empfänger. Ist niemand eingetragen, geht die Erinnerung an die hauptverantwortliche Person. Benachrichtigungen erscheinen in der Glocke oben rechts."],
+        links: [{ label: "Benachrichtigungen", href: "/postfach" }],
+        keywords: "benachrichtigung glocke e-mail empfänger",
+      },
+    ],
+  },
+  {
+    id: "farben",
+    title: "Farben und Zeichen",
+    description: "Was Farben, Formen und Symbole bedeuten.",
+    entries: [
+      {
+        id: "signale",
+        question: "Was bedeuten die farbigen Hinweise?",
+        answer: [
+          "Der Normalzustand ist grau. Braucht etwas Aufmerksamkeit, zeigt MedFlux immer Farbe, Form und Wort zusammen: Achteck = kritisch, Dreieck = prüfen, Kreis mit i = Information, Kreis mit Haken = erledigt, Funke = KI-Vorschlag.",
+          "Grün erscheint nur für Bestätigtes oder Vollständiges.",
+        ],
+        keywords: "signal warnung kritisch grün rot gelb farbe",
+      },
+      {
+        id: "kennfarben",
+        question: "Warum haben Vertragstyp, Abteilung und Kostenstelle eigene Farben?",
+        answer: ["Das sind Kennfarben: Sie zeigen, um welche Art von Angabe es sich handelt (Vertragstyp, Vertragspartner, Abteilung, Kostenstelle, Geräteart), jeweils mit eigenem Symbol. Sie sagen nichts über einen Zustand aus."],
+        keywords: "kennfarbe chip symbol",
+      },
+    ],
+  },
+  {
+    id: "daten",
+    title: "Stammdaten und Verwaltung",
+    description: "Grunddaten, Regeln und Rechte.",
+    entries: [
+      {
+        id: "stammdaten",
+        question: "Wo pflege ich Vertragspartner, Abteilungen und Kostenstellen?",
+        answer: [
+          "Alle Grunddaten liegen unter Stammdaten: Vertragspartner, Krankenhäuser, Abteilungen, Kostenstellen, Vertragstypen, Kategorien, Gerätearten und Auswahllisten. Viele Arten lassen sich als CSV importieren und exportieren.",
+        ],
+        links: [{ label: "Stammdaten", href: "/stammdaten" }],
+        keywords: "csv import lieferant partner kostenstelle abteilung",
+      },
+      {
+        id: "vertragsregeln",
+        question: "Was sind Vertragsregeln?",
+        answer: ["Eigene Prüfregeln Ihrer Organisation, zum Beispiel eine Mindest-Kündigungsfrist oder höchste Jahreskosten. MedFlux prüft jeden Vertrag dagegen; fehlt ein Wert, lautet das Ergebnis „unbekannt“ statt geraten."],
+        links: [{ label: "Vertragsregeln", href: "/stammdaten/vertragsregeln" }],
+        keywords: "regel playbook richtlinie prüfung",
+      },
+      {
+        id: "rollen",
+        question: "Wer darf was?",
+        answer: ["Es gibt vier Rollen: Administrator, Vertragsmanager, Prüfer und Leser. Was jede Rolle darf, steht unter Rollen & Rechte. Vertrauliche Verträge sehen nur berechtigte Personen."],
+        links: [{ label: "Rollen & Rechte", href: "/settings/roles" }],
+        keywords: "rechte berechtigung admin vertraulich",
+      },
+    ],
+  },
+];
