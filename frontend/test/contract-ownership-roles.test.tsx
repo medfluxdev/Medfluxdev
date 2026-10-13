@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   listContractTypes: vi.fn(),
   getContractRegister: vi.fn(),
   updateContractRegister: vi.fn(),
+  listDeviceTypes: vi.fn(),
+  getContractDeviceTypes: vi.fn(),
+  saveContractDeviceTypes: vi.fn(),
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
@@ -25,6 +28,11 @@ vi.mock("@/lib/domain-api/organizations", () => ({
 }));
 vi.mock("@/lib/domain-api/catalogs", () => ({ listContractTypes: mocks.listContractTypes }));
 vi.mock("@/lib/domain-api/register", () => ({ getContractRegister: mocks.getContractRegister, updateContractRegister: mocks.updateContractRegister }));
+vi.mock("@/lib/domain-api/deviceTypes", () => ({
+  listDeviceTypes: mocks.listDeviceTypes,
+  getContractDeviceTypes: mocks.getContractDeviceTypes,
+  saveContractDeviceTypes: mocks.saveContractDeviceTypes,
+}));
 vi.mock("@/lib/domain-api/ownership", () => ({
   getContractOwnership: mocks.getContractOwnership,
   getContractDepartmentRoles: mocks.getContractDepartmentRoles,
@@ -59,6 +67,47 @@ describe("Contract360 Organisationszuordnung", () => {
     });
     mocks.getContractRegister.mockResolvedValue({ fields: { contract_type_id: { value: "t-wartung" }, contract_category_id: { value: "cat-mt" } } });
     mocks.updateContractRegister.mockResolvedValue({});
+    const deviceType = (id: string, label: string, area: string, area_label: string) => ({ id, code: id, label, area, area_label, department_id: null, department_name: null, keywords: null, description: null, is_active: true, sort_order: 0 });
+    mocks.listDeviceTypes.mockResolvedValue({ items: [
+      deviceType("dt-ct", "CT", "medizintechnik", "Medizintechnik"),
+      deviceType("dt-mrt", "MRT", "medizintechnik", "Medizintechnik"),
+      deviceType("dt-server", "Server", "it", "IT"),
+      { ...deviceType("dt-monitor", "Patientenmonitoring", "sonstiges", "Sonstiges"), department_id: "dept-icu", department_name: "Intensivmedizin" },
+    ] });
+    mocks.getContractDeviceTypes.mockResolvedValue({ items: [{ device_type_id: "dt-ct", label: "CT", area: "medizintechnik", area_label: "Medizintechnik", quantity: 2, note: "Haus A" }], suggestions: [] });
+    mocks.saveContractDeviceTypes.mockImplementation(async (_org: string, _id: string, items: { device_type_id: string }[]) => ({ items: items.map((item) => ({ ...item, label: item.device_type_id, area: "it", area_label: "IT" })), suggestions: [] }));
+  });
+
+  it("Gerätearten: passende der Abteilungen zuerst, hinzufügen und entfernen, Anzahl und Notiz bleiben", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    expect(await screen.findByRole("list", { name: "Gerätearten" })).toHaveTextContent("CT");
+    const add = screen.getByLabelText("Geräteart hinzufügen");
+    // Radiologie liegt unter Medizintechnik; Patientenmonitoring gehört der nutzenden Intensivmedizin.
+    const matching = within(add).getByRole("group", { name: "Passend zu den Abteilungen" });
+    expect(within(matching).getAllByRole("option").map((option) => option.textContent)).toEqual(["MRT", "Patientenmonitoring"]);
+    expect(within(add).getByRole("group", { name: "IT" })).toHaveTextContent("Server");
+    expect(within(add).queryByRole("option", { name: "CT" })).not.toBeInTheDocument();
+
+    await user.selectOptions(add, "dt-server");
+    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
+    await waitFor(() => expect(mocks.saveContractDeviceTypes).toHaveBeenCalledWith("klinik", "contract-1", [
+      { device_type_id: "dt-ct", quantity: 2, note: "Haus A" },
+      { device_type_id: "dt-server", quantity: null, note: null },
+    ]));
+
+    mocks.saveContractDeviceTypes.mockClear();
+    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
+    await waitFor(() => expect(mocks.updateContractOwnership).toHaveBeenCalledTimes(2));
+    expect(mocks.saveContractDeviceTypes).not.toHaveBeenCalled();
+  });
+
+  it("Gerätearten nicht ladbar: Feld fehlt, Zuordnung bleibt speicherbar", async () => {
+    mocks.listDeviceTypes.mockRejectedValue(new Error("down"));
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await screen.findByLabelText("Vertragstyp");
+    expect(screen.queryByLabelText("Geräteart hinzufügen")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Zuordnung speichern" })).toBeEnabled();
   });
 
   it("Vertragstyp: zeigt den aktuellen Typ und speichert einen neuen (unpassende Kategorie wird geleert)", async () => {
@@ -84,7 +133,7 @@ describe("Contract360 Organisationszuordnung", () => {
     const responsible = await screen.findByLabelText("Verantwortliche Abteilung");
     expect(responsible).toHaveValue("dept-rad");
     expect(screen.getByRole("option", { name: "Medizintechnik › Radiologie" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Intensivmedizin" })).toBeChecked();
+    expect(screen.getByRole("list", { name: "Nutzende Abteilungen" })).toHaveTextContent("Intensivmedizin");
 
     await user.selectOptions(screen.getByLabelText("Kostenstelle"), "cc-1");
     await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
@@ -98,6 +147,19 @@ describe("Contract360 Organisationszuordnung", () => {
       cost_center_id: "cc-1",
     }));
     expect(screen.getByRole("status")).toHaveTextContent("Organisationszuordnung gespeichert.");
+  });
+
+  it("nutzende Abteilung entfernen: Auswahlfeld bietet sie wieder an und speichert ohne sie", async () => {
+    const user = userEvent.setup();
+    render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Intensivmedizin entfernen" }));
+    expect(screen.queryByRole("list", { name: "Nutzende Abteilungen" })).not.toBeInTheDocument();
+    expect(within(screen.getByLabelText("Nutzende Abteilung hinzufügen")).getByRole("option", { name: "Intensivmedizin" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Zuordnung speichern" }));
+    await waitFor(() => expect(mocks.updateContractDepartmentRoles).toHaveBeenCalledWith("klinik", "contract-1", {
+      responsible_department_id: "dept-rad",
+      beneficiary_department_ids: [],
+    }));
   });
 
   it("ohne Benutzer: sagt es und verlinkt nicht auf eine leere Auswahl", async () => {
@@ -141,13 +203,13 @@ describe("Contract360 Organisationszuordnung", () => {
     await user.selectOptions(department, "dept-rad");
     expect(screen.getByLabelText("Kostenstelle")).toHaveValue("cc-rad");
     // Kostenstelle einer nutzenden Abteilung wählen: die verantwortliche Abteilung bleibt.
-    await user.click(screen.getByRole("checkbox", { name: "Intensivmedizin" }));
+    await user.selectOptions(screen.getByLabelText("Nutzende Abteilung hinzufügen"), "dept-icu");
     const center = screen.getByLabelText("Kostenstelle");
     expect(within(center).getByRole("group", { name: "Verantwortliche Abteilung" })).toHaveTextContent("4400");
     expect(within(center).getByRole("group", { name: "Nutzende Abteilungen" })).toHaveTextContent("4500");
     await user.selectOptions(center, "cc-icu");
     expect(department).toHaveValue("dept-rad");
-    expect(screen.getByRole("checkbox", { name: "Intensivmedizin" })).toBeChecked();
+    expect(screen.getByRole("list", { name: "Nutzende Abteilungen" })).toHaveTextContent("Intensivmedizin");
     expect(center).toHaveValue("cc-icu");
   });
 

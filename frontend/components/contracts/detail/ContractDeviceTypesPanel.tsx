@@ -12,6 +12,10 @@ import {
   type ContractDeviceTypes,
   type DeviceTypeDto,
 } from "@/lib/domain-api/deviceTypes";
+import { getOrganizationStructure } from "@/lib/domain-api/organizations";
+import { getContractDepartmentRoles } from "@/lib/domain-api/ownership";
+import { deviceTypeGroups, type ContractDepartmentContext } from "@/lib/device-type-match";
+import { departmentFullPath } from "@/lib/organization-tree";
 
 type Draft = { device_type_id: string; quantity: string; note: string };
 
@@ -27,7 +31,7 @@ export default function ContractDeviceTypesPanel({ contractId, orgSlug, canEdit,
   contractId: string;
   orgSlug: string;
   canEdit: boolean;
-  /** Name der verantwortlichen Abteilung: ihre Gerätearten stehen in der Auswahl zuerst. */
+  /** Name der verantwortlichen Abteilung – Rückfall, falls die Abteilungen des Vertrags nicht ladbar sind. */
   responsibleDepartment?: string | null;
   onSaved?: () => void;
 }) {
@@ -37,6 +41,7 @@ export default function ContractDeviceTypesPanel({ contractId, orgSlug, canEdit,
   const [draft, setDraft] = useState<Draft[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [contextDepartments, setContextDepartments] = useState<ContractDepartmentContext[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,12 +61,25 @@ export default function ContractDeviceTypesPanel({ contractId, orgSlug, canEdit,
     return () => { cancelled = true; };
   }, [contractId, orgSlug]);
 
+  // Verantwortliche und nutzende Abteilungen (mit übergeordneten) – gleiche Regel wie in der Organisationszuordnung.
+  useEffect(() => {
+    if (!canEdit) return;
+    let cancelled = false;
+    Promise.all([getContractDepartmentRoles(orgSlug, contractId), getOrganizationStructure(orgSlug)])
+      .then(([roles, structure]) => {
+        if (cancelled) return;
+        const all = structure?.departments ?? [];
+        const ids = [roles?.responsible_department_id, ...(roles?.beneficiary_department_ids ?? [])].filter(Boolean);
+        setContextDepartments(all.filter((item) => ids.includes(item.id)).map((item) => ({ id: item.id, path: departmentFullPath(item, all) })));
+      })
+      .catch(() => { if (!cancelled) setContextDepartments(null); });
+    return () => { cancelled = true; };
+  }, [canEdit, contractId, orgSlug]);
+
   const byId = useMemo(() => new Map(catalog.map((item) => [item.id, item])), [catalog]);
   const dirty = data !== null && JSON.stringify(toDraft(data)) !== JSON.stringify(draft);
   const chosen = new Set(draft.map((item) => item.device_type_id));
-  const available = catalog.filter((item) => item.is_active && !chosen.has(item.id));
-  const own = available.filter((item) => responsibleDepartment && item.department_name === responsibleDepartment);
-  const areas = Array.from(new Set(available.map((item) => item.area_label)));
+  const groups = deviceTypeGroups(catalog, chosen, contextDepartments ?? (responsibleDepartment ? [{ id: null, path: responsibleDepartment }] : []));
 
   function update(index: number, patch: Partial<Draft>) {
     setDraft((current) => current.map((item, position) => (position === index ? { ...item, ...patch } : item)));
@@ -113,10 +131,9 @@ export default function ContractDeviceTypesPanel({ contractId, orgSlug, canEdit,
     </ul> : null}
 
     {canEdit ? <div className="device-type-actions">
-      {available.length ? <select aria-label="Geräteart hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setDraft((current) => [...current, { device_type_id: id, quantity: "", note: "" }]); }}>
+      {groups.length ? <select aria-label="Geräteart hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setDraft((current) => [...current, { device_type_id: id, quantity: "", note: "" }]); }}>
         <option value="">+ Geräteart hinzufügen …</option>
-        {own.length ? <optgroup label={`Abteilung ${responsibleDepartment}`}>{own.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup> : null}
-        {areas.map((area) => <optgroup key={area} label={area}>{available.filter((item) => item.area_label === area && !own.includes(item)).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}
+        {groups.map((group) => <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}
       </select> : null}
       <Link className="rg-link" href="/stammdaten/geraetearten">Gerätearten pflegen</Link>
       {dirty ? <span className="device-type-save">

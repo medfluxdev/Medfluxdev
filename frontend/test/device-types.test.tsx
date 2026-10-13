@@ -10,9 +10,13 @@ const api = vi.hoisted(() => ({
   getContractDeviceTypes: vi.fn(),
   saveContractDeviceTypes: vi.fn(),
   getDeviceTypeComparison: vi.fn(),
+  getContractDepartmentRoles: vi.fn(),
+  getOrganizationStructure: vi.fn(),
 }));
 
 vi.mock("@/lib/domain-api/deviceTypes", async (original) => ({ ...(await original<object>()), ...api }));
+vi.mock("@/lib/domain-api/ownership", () => ({ getContractDepartmentRoles: api.getContractDepartmentRoles }));
+vi.mock("@/lib/domain-api/organizations", () => ({ getOrganizationStructure: api.getOrganizationStructure }));
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => vi.fn() }));
 
 const kind = (id: string, label: string, area: "medizintechnik" | "it", areaLabel: string, department: string | null = null) => ({
@@ -24,6 +28,9 @@ describe("Gerätearten am Vertrag", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.listDeviceTypes.mockResolvedValue({ items: [kind("ct", "CT", "medizintechnik", "Medizintechnik", "Medizintechnik"), kind("mrt", "MRT", "medizintechnik", "Medizintechnik"), kind("server", "Server", "it", "IT", "IT")], areas: {} });
+    // Abteilungen des Vertrags nicht ladbar: Rückfall auf den Namen der verantwortlichen Abteilung.
+    api.getContractDepartmentRoles.mockRejectedValue(new Error("down"));
+    api.getOrganizationStructure.mockResolvedValue({ hospitals: [], departments: [] });
     api.getContractDeviceTypes.mockResolvedValue({ items: [], suggestions: [{ device_type_id: "ct", label: "CT", reason: "im Dokument: „somatom“" }] });
     api.saveContractDeviceTypes.mockImplementation(async (_org: string, _id: string, items: { device_type_id: string; quantity: number | null; note: string | null }[]) => ({
       items: items.map((item) => ({ ...item, label: item.device_type_id.toUpperCase(), area: "medizintechnik", area_label: "Medizintechnik" })), suggestions: [],
@@ -39,7 +46,7 @@ describe("Gerätearten am Vertrag", () => {
     expect(await axe(container)).toHaveNoViolations();
 
     const select = screen.getByRole("combobox", { name: "Geräteart hinzufügen" });
-    expect(within(select).getAllByRole("group")[0]).toHaveAttribute("label", "Abteilung Medizintechnik");
+    expect(within(select).getAllByRole("group")[0]).toHaveAttribute("label", "Passend zu den Abteilungen");
     await user.click(within(suggestions).getByRole("button", { name: "Übernehmen" }));
     await user.type(screen.getByRole("spinbutton", { name: "Anzahl CT" }), "2");
     await user.selectOptions(screen.getByRole("combobox", { name: "Geräteart hinzufügen" }), "server");
@@ -49,6 +56,21 @@ describe("Gerätearten am Vertrag", () => {
       { device_type_id: "server", quantity: null, note: null },
     ]));
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("gleiche Regel wie die Organisationszuordnung: nutzende und übergeordnete Abteilungen zählen", async () => {
+    api.getContractDepartmentRoles.mockResolvedValue({ contract_id: "c-1", responsible_department_id: "d-rad", beneficiary_department_ids: ["d-it"], unclassified_department_ids: [] });
+    api.getOrganizationStructure.mockResolvedValue({ hospitals: [], departments: [
+      { id: "d-mt", hospital_id: "h-1", parent_id: null, name: "Medizintechnik", code: "MT", is_active: true },
+      { id: "d-rad", hospital_id: "h-1", parent_id: "d-mt", name: "Radiologie", code: "RAD", is_active: true },
+      { id: "d-it", hospital_id: "h-1", parent_id: null, name: "IT-Abteilung", code: "IT", is_active: true },
+    ] });
+    api.listDeviceTypes.mockResolvedValue({ items: [kind("mrt", "MRT", "medizintechnik", "Medizintechnik"), kind("server", "Server", "it", "IT"), { ...kind("aufzug", "Aufzug", "it", "Haustechnik"), area: "haustechnik" }], areas: {} });
+    render(<ContractDeviceTypesPanel contractId="c-1" orgSlug="test-klinik" canEdit responsibleDepartment="Radiologie" />);
+    const select = await screen.findByRole("combobox", { name: "Geräteart hinzufügen" });
+    await waitFor(() => expect(within(select).getAllByRole("group")[0]).toHaveAttribute("label", "Passend zu den Abteilungen"));
+    expect(within(within(select).getAllByRole("group")[0]).getAllByRole("option").map((option) => option.textContent)).toEqual(["MRT", "Server"]);
+    expect(within(select).getByRole("group", { name: "Haustechnik" })).toHaveTextContent("Aufzug");
   });
 
   it("ohne Bearbeitungsrecht nur lesen", async () => {

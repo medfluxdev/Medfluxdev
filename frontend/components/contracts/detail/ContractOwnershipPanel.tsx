@@ -8,6 +8,15 @@ import { getOrganizationStructure, listCostCenters } from "@/lib/domain-api/orga
 import { listContractTypes, type ContractCategoryDto, type ContractTypeDto } from "@/lib/domain-api/catalogs";
 import { getContractRegister, updateContractRegister } from "@/lib/domain-api/register";
 import { departmentFullPath } from "@/lib/organization-tree";
+import { contractHref } from "@/lib/fix-targets";
+import { deviceTypeGroups } from "@/lib/device-type-match";
+import {
+  getContractDeviceTypes,
+  listDeviceTypes,
+  saveContractDeviceTypes,
+  type ContractDeviceTypeDto,
+  type DeviceTypeDto,
+} from "@/lib/domain-api/deviceTypes";
 import {
   getContractDepartmentRoles,
   getContractOwnership,
@@ -44,6 +53,10 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const [typeId, setTypeId] = useState("");
   const [savedTypeId, setSavedTypeId] = useState("");
   const [savedCategoryId, setSavedCategoryId] = useState("");
+  // Gerätearten des Vertrags (Anzahl und Notiz bleiben erhalten; gepflegt unter Verknüpfungen → Geräte).
+  const [deviceCatalog, setDeviceCatalog] = useState<DeviceTypeDto[] | null>(null);
+  const [savedDevices, setSavedDevices] = useState<ContractDeviceTypeDto[]>([]);
+  const [deviceIds, setDeviceIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,8 +73,14 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       getContractDepartmentRoles(orgSlug, contractId),
       listContractTypes(orgSlug).catch(() => null),
       getContractRegister(orgSlug, contractId).catch(() => null),
-    ]).then(([structure, costCenters, users, ownership, departmentRoles, catalog, register]) => {
+      listDeviceTypes(orgSlug).catch(() => null),
+      getContractDeviceTypes(orgSlug, contractId).catch(() => null),
+    ]).then(([structure, costCenters, users, ownership, departmentRoles, catalog, register, deviceTypes, contractDevices]) => {
       if (cancelled) return;
+      const devices = Array.isArray(contractDevices?.items) ? contractDevices.items : null;
+      setDeviceCatalog(Array.isArray(deviceTypes?.items) && devices ? deviceTypes.items : null);
+      setSavedDevices(devices ?? []);
+      setDeviceIds((devices ?? []).map((item) => item.device_type_id));
       const currentType = (register?.fields.contract_type_id?.value as string | null | undefined) ?? "";
       setTypes((catalog?.contract_types ?? []).filter((item) => item.is_active || item.id === currentType));
       setCategories(catalog?.contract_categories ?? []);
@@ -121,6 +140,14 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   [assignees, hospitalId, selectedDepartments]);
   // Alle Benutzer der Organisation; passende (Krankenhaus/Bereich) zuerst.
   const otherAssignees = useMemo(() => assignees.filter((item) => !visibleAssignees.includes(item)), [assignees, visibleAssignees]);
+  const deviceGroups = useMemo(() => deviceCatalog ? deviceTypeGroups(
+    deviceCatalog,
+    deviceIds,
+    departments.filter((item) => selectedDepartments.has(item.id)).map((item) => ({ id: item.id, path: departmentFullPath(item, departments) })),
+  ) : [], [deviceCatalog, deviceIds, departments, selectedDepartments]);
+  function deviceLabel(id: string) {
+    return deviceCatalog?.find((item) => item.id === id)?.label ?? savedDevices.find((item) => item.device_type_id === id)?.label ?? "Geräteart";
+  }
   const isAdmin = Boolean(account?.is_developer || role === "admin");
   function assigneeName(id: string) {
     return assignees.find((item) => item.id === id)?.display_name ?? "Unbekannte Person";
@@ -177,6 +204,15 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         setSavedTypeId(typeId);
         if (!keepCategory) setSavedCategoryId("");
       }
+      if (deviceCatalog && deviceIds.join() !== savedDevices.map((item) => item.device_type_id).join()) {
+        const kept = new Map(savedDevices.map((item) => [item.device_type_id, item]));
+        const devices = await saveContractDeviceTypes(orgSlug, contractId, deviceIds.map((id) => ({
+          device_type_id: id, quantity: kept.get(id)?.quantity ?? null, note: kept.get(id)?.note ?? null,
+        })));
+        const items = Array.isArray(devices?.items) ? devices.items : [];
+        setSavedDevices(items);
+        setDeviceIds(items.map((item) => item.device_type_id));
+      }
       setAssignment(ownership);
       setMessage("Organisationszuordnung gespeichert.");
       onSaved?.();
@@ -189,16 +225,18 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
 
   if (!editable) return null;
   const actions = loading ? null : <><button type="button" className="btn btn-primary btn-sm" onClick={() => void save()} disabled={saving}>{saving ? "Wird gespeichert…" : "Zuordnung speichern"}</button></>;
-  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description="Verantwortlichen Bereich, nutzende Bereiche und zuständige Person getrennt festlegen." actions={actions}>
+  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description="Verantwortlichen Bereich, nutzende Bereiche, Gerätearten und zuständige Person festlegen." actions={actions}>
     {message ? <p className="cw-ownership-status" role="status">{message}</p> : null}
     {loading ? <p role="status">Zuordnung wird geladen…</p> : <div className="cw-ownership-grid">
-      <label className="cw-ownership-type"><span>Vertragstyp</span><select value={typeId} onChange={(event) => setTypeId(event.target.value)}><option value="">Nicht festgelegt</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>{types.length === 0 ? <small>Noch keine Vertragstypen angelegt. {isAdmin ? <Link href="/stammdaten/vertragstypen">Vertragstypen pflegen</Link> : null}</small> : null}</label>
+      <p className="cw-ownership-group">Vertrag</p>
+      <label><span>Vertragstyp</span><select value={typeId} onChange={(event) => setTypeId(event.target.value)}><option value="">Nicht festgelegt</option>{types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>{types.length === 0 ? <small>Noch keine Vertragstypen angelegt. {isAdmin ? <Link href="/stammdaten/vertragstypen">Vertragstypen pflegen</Link> : null}</small> : null}</label>
       <label><span>Krankenhaus</span><select value={hospitalId} disabled={hospitalLocked} onChange={(event) => {
         setHospitalId(event.target.value);
         setResponsibleDepartmentId("");
         setBeneficiaryDepartmentIds([]);
         setCenterId("");
       }}><option value="">Organisationsweit</option>{hospitals.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{hospitalLocked ? <small>Das Krankenhaus lässt sich erst nach Aufheben der Bereichsrollen ändern.</small> : null}</label>
+      <p className="cw-ownership-group">Abteilungen, Kostenstelle und Geräte</p>
       <label><span>Verantwortliche Abteilung</span><select value={responsibleDepartmentId} disabled={!hospitalId} onChange={(event) => {
         const next = event.target.value;
         setResponsibleDepartmentId(next);
@@ -206,7 +244,15 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
         // Kostenstelle der Abteilung automatisch übernehmen (falls hinterlegt).
         setCenterId(centers.find((item) => item.department_id === next && item.hospital_id === hospitalId)?.id ?? "");
       }}><option value="">Bitte auswählen</option>{visibleDepartments.map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select></label>
-      <div className="cw-ownership-field"><span>Nutzende Abteilungen</span><div className="cw-ownership-checks">{visibleDepartments.filter((item) => item.id !== responsibleDepartmentId).map((item) => <label key={item.id} className="cw-ownership-check"><input type="checkbox" checked={beneficiaryDepartmentIds.includes(item.id)} onChange={() => toggleBeneficiary(item.id)} /><span>{departmentFullPath(item, departments)}</span></label>)}{hospitalId && visibleDepartments.length === 0 ? <small>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</small> : null}</div></div>
+      <div className="cw-ownership-field"><span id="cw-beneficiary-label">Nutzende Abteilungen</span>
+        <div className="cw-multi">{beneficiaryDepartmentIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-beneficiary-label">{beneficiaryDepartmentIds.map((id) => {
+          const department = departments.find((item) => item.id === id);
+          const name = department ? departmentFullPath(department, departments) : "Unbekannter Bereich";
+          return <li key={id}><span>{name}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleBeneficiary(id)} aria-label={`${name} entfernen`}>✕</button></li>;
+        })}</ul> : null}
+        <select aria-label="Nutzende Abteilung hinzufügen" value="" disabled={!hospitalId || visibleDepartments.length === 0} onChange={(event) => { const id = event.target.value; if (id && !beneficiaryDepartmentIds.includes(id)) toggleBeneficiary(id); }}><option value="">+ Abteilung hinzufügen …</option>{visibleDepartments.filter((item) => item.id !== responsibleDepartmentId && !beneficiaryDepartmentIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{departmentFullPath(item, departments)}</option>)}</select></div>
+        {hospitalId && visibleDepartments.length === 0 ? <small>Für dieses Krankenhaus sind keine aktiven Abteilungen vorhanden.</small> : null}
+      </div>
       <label><span>Kostenstelle</span><select value={centerId} onChange={(event) => {
         const next = event.target.value;
         setCenterId(next);
@@ -218,11 +264,17 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
           setBeneficiaryDepartmentIds((current) => current.filter((id) => id !== owner));
         }
       }} disabled={!hospitalId}><option value="">Keine Kostenstelle</option>{centerGroups.map((group) => group.items.length ? <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}{item.department_id ? ` — ${departmentFullPath(departments.find((department) => department.id === item.department_id)!, departments)}` : " — krankenhausweit"}</option>)}</optgroup> : null)}</select>{hospitalId && centerGroups[0].items.length === 0 && centerGroups[1].items.length === 0 && selectedDepartments.size ? <small>Die gewählten Abteilungen haben keine eigene Kostenstelle; unten stehen die übrigen des Krankenhauses.</small> : null}</label>
+      {deviceCatalog ? <div className="cw-ownership-field"><span id="cw-devices-label">Gerätearten</span>
+        <div className="cw-multi">{deviceIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-devices-label">{deviceIds.map((id) => <li key={id}><span>{deviceLabel(id)}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => setDeviceIds((current) => current.filter((value) => value !== id))} aria-label={`${deviceLabel(id)} entfernen`}>✕</button></li>)}</ul> : null}
+        {deviceGroups.length ? <select aria-label="Geräteart hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setDeviceIds((current) => current.includes(id) ? current : [...current, id]); }}><option value="">+ Geräteart hinzufügen …</option>{deviceGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select> : null}</div>
+        <small>{selectedDepartments.size ? "Passende Gerätearten der gewählten Abteilungen stehen oben. " : ""}Anzahl und Notiz unter <Link href={contractHref(contractId, { tab: "relations" })}>Verknüpfungen → Geräte</Link>.</small>
+      </div> : null}
+      <p className="cw-ownership-group">Verantwortliche Personen</p>
       <div className="cw-ownership-field cw-ownership-people">
         <label><span>Hauptverantwortlich</span><select value={responsibleId} onChange={(event) => { const next = event.target.value; setResponsibleId(next); setFurtherIds((current) => current.filter((id) => id !== next)); }} disabled={assignees.length === 0}><option value="">Nicht zugewiesen</option>{personOptions(visibleAssignees, otherAssignees, new Set())}</select></label>
         <div className="cw-ownership-field"><span id="cw-further-label">Weitere Verantwortliche</span>
-          {furtherIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-further-label">{furtherIds.map((id) => <li key={id}><span>{assigneeName(id)}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => setFurtherIds((current) => current.filter((value) => value !== id))} aria-label={`${assigneeName(id)} entfernen`}>✕</button></li>)}</ul> : null}
-          {assignees.length ? <select aria-label="Weitere verantwortliche Person hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setFurtherIds((current) => current.includes(id) ? current : [...current, id]); }}><option value="">+ Person hinzufügen …</option>{personOptions(visibleAssignees, otherAssignees, new Set([responsibleId, ...furtherIds]))}</select> : null}
+          <div className="cw-multi">{furtherIds.length ? <ul className="cw-people-chips" aria-labelledby="cw-further-label">{furtherIds.map((id) => <li key={id}><span>{assigneeName(id)}</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => setFurtherIds((current) => current.filter((value) => value !== id))} aria-label={`${assigneeName(id)} entfernen`}>✕</button></li>)}</ul> : null}
+          {assignees.length ? <select aria-label="Weitere verantwortliche Person hinzufügen" value="" onChange={(event) => { const id = event.target.value; if (id) setFurtherIds((current) => current.includes(id) ? current : [...current, id]); }}><option value="">+ Person hinzufügen …</option>{personOptions(visibleAssignees, otherAssignees, new Set([responsibleId, ...furtherIds]))}</select> : null}</div>
           <small>Erhalten dieselben Erinnerungen, sehen den Vertrag unter „Ich verantwortlich“ und dürfen ihn auch sehen, wenn er vertraulich ist.</small>
         </div>
         {assignees.length === 0 ? <p className="cw-ownership-note" role="note">In dieser Organisation gibt es noch keine Benutzer. {isAdmin ? <Link href="/settings/users">Benutzer anlegen</Link> : "Die Administration kann Benutzer anlegen."}</p> : null}
