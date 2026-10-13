@@ -394,7 +394,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   const actions = loading || loadFailed
     ? null
     : !editing
-      ? <button type="button" className="btn btn-sm" onClick={startEdit} aria-label="Organisationszuordnung bearbeiten">
+      ? <button type="button" className="btn btn-sm" onClick={startEdit} aria-label="Organisationszuordnung bearbeiten" data-shortcut="edit" aria-keyshortcuts="E" title="Bearbeiten (E)">
         <svg className="btn-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>Bearbeiten
       </button>
       : dirty ? null : <button type="button" className="btn btn-ghost btn-sm" onClick={discard}>Abbrechen</button>;

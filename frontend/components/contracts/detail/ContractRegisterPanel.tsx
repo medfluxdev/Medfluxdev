@@ -741,7 +741,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       const actions = editing
         ? <><button type="button" className="btn btn-sm" disabled={busy} onClick={() => cancelEdit(section.id)} aria-label={`Abbrechen (${section.title})`}>Abbrechen</button><button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button></>
         : canEditHere
-          ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`}>Bearbeiten</button>
+          ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`} data-shortcut="edit" aria-keyshortcuts="E" title="Bearbeiten (E)">Bearbeiten</button>
           : null;
       return <CollapsibleSection key={section.id} id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))}>
         <dl className="rg-fields">{fields.map((def) => {

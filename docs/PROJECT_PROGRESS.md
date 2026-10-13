@@ -5705,3 +5705,8 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 ### Nachtrag 2026-10-13 – „Stammdaten gespeichert.“ nicht mehr zwischen den Kästen
 
 - Vertragsdaten zeigten Erfolgsmeldungen doppelt: als Toast und als grünen Text unter dem Vertraulichkeits-Kasten, also mitten in der Seite. Erfolg jetzt nur als Toast; Fehler bleiben als Text sichtbar (`ContractRegisterPanel`). Test prüft den Toast und dass kein Text erscheint.
+
+### Nachtrag 2026-10-13 – Tastenkürzel E für „Bearbeiten“
+
+- Taste **E** (nicht beim Tippen, ohne Strg/Alt) löst „Bearbeiten“ im aktuellen Kasten aus: Vorrang hat der Kasten mit dem Fokus, sonst der oberste Kasten, dessen Knopf gerade im Bild ist; danach Fokus ins erste Feld. Knöpfe melden sich mit `data-shortcut="edit"` an (`aria-keyshortcuts="E"`, Titel „Bearbeiten (E)“): Organisationszuordnung und die Kästen der Vertragsdaten. Logik `triggerEditShortcut` in `components/shell/useShortcuts.ts`; steht in der Kürzel-Übersicht (?).
+- Tests: `test/edit-shortcut.test.tsx` (Kasten mit Fokus, Fokus ins Feld, nicht beim Tippen, ohne Knopf nichts). Vitest 367 bestanden.
