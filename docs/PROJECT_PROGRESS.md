@@ -5701,3 +5701,7 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 - **Einklappen einheitlich:** Der globale Knopf aus `lib/box-collapse.ts` sitzt jetzt wie bei `CollapsibleSection` links vor der Überschrift (40 × 40, Pfeil nach unten, eingeklappt nach rechts gedreht, ohne Drehung bei „Bewegung reduzieren“). Position aus dem Innenabstand des Kastens und der Höhe der Überschrift (`--box-pad-left`, `--box-toggle-top`, neu berechnet bei DOM-Änderung und Größenänderung). Damit gibt es im ganzen Programm nur noch eine Knopfposition.
 - **Verantwortliche Abteilung:** ab 8 Abteilungen des Krankenhauses ein Suchfeld „Abteilung suchen …“ über der Auswahl (filtert nach dem ganzen Pfad, die gewählte bleibt immer drin, Hinweis bei keinem Treffer; wird beim Verlassen des Bearbeitens geleert). Nutzende Abteilungen hatten über `ChipPicker` schon eine Suche ab 8 Einträgen.
 - **Geprüft:** `npm run verify` grün (vor der Suche: 363 Tests; Ownership-Tests danach 21/21), Playwright 184/187 – die 3 Fehlschläge waren nur Sichtvergleiche wegen der Knopfposition; Referenzen neu geschrieben.
+
+### Nachtrag 2026-10-13 – „Stammdaten gespeichert.“ nicht mehr zwischen den Kästen
+
+- Vertragsdaten zeigten Erfolgsmeldungen doppelt: als Toast und als grünen Text unter dem Vertraulichkeits-Kasten, also mitten in der Seite. Erfolg jetzt nur als Toast; Fehler bleiben als Text sichtbar (`ContractRegisterPanel`). Test prüft den Toast und dass kein Text erscheint.

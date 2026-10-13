@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   addContractRemark: vi.fn(),
 }));
 
+const toast = vi.hoisted(() => vi.fn());
+vi.mock("@/components/ui/Toast", () => ({ useToast: () => toast }));
 vi.mock("@/lib/domain-api/register", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/domain-api/register")>()),
   ...api,
@@ -209,7 +211,9 @@ describe("Vertragsregister – Stammdaten", () => {
     await user.click(screen.getByLabelText(/Ich gebe den Vertrag trotzdem frei/));
     await user.click(screen.getByRole("button", { name: "Status ändern" }));
     await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "gueltig", acknowledge_unreviewed: true })));
-    expect(await screen.findByText("Status auf „Gültig“ gesetzt.")).toBeInTheDocument();
+    // Erfolg nur als Toast, nicht als Text zwischen den Kästen.
+    await waitFor(() => expect(toast).toHaveBeenCalledWith("Status auf „Gültig“ gesetzt.", "success"));
+    expect(screen.queryByText("Status auf „Gültig“ gesetzt.")).not.toBeInTheDocument();
   });
 
   it("hebt eine Stornierung auf und kehrt in den früheren Status zurück", async () => {

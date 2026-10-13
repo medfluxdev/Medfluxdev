@@ -721,7 +721,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       </ul>
     </section> : null}
 
-    {message ? <p role={message.tone === "error" ? "alert" : "status"} className={message.tone === "error" ? "rg-error" : "rg-ok"}>{message.text}</p> : null}
+    {/* Erfolg nur als Toast; ein Text hier stünde zwischen den Kästen. Fehler bleiben sichtbar. */}
+    {message?.tone === "error" ? <p role="alert" className="rg-error">{message.text}</p> : null}
 
     {newPartner !== null ? <QuickCreatePartner
       organizationSlug={orgSlug}
