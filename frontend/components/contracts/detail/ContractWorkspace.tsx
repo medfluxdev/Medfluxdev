@@ -683,7 +683,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           onSearchInDocument={(key) => router.replace(documentSearchHref(data.contract_id, key), { scroll: false })}
           onShowSource={showSource}
           hiddenSections={!showAllSections && data.sections && !data.sections.maintenance ? new Set(["maintenance"]) : undefined}
-        />{slots.register}</>}
+          afterStatus={slots.register}
+        /></>}
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 

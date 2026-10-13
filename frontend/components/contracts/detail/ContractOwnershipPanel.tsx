@@ -65,7 +65,7 @@ function Icon({ children }: { children: ReactNode }) {
 /** Gruppe: links Titel mit Symbol und Zweck, rechts die Felder bzw. Werte. */
 function Group({ id, icon, title, intro, children }: { id: string; icon: string; title: string; intro: string; children: ReactNode }) {
   return <section className="cw-og" aria-labelledby={id}>
-    <div className="cw-og-intro"><h3 id={id}><Icon>{GROUP_ICONS[icon]}</Icon>{title}</h3><p>{intro}</p></div>
+    <div className="cw-og-intro"><h3 id={id}><span className={`cw-og-tile cw-og-tile-${icon}`}><Icon>{GROUP_ICONS[icon]}</Icon></span>{title}</h3><p>{intro}</p></div>
     <div className="cw-og-body">{children}</div>
   </section>;
 }

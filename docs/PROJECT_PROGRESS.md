@@ -5680,3 +5680,9 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 - **Problem:** Wer die App unter `http://127.0.0.1:3000` öffnete, bekam bei der Anmeldung „Die Verbindung zum Server ist fehlgeschlagen“. Die API liegt auf `localhost:8000`; CORS erlaubt nur `localhost:3000`, und das Sitzungscookie gälte für den anderen Host ohnehin nicht.
 - **Lösung:** `frontend/middleware.ts` leitet Aufrufe über `127.0.0.1`/`[::1]` auf `localhost` um (gleicher Pfad und Parameter), solange die API-Basis `localhost` ist. Per `Refresh`-Kopf statt 307, weil Next die Location auf den Pfad kürzt. Mit eigener `NEXT_PUBLIC_API_URL` (z. B. Browser-Tests) greift sie nicht.
 - **Geprüft:** curl gegen den laufenden Entwicklungsserver (127.0.0.1 → Weiterleitung, localhost → 200), tsc und ESLint sauber.
+
+### Nachtrag 2026-10-13 – Organisationszuordnung direkt unter dem Bearbeitungsstatus, farbige Gruppensymbole
+
+- **Reihenfolge:** Im Reiter Vertragsdaten steht die Organisationszuordnung jetzt direkt unter „Bearbeitungsstatus“ (vorher ganz unten). `ContractRegisterPanel` hat dafür den Platz `afterStatus`; `ContractWorkspace` reicht `slots.register` dort hinein.
+- **Symbole:** Jede Gruppe hat eine farbige Symbolkachel (Vertrag blau, Krankenhaus & Abteilungen petrol, Kostenstelle & Geräte kupfer, Personen indigo). Neue Tokens `--color-group-*` (+ `-bg`) für hell und dunkel in `tokens.css`; nur Orientierung, keine Statusbedeutung (Ruhe & Signal bleibt für Status).
+- **Geprüft:** tsc, ESLint, stylelint sauber; Vitest 355 bestanden. Browser-Tests nicht gelaufen; Sichtvergleiche der Vertragsseite brauchen ggf. neue Referenzen.

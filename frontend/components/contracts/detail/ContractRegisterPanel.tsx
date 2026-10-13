@@ -192,8 +192,10 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections }: {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus }: {
   contractId: string;
+  /** Direkt unter dem Bearbeitungsstatus (Organisationszuordnung). */
+  afterStatus?: ReactNode;
   /** Kästen, die der Vertragstyp nicht vorsieht; sie bleiben sichtbar, sobald ein Wert gepflegt ist. */
   hiddenSections?: Set<string>;
   orgSlug: string;
@@ -669,6 +671,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         <div className="rg-actions"><button type="button" className="btn" onClick={() => setTransition(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Status ändern</button></div>
       </form> : null}
     </section>
+
+    {afterStatus}
 
     <ContractRulesSection organizationSlug={orgSlug} contractId={contractId} version={register} />
 

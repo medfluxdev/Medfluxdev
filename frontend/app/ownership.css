@@ -11,6 +11,13 @@
 .cw-og-intro h3 { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-1); font-size: var(--text-ui); font-weight: var(--weight-semibold); }
 .cw-og-intro p { margin: 0; font-size: var(--text-small); line-height: 1.45; color: var(--color-text-muted); }
 .cw-og-icon { flex: none; width: 18px; height: 18px; fill: none; stroke: currentcolor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--color-icon); }
+/* Farbige Symbolkachel je Gruppe: Orientierung, keine Statusfarbe */
+.cw-og-tile { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--radius-sm); }
+.cw-og-tile .cw-og-icon { color: inherit; }
+.cw-og-tile-file { background: var(--color-group-contract-bg); color: var(--color-group-contract); }
+.cw-og-tile-building { background: var(--color-group-org-bg); color: var(--color-group-org); }
+.cw-og-tile-euro { background: var(--color-group-cost-bg); color: var(--color-group-cost); }
+.cw-og-tile-users { background: var(--color-group-people-bg); color: var(--color-group-people); }
 .cw-og-body { display: grid; gap: var(--space-4); max-width: 560px; min-width: 0; }
 
 /* Ansicht */
