@@ -38,7 +38,7 @@ const COLUMNS: GridColumn[] = [
   { key: "contract_type", label: "Vertragstyp", type: "enum", default: true, groupable: true },
   { key: "business_status", label: "Status", type: "status", default: true, groupable: true, options: [{ value: "in_arbeit", label: "In Arbeit" }, { value: "gueltig", label: "Gültig" }] },
   { key: "cancel_by", label: "Kündbar bis", type: "date", default: true, groupable: false },
-  { key: "possible_end", label: "Mögliches Ende", type: "date", default: false, groupable: false },
+  { key: "possible_end", label: "Vertragsende", type: "date", default: false, groupable: false },
   { key: "hospital", label: "Krankenhaus", type: "enum", default: false, groupable: true },
   { key: "department", label: "Abteilung", type: "enum", default: false, groupable: true },
   { key: "responsible", label: "Verantwortlich", type: "account", default: false, groupable: true },

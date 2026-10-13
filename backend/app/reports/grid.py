@@ -63,7 +63,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("term_start_date", "Vertragsbeginn", "date"),
     Column("earliest_end", "Frühestes Ende", "date"),
     Column("cancel_by", "Kündbar bis", "date", default=True),
-    Column("possible_end", "Mögliches Ende", "date"),
+    Column("possible_end", "Vertragsende", "date"),
     Column("terminated_on", "Gekündigt am", "date"),
     Column("terminated_effective", "Gekündigt zum", "date"),
     Column("reminder_date", "Erinnerung am", "date"),

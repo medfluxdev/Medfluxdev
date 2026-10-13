@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it } from "vitest";
 import { enhanceBoxes, revealBox } from "@/lib/box-collapse";
+import { cardIcon } from "@/lib/card-icons";
 
 function Page() {
   return <main>
@@ -52,5 +53,22 @@ describe("Jeder Kasten einklappbar", () => {
     revealBox(again.container.querySelector("#sla-body"));
     expect(restored).not.toHaveAttribute("data-collapsed");
     expect(window.localStorage.getItem("medflux.collapsed-boxes")).toBe("[]");
+  });
+});
+
+describe("Symbol je Karte", () => {
+  it("leitet Symbol und Kennfarbe aus der Überschrift ab; Kästen erhalten eine Kachel neben dem Knopf", () => {
+    expect(cardIcon("Finanzeinträge").tile).toBe("cost");
+    expect(cardIcon("Termine & Aufgaben").tile).toBe("type");
+    expect(cardIcon("Historie").tile).toBe("device");
+    expect(cardIcon("Dokumente zum Vertrag").tile).toBe("partner");
+    expect(cardIcon("Etwas ganz anderes").tile).toBe("accent");
+    const { container } = render(<Page />);
+    enhanceBoxes(container);
+    enhanceBoxes(container);
+    const tiles = container.querySelectorAll(".box-icon");
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0].getAttribute("aria-hidden")).toBe("true");
+    expect(tiles[0].previousElementSibling).toHaveClass("box-toggle");
   });
 });

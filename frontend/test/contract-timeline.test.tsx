@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   listContractDeadlines: vi.fn(),
   createContractDeadline: vi.fn(),
   deadlineAction: vi.fn(),
+  updateDeadline: vi.fn(),
   getContractRegister: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock("@/lib/domain-api/deadlines", async (importOriginal) => ({
   listContractDeadlines: api.listContractDeadlines,
   createContractDeadline: api.createContractDeadline,
   deadlineAction: api.deadlineAction,
+  updateDeadline: api.updateDeadline,
 }));
 vi.mock("@/lib/domain-api/register", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/domain-api/register")>()),
@@ -111,6 +113,18 @@ describe("Termine & Aufgaben", () => {
     const row = within(list).getAllByRole("listitem").find((item) => item.textContent?.startsWith("31.03.2029"))!;
     await user.click(within(row).getByRole("button", { name: "Erledigt" }));
     expect(api.deadlineAction).toHaveBeenCalledWith("test-klinik", "d-end", "done");
+  });
+
+  it("„Kalender an“ schaltet die Kalendereinladung je Termin", async () => {
+    const user = userEvent.setup();
+    api.updateDeadline.mockResolvedValue({ items: [] });
+    render(<ContractTimeline contractId="c-1" orgSlug="test-klinik" workItems={[]} onOpenTarget={vi.fn()} />);
+    const list = await screen.findByRole("list", { name: "Termine und Aufgaben" });
+    const row = within(list).getAllByRole("listitem").find((item) => item.textContent?.startsWith("31.03.2029"))!;
+    const toggle = within(row).getByRole("button", { name: "Kalender an" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
+    expect(api.updateDeadline).toHaveBeenCalledWith("test-klinik", "d-end", { send_ics: true });
   });
 
   it("leer nur, wenn es gar nichts gibt – mit Link zu den Vertragsdaten", async () => {

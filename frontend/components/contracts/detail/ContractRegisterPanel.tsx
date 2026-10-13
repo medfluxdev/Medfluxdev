@@ -60,7 +60,21 @@ type FieldDef = { key: string; kind: FieldKind };
 
 const PERIODS = ["initial_term", "minimum_term", "notice_period", "renewal_period"] as const;
 
-const SECTIONS: { id: string; title: string; description: string; fields: FieldDef[] }[] = [
+// „data“ = Reiter Vertragsdaten (was der Vertrag ist), „deadlines“ = Reiter Fristen & Aufgaben (was zu tun ist).
+export type RegisterView = "data" | "deadlines";
+
+const svgIcon = (body: ReactNode) => <svg viewBox="0 0 24 24" focusable="false">{body}</svg>;
+// Kachel je Kasten: Symbol + Kennfarbe der Art von Angabe (dekorativ, nie ein Zustand).
+const SECTION_ICONS: Record<string, { icon: ReactNode; tile: string }> = {
+  identity: { icon: svgIcon(<><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4M10 12h5M10 16h5" /></>), tile: "section-tile--partner" },
+  term: { icon: svgIcon(<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></>), tile: "section-tile--type" },
+  reminder: { icon: svgIcon(<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16M10 20a2 2 0 0 0 4 0" />), tile: "section-tile--dept" },
+  organisation: { icon: svgIcon(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />), tile: "section-tile--cost" },
+  price: { icon: svgIcon(<path d="M4 17l6-6 4 4 6-7M15 8h5v5" />), tile: "section-tile--cost" },
+};
+const STATUS_ICON = svgIcon(<path d="M5 21V4h11l-1.5 4L16 12H5" />);
+
+const SECTIONS: { id: string; title: string; description: string; fields: FieldDef[]; view?: RegisterView }[] = [
   {
     id: "identity",
     title: "Vertrag & Partner",
@@ -74,6 +88,9 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
       { key: "contract_category_id", kind: "category" },
       { key: "is_framework", kind: "bool" },
       { key: "subject_text", kind: "textarea" },
+      // Wartung, nur bei Verträgen mit Wartung: daraus entsteht „Wartung fällig“ in Fristen & Aufgaben.
+      { key: "maintenance_next_date", kind: "date" },
+      { key: "maintenance_interval_months", kind: "int" },
     ],
   },
   {
@@ -93,8 +110,9 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
   },
   {
     id: "reminder",
-    title: "Erinnerung & Verantwortung",
-    description: "Wer wird wann an die Frist erinnert",
+    title: "Erinnerungen",
+    description: "Wann und an wen vor Fristen erinnert wird",
+    view: "deadlines",
     fields: [
       { key: "reminder_lead_months", kind: "reminders" },
       { key: "reminder_recipient_account_id", kind: "account" },
@@ -124,15 +142,6 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
       { key: "price_adjustment_interval_months", kind: "int" },
     ],
   },
-  {
-    id: "maintenance",
-    title: "Wartung",
-    description: "Grundlage für die Erinnerung „Wartung fällig“",
-    fields: [
-      { key: "maintenance_next_date", kind: "date" },
-      { key: "maintenance_interval_months", kind: "int" },
-    ],
-  },
 ];
 // Nicht in diesen Kästen: Kündigungsdaten setzt nur der Statuswechsel („Gekündigt“), die Aufbewahrung
 // pflegt „Aufbewahrung & Löschung“, Datenschutz „Zugriff & Datenschutz“ (je eine Stelle).
@@ -140,8 +149,6 @@ const RETENTION_KEYS = new Set(["retention_years_after_end"]);
 const ACCESS_KEYS = new Set(["data_protection_relevant"]);
 const TERMINATION_KEYS = new Set(["terminated_on", "terminated_effective"]);
 
-const CALENDAR_ICON = <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>;
-const BELL_ICON = <svg viewBox="0 0 24 24" focusable="false"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16M10 20a2 2 0 0 0 4 0" /></svg>;
 const CALC_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></svg>;
 const FLAG_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="signal-icon"><path d="M5 21V4h11l-1.5 4L16 12H5" /></svg>;
 
@@ -153,7 +160,7 @@ const FIELD_HELP: Record<string, string> = {
   minimum_term: "Frühestens nach dieser Zeit ist eine Kündigung wirksam.",
   renewal_period: "Um wie viel sich der Vertrag ohne Kündigung jeweils verlängert.",
   maintenance_next_date: "Ein Monat vorher entsteht der Termin „Wartung fällig“ unter Fristen & Aufgaben.",
-  maintenance_interval_months: "Leer lassen für einen einmaligen Termin; sonst entsteht nach Erledigung der nächste Termin.",
+  maintenance_interval_months: "Wie oft gewartet wird. Leer = einmaliger Termin; sonst entsteht nach „Erledigt“ der nächste Termin.",
 };
 
 const TERM_FIELDS: Record<TermModel, string[]> = {
@@ -225,10 +232,12 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus, onOpenDeadlines }: {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus, view = "data", onOpenField }: {
   contractId: string;
-  /** „In Fristen & Aufgaben ansehen“ (Reiterwechsel). */
-  onOpenDeadlines?: () => void;
+  /** Welche Kästen: Vertragsdaten (Standard, mit Status, Regeln, KI-Vorschlägen) oder Fristen & Aufgaben (Erinnerungen). */
+  view?: RegisterView;
+  /** Feld, das auf dem anderen Reiter steht (z. B. „Erinnerung an“ aus „Für Gültig fehlen“). */
+  onOpenField?: (key: string, view: RegisterView) => void;
   /** Direkt unter dem Bearbeitungsstatus (Organisationszuordnung). */
   afterStatus?: ReactNode;
   /** Kästen, die der Vertragstyp nicht vorsieht; sie bleiben sichtbar, sobald ein Wert gepflegt ist. */
@@ -291,6 +300,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const load = useCallback(async () => {
     try {
       const data = await getContractRegister(orgSlug, contractId);
+      // Unvollständige Antwort nie anzeigen (sonst fehlen Felder still).
+      if (!data?.fields || !data.terms) throw new Error("Stammdaten konnten nicht geladen werden.");
       setRegister(data);
       if (!editingRef.current) setDraft(draftFrom(data));
     } catch (error) {
@@ -315,16 +326,17 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       editable ? listOwnershipAssignees(orgSlug) : Promise.resolve({ items: [] as AssigneeDto[] }),
     ]).then(([partnerResult, typeResult, lookupResult, assigneeResult]) => {
       if (cancelled) return;
-      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value);
+      if (partnerResult.status === "fulfilled") setPartners(partnerResult.value ?? []);
       if (typeResult.status === "fulfilled") {
-        setTypes(typeResult.value.contract_types);
-        setCategories(typeResult.value.contract_categories);
+        setTypes(typeResult.value?.contract_types ?? []);
+        setCategories(typeResult.value?.contract_categories ?? []);
       }
       if (lookupResult.status === "fulfilled") {
-        setStorage(lookupResult.value.items.filter((item) => item.field_key === "storage_location"));
-        setTodos(lookupResult.value.items.filter((item) => item.field_key === "todo_template"));
+        const lookups = lookupResult.value?.items ?? [];
+        setStorage(lookups.filter((item) => item.field_key === "storage_location"));
+        setTodos(lookups.filter((item) => item.field_key === "todo_template"));
       }
-      if (assigneeResult.status === "fulfilled") setAssignees(assigneeResult.value.items);
+      if (assigneeResult.status === "fulfilled") setAssignees(assigneeResult.value?.items ?? []);
     });
     return () => { cancelled = true; };
   }, [editable, orgSlug]);
@@ -450,6 +462,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   // Kündigungsdaten ändert nur der Statuswechsel: zum Bearbeitungsstatus springen.
   function openStatus() {
     const status = document.getElementById("rg-status-heading")?.closest("section");
+    if (status) revealBox(status);
     status?.scrollIntoView?.({ block: "start" });
     status?.querySelector<HTMLElement>(".rg-status-actions button")?.focus();
   }
@@ -497,6 +510,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       return;
     }
     if (TERMINATION_KEYS.has(key)) { openStatus(); return; }
+    const home = viewOf(key);
+    if (home !== view) { onOpenField?.(key, home); return; }
     const model = (editing ? draft.term_model : register.fields.term_model?.value) as TermModel | null | undefined;
     const hidden = TERM_SECTION_KEYS.has(key) && !(model ? TERM_FIELDS[model] : ["term_model"]).includes(key);
     const canEdit = editable && register.business_status !== "geloescht";
@@ -506,6 +521,11 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     const targetKey = hidden ? "term_model" : key;
     if (canEdit) startEdit(sectionOf(targetKey));
     setTarget({ key: hidden ? "term_model" : key, note: notes.join(" ") || undefined, at: Date.now() });
+  }
+
+  function viewOf(key: string): RegisterView {
+    if (key === "reminder_extra_leads") return "deadlines";
+    return SECTIONS.find((section) => section.fields.some((def) => def.key === key))?.view ?? "data";
   }
 
   function sectionOf(key: string): string {
@@ -763,14 +783,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     </>}
   </div>;
 
-  // „Nächste Erinnerungen“: einzige Stelle in den Vertragsdaten mit Erinnerungsdaten.
-  const nextReminders = (terms.reminder_dates?.length ? terms.reminder_dates : terms.reminder_date ? [terms.reminder_date] : []).filter((value) => value >= register.as_of);
-  const reminderEditing = editSections.has("reminder");
-  const nextLine = <div className="rg-next">
-    <span><strong>Nächste Erinnerungen:</strong> {nextReminders.length ? <span className="num">{nextReminders.map((value) => formatDate(value)).join(", ")}</span> : <span className="cw-muted">{terms.status === "incomplete" ? "erst berechenbar, wenn die Laufzeit vollständig ist" : "keine"}</span>}</span>
-    {reminderEditing ? <span className="field-hint">werden nach dem Speichern neu berechnet</span> : onOpenDeadlines ? <button type="button" className="rg-link" onClick={onOpenDeadlines}>In Fristen &amp; Aufgaben ansehen</button> : null}
-  </div>;
-
   function remindersRow(editing: boolean) {
     if (!register) return null;
     const leads = editing && leadDraft ? leadDraft : leadsOf(register);
@@ -798,24 +810,28 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           <button type="button" className="btn btn-sm" onClick={addLead}>Hinzufügen</button>
           <button type="button" className="btn btn-sm btn-ghost" onClick={() => setLeadAdd(null)}>Abbrechen</button>
         </span> : null}
-        {editing ? <span className="field-hint rg-help">Standard des Vertragstyps: {leadText({ value: register.reminders?.default_lead_months ?? 4, unit: "months" })}. Jede Erinnerung erzeugt einen Termin in „Fristen &amp; Aufgaben“.</span> : null}
+        {editing ? <span className="field-hint rg-help">Standard des Vertragstyps: {leadText({ value: register.reminders?.default_lead_months ?? 4, unit: "months" })}. Jede Erinnerung erscheint in „Termine &amp; Aufgaben“.</span> : null}
         {isTarget && target?.note ? <span className="rg-field-note" role="status">{target.note}</span> : null}
       </dd>
     </div>;
   }
 
   return <div className="rg-panel">
-    <section className="cw-section rg-status" aria-labelledby="rg-status-heading">
-      <div className="rg-status-row">
-        <div>
-          <h2 id="rg-status-heading">Bearbeitungsstatus</h2>
-          <p className="cw-muted">{register.has_ai_analysis ? "Werte aus der KI-Analyse sind gekennzeichnet und können bestätigt oder korrigiert werden." : "Manuell angelegter Vertrag ohne KI-Analyse."}</p>
-        </div>
-        <div className="rg-status-actions">
-          <StatusBadge label={register.business_status_label} tone={BUSINESS_STATUS_TONE[register.business_status] ?? "neutral"} />
-          {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-ghost btn-danger" : "btn"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>{register.business_status === "geloescht" ? `Stornierung aufheben → ${item.label}` : `→ ${item.label}`}</button>)}
-        </div>
-      </div>
+    {view === "data" ? <>
+    <CollapsibleSection
+      id="rg-status"
+      className="rg-status"
+      title="Bearbeitungsstatus"
+      description={register.has_ai_analysis ? "Werte aus der KI-Analyse sind gekennzeichnet und können bestätigt oder korrigiert werden." : "Manuell angelegter Vertrag ohne KI-Analyse."}
+      summary={register.business_status === "in_arbeit" && register.missing_for_valid.length ? <Signal tone="warning" size="sm">{`Für „Gültig“ fehlen ${register.missing_for_valid.length}`}</Signal> : null}
+      icon={STATUS_ICON}
+      iconClassName="section-tile--accent"
+      forceOpen={transition !== null}
+      actions={<span className="rg-status-actions">
+        <StatusBadge label={register.business_status_label} tone={BUSINESS_STATUS_TONE[register.business_status] ?? "neutral"} />
+        {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-sm btn-ghost btn-danger" : "btn btn-sm"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>{register.business_status === "geloescht" ? `Stornierung aufheben → ${item.label}` : `→ ${item.label}`}</button>)}
+      </span>}
+    >
       {register.business_status === "in_arbeit" ? <MissingList
         className="rg-hint"
         intro="Für „Gültig“ fehlen noch:"
@@ -834,7 +850,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         <label>Notiz (optional)<input type="text" maxLength={2000} value={transitionForm.note} onChange={(event) => setTransitionForm((form) => ({ ...form, note: event.target.value }))} /></label>
         <div className="rg-actions"><button type="button" className="btn" onClick={() => setTransition(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Status ändern</button></div>
       </form> : null}
-    </section>
+    </CollapsibleSection>
 
     {afterStatus}
 
@@ -848,6 +864,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         {proposalKeys.map((key) => <li key={key}>{register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button></li>)}
       </ul>
     </section> : null}
+    </> : null}
 
     {/* Erfolg nur als Toast; ein Text hier stünde zwischen den Kästen. Fehler bleiben sichtbar. */}
     {message?.tone === "error" ? <p role="alert" className="rg-error">{message.text}</p> : null}
@@ -861,7 +878,11 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     /> : null}
 
     {SECTIONS.map((section) => {
-      const fields = section.id === "term" ? section.fields.filter((def) => visibleTermFields.has(def.key)) : section.fields;
+      if ((section.view ?? "data") !== view) return null;
+      const maintenanceHidden = hiddenSections?.has("maintenance") && register.fields.maintenance_next_date?.value == null && register.fields.maintenance_interval_months?.value == null;
+      const fields = section.id === "term"
+        ? section.fields.filter((def) => visibleTermFields.has(def.key))
+        : section.fields.filter((def) => !(def.key.startsWith("maintenance_") && maintenanceHidden));
       // Nur dieser Kasten zeigt Eingabefelder (die übrigen Werte bleiben lesbar).
       const editing = editSections.has(section.id);
       if (hiddenSections?.has(section.id) && !editing && fields.every((def) => register.fields[def.key]?.value == null)) return null;
@@ -872,7 +893,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`} data-shortcut="edit" aria-keyshortcuts="E" title="Bearbeiten (E)">Bearbeiten</button>
           : null;
       const isTerm = section.id === "term";
-      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={isTerm ? CALENDAR_ICON : section.id === "reminder" ? BELL_ICON : undefined} iconClassName={isTerm ? "section-tile--type" : section.id === "reminder" ? "section-tile--dept" : undefined}>
+      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={SECTION_ICONS[section.id]?.icon} iconClassName={SECTION_ICONS[section.id]?.tile}>
         {isTerm ? terminationRow : null}
         <dl className="rg-fields">{fields.map((def) => {
           if (def.kind === "reminders") return remindersRow(editing);
@@ -907,7 +928,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           </div>;
         })}</dl>
         {isTerm ? termCalc : null}
-        {section.id === "reminder" ? nextLine : null}
         {editing ? <div className="cw-savebar" role="region" aria-label={`${section.title} speichern`}>
           <div className="cw-savebar-msg">{dirty ? <><Signal tone="info" size="sm">Ungespeicherte Änderungen</Signal><span><kbd>Strg</kbd> + <kbd>S</kbd> speichert</span></> : <span>Keine Änderungen</span>}</div>
           <div className="cw-savebar-actions">

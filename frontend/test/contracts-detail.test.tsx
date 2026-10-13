@@ -220,7 +220,8 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(await screen.findByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
 
     await openTab("Fristen & Aufgaben");
-    expect(screen.getAllByText(/01\.01\.2024/).length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByRole("heading", { name: "Entscheidung" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Termine & Aufgaben" })).toBeInTheDocument();
 
     await openTab("Verknüpfungen");
     expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);

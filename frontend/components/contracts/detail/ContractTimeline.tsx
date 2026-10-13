@@ -9,7 +9,7 @@ import { PersonTag } from "@/components/ui/TagChip";
 import { useToast } from "@/components/ui/Toast";
 import type { DetailWorkItem } from "@/lib/contract-detail-types";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
-import { createContractDeadline, deadlineAction, listContractDeadlines, type DeadlineDto } from "@/lib/domain-api/deadlines";
+import { createContractDeadline, deadlineAction, listContractDeadlines, updateDeadline, type DeadlineDto } from "@/lib/domain-api/deadlines";
 import { listOwnershipAssignees, type AssigneeDto } from "@/lib/domain-api/ownership";
 import { getContractRegister } from "@/lib/domain-api/register";
 import { REVIEW_TARGET, workItemTarget, type FixTarget } from "@/lib/fix-targets";
@@ -79,8 +79,10 @@ function deadlineTitle(item: DeadlineDto) {
  * Fristen & Aufgaben → „Termine & Aufgaben“: alle Termine, Erinnerungen und Aufgaben eines Vertrags auf einer Zeitachse.
  * Offene Punkte ohne Datum oben, dann „Heute“, dann chronologisch; Erledigtes eingeklappt darunter.
  */
-export default function ContractTimeline({ contractId, orgSlug, workItems, endCheck, onOpenTarget }: {
+export default function ContractTimeline({ contractId, orgSlug, workItems, endCheck, onOpenTarget, version = 0 }: {
   contractId: string;
+  /** Erhöhen, um neu zu laden (z. B. nach geänderten Erinnerungen). */
+  version?: number;
   orgSlug: string;
   workItems: DetailWorkItem[];
   endCheck?: EndCheck | null;
@@ -107,7 +109,7 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
       setReminderDates(register.value.terms?.reminder_dates ?? []);
       if (register.value.as_of) setToday(register.value.as_of);
     }
-  }, [contractId, orgSlug]);
+  }, [contractId, orgSlug, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { void load(); }, [load]);
 
@@ -229,6 +231,7 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
       sub: <>{subParts.join(" · ")}{item.basis_unconfirmed ? <> <button type="button" className="signal-link" onClick={() => onOpenTarget(REVIEW_TARGET)}><Signal tone="ai" size="sm">Basiert auf ungeprüften KI-Werten</Signal></button></> : null}</>,
       person: item.assignee_name,
       action: editable ? <span className="tl-actions">
+        <button type="button" className="btn btn-sm btn-ghost" disabled={busy} aria-pressed={item.send_ics} title="Kalendereinladung (ICS) mit der Erinnerung senden" onClick={() => void act(() => updateDeadline(orgSlug, item.id, { send_ics: !item.send_ics }), item.send_ics ? "Kalendereinladung aus." : "Kalendereinladung an.")}>{item.send_ics ? "Kalender aus" : "Kalender an"}</button>
         <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => void act(() => deadlineAction(orgSlug, item.id, "done"), "Termin erledigt.")}>Erledigt</button>
         {item.source === "manual" ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => void act(() => deadlineAction(orgSlug, item.id, "cancel"), "Termin abgebrochen.")}>Abbrechen</button> : null}
       </span> : null,

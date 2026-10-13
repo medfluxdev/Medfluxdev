@@ -181,7 +181,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         question: "Wer bekommt eine Erinnerung?",
         answer: [
           "Die im Vertrag eingetragene Empfängerin bzw. der Empfänger. Ist niemand eingetragen, geht die Erinnerung an die hauptverantwortliche Person. Benachrichtigungen erscheinen in der Glocke oben rechts.",
-          "Wann erinnert wird, legen Sie in den Vertragsdaten unter „Erinnerung & Verantwortung“ → „Erinnern“ fest, z. B. „4 Monate vorher“ und „12 Wochen vorher“. Jede Erinnerung erscheint als Termin unter „Fristen & Aufgaben“.",
+          "Wann und an wen erinnert wird, legen Sie im Vertrag unter „Fristen & Aufgaben“ → „Erinnerungen“ fest, z. B. „4 Monate vorher“ und „12 Wochen vorher“, dazu Eskalation und ToDo. Jede Erinnerung erscheint darüber in „Termine & Aufgaben“.",
         ],
         links: [{ label: "Benachrichtigungen", href: "/postfach" }],
         keywords: "benachrichtigung glocke e-mail empfänger erinnern vorher wochen monate",

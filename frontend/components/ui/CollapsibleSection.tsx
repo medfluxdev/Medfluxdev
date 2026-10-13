@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { clearSelection, isHeadDoubleClick } from "@/lib/box-collapse";
+import { cardIcon, tileClass } from "@/lib/card-icons";
 
 const STORAGE_KEY = "medflux.collapsed-sections";
 
@@ -66,12 +67,14 @@ export default function CollapsibleSection({ id, title, description, summary, ic
   }
 
   const bodyId = `${id}-body`;
+  // Jede Karte hat eine Kachel: eigenes Symbol oder eines aus der Überschrift (lib/card-icons.ts).
+  const auto = cardIcon(title);
   return <section className={["cw-section collapsible", collapsed ? "is-collapsed" : "", className ?? ""].filter(Boolean).join(" ")} aria-labelledby={`${id}-heading`}>
-    <div className={`cw-section-head collapsible-head${icon ? " has-icon" : ""}`} onDoubleClick={(event) => { if (!isHeadDoubleClick(event, event.currentTarget)) return; clearSelection(); toggle(); }}>
+    <div className="cw-section-head collapsible-head has-icon" onDoubleClick={(event) => { if (!isHeadDoubleClick(event, event.currentTarget)) return; clearSelection(); toggle(); }}>
       <button type="button" className="collapsible-toggle" aria-expanded={!collapsed} aria-controls={bodyId} onClick={toggle} aria-label={`${title} ${collapsed ? "aufklappen" : "einklappen"}`} title={collapsed ? "Aufklappen" : "Einklappen"}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
-      {icon ? <span className={`collapsible-icon${iconClassName ? ` ${iconClassName}` : ""}`} aria-hidden="true">{icon}</span> : null}
+      <span className={`collapsible-icon ${icon ? iconClassName ?? "" : tileClass(auto.tile)}`.trim()} aria-hidden="true">{icon ?? <svg viewBox="0 0 24 24" focusable="false"><path d={auto.path} /></svg>}</span>
       <div className="collapsible-title">
         <h2 id={`${id}-heading`}>{title}</h2>
         {collapsed

@@ -570,7 +570,8 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
     </Group>
   </>;
 
-  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description={description} summary={summary} actions={actions} forceOpen={editing}>
+  return <CollapsibleSection id="cw-ownership" className="cw-ownership-section" title="Organisationszuordnung" description={description} summary={summary} actions={actions} forceOpen={editing}
+    icon={<svg viewBox="0 0 24 24" focusable="false"><path d="M4 21V5l8-2v18M12 7l8 3v11M3 21h18M8 9h1M8 13h1M8 17h1M15 13h2M15 17h2" /></svg>} iconClassName="section-tile--dept">
     {loading ? <p role="status" className="cw-ownership-loading">Zuordnung wird geladen…</p> : loadFailed ? <div className="cw-ownership-alert"><InlineAlert tone="critical" role="alert">{message}</InlineAlert></div> : <>
       {editing ? edit : view}
       {roles?.unclassified_department_ids.length ? <p className="cw-ownership-note" role="note">Historische Zuordnung ohne dokumentierte Rolle: {roles.unclassified_department_ids.map(departmentName).join(" · ")}. Sie wird nicht automatisch als verantwortlich oder nutzend eingestuft.</p> : null}

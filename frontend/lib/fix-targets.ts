@@ -66,9 +66,15 @@ export function registerHref(filters: GridFilter[], extra?: Record<string, strin
 // Felder, die nicht im Formular „Vertragsdaten“ stehen, sondern im Abschnitt „Zuständigkeit“ darunter.
 const OWNERSHIP_FIELDS = new Set(["responsible_account_id", "cost_center_id", "hospital_id", "department_id"]);
 
-/** Ziele vereinheitlichen: Zuständigkeitsfelder führen zum Abschnitt „Zuständigkeit“. */
+// Felder, die unter „Fristen & Aufgaben“ → „Erinnerungen“ gepflegt werden, nicht in den Vertragsdaten.
+const DEADLINE_FIELDS = new Set(["reminder_lead_months", "reminder_extra_leads", "reminder_recipient_account_id", "escalation_recipient_account_id", "reminder_todo"]);
+const DEADLINE_SECTIONS = new Set(["reminder"]);
+
+/** Ziele vereinheitlichen: Zuständigkeitsfelder führen zum Abschnitt „Zuständigkeit“, Erinnerungen zu „Fristen & Aufgaben“. */
 export function normalizeTarget(target: FixTarget): FixTarget {
   if (target.field && OWNERSHIP_FIELDS.has(target.field)) return { tab: "register", section: "ownership" };
+  if (target.tab === "register" && target.field && DEADLINE_FIELDS.has(target.field)) return { ...target, tab: "deadlines" };
+  if (target.tab === "register" && !target.field && target.section && DEADLINE_SECTIONS.has(target.section)) return { ...target, tab: "deadlines" };
   return target;
 }
 
@@ -79,8 +85,9 @@ const SECTION_ANCHORS: Record<string, string> = {
   suggestions: "fin-ai-heading",
   terms: "rg-term-heading",
   rules: "rules-heading",
-  renewal: "renewal-heading",
-  deadlines: "rg-deadlines-heading",
+  renewal: "dec-heading",
+  decision: "dec-heading",
+  deadlines: "tl-heading",
   intelligence: "contract-intelligence-heading",
   "offene-punkte": "open-points-heading",
 };

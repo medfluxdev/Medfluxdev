@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractRegisterPanel from "@/components/contracts/detail/ContractRegisterPanel";
 import ContractRemarksPanel from "@/components/contracts/detail/ContractRemarksPanel";
 import type { ContractRegister, RegisterField } from "@/lib/domain-api/register";
-import { enhanceBoxes } from "@/lib/box-collapse";
 
 const api = vi.hoisted(() => ({
   getContractRegister: vi.fn(),
@@ -122,8 +121,9 @@ describe("Vertragsregister – Stammdaten", () => {
     const terms = screen.getByRole("heading", { name: "Laufzeit, Fristen & Kündigung" }).closest("section")!;
     expect(within(terms).getByText("Kündbar bis").nextElementSibling).toHaveTextContent("30.06.2027");
     expect(within(terms).queryByText(/Erinnerung/)).not.toBeInTheDocument();
-    const reminder = screen.getByRole("heading", { name: "Erinnerung & Verantwortung" }).closest("section")!;
-    expect(within(reminder).getByText("Nächste Erinnerungen:").parentElement).toHaveTextContent("Nächste Erinnerungen: 30.03.2027");
+    // Erinnerungen stehen unter Fristen & Aufgaben.
+    expect(screen.queryByRole("heading", { name: "Erinnerungen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Wartung planen" })).not.toBeInTheDocument();
     expect(screen.getByText("KI · Vorschlag")).toHaveAttribute("title", "Quelle: identity.contract_title");
     expect(screen.getByText("KI · korrigiert")).toBeInTheDocument();
     expect(screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
@@ -134,14 +134,13 @@ describe("Vertragsregister – Stammdaten", () => {
     try {
       render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
       await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-      for (const title of ["Vertrag & Partner", "Laufzeit, Fristen & Kündigung", "Erinnerung & Verantwortung"]) {
+      for (const title of ["Vertrag & Partner", "Laufzeit, Fristen & Kündigung"]) {
         await user.click(screen.getByRole("button", { name: `${title} einklappen` }));
       }
       const head = (title: string) => screen.getByRole("heading", { level: 2, name: title }).parentElement!;
       expect(head("Vertrag & Partner")).toHaveTextContent("Vertragspartner fehlt");
       expect(head("Vertrag & Partner")).toHaveTextContent("Nr. 000042");
       expect(head("Laufzeit, Fristen & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
-      expect(head("Erinnerung & Verantwortung")).toHaveTextContent("Erinnern 3 Monate vorher·an Hauptverantwortliche Person");
       // Bearbeiten bleibt auch eingeklappt erreichbar und klappt auf.
       await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
       expect(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung einklappen" })).toHaveAttribute("aria-expanded", "true");
@@ -237,15 +236,15 @@ describe("Vertragsregister – Stammdaten", () => {
     const user = userEvent.setup();
     window.localStorage.removeItem("medflux.collapsed-boxes");
     api.getContractRegister.mockResolvedValue(register({ business_status: "geloescht", business_status_label: "Storniert", allowed_transitions: [{ target: "beendet", label: "Beendet" }] }));
-    const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     const button = await screen.findByRole("button", { name: "Stornierung aufheben → Beendet" });
-    enhanceBoxes(container);
-    await user.click(screen.getByRole("button", { name: "Bearbeitungsstatus einklappen" }));
-    const box = screen.getByRole("heading", { name: "Bearbeitungsstatus" }).closest("section")!;
-    expect(box).toHaveAttribute("data-collapsed");
+    const toggle = screen.getByRole("button", { name: "Bearbeitungsstatus einklappen" });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // Die Statusknöpfe bleiben im Kopf bedienbar; ein Wechsel klappt den Kasten wieder auf.
     await user.click(button);
-    expect(box).not.toHaveAttribute("data-collapsed");
-    expect(screen.getByLabelText("Beendet am")).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() => expect(screen.getByLabelText("Beendet am")).toHaveFocus());
   });
 });
 
@@ -286,8 +285,6 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     expect(within(card).getByText("Restlaufzeit", { selector: "dt" }).nextElementSibling).toHaveTextContent("909 Tage");
     expect(within(card).queryByText(/Erinnerung/)).not.toBeInTheDocument();
     expect(within(card).getByText("Wie berechnet?").closest("details")).toHaveTextContent("Feste Laufzeit: Ende = festes Vertragsende 31.03.2029.");
-    const reminder = screen.getByRole("heading", { name: "Erinnerung & Verantwortung" }).closest("section")!;
-    expect(within(reminder).getByText("Nächste Erinnerungen:").parentElement).toHaveTextContent("30.11.2028, 06.01.2029");
     expect(within(card).getByText("KI · bestätigt")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
@@ -311,15 +308,15 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     const base = fixed();
     api.getContractRegister.mockResolvedValue({ ...base, fields: { ...base.fields, reminder_lead_months: field("Erinnerung (Monate vor Frist)", null) }, reminders: { default_lead_months: 4, lead_months: null, extra_leads: [{ value: 12, unit: "weeks" }] } });
     api.saveReminderLeads.mockResolvedValue(base);
-    const onOpenDeadlines = vi.fn();
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" onOpenDeadlines={onOpenDeadlines} />);
-    const card = await section("Erinnerung & Verantwortung");
+    render(<ContractRegisterPanel view="deadlines" contractId="c-1" orgSlug="test-klinik" />);
+    const card = await section("Erinnerungen");
+    // Ansicht „Fristen & Aufgaben“: nur Erinnerungen und Wartungstermin, kein Status, keine Vertragsdaten.
+    expect(screen.queryByRole("heading", { name: "Bearbeitungsstatus" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Laufzeit, Fristen & Kündigung" })).not.toBeInTheDocument();
     const chips = () => within(within(card).getByRole("list", { name: "Erinnerungen" })).getAllByRole("listitem").map((item) => item.textContent);
     expect(chips()).toEqual(["4 Monate vorher (Standard)", "12 Wochen vorher"]);
-    await user.click(within(card).getByRole("button", { name: "In Fristen & Aufgaben ansehen" }));
-    expect(onOpenDeadlines).toHaveBeenCalled();
 
-    await user.click(within(card).getByRole("button", { name: "Erinnerung & Verantwortung bearbeiten" }));
+    await user.click(within(card).getByRole("button", { name: "Erinnerungen bearbeiten" }));
     expect(within(card).getByText(/Standard des Vertragstyps: 4 Monate vorher/)).toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: "4 Monate vorher (Standard) entfernen" })).not.toBeInTheDocument();
     await user.click(within(card).getByRole("button", { name: "+ Erinnerung" }));
@@ -329,7 +326,7 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     expect(chips().slice(0, 2)).toEqual(["12 Wochen vorher", "6 Monate vorher"]);
     await user.click(within(card).getByRole("button", { name: "12 Wochen vorher entfernen" }));
     expect(chips()[0]).toBe("6 Monate vorher");
-    await user.click(within(within(card).getByRole("region", { name: "Erinnerung & Verantwortung speichern" })).getByRole("button", { name: "Speichern" }));
+    await user.click(within(within(card).getByRole("region", { name: "Erinnerungen speichern" })).getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { reminder_lead_months: 6 } }));
     await waitFor(() => expect(api.saveReminderLeads).toHaveBeenCalledWith("test-klinik", "c-1", []));
   });

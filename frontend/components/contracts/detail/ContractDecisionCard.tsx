@@ -72,6 +72,8 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<{ decision: ContractLifecycleDecisionKind; effective: string; note: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Nach „Kündigen“: die Kündigung selbst wird über den Status „Gekündigt“ dokumentiert.
+  const [terminated, setTerminated] = useState(false);
   const [summary, setSummary] = useState<{ loading: boolean; text: string | null; note: string | null }>({ loading: false, text: null, note: null });
   const effectiveRef = useRef<HTMLInputElement | null>(null);
 
@@ -98,6 +100,7 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
     setError(null);
     try {
       await createContractLifecycleDecision(orgSlug, contractId, { decision: form.decision, status: "planned", effective_date: form.effective || null, note: form.note.trim() || null });
+      setTerminated(form.decision === "terminate");
       setForm(null);
       toast("Entscheidung gespeichert.", "success");
       await load();
@@ -186,6 +189,11 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
         {form.decision === "terminate" ? <p className="rg-hint dec-full">Die Entscheidung wird nur erfasst. Die Kündigung selbst versenden Sie und dokumentieren sie anschließend über den Status „Gekündigt“.</p> : null}
         <div className="rg-actions dec-full"><button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Entscheidung speichern</button></div>
       </form> : null}
+
+      {terminated && brief.business_status !== "gekuendigt" && brief.business_status !== "beendet" ? <p className="dec-followup" role="status">
+        Kündigung versendet? Dann den Vertrag auf „Gekündigt“ setzen – mit Datum der Kündigung und Wirksamkeit.{" "}
+        <Link className="rg-link" href={contractHref(contractId, { tab: "register", section: "status" })}>Status auf „Gekündigt“ setzen</Link>
+      </p> : null}
 
       <div className="dec-history">
         <h3>Bisherige Entscheidungen</h3>

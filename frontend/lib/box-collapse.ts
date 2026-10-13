@@ -7,8 +7,11 @@
  * Klassen der Kästen weiter selbst.
  *
  * Ausgenommen: Kästen mit eigenem Einklappen (`CollapsibleSection`, Klasse `collapsible`) und
- * Kästen mit `data-no-collapse`.
+ * Kästen mit `data-no-collapse`. Neben dem Knopf steht eine Kachel mit Symbol und Kennfarbe aus der
+ * Überschrift (`lib/card-icons.ts`), außer der Kasten zeigt schon eine eigene (`.collapsible-icon`).
  */
+
+import { cardIcon, cardIconMarkup, tileClass } from "@/lib/card-icons";
 
 const STORAGE_KEY = "medflux.collapsed-boxes";
 const BOX_SELECTOR = [
@@ -116,6 +119,15 @@ function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
   });
   // Direkt nach dem Kopf: in der Tab-Reihenfolge vor dem Inhalt.
   box.firstElementChild!.after(button);
+  if (!box.firstElementChild!.querySelector(".collapsible-icon")) {
+    const icon = cardIcon(name);
+    const tile = document.createElement("span");
+    tile.className = `collapsible-icon box-icon ${tileClass(icon.tile)}`;
+    tile.setAttribute("aria-hidden", "true");
+    tile.innerHTML = cardIconMarkup(icon);
+    button.after(tile);
+    box.setAttribute("data-box-icon", "");
+  }
   render(box, button, collapsedKeys.has(key), name);
   place(box, head);
 }

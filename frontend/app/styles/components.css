@@ -861,6 +861,8 @@ body { background: var(--color-bg); }
 .section-tile--type { --tile-fg: var(--color-tag-type); --tile-bg: var(--color-tag-type-bg); --tile-border: var(--color-tag-type-border); }
 .section-tile--device { --tile-fg: var(--color-tag-device); --tile-bg: var(--color-tag-device-bg); --tile-border: var(--color-tag-device-border); }
 .section-tile--dept { --tile-fg: var(--color-tag-department); --tile-bg: var(--color-tag-department-bg); --tile-border: var(--color-tag-department-border); }
+.section-tile--partner { --tile-fg: var(--color-tag-partner); --tile-bg: var(--color-tag-partner-bg); --tile-border: var(--color-tag-partner-border); }
+.section-tile--cost { --tile-fg: var(--color-tag-cost); --tile-bg: var(--color-tag-cost-bg); --tile-border: var(--color-tag-cost-border); }
 .section-tile--accent { --tile-fg: var(--color-accent); --tile-bg: var(--color-surface-accent); --tile-border: var(--color-border); }
 @media (forced-colors: active) { .collapsible-icon { border-color: CanvasText; } }
 @media (max-width: 640px) {
@@ -972,12 +974,15 @@ body { background: var(--color-bg); }
 [data-box] { position: relative; }
 /* Einklappen links vor der Überschrift, 40 × 40 wie CollapsibleSection (Position aus lib/box-collapse.ts) */
 [data-box] > :first-child { padding-left: calc(40px + var(--space-3)); }
+[data-box][data-box-icon] > :first-child { padding-left: calc(80px + 2 * var(--space-3)); min-height: 40px; }
+.box-icon { position: absolute; top: var(--box-toggle-top, var(--space-3)); left: calc(var(--box-pad-left, var(--space-3)) + 40px + var(--space-3)); }
+@media print { .box-icon { display: none; } }
 .box-toggle { position: absolute; top: var(--box-toggle-top, var(--space-3)); left: var(--box-pad-left, var(--space-3)); display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
 .box-toggle:hover { background: var(--color-surface-subtle); }
 .box-toggle svg { transition: transform 0.15s; }
 [data-box][data-collapsed] > .box-toggle svg { transform: rotate(-90deg); }
 @media (prefers-reduced-motion: reduce) { .box-toggle svg { transition: none; } }
-[data-box][data-collapsed] > :not(:first-child):not(.box-toggle) { display: none; }
+[data-box][data-collapsed] > :not(:first-child):not(.box-toggle):not(.box-icon) { display: none; }
 [data-box][data-collapsed] > .cw-section-head { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
 [data-box][data-collapsed] > .cw-section-head p { display: none; }
 @media print { .box-toggle { display: none; } [data-box][data-collapsed] > * { display: revert; } }
@@ -1001,7 +1006,7 @@ button.tag-chip:hover, a.tag-chip:hover { text-decoration: underline; transform:
 .header-link, .fact-link { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--color-border-strong); text-underline-offset: 3px; }
 .header-link:hover, .fact-link:hover { text-decoration-color: currentColor; }
 .term-bar--link { cursor: pointer; }
-.term-bar-open-link { justify-self: end; font-size: var(--text-small); }
+.term-bar-open-link, .rg-link.term-bar-open-link { display: inline-flex; align-items: center; justify-self: end; min-height: 24px; font-size: var(--text-small); }
 @media (forced-colors: active) { .tag-chip, .tag-avatar { border-color: ButtonText; } }
 @media (prefers-reduced-motion: reduce) { button.tag-chip, a.tag-chip { transition: none; } button.tag-chip:hover, a.tag-chip:hover { transform: none; } }
 

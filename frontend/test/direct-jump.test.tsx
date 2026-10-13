@@ -75,6 +75,11 @@ describe("Direkt zur Stelle: Ziele", () => {
     expect(contractHref("c-1", { tab: "documents", subtab: "review" })).toBe("/contracts/c-1?tab=documents&subtab=review");
     expect(contractHref("c-1", { tab: "finance", section: "entries" })).toBe("/contracts/c-1?tab=finance&abschnitt=entries");
     expect(contractHref("c-1", { tab: "overview" })).toBe("/contracts/c-1");
+    // Erinnerungen werden unter Fristen & Aufgaben gepflegt, die Wartung in den Vertragsdaten.
+    expect(contractHref("c-1", { tab: "register", field: "reminder_recipient_account_id" })).toBe("/contracts/c-1?tab=deadlines&feld=reminder_recipient_account_id");
+    expect(contractHref("c-1", { tab: "register", field: "maintenance_next_date" })).toBe("/contracts/c-1?tab=register&feld=maintenance_next_date");
+    expect(contractHref("c-1", { tab: "register", section: "reminder" })).toBe("/contracts/c-1?tab=deadlines&abschnitt=reminder");
+    expect(contractHref("c-1", { tab: "register", field: "maintenance_interval_months" })).toBe("/contracts/c-1?tab=register&feld=maintenance_interval_months");
     expect(registerHref([{ column: "annual_cost", op: "empty" }], { ansicht: "review" })).toBe(`/register?ansicht=review&filter=${encodeURIComponent('[{"column":"annual_cost","op":"empty"}]')}`);
   });
 

@@ -114,6 +114,8 @@ describe("Entscheidung", () => {
     expect(within(list).getByText("wirksam am 31.12.2026 · Neues Angebot")).toBeInTheDocument();
     expect(within(list).getByText("Ahmad")).toBeInTheDocument();
     expect(screen.queryByLabelText("Wirksam am")).not.toBeInTheDocument();
+    // Nach „Kündigen“: Hinweis auf den Statuswechsel, der die Kündigung dokumentiert.
+    expect(screen.getByRole("link", { name: "Status auf „Gekündigt“ setzen" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=status");
   });
 });
 

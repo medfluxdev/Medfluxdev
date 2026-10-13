@@ -40,7 +40,7 @@ import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import StatusBadge from "@/components/ui/StatusBadge";
-import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
+import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
 import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
@@ -197,7 +197,14 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = toTab(searchParams.get("tab")) ?? "overview";
+  // Alte Links (?tab=register&feld=reminder_…) führen dorthin, wo das Feld jetzt steht.
+  const tabFromUrl = () => {
+    const tab = toTab(searchParams.get("tab")) ?? "overview";
+    const field = searchParams.get(FIELD_PARAM);
+    return tab === "register" && field && normalizeTarget({ tab, field }).tab === "deadlines" ? "deadlines" : tab;
+  };
+  const initialTab = tabFromUrl();
+  const [timelineVersion, setTimelineVersion] = useState(0);
   const initialSubtab = isDocumentTab(searchParams.get("subtab")) ? searchParams.get("subtab") as DocumentTab : "document";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [documentTab, setDocumentTab] = useState<DocumentTab>(initialSubtab);
@@ -245,7 +252,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     return () => setPageCommands([]);
   }, [data.contract_id, gaps, searchMissingHref]);
   // Links auf derselben Seite (z. B. „Kosten erfassen“) ändern nur die Adresse: Reiter danach richten.
-  const urlTab = toTab(searchParams.get("tab")) ?? "overview";
+  const urlTab = tabFromUrl();
   const urlSubtab = searchParams.get("subtab");
   const linkedSection = searchParams.get(SECTION_PARAM);
   useEffect(() => {
@@ -469,6 +476,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const effectiveEnd = data.dates.documented_end_date ?? data.dates.calculated_end_date;
   // KI-Auswertungen nur zeigen, wenn es ein analysiertes Dokument gibt (sonst nur "Fehlt"-Kacheln).
   const hasAi = data.documents.length > 0;
+  const maintenanceHidden = !showAllSections && data.sections && !data.sections.maintenance ? new Set(["maintenance"]) : undefined;
   const endOrigin: OriginKind = data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis);
   const annualOrigin: OriginKind = data.costs.annual_recurring.amount == null ? "missing" : hasCalculationBasis(data.costs.annual_recurring_basis) ? "calculated" : annualCostEvidence ? "extracted" : "system";
   // Gepflegter Wert (Finanzposten) vor KI-Wert; der KI-Wert wird nie als gepflegt ausgegeben.
@@ -693,16 +701,26 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           searchableKeys={reextraction.state?.can_start ? new Set(fieldSearchMap(reextraction.state).keys()) : undefined}
           onSearchInDocument={(key) => router.replace(documentSearchHref(data.contract_id, key), { scroll: false })}
           onShowSource={showSource}
-          hiddenSections={!showAllSections && data.sections && !data.sections.maintenance ? new Set(["maintenance"]) : undefined}
+          hiddenSections={maintenanceHidden}
           afterStatus={slots.register}
-          onOpenDeadlines={() => setRoute("deadlines")}
+          onOpenField={(key, view) => openTarget({ tab: view === "deadlines" ? "deadlines" : "register", field: key })}
         /></>}
 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 
         {activeTab === "deadlines" && <div className="stack-4">
           <ContractDecisionCard contractId={data.contract_id} orgSlug={orgSlug} />
-          <ContractTimeline contractId={data.contract_id} orgSlug={orgSlug} workItems={data.work_items} endCheck={endCheck} onOpenTarget={openTarget} />
+          <ContractTimeline contractId={data.contract_id} orgSlug={orgSlug} workItems={data.work_items} endCheck={endCheck} onOpenTarget={openTarget} version={timelineVersion} />
+          {/* Erinnerungen: Einstellungen dessen, was hier passiert (Vertragsdaten-Felder, eine Implementierung). */}
+          <ContractRegisterPanel
+            view="deadlines"
+            contractId={data.contract_id}
+            orgSlug={orgSlug}
+            onChanged={() => { reload(); setTimelineVersion((value) => value + 1); }}
+            onShowSource={showSource}
+            hiddenSections={maintenanceHidden}
+            onOpenField={(key, view) => openTarget({ tab: view === "deadlines" ? "deadlines" : "register", field: key })}
+          />
         </div>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
