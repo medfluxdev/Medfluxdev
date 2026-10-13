@@ -74,6 +74,16 @@ export const HELP_SECTIONS: HelpSection[] = [
         keywords: "suchen filtern export excel register bestand",
       },
       {
+        id: "inhaltssuche",
+        question: "Wie finde ich Verträge mit einer bestimmten Regelung?",
+        answer: [
+          "Die Inhaltssuche durchsucht den Text aller Vertragsdokumente, zum Beispiel nach „Preisgleitklausel“ oder „Rufbereitschaft“. Jeder Treffer nennt Vertrag, Dokument und Seite.",
+          "Aus Strg + K erreichen Sie sie mit „In allen Vertragsdokumenten suchen“.",
+        ],
+        links: [{ label: "Inhaltssuche", href: "/suche" }],
+        keywords: "volltext klausel text dokument durchsuchen",
+      },
+      {
         id: "bearbeiten",
         question: "Wie bearbeite ich Vertragsdaten?",
         answer: [
@@ -160,7 +170,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         id: "fristen-berechnung",
         question: "Woher kommen die Fristen?",
         answer: [
-          "Aus den gepflegten Vertragsdaten: Laufzeitmodell, Beginn, Ende, Kündigungsfrist und Verlängerung. Daraus berechnet MedFlux „Kündbar bis“, das mögliche Vertragsende und die Erinnerung. Fehlt eine nötige Angabe, sagt der Kasten „Berechnete Fristen“, welche.",
+          "Aus den gepflegten Vertragsdaten: Laufzeitmodell, Beginn, Ende, Kündigungsfrist und Verlängerung. Daraus berechnet MedFlux „Kündbar bis“, das mögliche Vertragsende und die Erinnerung. Das Ergebnis steht im Streifen „Berechnet“ der Karte „Laufzeit, Fristen & Kündigung“; fehlt eine nötige Angabe, nennt er sie mit Link zum Feld.",
           "Alle Fristen und Aufgaben finden Sie unter „Fristen & Aufgaben“; „Nur meine“ zeigt Ihre persönliche Wiedervorlage.",
         ],
         links: [{ label: "Fristen & Aufgaben", href: "/fristen" }],
@@ -172,6 +182,107 @@ export const HELP_SECTIONS: HelpSection[] = [
         answer: ["Die im Vertrag eingetragene Empfängerin bzw. der Empfänger. Ist niemand eingetragen, geht die Erinnerung an die hauptverantwortliche Person. Benachrichtigungen erscheinen in der Glocke oben rechts."],
         links: [{ label: "Benachrichtigungen", href: "/postfach" }],
         keywords: "benachrichtigung glocke e-mail empfänger",
+      },
+      {
+        id: "kuendigungsentscheidung",
+        question: "Wie bereite ich eine Kündigungsentscheidung vor?",
+        answer: [
+          "Steht eine Kündigungsfrist an, zeigt die Entscheidungsvorlage „Kündbar bis“, das aktuelle Ende, die jährlichen Kosten und was ohne Handeln passiert. Fakten und Beträge sind berechnet; die Hinweise sind nur Beratung – entscheiden und die Entscheidung erfassen tun Sie.",
+          "Alle anstehenden Entscheidungen stehen unter „Fristen & Aufgaben“ → „Kündigungsentscheidungen“.",
+        ],
+        links: [{ label: "Kündigungsentscheidungen", href: "/fristen?ansicht=entscheidungen" }],
+        keywords: "verlängerung verlängern kündigen entscheidungsvorlage",
+      },
+    ],
+  },
+  {
+    id: "dokumente",
+    title: "Dokumente und Verknüpfungen",
+    description: "Nachträge, Rahmenverträge und der Verlauf eines Vertrags.",
+    entries: [
+      {
+        id: "nachtrag",
+        question: "Wie füge ich einen Nachtrag oder eine Kündigung hinzu?",
+        answer: [
+          "Im Vertrag unter Dokumente → Anlagen: „Dokument hinzufügen“, Art wählen (z. B. Nachtrag oder Kündigung) und hochladen. Ein Dokument ist das Hauptdokument; es lässt sich erst entfernen, wenn ein anderes Hauptdokument festgelegt ist.",
+          "Liest die KI einen Nachtrag aus, entstehen nur Vorschläge in den Vertragsdaten. Übernommen wird erst, was eine Person bestätigt.",
+        ],
+        keywords: "anlage nachtrag kündigungsschreiben hauptdokument hochladen",
+      },
+      {
+        id: "rahmenvertrag",
+        question: "Wie ordne ich einen Einzelvertrag seinem Rahmenvertrag zu?",
+        answer: [
+          "Im Vertrag unter Verknüpfungen → „Gehört zu Rahmenvertrag“. Am Rahmenvertrag sehen Sie umgekehrt alle zugeordneten Einzelverträge.",
+          "Findet die KI im Dokument einen Verweis auf einen Rahmenvertrag, erscheint er als Vorschlag zum Bestätigen.",
+        ],
+        keywords: "verknüpfung rahmen einzelvertrag beziehung",
+      },
+      {
+        id: "verlauf",
+        question: "Wo sehe ich, wer was geändert hat?",
+        answer: [
+          "Im Vertrag unter Verlauf: alle Änderungen, Prüfungen, Dokumente und versendeten Erinnerungen, neueste zuerst. Automatische Änderungen (KI, berechnete Fristen, Erinnerungen) sind als „System“ gekennzeichnet.",
+          "Für die ganze Organisation gibt es „Aktivitäten & Protokoll“ mit Filtern; Administration und Vertragsmanagement können es als CSV exportieren.",
+        ],
+        links: [{ label: "Aktivitäten & Protokoll", href: "/audit" }],
+        keywords: "historie protokoll änderung audit wer wann csv",
+      },
+    ],
+  },
+  {
+    id: "finanzen",
+    title: "Kosten und Finanzen",
+    description: "Wie Kosten erfasst und gerechnet werden.",
+    entries: [
+      {
+        id: "finanzeintraege",
+        question: "Wie erfasse ich die Kosten eines Vertrags?",
+        answer: [
+          "Im Vertrag unter Finanzen → Finanzeinträge: Betrag, Zeitraum und Gültigkeit. Ändert sich der Preis, legen Sie einen neuen Eintrag mit neuem Zeitraum an – so bleibt die Entwicklung nachvollziehbar.",
+          "Einzelpreise wie Stundensätze, Reisekosten oder Pauschalen gehören in den Leistungskatalog.",
+        ],
+        keywords: "kosten preis betrag jahreskosten preiserhöhung stundensatz leistungskatalog",
+      },
+      {
+        id: "kosten-berechnung",
+        question: "Wie rechnet MedFlux die Kosten?",
+        answer: [
+          "Kalkulatorisch auf Basis ganzer Monate aus den gepflegten Finanzeinträgen: laufendes Jahr, bisher, bis zum Ende, gesamte Laufzeit und Jahreswert.",
+          "Unbekannte Kosten zählen nie als 0. Summen zeigen deshalb, für wie viele Verträge Kosten bekannt sind. Ist das Vertragsende offen, bleibt „bis zum Ende“ leer.",
+          "KI-Vorschläge aus dem Vertrag fließen erst ein, wenn Sie sie übernehmen.",
+        ],
+        keywords: "summe berechnung abdeckung unbekannt null jahreswert",
+      },
+      {
+        id: "kostenstellen-aufteilung",
+        question: "Kann ich Kosten auf mehrere Kostenstellen verteilen?",
+        answer: ["Ja, unter Finanzen → Kostenstellen-Aufteilung; die Anteile müssen zusammen 100 % ergeben. Ohne Aufteilung gilt die Kostenstelle aus der Organisationszuordnung."],
+        keywords: "kostenstelle verteilen prozent anteil",
+      },
+    ],
+  },
+  {
+    id: "analysen",
+    title: "Analysen",
+    description: "Auswertungen über alle Verträge.",
+    entries: [
+      {
+        id: "analysen-seite",
+        question: "Was zeigt die Seite „Analysen“?",
+        answer: [
+          "Das Vertragsportfolio im Überblick, „Kosten nach Bereich“ (Krankenhaus → Abteilung → Verträge), „Gerätearten vergleichen“ und Hinweise aus der KI-Analyse. Gerechnet wird mit laufenden Verträgen; unbekannte Kosten zählen nicht als 0.",
+          "Unter „Fragen an das Portfolio“ fragen Sie in eigenen Worten, z. B. „Welche Verträge enden?“; die Antwort nennt die passenden Verträge mit Link.",
+        ],
+        links: [{ label: "Analysen", href: "/analysen" }],
+        keywords: "auswertung bericht portfolio drilldown geräteart vergleich frage",
+      },
+      {
+        id: "excel-export",
+        question: "Wie bekomme ich eine Liste für Excel?",
+        answer: ["In der Vertragsliste Filter, Spalten und Sortierung einstellen und „Excel exportieren“ wählen. Exportiert wird die aktuelle Auswahl. Eine Einstellung, die Sie öfter brauchen, sichern Sie mit „Ansicht speichern“."],
+        links: [{ label: "Vertragsliste", href: "/register" }],
+        keywords: "export xlsx tabelle ansicht speichern bericht",
       },
     ],
   },
@@ -227,4 +338,93 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
     ],
   },
+  {
+    id: "darstellung",
+    title: "Darstellung und Konto",
+    description: "MedFlux an Ihre Arbeitsweise anpassen.",
+    entries: [
+      {
+        id: "darstellung-anpassen",
+        question: "Kann ich die Schrift vergrößern oder ein dunkles Design wählen?",
+        answer: [
+          "Ja, im Kontomenü oben rechts unter „Darstellung“: Design (Hell, Dunkel, Wie System), Textgröße (bis 125 %) und Dichte (Komfortabel oder Kompakt). Die Einstellungen werden mit Ihrem Konto gespeichert.",
+          "Das Design wechseln Sie auch über Strg + K („Dunkles Design einschalten“).",
+        ],
+        keywords: "dunkel hell dark mode schriftgröße text größer kompakt dichte",
+      },
+      {
+        id: "profil",
+        question: "Wo ändere ich meinen Namen oder meine Kontaktdaten?",
+        answer: ["Im Kontomenü unter „Mein Profil“: Name, Funktion, Abteilung, Telefon und Foto."],
+        links: [{ label: "Mein Profil", href: "/profile" }],
+        keywords: "konto name foto telefon kontakt",
+      },
+    ],
+  },
+  {
+    id: "probleme",
+    title: "Wenn etwas nicht klappt",
+    description: "Häufige Fälle und was Sie tun können.",
+    entries: [
+      {
+        id: "import-fehlgeschlagen",
+        question: "Der Import oder die Analyse ist fehlgeschlagen.",
+        answer: [
+          "Das Original ist trotzdem gespeichert. Auf der Import-Seite stehen fehlgeschlagene Importe mit einer verständlichen Meldung; von dort starten Sie die Analyse erneut, zum Beispiel wenn die lokale KI wieder bereit ist.",
+          "Klappt es weiterhin nicht, können Sie die Angaben von Hand erfassen.",
+        ],
+        links: [{ label: "Import", href: "/import" }],
+        keywords: "fehler fehlgeschlagen analyse erneut versuchen ki nicht bereit",
+      },
+      {
+        id: "wert-fehlt",
+        question: "Die KI hat eine Angabe nicht gefunden.",
+        answer: [
+          "Dann bleibt das Feld leer – MedFlux rät nicht. Neben leeren Feldern und in „Was fehlt noch?“ startet „Im Dokument suchen“ eine gezielte Suche nach genau dieser Angabe.",
+          "Sie können den Wert auch selbst eintragen oder ihn aus dem gelesenen Text übernehmen.",
+        ],
+        links: [{ label: "Erneut erfassen", href: "/hilfe#erneut-erfassen" }],
+        keywords: "nicht gefunden leer fehlt im dokument suchen",
+      },
+      {
+        id: "kein-bearbeiten",
+        question: "Ich sehe keinen Knopf „Bearbeiten“.",
+        answer: ["Ihre Rolle darf diese Angaben nur lesen: Sie sehen alle Daten, können sie aber nicht ändern. Wenden Sie sich an die Administration, wenn Sie mehr Rechte brauchen."],
+        links: [{ label: "Rollen & Rechte", href: "/settings/roles" }],
+        keywords: "leser lesen rechte gesperrt ändern nicht möglich",
+      },
+      {
+        id: "vertrag-nicht-gefunden",
+        question: "Ein Vertrag fehlt in der Liste.",
+        answer: [
+          "Prüfen Sie zuerst die Reiter: Archivierte Verträge stehen im Archiv. Suche und Filter wirken zusammen – „Alle zurücksetzen“ nimmt Suche und zusätzliche Filter wieder heraus.",
+          "Vertrauliche Verträge sehen nur berechtigte Personen, gelöschte nur Administration und Vertragsmanagement.",
+        ],
+        links: [{ label: "Archiv", href: "/register?ansicht=archive" }],
+        keywords: "fehlt nicht da verschwunden archiv gelöscht vertraulich filter",
+      },
+    ],
+  },
 ];
+
+/** Vergleich ohne Groß-/Kleinschreibung und Akzente („kundigung“ findet „Kündigung“). */
+export function normalizeHelpText(text: string) {
+  return text.toLocaleLowerCase("de-DE").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function entryText(section: HelpSection, entry: HelpEntry) {
+  return normalizeHelpText(`${section.title} ${entry.question} ${entry.answer.join(" ")} ${(entry.steps ?? []).join(" ")} ${entry.keywords ?? ""}`);
+}
+
+/** Abschnitte mit den passenden Einträgen (auch über den Abschnittstitel); leere Suche = alles. */
+export function searchHelp(query: string): HelpSection[] {
+  const term = normalizeHelpText(query.trim());
+  if (!term) return HELP_SECTIONS;
+  return HELP_SECTIONS
+    .map((section) => ({ ...section, entries: section.entries.filter((entry) => entryText(section, entry).includes(term)) }))
+    .filter((section) => section.entries.length);
+}
+
+export function helpHref(entryId: string) {
+  return `/hilfe#${entryId}`;
+}

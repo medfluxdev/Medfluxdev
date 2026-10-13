@@ -1,9 +1,10 @@
+import { normalizeHelpText } from "@/lib/help-content";
 import { SHORTCUT_GROUPS, SHORTCUTS } from "./useShortcuts";
 
 /** Tastenkürzel nach Gruppen (Dialog „?“ und Hilfe-Seite). Mit `query` nur passende Zeilen. */
 export default function ShortcutTable({ query = "" }: { query?: string }) {
-  const term = query.trim().toLocaleLowerCase("de");
-  const rows = SHORTCUTS.filter((item) => !term || `${item.keys} ${item.label} ${item.group}`.toLocaleLowerCase("de").includes(term));
+  const term = normalizeHelpText(query.trim());
+  const rows = SHORTCUTS.filter((item) => !term || normalizeHelpText(`${item.keys} ${item.label} ${item.group}`).includes(term));
   if (!rows.length) return null;
   return <table className="data-table shortcut-table">
     <caption className="visually-hidden">Tastenkürzel</caption>

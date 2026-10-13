@@ -5,13 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import ShortcutTable from "@/components/shell/ShortcutTable";
 import { SHORTCUTS } from "@/components/shell/useShortcuts";
-import { HELP_SECTIONS, type HelpEntry } from "@/lib/help-content";
+import { HELP_SECTIONS, normalizeHelpText, searchHelp } from "@/lib/help-content";
 
 const SHORTCUTS_ID = "tastenkuerzel";
-
-function matches(entry: HelpEntry, term: string) {
-  return `${entry.question} ${entry.answer.join(" ")} ${(entry.steps ?? []).join(" ")} ${entry.keywords ?? ""}`.toLocaleLowerCase("de").includes(term);
-}
 
 // Hilfe: Antworten aus lib/help-content.ts plus Tastenkürzel aus derselben Liste wie der Dialog „?“.
 export default function HelpPage() {
@@ -27,11 +23,10 @@ export default function HelpPage() {
     if (hash) document.getElementById(hash)?.scrollIntoView({ block: "start" });
   }, [hash]);
 
-  const term = query.trim().toLocaleLowerCase("de");
-  const sections = useMemo(() => HELP_SECTIONS
-    .map((section) => ({ ...section, entries: term ? section.entries.filter((entry) => matches(entry, term)) : section.entries }))
-    .filter((section) => section.entries.length), [term]);
-  const shortcutHits = !term || SHORTCUTS.some((item) => `${item.keys} ${item.label} ${item.group}`.toLocaleLowerCase("de").includes(term)) || "tastenkürzel tastatur kürzel".includes(term);
+  const term = normalizeHelpText(query.trim());
+  const sections = useMemo(() => searchHelp(query), [query]);
+  const shortcutRows = Boolean(term) && SHORTCUTS.some((item) => normalizeHelpText(`${item.keys} ${item.label} ${item.group}`).includes(term));
+  const shortcutHits = !term || shortcutRows || normalizeHelpText("tastenkürzel tastatur kürzel").includes(term);
   const total = sections.reduce((sum, section) => sum + section.entries.length, 0) + (shortcutHits && term ? 1 : 0);
 
   return <div className="page help-page">
@@ -71,7 +66,7 @@ export default function HelpPage() {
         {shortcutHits ? <section id={SHORTCUTS_ID} className="card card-pad help-section" aria-labelledby={`${SHORTCUTS_ID}-heading`}>
           <h2 id={`${SHORTCUTS_ID}-heading`} className="card-title">Tastenkürzel</h2>
           <p className="help-section-intro">Funktionieren überall, außer beim Tippen in einem Feld (dort nur Strg + K und Strg + S). Mit ? öffnen Sie diese Liste jederzeit.</p>
-          <ShortcutTable query={SHORTCUTS.some((item) => `${item.keys} ${item.label} ${item.group}`.toLocaleLowerCase("de").includes(term)) ? query : ""} />
+          <ShortcutTable query={shortcutRows ? query : ""} />
         </section> : null}
       </div>
     </div>

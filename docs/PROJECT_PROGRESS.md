@@ -5718,3 +5718,11 @@ Vorgabe: `Claude outputs/تعليمات-Claude-Code-Organisationszuordnung.md` m
 - **Tastenkürzel aus einer Quelle:** `SHORTCUTS` hat jetzt Gruppen (Überall, Springen, Bearbeiten, Bedienung) und `g dann h` → Hilfe; `components/shell/ShortcutTable.tsx` zeigt sie im Dialog „?“ (mit Knopf „Zur Hilfe“) und auf der Seite.
 - **Erreichbar:** Fragezeichen-Symbol in der Kopfleiste, Kontomenü „Hilfe & Tastenkürzel“, Strg+K („Hilfe“), `g h`.
 - **Tests:** `test/help-page.test.tsx` (alle Themen und Kürzel, Suche, eindeutige Sprungmarken, Link im Dialog, axe). `npm run verify` grün (371 Tests, Build ok).
+
+### Nachtrag 2026-10-13 – Hilfe: mehr Themen, Antworten in Strg+K
+
+- **Neue Themen** in `lib/help-content.ts`: Dokumente und Verknüpfungen (Nachtrag/Kündigung, Rahmenvertrag, Verlauf/Protokoll), Kosten und Finanzen (Finanzeinträge, Berechnung mit Abdeckung, Kostenstellen-Aufteilung), Analysen (Seite, Excel-Export), Darstellung und Konto, „Wenn etwas nicht klappt“ (Import fehlgeschlagen, KI fand nichts, kein „Bearbeiten“, Vertrag fehlt in der Liste); dazu Inhaltssuche und Kündigungsentscheidung. Jede Aussage gegen die UI geprüft.
+- **Eine Suche:** `searchHelp()`/`normalizeHelpText()` in `lib/help-content.ts` (ohne Akzente, „kundigung“ findet „Kündigung“; Abschnittstitel zählt mit), genutzt von `/hilfe`, `ShortcutTable` und der Befehlspalette.
+- **Strg+K:** ab zwei Zeichen bis zu vier Hilfe-Antworten (Abschnitt „Hilfe“), springen zu `/hilfe#<id>`; auf `/hilfe` selbst wird nur die Sprungmarke gewechselt. `helpHref(id)` für Links aus anderen Seiten.
+- **Tests:** `test/help-page.test.tsx` (Suche ohne Umlaute, Abschnittstitel, interne `/hilfe#`-Links gültig), `test/command-palette-page.test.tsx` (Hilfe-Treffer, nicht bei einem Zeichen). `npm run verify` grün (386 Tests, Build ok).
+- **Nächster Schritt:** Kontext-Links aus Seiten/InfoTips auf passende Antworten (`helpHref`).

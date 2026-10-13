@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { listPartners } from "@/lib/domain-api/catalogs";
@@ -9,10 +9,11 @@ import { useFocusTrap } from "@/components/ui/useFocusTrap";
 import { allowed, EXTRA_PAGES, Icon, NAV_GROUPS, type IconName } from "./navigation";
 import { usePreferences } from "./preferences";
 import { usePageCommands } from "@/lib/page-commands";
+import { helpHref, searchHelp } from "@/lib/help-content";
 
 interface Command {
   id: string;
-  section: "Dieser Vertrag" | "Aktionen" | "Seiten" | "Verträge" | "Vertragspartner" | "Inhalte";
+  section: "Dieser Vertrag" | "Aktionen" | "Seiten" | "Hilfe" | "Verträge" | "Vertragspartner" | "Inhalte";
   label: string;
   hint?: string;
   icon: IconName;
@@ -23,9 +24,10 @@ function normalize(text: string) {
   return text.toLocaleLowerCase("de-DE").normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-// Befehlspalette (Strg+K): Seiten, Aktionen, Vertraege, Partner und Inhaltssuche.
+// Befehlspalette (Strg+K): Seiten, Aktionen, Hilfe-Antworten, Vertraege, Partner und Inhaltssuche.
 export default function CommandPalette({ open, onClose, onShowShortcuts }: { open: boolean; onClose: () => void; onShowShortcuts: () => void }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { role, account, organizationSlug } = useAuth();
   const [, updatePrefs] = usePreferences();
   const [query, setQuery] = useState("");
@@ -97,8 +99,14 @@ export default function CommandPalette({ open, onClose, onShowShortcuts }: { ope
     const q = normalize(query.trim());
     const page = q ? fromPage.filter((command) => normalize(`${command.label} ${command.hint ?? ""}`).includes(q)) : fromPage;
     const matches = q ? local.filter((command) => normalize(`${command.label} ${command.hint ?? ""}`).includes(q)) : local.filter((command) => command.section === "Aktionen" || command.section === "Seiten").slice(0, 12);
-    return [...page.slice(0, 8), ...matches.slice(0, 10), ...remote];
-  }, [fromPage, local, query, remote]);
+    // Hilfe-Antworten ab zwei Zeichen; auf /hilfe selbst nur die Sprungmarke wechseln (löst hashchange aus).
+    const help: Command[] = q.length < 2 ? [] : searchHelp(query).flatMap((section) => section.entries).slice(0, 4).map((entry) => ({
+      id: `help:${entry.id}`, section: "Hilfe", label: entry.question, icon: "help",
+      run: pathname === "/hilfe" ? () => { onClose(); window.location.hash = entry.id; } : go(helpHref(entry.id)),
+    }));
+    return [...page.slice(0, 8), ...matches.slice(0, 10), ...help, ...remote];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromPage, local, query, remote, pathname]);
 
   useEffect(() => { setActive(0); }, [query]);
 

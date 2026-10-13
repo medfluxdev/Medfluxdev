@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import CommandPalette from "@/components/shell/CommandPalette";
 import { setPageCommands } from "@/lib/page-commands";
+import { HELP_SECTIONS } from "@/lib/help-content";
 
 const router = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/contracts/c-1" }));
@@ -30,5 +31,25 @@ describe("Strg+K: was dem Vertrag fehlt", () => {
   it("ohne Vertragsakte gibt es keine Vertragsbefehle", () => {
     render(<CommandPalette open onClose={() => undefined} onShowShortcuts={() => undefined} />);
     expect(screen.queryByText("Dieser Vertrag")).not.toBeInTheDocument();
+  });
+});
+
+describe("Strg+K: Antworten aus der Hilfe", () => {
+  it("findet Hilfe-Antworten ohne Umlaute und springt zur Antwort", async () => {
+    const user = userEvent.setup();
+    render(<CommandPalette open onClose={() => undefined} onShowShortcuts={() => undefined} />);
+    await user.type(screen.getByRole("combobox"), "kundigungsentscheidung");
+    const option = screen.getByRole("option", { name: /Kündigungsentscheidung vor/ });
+    expect(screen.getByText("Hilfe")).toBeInTheDocument();
+    await user.click(option);
+    expect(router.push).toHaveBeenCalledWith("/hilfe#kuendigungsentscheidung");
+  });
+
+  it("zeigt bei einem Zeichen noch keine Hilfe-Antworten", async () => {
+    const user = userEvent.setup();
+    render(<CommandPalette open onClose={() => undefined} onShowShortcuts={() => undefined} />);
+    await user.type(screen.getByRole("combobox"), "k");
+    const questions = HELP_SECTIONS.flatMap((section) => section.entries.map((entry) => entry.question));
+    expect(screen.queryAllByRole("option").some((option) => questions.includes(option.textContent ?? ""))).toBe(false);
   });
 });
