@@ -28,7 +28,7 @@ interface Props {
   id: string;
   title: string;
   description?: ReactNode;
-  /** Kurzfassung (2–3 Werte, Fehlendes als Signal); ersetzt im eingeklappten Zustand die Beschreibung. */
+  /** Kurzfassung (2–3 Werte, Fehlendes als Signal); ersetzt im eingeklappten Zustand die Beschreibung (ohne Kurzfassung bleibt die Beschreibung). */
   summary?: ReactNode;
   /** Kachel 40 × 40 zwischen Einklappen und Überschrift (Kennfarbe des Inhalts, dekorativ). */
   icon?: ReactNode;
@@ -78,7 +78,7 @@ export default function CollapsibleSection({ id, title, description, summary, ic
       <div className="collapsible-title">
         <h2 id={`${id}-heading`}>{title}</h2>
         {collapsed
-          ? summary ? <div className="collapsible-summary">{summary}</div> : null
+          ? summary ? <div className="collapsible-summary">{summary}</div> : description ? <p>{description}</p> : null
           : description ? <p>{description}</p> : null}
       </div>
       {actions ? <div className="collapsible-corner">{actions}</div> : null}

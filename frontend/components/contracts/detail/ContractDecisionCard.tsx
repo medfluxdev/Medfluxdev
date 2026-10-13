@@ -145,6 +145,7 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
     id="dec"
     title="Entscheidung"
     description="Was soll mit dem Vertrag zum nächsten Termin passieren?"
+    summary={brief ? <span>{sorted[0] ? <>Zuletzt: <b>{DECISIONS.find((entry) => entry.key === sorted[0].decision)?.label ?? sorted[0].decision}</b>{sorted[0].effective_date ? ` · wirksam am ${formatDate(sorted[0].effective_date)}` : ""}</> : "Noch keine Entscheidung erfasst"}{brief.cancel_by ? ` · Kündbar bis ${formatDate(brief.cancel_by)}` : brief.current_end ? ` · Vertragsende ${formatDate(brief.current_end)}` : ""}</span> : null}
     icon={SCALE_ICON}
     iconClassName="section-tile--accent"
     actions={signal ? <Signal tone={signal.tone}>{signal.label}</Signal> : null}

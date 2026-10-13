@@ -722,6 +722,18 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const joinParts = (parts: ReactNode[]) => parts.filter(Boolean).map((part, index) => <span key={index} className="summary-part">{index > 0 ? <span className="sep" aria-hidden="true">·</span> : null}{part}</span>);
   function summaryFor(sectionId: string): ReactNode {
     if (!register) return null;
+    if (sectionId === "organisation") {
+      const storageLabel = shown("storage_location_code");
+      const accountNumber = shown("account_number");
+      const parts = [storageLabel ? <>Ablage <b>{storageLabel}</b></> : null, accountNumber ? <>Konto <b>{accountNumber}</b></> : null, register.fields.manual_billing?.value ? "Manuelle Abrechnung" : null];
+      return parts.some(Boolean) ? joinParts(parts) : "Nichts erfasst";
+    }
+    if (sectionId === "price") {
+      const kind = shown("price_adjustment_kind");
+      if (!kind) return "Keine Preisanpassung erfasst";
+      const next = shown("price_adjustment_next_date");
+      return joinParts([<b key="k">{kind}</b>, shown("price_adjustment_percent") ?? shown("price_adjustment_index_name"), next ? <>nächste <b>{next}</b></> : null]);
+    }
     if (sectionId === "identity") {
       const partner = shown("partner_id");
       return joinParts([
@@ -823,7 +835,11 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       className="rg-status"
       title="Bearbeitungsstatus"
       description={register.has_ai_analysis ? "Werte aus der KI-Analyse sind gekennzeichnet und können bestätigt oder korrigiert werden." : "Manuell angelegter Vertrag ohne KI-Analyse."}
-      summary={register.business_status === "in_arbeit" && register.missing_for_valid.length ? <Signal tone="warning" size="sm">{`Für „Gültig“ fehlen ${register.missing_for_valid.length}`}</Signal> : null}
+      summary={joinParts([
+        <>Status <b>{register.business_status_label}</b></>,
+        register.business_status === "in_arbeit" && register.missing_for_valid.length ? <Signal tone="warning" size="sm">{`Für „Gültig“ fehlen ${register.missing_for_valid.length}`}</Signal> : null,
+        register.has_ai_analysis ? (register.review_pending ? <Signal tone="ai" size="sm">KI-Prüfung offen</Signal> : "KI-Werte geprüft") : "Ohne KI-Analyse",
+      ])}
       icon={STATUS_ICON}
       iconClassName="section-tile--accent"
       forceOpen={transition !== null}

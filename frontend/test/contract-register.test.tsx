@@ -134,13 +134,17 @@ describe("Vertragsregister – Stammdaten", () => {
     try {
       render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
       await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-      for (const title of ["Vertrag & Partner", "Laufzeit, Fristen & Kündigung"]) {
+      for (const title of ["Bearbeitungsstatus", "Vertrag & Partner", "Laufzeit, Fristen & Kündigung", "Ablage & Abrechnung", "Preisanpassung"]) {
         await user.click(screen.getByRole("button", { name: `${title} einklappen` }));
       }
       const head = (title: string) => screen.getByRole("heading", { level: 2, name: title }).parentElement!;
       expect(head("Vertrag & Partner")).toHaveTextContent("Vertragspartner fehlt");
       expect(head("Vertrag & Partner")).toHaveTextContent("Nr. 000042");
       expect(head("Laufzeit, Fristen & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
+      // Jede eingeklappte Karte zeigt eine kurze Angabe unter dem Namen.
+      expect(head("Bearbeitungsstatus")).toHaveTextContent(/Status In Arbeit/);
+      expect(head("Ablage & Abrechnung")).toHaveTextContent(/Ablage|Konto|Manuelle Abrechnung|Nichts erfasst/);
+      expect(head("Preisanpassung")).toHaveTextContent(/Keine Preisanpassung erfasst|nächste/);
       // Bearbeiten bleibt auch eingeklappt erreichbar und klappt auf.
       await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
       expect(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung einklappen" })).toHaveAttribute("aria-expanded", "true");

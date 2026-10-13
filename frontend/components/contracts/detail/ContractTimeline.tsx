@@ -270,6 +270,7 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
     id="tl"
     title="Termine & Aufgaben"
     description="Alle Termine, Erinnerungen und Aufgaben zu diesem Vertrag"
+    summary={items === null ? null : nothing ? "Keine Termine" : <span>{`${open.filter((row) => row.kind !== "Erinnerung").length} offen`}{upcoming[0]?.date ? <> · nächster: <b>{formatDate(upcoming[0].date)}</b> {upcoming[0].title}</> : null}{past.length ? ` · ${past.length} überfällig` : ""}</span>}
     icon={KIND_ICON.Erinnerung}
     iconClassName="section-tile--type"
     actions={editable && !form ? <button type="button" className="btn btn-sm" onClick={() => setForm(EMPTY_FORM)}>Termin hinzufügen</button> : null}
