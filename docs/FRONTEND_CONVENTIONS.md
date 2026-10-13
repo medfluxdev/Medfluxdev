@@ -49,6 +49,7 @@ Vor jedem neuen UI-Element in `components/ui/` nachsehen:
 | Kennzahl mit Ziel | `KpiTile`: mit `href` ist die ganze Kachel ein Link; die Kachel ist immer neutral; Aufmerksamkeit nur über `signal={{ tone, label }}`; `icon` = graues Liniensymbol vor der Beschriftung |
 | Einfache sortierbare Tabelle | `DataTable` |
 | Ungespeicherte Änderungen, Strg+S | `useUnsavedChanges`, `useSaveShortcut` |
+| „Bearbeiten“ per Taste E | Bearbeiten-Knopf eines Kastens mit `data-shortcut="edit"`, `aria-keyshortcuts="E"`, Titel „Bearbeiten (E)“; ausgelöst über `triggerEditShortcut` (`components/shell/useShortcuts.ts`) |
 
 Keine Inline-Styles außer für wirklich dynamische Werte (z. B. Breite eines Balkens).
 
