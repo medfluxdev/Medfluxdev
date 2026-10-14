@@ -162,6 +162,25 @@
   --color-tag-category: #4f5b16;
   --color-tag-category-bg: #f0f3df;
   --color-tag-category-border: #c6cf96;
+  /* Kennfarben der Termin-Typen: Identität, nicht Status. Immer mit Symbol + Wort, nur in Terminlisten. */
+  --color-termin-aufgabe: #1d4f91;
+  --color-termin-aufgabe-bg: #e4edf9;
+  --color-termin-aufgabe-border: #a9c3e8;
+  --color-termin-erinnerung: #7a4b00;
+  --color-termin-erinnerung-bg: #fbefd6;
+  --color-termin-erinnerung-border: #e0c07f;
+  --color-termin-frist: #a0351f;
+  --color-termin-frist-bg: #fbe6e0;
+  --color-termin-frist-border: #eeb0a0;
+  --color-termin-wartung: #0b5e66;
+  --color-termin-wartung-bg: #e2f2f3;
+  --color-termin-wartung-border: #9ccfd3;
+  --color-termin-loeschung: #5e5500;
+  --color-termin-loeschung-bg: #f3f0d5;
+  --color-termin-loeschung-border: #d2c86f;
+  --color-termin-ki: #5b3fa6;
+  --color-termin-ki-bg: #ece6fa;
+  --color-termin-ki-border: #c2b3ec;
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
@@ -303,6 +322,25 @@
     --color-tag-category: #cbd68e;
     --color-tag-category-bg: #282c16;
     --color-tag-category-border: #535a2c;
+    /* Kennfarben der Termin-Typen: Identität, nicht Status. */
+    --color-termin-aufgabe: #9cc0f5;
+    --color-termin-aufgabe-bg: #15273f;
+    --color-termin-aufgabe-border: #2f4a70;
+    --color-termin-erinnerung: #f0c070;
+    --color-termin-erinnerung-bg: #3a2a0c;
+    --color-termin-erinnerung-border: #6a4f1c;
+    --color-termin-frist: #f4a08c;
+    --color-termin-frist-bg: #3e1a12;
+    --color-termin-frist-border: #6e3326;
+    --color-termin-wartung: #7fd3da;
+    --color-termin-wartung-bg: #10302f;
+    --color-termin-wartung-border: #245a5d;
+    --color-termin-loeschung: #ddd27a;
+    --color-termin-loeschung-bg: #2f2c10;
+    --color-termin-loeschung-border: #595220;
+    --color-termin-ki: #c9b8f5;
+    --color-termin-ki-bg: #2a2244;
+    --color-termin-ki-border: #4a3d78;
     --color-success-fill: #3fae86;
     --color-warning-fill: #d99a2b;
     --color-danger-fill: #d9605a;
@@ -389,6 +427,25 @@
   --color-tag-category: #cbd68e;
   --color-tag-category-bg: #282c16;
   --color-tag-category-border: #535a2c;
+  /* Kennfarben der Termin-Typen: Identität, nicht Status. */
+  --color-termin-aufgabe: #9cc0f5;
+  --color-termin-aufgabe-bg: #15273f;
+  --color-termin-aufgabe-border: #2f4a70;
+  --color-termin-erinnerung: #f0c070;
+  --color-termin-erinnerung-bg: #3a2a0c;
+  --color-termin-erinnerung-border: #6a4f1c;
+  --color-termin-frist: #f4a08c;
+  --color-termin-frist-bg: #3e1a12;
+  --color-termin-frist-border: #6e3326;
+  --color-termin-wartung: #7fd3da;
+  --color-termin-wartung-bg: #10302f;
+  --color-termin-wartung-border: #245a5d;
+  --color-termin-loeschung: #ddd27a;
+  --color-termin-loeschung-bg: #2f2c10;
+  --color-termin-loeschung-border: #595220;
+  --color-termin-ki: #c9b8f5;
+  --color-termin-ki-bg: #2a2244;
+  --color-termin-ki-border: #4a3d78;
   --color-success-fill: #3fae86;
   --color-warning-fill: #d99a2b;
   --color-danger-fill: #d9605a;

@@ -344,36 +344,95 @@
 .dec-history-row--edit .dec-form{margin: 0}
 .dec-delete{color: var(--color-danger)}
 
-/* Fristen & Aufgaben: Zeitachse „Termine & Aufgaben“ */
+/* Fristen & Aufgaben: Zeitachse „Termine & Aufgaben“ – feste Spalten:
+   Punkt · Datum · Typ · Was zu tun ist · Person · Aktionen. */
 .tl{position: relative;margin: 0;padding: 0;list-style: none}
-.tl::before{content: "";position: absolute;top: 18px;bottom: 18px;left: 7px;width: 2px;background: var(--color-border-subtle)}
-/* Feste Spalten, damit Person und Knöpfe in allen Zeilen (offen und erledigt) untereinander stehen. */
-.tl-row{position: relative;display: grid;grid-template-columns: 16px 96px 132px minmax(0,1fr) 160px 300px;align-items: center;gap: 12px;padding: 10px 0}
+.tl::before{content: "";position: absolute;top: 14px;bottom: 14px;left: 7px;width: 2px;background: var(--color-border)}
+.tl-row{position: relative;display: grid;grid-template-columns: 24px 132px 132px minmax(0,1fr) 170px 150px;align-items: start;gap: 12px;padding: 10px 0}
 .tl-row + .tl-row{border-top: 1px solid var(--color-border-subtle)}
-.tl-row--ai{margin: 0 -12px;padding-right: 12px;padding-left: 12px;border-radius: var(--radius-sm);background: var(--color-ai-bg)}
-.tl-row--ai + .tl-row,.tl-row + .tl-row--ai{border-top-color: transparent}
-.tl-dot{position: relative;width: 16px;height: 16px;border: 2px solid var(--color-border-strong);border-radius: 50%;background: var(--color-surface)}
-.tl-dot--warning{border-color: var(--color-warning);background: var(--color-warning-bg)}
-.tl-dot--critical{border-color: var(--color-danger);background: var(--color-danger-bg)}
-.tl-dot--ai{border-color: var(--color-ai);background: var(--color-ai-bg)}
+.tl-row:hover{background: var(--color-surface-subtle)}
+.tl-dot{position: relative;z-index: var(--z-raised);width: 10px;height: 10px;margin: 6px 0 0 3px;border: 2px solid var(--color-border-strong);border-radius: 50%;background: var(--color-surface);box-sizing: content-box}
+.tl-dot--t-aufgabe{border-color: var(--color-termin-aufgabe);background: var(--color-termin-aufgabe-bg)}
+.tl-dot--t-erinnerung{border-color: var(--color-termin-erinnerung);background: var(--color-termin-erinnerung-bg)}
+.tl-dot--t-frist{border-color: var(--color-termin-frist);background: var(--color-termin-frist-bg)}
+.tl-dot--t-wartung{border-color: var(--color-termin-wartung);background: var(--color-termin-wartung-bg)}
+.tl-dot--t-loeschung{border-color: var(--color-termin-loeschung);background: var(--color-termin-loeschung-bg)}
+.tl-dot--t-ki{border-color: var(--color-termin-ki);background: var(--color-termin-ki-bg)}
+.tl-dot--overdue{border-color: var(--color-danger);background: var(--color-danger)}
 .tl-dot--today{border-color: var(--color-accent);background: var(--color-accent)}
-.tl-date{font-size: var(--text-small);font-weight: var(--weight-semibold)}
-.tl-title{font-weight: var(--weight-medium)}
-.tl-title small{display: block;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-regular)}
-.tl-who{min-width: 0;overflow: hidden;color: var(--color-text-muted);font-size: var(--text-small);white-space: nowrap;text-overflow: ellipsis}
-.tl-act,.tl-actions{display: flex;flex-wrap: wrap;justify-content: flex-end;gap: 6px}
-.tl-today{color: var(--color-accent);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.tl-dot--closed{border-color: var(--color-border-strong);background: var(--color-surface)}
+.tl-when{display: grid;gap: 2px;line-height: 1.25}
+.tl-date{font-family: var(--font-mono);font-size: var(--text-small);font-weight: var(--weight-semibold);font-variant-numeric: tabular-nums}
+.tl-rel{color: var(--color-text-muted);font-size: var(--text-caption)}
+.tl-rel--overdue{color: var(--color-danger);font-weight: var(--weight-semibold)}
+.tl-kind{display: flex;min-width: 0}
+.tl-kind-chip--aufgabe{border-color: var(--color-termin-aufgabe-border);background: var(--color-termin-aufgabe-bg);color: var(--color-termin-aufgabe)}
+.tl-kind-chip--erinnerung{border-color: var(--color-termin-erinnerung-border);background: var(--color-termin-erinnerung-bg);color: var(--color-termin-erinnerung)}
+.tl-kind-chip--frist{border-color: var(--color-termin-frist-border);background: var(--color-termin-frist-bg);color: var(--color-termin-frist)}
+.tl-kind-chip--wartung{border-color: var(--color-termin-wartung-border);background: var(--color-termin-wartung-bg);color: var(--color-termin-wartung)}
+.tl-kind-chip--loeschung{border-color: var(--color-termin-loeschung-border);background: var(--color-termin-loeschung-bg);color: var(--color-termin-loeschung)}
+.tl-kind-chip--ki{border-color: var(--color-termin-ki-border);background: var(--color-termin-ki-bg);color: var(--color-termin-ki)}
+.tl-what{display: grid;gap: 4px;min-width: 0}
+.tl-title{overflow: hidden;font-size: var(--text-body);font-weight: var(--weight-semibold);white-space: nowrap;text-overflow: ellipsis}
+.tl-meta{display: flex;flex-wrap: wrap;align-items: center;gap: 4px 10px;min-width: 0;color: var(--color-text-muted);font-size: var(--text-small)}
+.tl-meta-chip{display: inline-flex;align-items: center;gap: 4px;min-width: 0}
+.tl-meta-text{max-width: 100%;overflow: hidden;white-space: nowrap;text-overflow: ellipsis}
+.tl-meta-icon{flex: none;width: 13px;height: 13px;fill: none;stroke: var(--color-icon);stroke-width: 1.8;stroke-linecap: round;stroke-linejoin: round}
+.tl-meta-person{display: none}
+.tl-who{min-width: 0}
+.tl-person{display: inline-flex;align-items: center;gap: 8px;min-width: 0;max-width: 100%;color: var(--color-text-muted);font-size: var(--text-small)}
+.tl-person-name{overflow: hidden;white-space: nowrap;text-overflow: ellipsis}
+.tl-avatar{display: grid;flex: none;width: 24px;height: 24px;place-items: center;border: 1px solid var(--color-border);border-radius: 50%;background: var(--color-surface-muted);color: var(--color-text);font-size: var(--text-caption);font-weight: var(--weight-bold)}
+.tl-none{color: var(--color-text-subtle)}
+.tl-act{display: flex;align-items: center;justify-content: flex-end;gap: 4px;opacity: .55;transition: opacity .12s}
+.tl-row:hover .tl-act,.tl-row:focus-within .tl-act{opacity: 1}
+.tl-year{display: flex;align-items: center;gap: 10px;padding: 14px 0 6px 36px;color: var(--color-text-subtle);font-size: var(--text-caption);font-weight: var(--weight-bold);letter-spacing: .04em;text-transform: uppercase}
+.tl-year::after{flex: 1;height: 1px;background: var(--color-border-subtle);content: ""}
+.tl-row--today{align-items: center;padding: 6px 0}
+.tl-row--today:hover{background: transparent}
+.tl-today{display: flex;grid-column: 2 / -1;align-items: center;gap: 12px;color: var(--color-accent);font-size: var(--text-small);font-weight: var(--weight-semibold)}
+.tl-today::after{flex: 1;height: 1px;background: var(--color-accent);opacity: .4;content: ""}
+.tl-today-chip{padding: 1px 8px;border: 1px solid var(--color-accent);border-radius: var(--radius-pill);background: var(--color-accent-soft);font-variant-numeric: tabular-nums}
+.tl-dup{display: inline-flex}
+.tl-editor,.tl-confirm{grid-column: 2 / -1}
+.tl-confirm{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 12px;padding: 10px 14px;border: 1px solid var(--color-danger-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle);font-size: var(--text-small)}
 .tl-compare{display: grid;grid-column: 2 / -1;gap: 12px;padding: 14px 16px;border: 1px solid var(--color-ai-border);border-radius: var(--radius-sm);background: var(--color-surface)}
 .tl-compare-cols{display: grid;grid-template-columns: 1fr 1fr;gap: 12px;margin: 0}
 .tl-cmp{padding: 12px 14px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
 .tl-cmp dt{display: flex;align-items: center;gap: 6px;margin-bottom: 4px;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
 .tl-cmp dd{margin: 0;font-size: var(--text-title-s);font-weight: var(--weight-semibold)}
 .tl-cmp small{display: block;margin-top: 4px;color: var(--color-text-muted);font-size: var(--text-small)}
-.tl-none{color: var(--color-text-subtle)}
 .tl-compare .rg-actions{justify-content: flex-end}
+/* Filter */
+.tl-filters{display: flex;flex-wrap: wrap;align-items: center;gap: 8px;padding: 4px 0 12px}
+.tl-filters-label{margin-right: 4px;color: var(--color-text-muted);font-size: var(--text-small)}
+.tl-filters-gap{flex: 1}
+.tl-filter{display: inline-flex;align-items: center;gap: 6px;min-height: 28px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-pill);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small);font-weight: var(--weight-medium);cursor: pointer}
+.tl-filter[aria-pressed="true"]{border-color: var(--color-accent);background: var(--color-accent-soft);color: var(--color-accent);font-weight: var(--weight-semibold)}
+.tl-filter-count{color: var(--color-text-muted);font-variant-numeric: tabular-nums}
+.tl-filter-icon{width: 14px;height: 14px;fill: none;stroke: currentColor;stroke-width: 1.8;stroke-linecap: round;stroke-linejoin: round}
+.tl-swatch{display: inline-block;width: 10px;height: 10px;border: 2px solid;border-radius: 50%;box-sizing: border-box}
+.tl-swatch--aufgaben{border-color: var(--color-termin-aufgabe);background: var(--color-termin-aufgabe-bg)}
+.tl-swatch--erinnerungen{border-color: var(--color-termin-erinnerung);background: var(--color-termin-erinnerung-bg)}
+.tl-swatch--fristen{border-color: var(--color-termin-frist);background: var(--color-termin-frist-bg)}
+.tl-filter-empty{margin: 0;padding: 12px 0;color: var(--color-text-muted);font-size: var(--text-small)}
+/* Erledigt-Bereich und Legende */
 .tl-done{margin-top: var(--space-3)}
 .tl-done summary{cursor: pointer;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
-.tl--closed{margin-top: 10px;opacity: .75}
+.tl--closed{margin-top: 10px;opacity: .7}
+.tl-row--closed .tl-title{color: var(--color-text-muted);text-decoration: line-through;text-decoration-color: var(--color-text-subtle)}
+.tl-legend{display: flex;flex-wrap: wrap;align-items: center;gap: 8px;margin-top: 14px;padding-top: 12px;border-top: 1px dashed var(--color-border);color: var(--color-text-muted);font-size: var(--text-caption)}
+.tl-legend-note{margin-inline-start: auto}
+/* „⋯“-Menü */
+.action-menu{position: relative;display: inline-flex}
+.action-menu-icon{width: 16px;height: 16px;fill: none;stroke: currentColor;stroke-width: 1.8;stroke-linecap: round;stroke-linejoin: round}
+.action-menu-trigger .action-menu-icon{width: 18px;height: 18px}
+.action-menu-panel{position: absolute;top: calc(100% + 4px);right: 0;z-index: var(--z-dropdown);display: grid;min-width: 220px;padding: 6px;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface);box-shadow: var(--shadow-md)}
+.action-menu-item{display: flex;align-items: center;gap: 10px;width: 100%;padding: 8px 10px;border: 0;border-radius: var(--radius-sm);background: transparent;color: var(--color-text);font: inherit;font-size: var(--text-small);font-weight: var(--weight-medium);text-align: left;cursor: pointer}
+.action-menu-item:hover,.action-menu-item:focus-visible{background: var(--color-surface-subtle)}
+.action-menu-item .action-menu-icon{color: var(--color-icon)}
+.action-menu-item--danger,.action-menu-item--danger .action-menu-icon{color: var(--color-danger)}
+.action-menu-separator{margin: 4px 0;border-top: 1px solid var(--color-border-subtle)}
 
 /* Vertragsdaten: „Wie berechnet?“, „Erinnern“, „Nächste Erinnerungen“ */
 .rg-how summary{display: inline;color: var(--color-link);font-size: var(--text-small);font-weight: var(--weight-semibold);cursor: pointer}
@@ -394,10 +453,18 @@
   .dec-kpis{grid-template-columns: repeat(2,minmax(0,1fr))}
   .dec-form{grid-template-columns: 1fr}
   .dec-history-row{grid-template-columns: 100px minmax(0,1fr)}
-  .tl-row{grid-template-columns: 16px 96px minmax(0,1fr)}
-  .tl-kind,.tl-title,.tl-who,.tl-act{grid-column: 3}
-  .tl-compare{grid-column: 1 / -1}
+  /* Fünf Spalten: die Person steht in der zweiten Zeile. */
+  .tl-row{grid-template-columns: 24px 120px 132px minmax(0,1fr) auto}
+  .tl-who{display: none}
+  .tl-meta-person{display: inline-flex}
   .tl-compare-cols{grid-template-columns: 1fr}
+}
+@media (max-width: 800px){
+  /* Zwei Spalten: Punkt · alles übereinander. */
+  .tl-row{grid-template-columns: 24px minmax(0,1fr);gap: 6px 12px}
+  .tl-when,.tl-kind,.tl-what,.tl-act,.tl-editor,.tl-confirm,.tl-compare{grid-column: 2}
+  .tl-act{justify-content: flex-start}
+  .tl-today{grid-column: 2}
 }
 @media (forced-colors: active){
   .tl-dot,.dec-seg button[aria-pressed="true"]{forced-color-adjust: none;border-color: CanvasText}

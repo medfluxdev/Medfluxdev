@@ -80,7 +80,9 @@ describe("Termine eines Vertrags", () => {
     expect(within(row).queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();
     expect(screen.getByText("Erledigte und abgebrochene (1)")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
-    await user.click(within(row).getByRole("button", { name: "Erledigt" }));
+    // Systemfrist: Hauptaktion „Öffnen“, „Erledigt“ steht im „⋯“-Menü.
+    await user.click(within(row).getByRole("button", { name: /Weitere Aktionen/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Erledigt" }));
     expect(api.deadlineAction).toHaveBeenCalledWith("test-klinik", "d-1", "done");
   });
 
