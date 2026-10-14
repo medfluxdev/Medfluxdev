@@ -85,6 +85,8 @@ class EvidenceRef(BaseModel):
     source_type: Optional[str] = None
     snippet: Optional[str] = None
     confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    # ai = Vorschlag des Modells (mit Sicherheit), programmatic = von festen Regeln woertlich gelesen.
+    extraction_method: Optional[str] = None
     requires_review: bool = False
     bbox: Optional[EvidenceBbox] = None
     precision: Literal["coarse", "none"] = "none"
@@ -329,6 +331,8 @@ class ScopeStatusItem(BaseModel):
     page: Optional[int] = None
     snippet: Optional[str] = None
     evidence_ref: Optional[str] = None
+    # Ja/Nein der KI-Analyse (nur Vorschlag; das Verdikt oben entscheidet).
+    ai_suggestion: Optional[bool] = None
 
 
 class ContractScopeSection(BaseModel):
@@ -413,6 +417,12 @@ class DetailWarning(BaseModel):
     requires_action: bool = False
     requires_review: bool = False
     action_state: Optional[str] = None
+    # Quellfelder der Warnung (z. B. `dates.end_date`) – verbindet sie mit der Faktprüfung.
+    source_refs: list[str] = Field(default_factory=list)
+    # Prüf-Warnung, deren Angaben eine Person geprüft hat (requires_review ist dann False).
+    review_resolved: bool = False
+    # Widerspruch verständlich: Frage, die beiden Werte mit Herkunft, Entscheidung (nur Konflikte).
+    conflict: Optional[dict] = None
 
 
 class DetailDocument(BaseModel):
@@ -502,6 +512,12 @@ class FactReviewStateDto(BaseModel):
     linked_evidence_refs: list[str] = Field(default_factory=list)
     needs_evidence: bool = False
     is_critical: bool = False
+    # Sicherheit der KI zu ihrem Vorschlag (0..1, bester Beleg); None = keine Angabe.
+    ai_confidence: Optional[float] = None
+    # Angabe aus einem Nachweis ohne feste Pruef-Angabe („evidence.<feld>“).
+    is_evidence_item: bool = False
+    # Ohne KI-Sicherheit: alle Belege von festen Regeln woertlich im Text gefunden (kein Modellvorschlag).
+    found_by_rule: bool = False
 
 
 class ContractReviewDto(BaseModel):

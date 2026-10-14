@@ -55,6 +55,8 @@ export function reviewContractFact(
     system_value?: unknown;
     note?: string | null;
     evidence_ref?: string | null;
+    /** Versionsstand; hat jemand die Angabe inzwischen geprüft, antwortet der Server mit 409. */
+    expected_reviewed_at?: string | null;
   },
 ) {
   return apiPost<ContractDetailResponse>(

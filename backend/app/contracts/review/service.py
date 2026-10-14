@@ -14,14 +14,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.contracts.review.material import (
+    EVIDENCE_FACT_PREFIX,
     MATERIAL_FACT_KEYS,
+    evidence_base,
+    SCOPE_FACTS,
     fact_is_critical,
     fact_label,
     material_report,
@@ -37,7 +40,8 @@ REVIEWED_ACTIONS = frozenset({"confirmed", "corrected"})
 # entsteht kein Pruef-Eintrag, kritische Angaben bleiben immer manuell.
 AUTO_ACCEPTED_STATE = "auto_accepted"
 RESOLVED_STATES = REVIEWED_ACTIONS | {AUTO_ACCEPTED_STATE}
-MATERIAL_CHANGE_ACTIONS = frozenset({"corrected", "voided"})
+MATERIAL_CHANGE_ACTIONS = frozenset({"corrected", "voided", "reopened"})
+AUTO_COMPLETE_NOTE = "Alle Angaben geprüft."
 
 ACTION_LABELS = {
     "confirmed": "Geprüft und bestätigt",
@@ -142,6 +146,11 @@ DUPLICATE_WINDOW_SECONDS = 30
 _NOT_GIVEN = object()
 
 
+def _valid_evidence_key(fact_key: str) -> bool:
+    base = fact_key[len(EVIDENCE_FACT_PREFIX):] if fact_key.startswith(EVIDENCE_FACT_PREFIX) else ""
+    return bool(base) and len(fact_key) <= 120 and all(part.replace("_", "").isalnum() for part in base.split("."))
+
+
 def record_fact_action(
     session: Session,
     *,
@@ -165,7 +174,7 @@ def record_fact_action(
     reviewer = _require_reviewer(reviewer_display_name)
     if action not in REVIEW_ACTIONS:
         raise ReviewError(f"Unbekannte Prüf-Aktion: {action}")
-    if fact_key not in MATERIAL_FACT_KEYS:
+    if fact_key not in MATERIAL_FACT_KEYS and not _valid_evidence_key(fact_key):
         raise ReviewError(f"Unbekannter Prüf-Fakt: {fact_key}")
     if action == "corrected" and corrected_value is None:
         raise ReviewError(
@@ -364,7 +373,7 @@ def complete_review(
 #   - Aliase (Harness-Feldname != Material-Key): `termination.automatic_renewal`
 #     fuer `termination.auto_renewal`, `costs.annual_cost` fuer `costs.annual`
 #   - gewachsene Praefixe: `identity_equipment.evidence.0` fuer equipment.*,
-#     `sla.*`/`scope.*` fuer `services.coverage`
+#     `services.<key>` fuer `scope.<key>` (Leistungsumfang)
 # Gruppen-Zeilen (`dates.evidence`, `costs.evidence`, ...) dienen als
 # Rueckfall, damit ein vorliegender Fakt nie grundlos „Kein Quellen-Beleg"
 # zeigt – sie zaehlen aber nicht, wenn ein feldspezifischer Beleg existiert.
@@ -380,10 +389,10 @@ _FACT_EVIDENCE_ALIASES: dict[str, tuple[str, ...]] = {
     "costs.vat_rate": ("costs.tax_table.vat",),
     "costs.vat_amount": ("costs.tax_table.vat",),
     "costs.monthly_gross": ("costs.tax_table.gross",),
-    "services.coverage": (
-        "services.included_services",
-        "services.excluded_services",
-    ),
+    # Leistungsumfang je Leistung: Belege aus `services.<key>` (Harness) oder `scope.<key>`.
+    **{f"scope.{key}": (f"services.{key}",) for key, _ in SCOPE_FACTS},
+    "scope.other_included": ("services.included_services", "scope.included_services"),
+    "scope.other_excluded": ("services.excluded_services", "scope.excluded_services"),
 }
 
 _FACT_EVIDENCE_PREFIXES: dict[str, tuple[str, ...]] = {
@@ -397,7 +406,6 @@ _FACT_EVIDENCE_PREFIXES: dict[str, tuple[str, ...]] = {
         "equipment.evidence",
         "identity.system_identity",
     ),
-    "services.coverage": ("scope.", "sla."),
 }
 
 
@@ -458,15 +466,41 @@ def build_fact_review_states(
     for ev in data.get("evidence") or []:
         evidence_by_ref.setdefault(ev.get("field_ref"), []).append(ev)
 
-    states: list[dict] = []
+    # Jeder Nachweis gehoert zu genau einer Pruef-Angabe: Belege, die keiner festen Angabe
+    # zugeordnet sind, werden je Quellfeld eine eigene Angabe („evidence.<feld>“).
+    used: set[int] = set()
     for fact_key, info in report.items():
+        if info.get("present"):
+            specific, group_fallback = _link_fact_evidence(fact_key, evidence_by_ref)
+            used.update(id(ev) for ev in (specific or group_fallback))
+    evidence_groups: dict[str, list[dict]] = {}
+    for ev in data.get("evidence") or []:
+        if id(ev) not in used and ev.get("field_ref"):
+            evidence_groups.setdefault(EVIDENCE_FACT_PREFIX + evidence_base(ev["field_ref"]), []).append(ev)
+    items = list(report.items()) + [
+        (key, {"present": True, "value": _evidence_value(evs), "critical": False})
+        for key, evs in evidence_groups.items()
+    ]
+
+    states: list[dict] = []
+    for fact_key, info in items:
         row = latest.get(fact_key)
+        # Von Hand eingetragener Wert (z. B. im Dokument nicht gefunden) zählt wie ein vorliegender.
+        if row is not None and row.action == "corrected" and not info.get("present"):
+            info = {**info, "present": True}
         state = row.action if row is not None else "unreviewed"
         if row is not None and row.action == "reopened":
             state = "unreviewed"
 
-        specific, group_fallback = _link_fact_evidence(fact_key, evidence_by_ref)
+        if fact_key in evidence_groups:
+            specific, group_fallback = list(evidence_groups[fact_key]), []
+        else:
+            specific, group_fallback = _link_fact_evidence(fact_key, evidence_by_ref)
         evidence_list = specific or group_fallback
+        ai_confidence = max(
+            (float(ev["confidence"]) for ev in evidence_list if ev.get("confidence") is not None),
+            default=None,
+        )
         # UAT Re-Test (Defect 1): wiederhergestellte, wörtlich belegte Quellen
         # (evidence_id "recovered:...") vor dekorativen Sammel-/Extraktions-
         # Refs – so zeigt der "Seite N"-Beleg des Reviews die kanonische Seite.
@@ -545,9 +579,25 @@ def build_fact_review_states(
                 and state in ("unreviewed", "needs_review")
                 and not evidence_list,
                 "is_critical": bool(info.get("critical")),
+                # Sicherheit der KI zu ihrem Vorschlag (bester Beleg, 0..1); None = keine Angabe.
+                "ai_confidence": ai_confidence,
+                "is_evidence_item": fact_key in evidence_groups,
+                "found_by_rule": ai_confidence is None
+                and bool(evidence_list)
+                and all(ev.get("extraction_method") == "programmatic" for ev in evidence_list),
             }
         )
     return states
+
+
+def _evidence_value(evidence: list[dict]) -> Optional[str]:
+    """Wert einer Nachweis-Angabe: das Zitat des Belegs (wiederhergestellte Quellen zuerst)."""
+    ordered = sorted(evidence, key=lambda ev: 0 if str(ev.get("evidence_id") or "").startswith("recovered:") else 1)
+    for ev in ordered:
+        text = " ".join(str(ev.get("snippet") or "").split())
+        if text:
+            return text if len(text) <= 240 else text[:239] + "…"
+    return None
 
 
 def _unwrap(payload) -> object:
@@ -621,6 +671,293 @@ def build_fact_review_history(session, *, contract_id) -> list[dict]:
     return out
 
 
+def complete_if_all_reviewed(
+    session, *, organization_id, contract_id, data: dict, reviewer_display_name: Optional[str]
+) -> bool:
+    """Prüfung des Vertrags abschließen, sobald eine Person die letzte offene Angabe geprüft hat.
+
+    Faktprüfung, Vertragsliste („Zu prüfen“) und Hinweise zählen damit dasselbe. Kritische Angaben
+    zählen nur mit menschlicher Prüfung; ohne relevante Angaben bleibt der Status unverändert.
+    """
+    summary = build_review_summary(
+        build_fact_review_states(session, organization_id=organization_id, contract_id=contract_id, data=data)
+    )
+    if not summary["relevant_count"] or summary["unresolved_count"] or summary["critical_unreviewed_count"]:
+        return False
+    review = get_contract_review(session, organization_id=organization_id, contract_id=contract_id)
+    if review is not None and review.status == "reviewed":
+        return False
+    complete_review(
+        session,
+        organization_id=organization_id,
+        contract_id=contract_id,
+        reviewer_display_name=reviewer_display_name,
+        note=AUTO_COMPLETE_NOTE,
+        relevant_count=summary["relevant_count"],
+        reviewed_count=summary["reviewed_count"],
+    )
+    return True
+
+
+REGISTER_CONFIRM_NOTE = "In den Vertragsdaten bestätigt."
+
+
+def confirm_facts_from_register(
+    session, *, organization_id, contract_id, register_keys, reviewer_display_name: Optional[str]
+) -> list[str]:
+    """In den Vertragsdaten bestätigte KI-Werte gelten auch in der Faktprüfung als bestätigt.
+
+    Gegenstück zu `apply_review_to_register`; nur offene, vorliegende Angaben. Danach wird die
+    Prüfung abgeschlossen, falls nichts mehr offen ist. Gibt die bestätigten Angaben zurück.
+    """
+    from app.contracts.detail.service import build_contract_detail
+    from app.reextract.facts import REVIEW_TO_REGISTER
+
+    if not (reviewer_display_name or "").strip():
+        return []
+    bases = {key.removesuffix("_value").removesuffix("_unit") for key in register_keys}
+    facts = [fact for fact, base in REVIEW_TO_REGISTER.items() if base in bases]
+    if not facts:
+        return []
+    data = build_contract_detail(session, organization_id=organization_id, contract_id=contract_id)
+    if data is None:
+        return []
+    states = {
+        state["fact_key"]: state
+        for state in build_fact_review_states(session, organization_id=organization_id, contract_id=contract_id, data=data)
+    }
+    confirmed: list[str] = []
+    for fact in facts:
+        state = states.get(fact)
+        if state is None or not state["present"] or state["state"] not in ("unreviewed", "needs_review"):
+            continue
+        record_fact_action(
+            session,
+            organization_id=organization_id,
+            contract_id=contract_id,
+            fact_key=fact,
+            action="confirmed",
+            reviewer_display_name=reviewer_display_name,
+            note=REGISTER_CONFIRM_NOTE,
+            system_value=state["original_value"],
+        )
+        confirmed.append(fact)
+    if confirmed:
+        sync_review_links(
+            session, organization_id=organization_id, contract_id=contract_id, data=data,
+            reviewer_display_name=reviewer_display_name,
+        )
+    return confirmed
+
+
+# Ziel einer Warnung -> Pruef-Angabe, falls die Quellfelder keine nennen.
+_WARNING_TARGET_FACTS = {
+    "contract_end": ("dates.end_date",),
+    "cancellation_deadline": ("dates.latest_cancellation",),
+    "renewal": ("termination.auto_renewal",),
+}
+
+
+def _warning_facts(warning: dict) -> set[str]:
+    aliases = {alias: fact for fact, names in _FACT_EVIDENCE_ALIASES.items() for alias in names}
+    facts = set()
+    for ref in warning.get("source_refs") or []:
+        base = str(ref).split(".evidence", 1)[0]
+        fact = base if base in MATERIAL_FACT_KEYS else aliases.get(base)
+        if fact:
+            facts.add(fact)
+    if not facts:
+        facts.update(_WARNING_TARGET_FACTS.get(str(warning.get("target_kind") or ""), ()))
+    return facts & MATERIAL_FACT_KEYS
+
+
+_UNIT_DE = {"years": "Jahre", "year": "Jahr", "months": "Monate", "month": "Monat", "weeks": "Wochen", "days": "Tage"}
+_INPUT_LABELS_DE = {
+    "end_date": "Vertragsende laut Dokument",
+    "derived_end_date": "Aus Beginn + Laufzeit",
+    "start_date": "Vertragsbeginn",
+    "duration": "Laufzeit",
+    "cancellation_period": "Kündigungsfrist",
+    "notice_period": "Kündigungsfrist",
+}
+CONFLICT_RESOLVED_NOTE = "Widerspruch geklärt"
+
+
+def _date_de(value) -> Optional[str]:
+    try:
+        return date.fromisoformat(str(value)[:10]).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return None
+
+
+def _duration_de(value) -> Optional[str]:
+    parts = str(value or "").split()
+    if len(parts) != 2 or parts[0] in ("?", "-"):
+        return None
+    number = parts[0][:-2] if parts[0].endswith(".0") else parts[0]
+    return f"{number} {_UNIT_DE.get(parts[1], parts[1])}"
+
+
+def build_conflict(warning: dict, data: dict, states_by_key: dict[str, dict]) -> Optional[dict]:
+    """Widerspruch verständlich machen: was weicht ab, welche Werte stehen zur Wahl, woher stammen sie.
+
+    Nur aus der gespeicherten Berechnung (keine erfundenen Werte). Das Vertragsende hat zwei Optionen
+    zur Entscheidung; andere Widersprüche zeigen Erklärung und Eingangswerte.
+    """
+    if warning.get("warning_type") != "calculation_conflict":
+        return None
+    dates = data.get("dates") or {}
+    target = str(warning.get("target_kind") or "")
+    if target == "contract_end":
+        inputs = (dates.get("calculated_end_basis") or {}).get("inputs") or {}
+        documented, derived = inputs.get("end_date"), inputs.get("derived_end_date")
+        if _date_de(documented) and _date_de(derived):
+            start, duration = _date_de(inputs.get("start_date")), _duration_de(inputs.get("duration"))
+            days = abs((date.fromisoformat(str(documented)[:10]) - date.fromisoformat(str(derived)[:10])).days)
+            fact = states_by_key.get("dates.end_date") or {}
+            return {
+                "topic": "contract_end",
+                "title_de": "Widerspruch beim Vertragsende",
+                "question_de": "Welches Vertragsende gilt?",
+                "explanation_de": (
+                    f"Im Dokument steht als Vertragsende der {_date_de(documented)}. Aus Vertragsbeginn und Laufzeit "
+                    f"ergibt sich der {_date_de(derived)} – {days} Tage Unterschied."
+                ),
+                "fact_key": "dates.end_date",
+                "options": [
+                    {"key": "document", "label_de": "Laut Dokument", "value": str(documented)[:10],
+                     "detail_de": "Ausdrücklich im Vertrag genannt", "fact_keys": ["dates.end_date"]},
+                    {"key": "calculated", "label_de": "Aus Beginn + Laufzeit", "value": str(derived)[:10],
+                     "detail_de": f"{start} + {duration}" if start and duration else "Aus Vertragsbeginn und Laufzeit berechnet",
+                     "fact_keys": ["dates.start_date", "dates.duration"]},
+                ],
+                "decided_value": fact.get("effective_value") if fact.get("state") in REVIEWED_ACTIONS else None,
+                "decided_by": fact.get("reviewer_display_name") if fact.get("state") in REVIEWED_ACTIONS else None,
+            }
+    basis_key = {"cancellation_deadline": "latest_cancellation_basis"}.get(target)
+    basis = (dates.get(basis_key) or {}) if basis_key else {}
+    shown = [
+        {"label_de": _INPUT_LABELS_DE.get(key, key.replace("_", " ")), "value": _date_de(value) or _duration_de(value) or str(value)}
+        for key, value in (basis.get("inputs") or {}).items()
+        if value not in (None, "", "-")
+    ]
+    topic_de = {"cancellation_deadline": "beim Kündigungstermin"}.get(target, "in den Vertragsdaten")
+    return {
+        "topic": target or "data",
+        "title_de": f"Widerspruch {topic_de}",
+        "question_de": "Die Angaben aus dem Dokument passen nicht zusammen.",
+        "explanation_de": "Die Werte unten widersprechen sich. Bitte die Angaben in den Vertragsdaten prüfen und richtigstellen.",
+        "fact_key": {"cancellation_deadline": "termination.cancellation_period"}.get(target),
+        "options": [],
+        "inputs": shown,
+        "decided_value": None,
+        "decided_by": None,
+    }
+
+
+def resolve_review_warnings(data: dict, states: list[dict], review_status: str) -> None:
+    """Prüf-Warnungen gelten als erledigt, sobald ihre Angaben in der Faktprüfung geprüft sind.
+
+    Ohne zuordenbare Angabe: erledigt, wenn die Prüfung des Vertrags abgeschlossen ist. So zeigen
+    „Offene Punkte“, KI-Prüfung und Faktprüfung denselben Stand.
+    """
+    by_key = {state["fact_key"]: state for state in states}
+    for warning in data.get("warnings") or []:
+        conflict = build_conflict(warning, data, by_key)
+        if conflict is not None:
+            warning["conflict"] = conflict
+    all_done = review_status == "reviewed" and not any(
+        state["present"] and state["state"] not in RESOLVED_STATES and state["state"] != "voided" for state in states
+    )
+    for warning in data.get("warnings") or []:
+        if not warning.get("requires_review"):
+            continue
+        facts = [by_key[key] for key in _warning_facts(warning) if key in by_key]
+        resolved = all(state["state"] in RESOLVED_STATES for state in facts) if facts else all_done
+        if resolved:
+            warning["requires_review"] = False
+            warning["review_resolved"] = True
+    _refresh_risk(data)
+    review = data.get("review")
+    if isinstance(review, dict):
+        open_reviews = [w for w in data.get("warnings") or [] if w.get("requires_review")]
+        review["requires_manual_review"] = bool(open_reviews)
+        review["review_reasons"] = [w.get("title_de") for w in open_reviews if w.get("title_de")]
+
+
+_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+
+def _refresh_risk(data: dict) -> None:
+    """Berechnetes Risiko ohne geklärte Prüf-Warnungen (gleiche Regel wie `_project_risk_level`)."""
+    warnings = data.get("warnings") or []
+    risk = data.get("risk")
+    if not isinstance(risk, dict) or not any(w.get("review_resolved") for w in warnings):
+        return
+    worst = min((_SEVERITY_ORDER.get(str(w.get("severity")), 4) for w in warnings if not w.get("review_resolved")), default=4)
+    level = "high" if worst <= 1 else "medium" if worst == 2 else "low" if worst == 3 else "unknown"
+    if level == risk.get("computed"):
+        return
+    risk["computed"] = level
+    risk["confirmed"] = None
+    if not risk.get("override"):
+        risk["effective"] = level
+        data["risk_level"] = level
+
+
+def resolve_review_work_items(session, *, organization_id, contract_id, data: dict) -> int:
+    """Prüf-Aufgaben (Arbeitsvorrat) schließen, deren Angaben in der Faktprüfung geprüft sind.
+
+    Gleiche Regel wie `resolve_review_warnings`; geschlossene Aufgaben lebt `reconcile_work_items`
+    nicht wieder auf. Gibt die Zahl geschlossener Aufgaben zurück.
+    """
+    from app.database.models.warning import ContractWarning
+    from app.database.models.work_item import WorkItem
+
+    states = build_fact_review_states(session, organization_id=organization_id, contract_id=contract_id, data=data)
+    review = get_contract_review(session, organization_id=organization_id, contract_id=contract_id)
+    probe = {"warnings": [], "review": None}
+    items = session.scalars(
+        select(WorkItem).where(
+            (WorkItem.organization_id == organization_id)
+            & (WorkItem.contract_id == contract_id)
+            & (WorkItem.active.is_(True))
+            & (WorkItem.requires_review.is_(True))
+            & (WorkItem.status != "resolved")
+        )
+    ).all()
+    for item in items:
+        warning = session.get(ContractWarning, item.source_warning_id) if item.source_warning_id else None
+        probe["warnings"].append({
+            "requires_review": True,
+            "source_refs": [str(ref) for ref in (item.source_field_refs or []) if ref],
+            "target_kind": warning.target_kind if warning is not None else None,
+            "_item": item,
+        })
+    resolve_review_warnings(probe, states, review.status if review is not None else "unreviewed")
+    now = datetime.now(timezone.utc)
+    closed = 0
+    for entry in probe["warnings"]:
+        if entry.get("review_resolved"):
+            item = entry["_item"]
+            item.status = "resolved"
+            item.status_updated_at = now
+            item.active = False
+            closed += 1
+    if closed:
+        session.flush()
+    return closed
+
+
+def sync_review_links(session, *, organization_id, contract_id, data: dict, reviewer_display_name: Optional[str]) -> None:
+    """Nach einer menschlichen Prüfung: Vertragsprüfung abschließen (wenn nichts offen) und Prüf-Aufgaben schließen."""
+    complete_if_all_reviewed(
+        session, organization_id=organization_id, contract_id=contract_id, data=data,
+        reviewer_display_name=reviewer_display_name,
+    )
+    resolve_review_work_items(session, organization_id=organization_id, contract_id=contract_id, data=data)
+
+
 def review_detail_response(session, *, organization_id, contract_id, data: dict) -> dict:
     states = build_fact_review_states(
         session, organization_id=organization_id, contract_id=contract_id, data=data
@@ -632,4 +969,5 @@ def review_detail_response(session, *, organization_id, contract_id, data: dict)
     data["fact_review_states"] = states
     data["fact_reviews"] = build_fact_review_history(session, contract_id=contract_id)
     data["contract_review"] = {**cr_dto, **summary}
+    resolve_review_warnings(data, states, cr_dto["status"])
     return data

@@ -90,6 +90,7 @@ const SECTION_ANCHORS: Record<string, string> = {
   deadlines: "tl-heading",
   intelligence: "contract-intelligence-heading",
   "offene-punkte": "open-points-heading",
+  widerspruch: "conflict-heading",
 };
 
 export function sectionAnchor(section: string): string {
@@ -135,13 +136,16 @@ const WORK_ITEM_TARGETS: Record<string, FixTarget | null> = {
   contract_expired: DEADLINE_TARGET,
   sla_issue: null,
 };
+/** „Widerspruch klären“ auf der Übersicht. */
+export const CONFLICT_TARGET: FixTarget = { tab: "overview", section: "widerspruch" };
+
 const WARNING_TARGETS: Record<string, FixTarget> = {
   missing_cost_data: FINANCE_ENTRIES_TARGET,
   cost_conflict: FINANCE_ENTRIES_TARGET,
   currency_conflict: FINANCE_ENTRIES_TARGET,
   unclear_contract_data: REVIEW_TARGET,
   manual_review_required: REVIEW_TARGET,
-  calculation_conflict: REVIEW_TARGET,
+  calculation_conflict: CONFLICT_TARGET,
   cancellation_deadline_approaching: DEADLINE_TARGET,
   cancellation_deadline_today: DEADLINE_TARGET,
   cancellation_deadline_passed: DEADLINE_TARGET,
@@ -157,6 +161,8 @@ export function workItemTarget(itemType: string, requiresReview = false): FixTar
 }
 
 export function warningTarget(warningType: string, requiresReview = false): FixTarget | null {
+  // Ein Widerspruch wird dort geklärt, wo beide Werte nebeneinander stehen.
+  if (warningType === "calculation_conflict") return CONFLICT_TARGET;
   if (requiresReview) return REVIEW_TARGET;
   return WARNING_TARGETS[warningType] ?? null;
 }

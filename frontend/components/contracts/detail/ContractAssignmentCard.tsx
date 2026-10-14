@@ -30,8 +30,8 @@ export default function ContractAssignmentCard({ contractId, assignment, canEdit
       {canEdit ? <Link className="btn btn-sm" href={href} aria-label="Zuordnung ändern">Ändern</Link> : null}
     </div>
     <dl className="side-dl">
-      <div><dt>Vertragstyp</dt><dd>{a?.contract_type ? <><TagChip kind="type">{a.contract_type}</TagChip>{a.contract_category ? <span className="side-sub">{a.contract_category}</span> : null}</> : missing("Vertragstyp")}</dd></div>
-      <div><dt>Krankenhaus</dt><dd>{a?.hospital ?? (a ? "Organisationsweit" : missing("Krankenhaus"))}</dd></div>
+      <div><dt>Vertragstyp</dt><dd>{a?.contract_type ? <><TagChip kind="type">{a.contract_type}</TagChip>{a.contract_category ? <TagChip kind="category" srLabel="Kategorie">{a.contract_category}</TagChip> : null}</> : missing("Vertragstyp")}</dd></div>
+      <div><dt>Krankenhaus</dt><dd>{a?.hospital ? <TagChip kind="hospital">{a.hospital}</TagChip> : a ? <TagChip kind="hospital">Organisationsweit</TagChip> : missing("Krankenhaus")}</dd></div>
       <div><dt>Verantwortliche Abteilung</dt><dd>{a?.responsible_department ? <TagChip kind="department">{a.responsible_department}</TagChip> : missing("Verantwortliche Abteilung")}</dd></div>
       <div><dt>Nutzende Abteilungen</dt><dd>{departments.length ? departments.map((name) => <TagChip key={name} kind="department">{name}</TagChip>) : none}</dd></div>
       <div><dt>Kostenstelle</dt><dd>{a?.cost_center ? <TagChip kind="cost" code={a.cost_center.code}>{a.cost_center.name}</TagChip> : missing("Kostenstelle")}</dd></div>

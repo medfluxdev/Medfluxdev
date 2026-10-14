@@ -50,11 +50,13 @@ from app.contracts.search.models import ContractListResponse
 from app.contracts.search.service import SearchError, SearchParams, build_contract_search
 from app.contracts.detail.models import ContractDetailResponse
 from app.contracts.detail.service import DetailError, build_contract_detail
-from app.contracts.review.material import material_report
+from app.contracts.review.material import EVIDENCE_FACT_PREFIX, material_report
 from app.contracts.review.service import (
     ReviewConflict,
     ReviewError,
     build_fact_review_states,
+    resolve_review_work_items,
+    sync_review_links,
     build_review_summary,
     complete_review,
     record_fact_action,
@@ -465,6 +467,14 @@ def contract_fact_review(
                 system_value = (material_report(data).get(payload.fact_key) or {}).get(
                     "value"
                 )
+            if system_value is None and payload.fact_key.startswith(EVIDENCE_FACT_PREFIX):
+                # Nachweis-Angabe: das Zitat des Belegs ist der Originalwert.
+                system_value = next(
+                    (state["original_value"] for state in build_fact_review_states(
+                        session, organization_id=org.id, contract_id=cid, data=data
+                    ) if state["fact_key"] == payload.fact_key),
+                    None,
+                )
             # Vertragsdaten-Feld zur Angabe: Korrektur vorab lesen (nicht lesbar -> nichts speichern).
             from app.register.fields import FieldValidationError
             from app.register.service import review_register_changes
@@ -499,6 +509,14 @@ def contract_fact_review(
                 {"fact_key": payload.fact_key},
             )
             _review_into_register(request, organization_slug, session, cid, register_base, register_changes)
+            if payload.action in ("confirmed", "corrected"):
+                sync_review_links(
+                    session,
+                    organization_id=org.id,
+                    contract_id=cid,
+                    data=data,
+                    reviewer_display_name=reviewer_name(request, payload.reviewer_display_name),
+                )
             session.commit()
         except ReviewConflict as exc:
             session.rollback()
@@ -636,6 +654,7 @@ def contract_review_complete(
                 reviewed_count=summary["reviewed_count"],
                 critical_unreviewed_count=summary["critical_unreviewed_count"],
             )
+            resolve_review_work_items(session, organization_id=org.id, contract_id=cid, data=data)
             _record_account_activity(
                 session,
                 request,

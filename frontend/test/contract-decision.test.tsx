@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ContractDecisionCard, { deadlineSignal } from "@/components/contracts/detail/ContractDecisionCard";
+import ContractDecisionCard, { deadlineSignal, followUpDue } from "@/components/contracts/detail/ContractDecisionCard";
 import RenewalOverview from "@/components/deadlines/RenewalOverview";
 import type { ContractLifecycleDecision } from "@/lib/domain-api/lifecycle";
 import type { RenewalBrief } from "@/lib/domain-api/registerGrid";
@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   getContractLifecycle: vi.fn(),
   createContractLifecycleDecision: vi.fn(),
   updateContractLifecycleDecision: vi.fn(),
+  deleteContractLifecycleDecision: vi.fn(),
 }));
 
 vi.mock("@/lib/domain-api/registerGrid", async (importOriginal) => ({
@@ -26,7 +27,9 @@ vi.mock("@/lib/domain-api/lifecycle", () => ({
   getContractLifecycle: api.getContractLifecycle,
   createContractLifecycleDecision: api.createContractLifecycleDecision,
   updateContractLifecycleDecision: api.updateContractLifecycleDecision,
+  deleteContractLifecycleDecision: api.deleteContractLifecycleDecision,
 }));
+
 
 function brief(overrides: Partial<RenewalBrief> = {}): RenewalBrief {
   return {
@@ -108,7 +111,11 @@ describe("Entscheidung", () => {
     await user.click(terminate);
     await user.type(screen.getByLabelText("Notiz"), "Neues Angebot");
     await user.click(screen.getByRole("button", { name: "Entscheidung speichern" }));
-    await waitFor(() => expect(api.createContractLifecycleDecision).toHaveBeenCalledWith("test-klinik", "c-1", { decision: "terminate", status: "planned", effective_date: "2026-12-31", note: "Neues Angebot" }));
+    // Entscheidung und Erinnerung in einem Schritt: der passende Termin wird mit angelegt und verknüpft.
+    await waitFor(() => expect(api.createContractLifecycleDecision).toHaveBeenCalledWith("test-klinik", "c-1", {
+      decision: "terminate", status: "planned", effective_date: "2026-12-31", note: "Neues Angebot",
+      reminder: expect.objectContaining({ title: "Kündigung versenden", kind: "kuendigungsfrist", due_date: "2026-12-31" }),
+    }));
     const list = await screen.findByRole("list", { name: "Bisherige Entscheidungen" });
     expect(within(list).getByText("Kündigen")).toBeInTheDocument();
     expect(within(list).getByText("wirksam am 31.12.2026 · Neues Angebot")).toBeInTheDocument();
@@ -116,6 +123,112 @@ describe("Entscheidung", () => {
     expect(screen.queryByLabelText("Wirksam am")).not.toBeInTheDocument();
     // Nach „Kündigen“: Hinweis auf den Statuswechsel, der die Kündigung dokumentiert.
     expect(screen.getByRole("link", { name: "Status auf „Gekündigt“ setzen" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=status");
+  });
+});
+
+describe("Entscheidung mit Erinnerung", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getRenewalBrief.mockResolvedValue(brief());
+    api.getContractLifecycle.mockResolvedValue({ items: [] });
+    api.createContractLifecycleDecision.mockResolvedValue(SAVED);
+  });
+
+  it("Fälligkeit: Kündigungsfrist, sonst Wirksamkeit, nie vergangen; Beobachten in 3 Monaten", () => {
+    const b = { cancel_by: "2026-09-30", current_end: "2026-12-31" };
+    expect(followUpDue("terminate", b, "2026-12-31", "2026-08-15")).toBe("2026-09-30");
+    expect(followUpDue("terminate", b, "2026-12-31", "2026-10-14")).toBe("2026-12-31");
+    expect(followUpDue("renew", { cancel_by: null, current_end: "2026-12-31" }, "", "2026-10-14")).toBe("2026-12-31");
+    expect(followUpDue("monitor", b, "2026-12-31", "2026-10-14")).toBe("2027-01-14");
+    expect(followUpDue("renegotiate", { cancel_by: null, current_end: null }, "", "2026-10-14")).toBe("2026-10-21");
+  });
+
+  it("Erinnerung ist vorausgefüllt, änderbar und abwählbar", async () => {
+    const user = userEvent.setup();
+    const onReminderCreated = vi.fn();
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" onReminderCreated={onReminderCreated} />);
+    const group = await screen.findByRole("group", { name: "Entscheidung" });
+    await user.click(within(group).getByRole("button", { name: "Beobachten" }));
+    expect(screen.getByLabelText("Erinnerung anlegen")).toBeChecked();
+    expect(screen.getByLabelText("Termin")).toHaveValue("Entscheidung erneut prüfen");
+    await user.clear(screen.getByLabelText("Fällig am"));
+    await user.type(screen.getByLabelText("Fällig am"), "2027-02-01");
+    await user.click(screen.getByRole("button", { name: "Entscheidung speichern" }));
+    await waitFor(() => expect(api.createContractLifecycleDecision).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({
+      reminder: expect.objectContaining({ title: "Entscheidung erneut prüfen", due_date: "2027-02-01", kind: "pruefung" }),
+    })));
+    expect(onReminderCreated).toHaveBeenCalled();
+
+    // Ohne Erinnerung: nur die Entscheidung (ein doppelter gleicher Termin wird im Backend wiederverwendet).
+    await user.click(within(group).getByRole("button", { name: "Verlängern" }));
+    await user.click(screen.getByLabelText("Erinnerung anlegen"));
+    expect(screen.queryByLabelText("Fällig am")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Entscheidung speichern" }));
+    await waitFor(() => expect(api.createContractLifecycleDecision).toHaveBeenCalledTimes(2));
+    expect(api.createContractLifecycleDecision).toHaveBeenLastCalledWith("test-klinik", "c-1", { decision: "renew", status: "planned", effective_date: "2026-12-31", note: null });
+  });
+});
+
+describe("Bisherige Entscheidungen ändern und löschen", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getRenewalBrief.mockResolvedValue(brief());
+    api.getContractLifecycle.mockReset().mockResolvedValue({ items: [SAVED] });
+  });
+
+  it("Bearbeiten ändert Entscheidung, Datum und Notiz", async () => {
+    const user = userEvent.setup();
+    api.updateContractLifecycleDecision.mockResolvedValue({ ...SAVED, decision: "renegotiate", note: "Neu verhandeln" });
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Kündigen vom 15.08.2026 bearbeiten" }));
+    const form = screen.getByRole("form", { name: "Entscheidung vom 15.08.2026 bearbeiten" });
+    await user.selectOptions(within(form).getByLabelText("Entscheidung"), "renegotiate");
+    await user.clear(within(form).getByLabelText("Notiz"));
+    await user.type(within(form).getByLabelText("Notiz"), "Neu verhandeln");
+    await user.click(within(form).getByRole("button", { name: "Änderung speichern" }));
+    await waitFor(() => expect(api.updateContractLifecycleDecision).toHaveBeenCalledWith("test-klinik", "c-1", "l-1", { decision: "renegotiate", status: "planned", effective_date: "2026-12-31", note: "Neu verhandeln" }));
+    const list = screen.getByRole("list", { name: "Bisherige Entscheidungen" });
+    expect(within(list).getByText("wirksam am 31.12.2026 · Neu verhandeln")).toBeInTheDocument();
+  });
+
+  it("Bearbeiten ändert auch die verknüpfte Erinnerung oder entfernt sie", async () => {
+    const user = userEvent.setup();
+    const withReminder = { ...SAVED, reminder: { id: "d-1", title: "Kündigung versenden", due_date: "2026-09-30", status: "open" as const } };
+    api.getContractLifecycle.mockReset().mockResolvedValue({ items: [withReminder] });
+    api.updateContractLifecycleDecision.mockResolvedValue(withReminder);
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
+    const list = await screen.findByRole("list", { name: "Bisherige Entscheidungen" });
+    expect(within(list).getByText(/Erinnerung am 30\.09\.2026/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Kündigen vom 15.08.2026 bearbeiten" }));
+    const form = screen.getByRole("form", { name: "Entscheidung vom 15.08.2026 bearbeiten" });
+    expect(within(form).getByLabelText("Termin")).toHaveValue("Kündigung versenden");
+    await user.selectOptions(within(form).getByLabelText("Entscheidung"), "renegotiate");
+    expect(within(form).getByLabelText("Termin")).toHaveValue("Neu verhandeln");
+    await user.clear(within(form).getByLabelText("Fällig am"));
+    await user.type(within(form).getByLabelText("Fällig am"), "2026-09-15");
+    await user.click(within(form).getByRole("button", { name: "Änderung speichern" }));
+    await waitFor(() => expect(api.updateContractLifecycleDecision).toHaveBeenCalledWith("test-klinik", "c-1", "l-1", expect.objectContaining({
+      decision: "renegotiate", reminder: expect.objectContaining({ title: "Neu verhandeln", due_date: "2026-09-15" }),
+    })));
+
+    await user.click(screen.getByRole("button", { name: "Kündigen vom 15.08.2026 bearbeiten" }));
+    await user.click(screen.getByLabelText("Erinnerung"));
+    expect(screen.getByText("Die Erinnerung wird beim Speichern entfernt.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Änderung speichern" }));
+    await waitFor(() => expect(api.updateContractLifecycleDecision).toHaveBeenLastCalledWith("test-klinik", "c-1", "l-1", expect.objectContaining({ remove_reminder: true })));
+  });
+
+  it("Löschen erst nach Bestätigung", async () => {
+    const user = userEvent.setup();
+    api.deleteContractLifecycleDecision.mockResolvedValue({ deleted: true, id: "l-1" });
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Kündigen vom 15.08.2026 löschen" }));
+    expect(api.deleteContractLifecycleDecision).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Abbrechen" }));
+    await user.click(screen.getByRole("button", { name: "Kündigen vom 15.08.2026 löschen" }));
+    await user.click(screen.getByRole("button", { name: "Endgültig löschen" }));
+    await waitFor(() => expect(api.deleteContractLifecycleDecision).toHaveBeenCalledWith("test-klinik", "c-1", "l-1"));
+    expect(await screen.findByText("Noch keine Entscheidung erfasst.")).toBeInTheDocument();
   });
 });
 

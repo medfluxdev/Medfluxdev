@@ -8,6 +8,7 @@ import type {
   CalcBasis,
   ContractDetailResponse,
   EvidenceRef,
+  FactReviewStateDto,
   MoneyValue,
   SourceNavigationTarget,
 } from "@/lib/contract-detail-types";
@@ -40,7 +41,7 @@ import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import StatusBadge from "@/components/ui/StatusBadge";
-import { FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
+import { CONFLICT_TARGET, FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
 import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
@@ -55,6 +56,24 @@ import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
 import ContractAssignmentCard from "./ContractAssignmentCard";
+import { LIST_SEPARATOR, factValue } from "./CardFact";
+import { SCOPE_CHOICES, ScopeCard, SlaCard } from "./FactCards";
+import ConflictCard from "./ConflictCard";
+
+const [SCOPE_INCLUDED, SCOPE_EXCLUDED] = SCOPE_CHOICES;
+const REVIEWED_STATES = new Set(["confirmed", "corrected", "auto_accepted"]);
+
+/** Wie `build_review_summary`: vorliegend, nicht verworfen und noch nicht geprüft. */
+function factOpen(fact: FactReviewStateDto | undefined): boolean {
+  return Boolean(fact?.present) && fact!.state !== "voided" && !REVIEWED_STATES.has(fact!.state);
+}
+
+/** Prüf-Wert einer Leistung als Inklusive/Exklusive (ältere Einträge: Enthalten/Ausgeschlossen). */
+function scopeLabel(value: unknown): string | null {
+  if (value === SCOPE_INCLUDED || value === "Enthalten") return SCOPE_INCLUDED;
+  if (value === SCOPE_EXCLUDED || value === "Ausgeschlossen") return SCOPE_EXCLUDED;
+  return null;
+}
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
@@ -122,11 +141,6 @@ function money(value: MoneyValue): string {
 function moneyLike(amount: string | number | null, currency: string | null): string {
   if (amount == null || !currency) return "Nicht verfügbar";
   return formatCurrency(String(amount), currency);
-}
-
-function yesNo(value: boolean | null): string {
-  if (value == null) return "Unbekannt";
-  return value ? "Ja" : "Nein";
 }
 
 
@@ -239,7 +253,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     contractId: data.contract_id,
     orgSlug,
     hasAnnualCost: Boolean(data.register_facts?.annual_cost),
-    reviewPending: Boolean(data.review?.requires_manual_review),
+    // Offen = Angaben der Faktprüfung, die noch niemand geprüft hat (gleiche Zahl wie „Ungeprüfte Angaben“).
+    reviewPending: (data.contract_review?.unresolved_count ?? 0) > 0,
     documentCount: data.documents.length,
     version: data,
   });
@@ -322,11 +337,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       setArchivePending(false);
     }
   }
-  const openTasks = useMemo(() => data.work_items.filter((item) => item.status !== "resolved"), [data.work_items]);
+  // Ein offener Widerspruch steht als eigener Punkt (führt zu „Widerspruch klären“), nicht als Prüf-Aufgabe.
+  const openConflicts = useMemo(() => data.warnings.filter((warning) => warning.conflict && warning.requires_review), [data.warnings]);
+  const openTasks = useMemo(() => removeWarningsRepresentedByTasks(
+    openConflicts,
+    data.work_items.filter((item) => item.status !== "resolved"),
+  ), [data.work_items, openConflicts]);
   const actionableWarnings = useMemo(() => removeWarningsRepresentedByTasks(
     openTasks,
     data.warnings.filter((warning) => warning.requires_action || warning.requires_review),
-  ), [data.warnings, openTasks]);
+  ).map((warning) => (warning.conflict ? { ...warning, title_de: warning.conflict.title_de } : warning)), [data.warnings, openTasks]);
 
   function setRoute(requested: TabKey, subtab?: DocumentTab) {
     const tab = toTab(requested) ?? "overview";
@@ -463,14 +483,25 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const taxRateEvidence = evidenceById(data.costs.tax_breakdown?.evidence_field_refs?.vat_rate) ?? findExactEvidence("costs.tax_rate_percent", "cost.tax_rate_percent", "vat_rate");
   const taxBasisEvidence = findExactEvidence("costs.tax_basis", "cost.tax_basis");
 
-  function scopeState(key: string, legacy: boolean | null) {
+  const factByKey = new Map((data.fact_review_states ?? []).map((fact) => [fact.fact_key, fact]));
+  const canReviewFacts = role === "admin" || role === "contract_manager" || role === "reviewer";
+  // Vorschlag aus der KI-Analyse: Verdikt aus dem Text, sonst das Ja/Nein der KI.
+  function scopeSuggestion(key: string, legacy: boolean | null): string | null {
     const state = data.scope.scope_status?.[key];
-    if (state) {
-      if (state.status === "included") return { label: "Enthalten", tone: "yes", evidence: evidenceById(state.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`) };
-      if (state.status === "excluded") return { label: "Ausgeschlossen", tone: "no", evidence: evidenceById(state.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`) };
-      return { label: "Zu prüfen", tone: "unknown", evidence: evidenceById(state.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`) };
-    }
-    return { label: legacy === true ? "Enthalten" : legacy === false ? "Ausgeschlossen" : "Zu prüfen", tone: legacy === true ? "yes" : legacy === false ? "no" : "unknown", evidence: findExactEvidence(`services.${key}`, `scope.${key}`) };
+    const verdict = state?.status === "included" ? true : state?.status === "excluded" ? false : state ? state.ai_suggestion ?? null : legacy;
+    return verdict === true ? SCOPE_INCLUDED : verdict === false ? SCOPE_EXCLUDED : null;
+  }
+  // Angezeigter Wert je Leistung: von einer Person geprüft (bestätigt, korrigiert, automatisch übernommen)
+  // vor dem KI-Vorschlag. Offen („zu prüfen“) ist eine Leistung genau dann, wenn die Faktprüfung sie als
+  // vorliegend und ungeprüft führt – dieselbe Zählung wie „Ungeprüfte Angaben“.
+  function scopeState(key: string, legacy: boolean | null) {
+    const evidence = evidenceById(data.scope.scope_status?.[key]?.evidence_ref) ?? findExactEvidence(`services.${key}`, `scope.${key}`);
+    const fact = factByKey.get(`scope.${key}`);
+    const reviewed = fact && REVIEWED_STATES.has(fact.state) ? scopeLabel(fact.effective_value ?? fact.original_value) : null;
+    const open = fact ? factOpen(fact) : Boolean(scopeSuggestion(key, legacy));
+    const label = reviewed ?? scopeSuggestion(key, legacy) ?? (open ? "Erwähnt – bitte festlegen" : null);
+    if (!label) return { label: "Nicht angegeben", tone: "none", evidence, open: false };
+    return { label, tone: label === SCOPE_INCLUDED ? "yes" : label === SCOPE_EXCLUDED ? "no" : "unknown", evidence, open: open && !reviewed };
   }
 
   const effectiveEnd = data.dates.documented_end_date ?? data.dates.calculated_end_date;
@@ -515,12 +546,33 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   } : null;
 
   // Leistungsumfang: Zustand je Leistung und Zusammenfassung (nur mit analysiertem Dokument).
-  const scopeRows = SCOPE_FIELDS.map(([key, label, prop]) => ({ key, label, state: scopeState(key, data.scope[prop]) }));
+  const scopeRows = SCOPE_FIELDS.map(([key, label, prop]) => ({ key, label, state: scopeState(key, data.scope[prop]), suggestion: scopeSuggestion(key, data.scope[prop]), fact: factByKey.get(`scope.${key}`) }));
+  // Weitere Leistungen: Listen der KI-Analyse, von Hand ergänzbar (Faktprüfung `scope.other_*`).
+  const scopeLists = ([
+    ["other_included", "Weitere inklusive Leistungen", data.scope.included_services],
+    ["other_excluded", "Exklusive Leistungen", data.scope.excluded_services],
+  ] as const).map(([key, label, items]) => {
+    const fact = factByKey.get(`scope.${key}`);
+    const suggestion = items.map((item) => item.trim()).filter(Boolean).join(LIST_SEPARATOR) || null;
+    return { key, label, fact, suggestion, value: factValue(fact, suggestion) };
+  });
   const scopeCounts = {
     included: scopeRows.filter((row) => row.state.tone === "yes").length,
     excluded: scopeRows.filter((row) => row.state.tone === "no").length,
-    unknown: scopeRows.filter((row) => row.state.tone === "unknown").length,
+    unknown: scopeRows.filter((row) => row.state.open).length,
   };
+  // SLA: von Hand eingetragene Werte (Faktprüfung) vor den Werten aus dem Dokument.
+  const slaEmergencyDocument = data.sla.emergency_availability ?? (data.sla.availability_24_7 == null ? null : data.sla.availability_24_7 ? "24/7 erreichbar" : "Nicht 24/7");
+  const slaRows = ([
+    ["response_time", "Reaktionszeit", data.sla.response_time, "Nicht im Vertrag gefunden"],
+    ["resolution_time", "Lösungszeit", data.sla.resolution_time, "Nicht im Vertrag gefunden"],
+    ["service_hours", "Servicezeiten", data.sla.service_hours, "Nicht angegeben"],
+    ["emergency_availability", "Notfallverfügbarkeit", slaEmergencyDocument, "Unbekannt"],
+    ["sla_notes", "Weitere SLA-Angaben", data.sla.sla_notes, "Keine"],
+  ] as const).map(([key, label, documentValue, empty]) => {
+    const fact = factByKey.get(`sla.${key}`);
+    return { key, label, fact, empty, wide: key === "sla_notes", suggestion: documentValue ?? null, value: factValue(fact, documentValue) };
+  });
   // Abschnitte je Vertragstyp: nicht vorgesehene, leere Abschnitte ausblenden (lib/contract-sections.ts).
   const sections = showAllSections ? null : data.sections ?? null;
   const scopeHasData = scopeCounts.included + scopeCounts.excluded > 0;
@@ -535,15 +587,15 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     ["sla", showSla || !hasAi, slaHasData],
     ["equipment", showEquipment, data.equipment.length > 0],
   ] as const).filter(([, shown]) => !shown).map(([key, , found]) => `${SECTION_LABELS[key]}${found ? " (mit Angaben aus dem Dokument)" : ""}`) : [];
-  const slaMissing = showSla ? [data.sla.response_time ? null : "Reaktionszeit", data.sla.resolution_time ? null : "Lösungszeit"].filter((item): item is string => Boolean(item)) : [];
   // Erst mit geladenen Lücken berechnen, sonst stünde kurz ein unvollständiges Bild da.
   const openPoints = gaps === null ? null : buildOpenPoints({
     gaps,
     tasks: openTasks,
     warnings: actionableWarnings,
     scopeToCheck: showScope ? scopeCounts.unknown : 0,
-    scopeTotal: scopeRows.length,
-    slaMissing,
+    scopeTotal: scopeRows.filter((row) => row.state.tone !== "none").length,
+    slaToCheck: showSla ? slaRows.filter((row) => factOpen(row.fact)).length : 0,
+    reviewOpen: data.contract_review?.unresolved_count ?? 0,
     cancelByUnknown: !headerCancelBy && !fixedTerm,
   });
   // Reiter zeigen, wo Arbeit wartet (Symbol mit Namen für Screenreader).
@@ -586,8 +638,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <div className="object-header-meta object-header-signals">
             {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
             {openPoints?.length ? <Link className="open-points-link" href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><Signal tone={openPoints[0].tone === "critical" ? "critical" : "warning"}>Offene Punkte · {openPoints.length}</Signal></Link> : null}
-            <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={data.review.requires_manual_review} canEdit={canEditData} version={data} onCount={setAiOpenCount} />
-            <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings} canEdit={canEditData} onChanged={reload} />
+            <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={(data.contract_review?.unresolved_count ?? 0) > 0} canEdit={canEditData} version={data} onCount={setAiOpenCount} />
+            <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings.filter((warning) => !warning.review_resolved).map((warning) => (warning.conflict ? { ...warning, title_de: warning.conflict.title_de } : warning))} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>
         <dl className={`object-header-facts${fixedTerm ? " object-header-facts--three" : ""}`}>
@@ -645,29 +697,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       <div className="cw-content" id="contract-tab-panel" role="tabpanel" aria-labelledby={`contract-tab-${activeTab}`} tabIndex={0}>
         {activeTab === "overview" && <div className="cw-overview">
           <div className="cw-overview-main">
+            <ConflictCard contractId={data.contract_id} orgSlug={orgSlug} warnings={openConflicts} facts={factByKey} evidence={data.evidence} canDecide={canReviewFacts} onOpenEvidence={(ref) => openEvidence(ref, "document")} onOpenTarget={() => openTarget({ tab: "register", section: "term" })} onSaved={reload} />
             <OpenPoints contractId={data.contract_id} points={openPoints} searchHref={searchMissingHref} onOpen={openTarget} />
-            {showScope ? <section className="cw-section" aria-labelledby="leistungsumfang-heading">
-              <div className="cw-section-head"><div><h2 id="leistungsumfang-heading">Leistungsumfang</h2><p>Was der Vertrag abdeckt – laut Dokument</p></div></div>
-              <div className="scope-summary">
-                <Signal tone={scopeCounts.included > 0 ? "done" : "neutral"}>{scopeCounts.included} enthalten</Signal>
-                <Signal tone="neutral">{scopeCounts.excluded} ausgeschlossen</Signal>
-                <Signal tone={scopeCounts.unknown > 0 ? "warning" : "neutral"}>{scopeCounts.unknown} zu prüfen</Signal>
-              </div>
-              <ul className="scope-list">{scopeRows.map((row) => <li key={row.key}>
-                <span className="scope-name">{row.label}</span>
-                <Signal tone={row.state.tone === "yes" ? "done" : row.state.tone === "no" ? "neutral" : "warning"} size="sm">{row.state.label}</Signal>
-                <span className="scope-source"><SourceButton evidence={row.state.evidence} /></span>
-              </li>)}</ul>
-            </section> : null}
-            {showSla ? <section className="cw-section" aria-labelledby="sla-heading">
-              <div className="cw-section-head"><div><h2 id="sla-heading">SLA</h2><p>Zugesagte Reaktions- und Servicezeiten</p></div></div>
-              <dl className="sla-grid">
-                <div><dt>Reaktionszeit</dt><dd>{data.sla.response_time ?? <Signal tone="warning" size="sm">Nicht im Vertrag gefunden</Signal>}</dd></div>
-                <div><dt>Lösungszeit</dt><dd>{data.sla.resolution_time ?? <Signal tone="warning" size="sm">Nicht im Vertrag gefunden</Signal>}</dd></div>
-                <div><dt>Servicezeiten</dt><dd>{data.sla.service_hours ?? <Signal tone="neutral" size="sm">Nicht angegeben</Signal>}</dd></div>
-                <div><dt>Notfallverfügbarkeit</dt><dd>{data.sla.emergency_availability ?? (data.sla.availability_24_7 == null ? <Signal tone="neutral" size="sm">Unbekannt</Signal> : yesNo(data.sla.availability_24_7))}</dd></div>
-              </dl>
-            </section> : null}
+            {showScope ? <ScopeCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={scopeRows} lists={scopeLists} counts={scopeCounts} source={(evidence) => <SourceButton evidence={evidence} />} /> : null}
+            {showSla ? <SlaCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={slaRows} /> : null}
             {hiddenSections.length ? <p className="sections-hidden-note">Für {data.sections!.type_label} ausgeblendet: {hiddenSections.join(", ")}. <button type="button" className="rg-link" onClick={() => setShowAllSections(true)}>Trotzdem anzeigen</button></p> : null}
             {showAllSections && data.sections ? <p className="sections-hidden-note">Alle Abschnitte werden angezeigt. <button type="button" className="rg-link" onClick={() => setShowAllSections(false)}>Nur passende Abschnitte</button></p> : null}
             {hasAi && !data.sections ? <p className="sections-hidden-note">Mit einem Vertragstyp zeigt die Akte nur die passenden Abschnitte. {canEditData ? <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "ownership" })}>Vertragstyp festlegen</button> : null}</p> : null}
@@ -682,14 +715,6 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 <li><button type="button" onClick={() => setRoute("documents", "document")}>Dokumente<b>{data.documents.length}</b><span aria-hidden="true">›</span></button></li>
                 <li><button type="button" onClick={() => setRoute("documents", "review")}>Ungeprüfte Angaben<b>{data.contract_review.unresolved_count}</b><span aria-hidden="true">›</span></button></li>
               </ul>
-            </section>
-            <section className="cw-section" aria-labelledby="origin-legend-heading">
-              <div className="cw-section-head"><div><h2 id="origin-legend-heading">Herkunft der Werte</h2></div></div>
-              <dl className="side-dl side-dl--legend">
-                <div><dt><ValueOriginBadge kind="system" /></dt><dd>Im System erfasst oder bestätigt</dd></div>
-                <div><dt><ValueOriginBadge kind="calculated" /></dt><dd>Aus anderen Werten abgeleitet</dd></div>
-                <div><dt><ValueOriginBadge kind="extracted" /></dt><dd>Aus dem Dokument gelesen, noch nicht bestätigt</dd></div>
-              </dl>
             </section>
           </aside>
         </div>}
@@ -709,7 +734,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
 
         {activeTab === "deadlines" && <div className="stack-4">
-          <ContractDecisionCard contractId={data.contract_id} orgSlug={orgSlug} />
+          <ContractDecisionCard contractId={data.contract_id} orgSlug={orgSlug} onReminderCreated={() => setTimelineVersion((value) => value + 1)} />
           <ContractTimeline contractId={data.contract_id} orgSlug={orgSlug} workItems={data.work_items} endCheck={endCheck} onOpenTarget={openTarget} version={timelineVersion} />
           {/* Erinnerungen: Einstellungen dessen, was hier passiert (Vertragsdaten-Felder, eine Implementierung). */}
           <ContractRegisterPanel
@@ -770,7 +795,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
           {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
           {documentTab === "review" && <ReviewQueueNav contractId={data.contract_id} />}
-          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
+          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} onOpenConflict={() => openTarget(CONFLICT_TARGET)} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}
       </div>

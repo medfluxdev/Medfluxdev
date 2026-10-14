@@ -37,6 +37,10 @@ class ContractLifecycleDecision(OrgOwnedMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )
     actor_display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Erinnerung, die mit der Entscheidung angelegt wurde (änderbar mit der Entscheidung).
+    reminder_deadline_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract_deadline.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

@@ -66,6 +66,22 @@ def test_terminated_contract_gets_set_ended_task():
     assert spec.remind_on == spec.due_date == date(2026, 12, 31)
 
 
+@pytest.mark.parametrize("status", ["gueltig", "gekuendigt", "beendet"])
+def test_retention_review_as_soon_as_end_is_known(status):
+    specs = plan_system_deadlines(
+        _contract(business_status=status, term_model="fixed_term"),
+        TermResult(status="complete", possible_end=date(2029, 3, 31)),
+        deletion_from=date(2040, 1, 1),
+    )
+    [review] = [spec for spec in specs if spec.system_key == "retention_review"]
+    assert review.due_date == review.remind_on == date(2040, 1, 1)
+
+
+def test_no_retention_review_for_cancelled_contract():
+    specs = plan_system_deadlines(_contract(business_status="geloescht"), TERMS, deletion_from=date(2040, 1, 1))
+    assert all(spec.system_key != "retention_review" for spec in specs)
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

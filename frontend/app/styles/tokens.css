@@ -156,6 +156,12 @@
   --color-tag-device: #3f5873;
   --color-tag-device-bg: #eaeff5;
   --color-tag-device-border: #b9c7d6;
+  --color-tag-hospital: #7a4a12;
+  --color-tag-hospital-bg: #f6eddf;
+  --color-tag-hospital-border: #dcc29c;
+  --color-tag-category: #4f5b16;
+  --color-tag-category-bg: #f0f3df;
+  --color-tag-category-border: #c6cf96;
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
@@ -291,6 +297,12 @@
     --color-tag-device: #a9c1dc;
     --color-tag-device-bg: #1c2836;
     --color-tag-device-border: #3a4c62;
+    --color-tag-hospital: #e7bf86;
+    --color-tag-hospital-bg: #33261a;
+    --color-tag-hospital-border: #654a2c;
+    --color-tag-category: #cbd68e;
+    --color-tag-category-bg: #282c16;
+    --color-tag-category-border: #535a2c;
     --color-success-fill: #3fae86;
     --color-warning-fill: #d99a2b;
     --color-danger-fill: #d9605a;
@@ -371,6 +383,12 @@
   --color-tag-device: #a9c1dc;
   --color-tag-device-bg: #1c2836;
   --color-tag-device-border: #3a4c62;
+  --color-tag-hospital: #e7bf86;
+  --color-tag-hospital-bg: #33261a;
+  --color-tag-hospital-border: #654a2c;
+  --color-tag-category: #cbd68e;
+  --color-tag-category-bg: #282c16;
+  --color-tag-category-border: #535a2c;
   --color-success-fill: #3fae86;
   --color-warning-fill: #d99a2b;
   --color-danger-fill: #d9605a;

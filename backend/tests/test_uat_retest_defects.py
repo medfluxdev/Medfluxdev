@@ -325,18 +325,20 @@ class TestFactEvidenceLinking:
             specific, _ = _link_fact_evidence(fact_key, by_ref)
             assert len(specific) == 3
 
-    def test_services_coverage_binds_scope_sla_and_service_rows(self):
+    def test_scope_and_sla_facts_bind_their_own_rows(self):
         from app.contracts.review.service import _link_fact_evidence
 
         by_ref = self._by_ref([
             "scope.included_services",
-            "scope.excluded_services",
             "sla.service_hours.evidence.0",
-            "services.included_services.evidence.2",
-            "services.excluded_services.evidence.1",
+            "sla.response_time.evidence.0",
+            "services.repair.evidence.1",
+            "scope.repair",
         ])
-        specific, _ = _link_fact_evidence("services.coverage", by_ref)
-        assert len(specific) == 5
+        specific, _ = _link_fact_evidence("scope.repair", by_ref)
+        assert sorted(ev["field_ref"] for ev in specific) == ["scope.repair", "services.repair.evidence.1"]
+        specific, _ = _link_fact_evidence("sla.service_hours", by_ref)
+        assert [ev["field_ref"] for ev in specific] == ["sla.service_hours.evidence.0"]
 
     def test_group_row_only_as_fallback(self):
         from app.contracts.review.service import _link_fact_evidence

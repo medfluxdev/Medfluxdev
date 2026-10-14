@@ -210,6 +210,8 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
   for (const item of items ?? []) {
     const kind = deadlineKind(item);
     const title = deadlineTitle(item);
+    // Vom Fristenabgleich ersetzte Systemtermine (Grundlage geändert) sind keine Handlung des Nutzers: nicht als „Abgebrochen“ zeigen.
+    if (item.status === "cancelled" && item.source === "system" && item.note?.startsWith("Automatisch entfernt")) continue;
     if (item.status !== "open") {
       closed.push({
         key: `deadline:${item.id}`, date: item.done_at?.slice(0, 10) ?? item.due_date, kind: item.status === "cancelled" ? "Abgebrochen" : kind,
@@ -231,7 +233,7 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
       sub: <>{subParts.join(" · ")}{item.basis_unconfirmed ? <> <button type="button" className="signal-link" onClick={() => onOpenTarget(REVIEW_TARGET)}><Signal tone="ai" size="sm">Basiert auf ungeprüften KI-Werten</Signal></button></> : null}</>,
       person: item.assignee_name,
       action: editable ? <span className="tl-actions">
-        <button type="button" className="btn btn-sm btn-ghost" disabled={busy} aria-pressed={item.send_ics} title="Kalendereinladung (ICS) mit der Erinnerung senden" onClick={() => void act(() => updateDeadline(orgSlug, item.id, { send_ics: !item.send_ics }), item.send_ics ? "Kalendereinladung aus." : "Kalendereinladung an.")}>{item.send_ics ? "Kalender aus" : "Kalender an"}</button>
+        <button type="button" className="btn btn-sm btn-ghost" disabled={busy} aria-pressed={item.send_ics} title={item.send_ics ? "Kalendereinladung wird mit der Erinnerung gesendet – klicken zum Ausschalten" : "In Kalender eintragen: Kalendereinladung (ICS) mit der Erinnerung senden"} aria-label="In Kalender eintragen" onClick={() => void act(() => updateDeadline(orgSlug, item.id, { send_ics: !item.send_ics }), item.send_ics ? "Kalendereinladung aus." : "Kalendereinladung an.")}>{item.send_ics ? "✓ Kalender" : "+ Kalender"}</button>
         <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => void act(() => deadlineAction(orgSlug, item.id, "done"), "Termin erledigt.")}>Erledigt</button>
         {item.source === "manual" ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => void act(() => deadlineAction(orgSlug, item.id, "cancel"), "Termin abgebrochen.")}>Abbrechen</button> : null}
       </span> : null,

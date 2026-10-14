@@ -42,15 +42,17 @@ function bySeverity(severity: string): { tone: SignalTone; word: string; rank: n
   return { tone: "info", word: "Hinweis", rank: RANK.info, priority: false };
 }
 
-export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaMissing, cancelByUnknown = false }: {
+export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, cancelByUnknown = false }: {
   gaps: Gap[];
   tasks: OpenTask[];
   warnings: DetailWarning[];
-  /** Anzahl Leistungen „Zu prüfen“ und gesamt (nur mit Dokument). */
+  /** Leistungen mit noch nicht bestätigtem KI-Wert und Leistungen mit Wert überhaupt (wie die Faktprüfung). */
   scopeToCheck: number;
   scopeTotal: number;
-  /** Fehlende SLA-Angaben (z. B. ["Reaktionszeit", "Lösungszeit"]); leer = nichts fehlt. */
-  slaMissing: string[];
+  /** SLA-Werte aus dem Dokument, die noch niemand bestätigt hat. */
+  slaToCheck?: number;
+  /** Offene Angaben der Faktprüfung (Zahl im Punkt „KI-Werte bestätigen“). */
+  reviewOpen?: number;
   /** Kündbar-bis lässt sich nicht berechnen (Kopf zeigt „Nicht berechenbar“). */
   cancelByUnknown?: boolean;
 }): OpenPoint[] {
@@ -61,7 +63,7 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
   }
   for (const gap of gaps) {
     if (gap.key === "review") {
-      points.push({ key: `gap-${gap.key}`, tone: "ai", word: "KI-Prüfung", title: "KI-Werte bestätigen", why: "Werte aus dem Dokument sind noch nicht bestätigt.", action: "Werte prüfen", target: gap.target, rank: RANK.ai });
+      points.push({ key: `gap-${gap.key}`, tone: "ai", word: "KI-Prüfung", title: "KI-Werte bestätigen", why: reviewOpen > 0 ? `${reviewOpen} ${reviewOpen === 1 ? "Angabe aus dem Dokument ist" : "Angaben aus dem Dokument sind"} noch nicht bestätigt.` : "Werte aus dem Dokument sind noch nicht bestätigt.", action: "Werte prüfen", target: gap.target, rank: RANK.ai });
       continue;
     }
     if (gap.blocksDeadline) {
@@ -85,10 +87,10 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
     points.push({ key: `warning-${warning.warning_type}-${index}`, tone: level.tone, word: level.word, title: warning.title_de, why: [warning.requires_review ? "Bitte prüfen" : null, level.priority ? "Priorität hoch" : null].filter(Boolean).join(" · ") || "Hinweis aus der Berechnung", action: "Ansehen", target: warningTarget(warning.warning_type, false) ?? { tab: "deadlines" }, rank: level.rank });
   });
   if (scopeToCheck > 0) {
-    points.push({ key: "scope", tone: "warning", word: "Prüfen", title: "Leistungsumfang ungeklärt", why: `${scopeToCheck} von ${scopeTotal} Leistungen sind noch zu prüfen.`, action: "Leistungen", target: null, anchor: "leistungsumfang-heading", rank: RANK.warning });
+    points.push({ key: "scope", tone: "warning", word: "Prüfen", title: "Leistungsumfang ungeklärt", why: `${scopeToCheck} von ${scopeTotal} Leistungen aus dem Dokument ${scopeToCheck === 1 ? "ist" : "sind"} noch nicht bestätigt.`, action: "Leistungen", target: null, anchor: "leistungsumfang-heading", rank: RANK.warning });
   }
-  if (slaMissing.length > 0) {
-    points.push({ key: "sla", tone: "warning", word: "Prüfen", title: "SLA unvollständig", why: `${slaMissing.join(" und ")} ${slaMissing.length === 1 ? "wurde" : "wurden"} im Vertrag nicht gefunden.`, action: "SLA", target: null, anchor: "sla-heading", rank: RANK.warning });
+  if (slaToCheck > 0) {
+    points.push({ key: "sla-check", tone: "warning", word: "Prüfen", title: "SLA-Werte bestätigen", why: `${slaToCheck} ${slaToCheck === 1 ? "SLA-Wert aus dem Dokument ist" : "SLA-Werte aus dem Dokument sind"} noch nicht bestätigt.`, action: "SLA", target: null, anchor: "sla-heading", rank: RANK.warning });
   }
   return points.map((point, index) => ({ point, index })).sort((a, b) => a.point.rank - b.point.rank || a.index - b.index).map(({ point }) => point);
 }

@@ -239,7 +239,9 @@ def plan_system_deadlines(
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
             ))
-    if contract.business_status in ("beendet", "gekuendigt") and deletion_from is not None:
+    # Sobald das Vertragsende feststeht (auch bei fester Laufzeit im laufenden Vertrag), steht der Löschtermin fest.
+    # Ändert sich das Ende, ersetzt der Abgleich den alten Termin durch den neuen.
+    if contract.business_status != "geloescht" and deletion_from is not None:
         specs.append(SystemDeadlineSpec(
             system_key="retention_review",
             kind="loeschpruefung",

@@ -16,6 +16,7 @@ from typing import Any, Iterable, Optional
 
 from pydantic import BaseModel
 
+from app.contracts.review.material import SCOPE_FACTS
 from app.models.contract import Contract as ExtractedContract
 
 GROUPS = ("identity", "dates", "termination", "costs", "payment", "services", "sla")
@@ -114,6 +115,8 @@ REVIEW_TERM_FACTS = (
     "dates.duration", "termination.cancellation_period", "termination.cancellation_condition", "termination.renewal_period",
 )
 
+SCOPE_REVIEW_FACTS = tuple(f"scope.{key}" for key, _ in SCOPE_FACTS)
+
 # Uebernommener Fakt -> Pruef-Angaben, die dadurch einen neuen Wert bekommen (auch berechnete).
 REVIEW_FACTS: dict[str, tuple[str, ...]] = {
     "identity.contract_number": ("identity.contract_number",),
@@ -134,8 +137,15 @@ REVIEW_FACTS: dict[str, tuple[str, ...]] = {
     "costs.price_indexation": ("costs.price_indexation",),
     "costs.price_adjustment_clause": ("costs.price_fixed", "costs.price_indexation"),
     "equipment": ("equipment.identity", "equipment.serial"),
-    "services.included_services": ("services.coverage",),
-    "services.excluded_services": ("services.coverage",),
+    "services.included_services": SCOPE_REVIEW_FACTS + ("scope.other_included",),
+    "services.excluded_services": SCOPE_REVIEW_FACTS + ("scope.other_excluded",),
+    **{f"services.{key}": (f"scope.{key}",) for key, _ in SCOPE_FACTS},
+    "sla.response_time": ("sla.response_time",),
+    "sla.resolution_time": ("sla.resolution_time",),
+    "sla.service_hours": ("sla.service_hours",),
+    "sla.emergency_availability": ("sla.emergency_availability",),
+    "sla.availability_24_7": ("sla.emergency_availability",),
+    "sla.sla_notes": ("sla.sla_notes",),
 }
 
 # Pruef-Angabe -> Vertragsdaten-Feld (Basisname), das eine Korrektur in der Pruefung mit aendert.

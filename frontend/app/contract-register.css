@@ -339,12 +339,16 @@
 .dec-history h3{margin: 0 0 6px;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-semibold)}
 .dec-history ul{margin: 0;padding: 0;list-style: none}
 .dec-history-row{display: grid;grid-template-columns: 110px 150px 180px minmax(0,1fr) auto;align-items: center;gap: 12px;padding: 8px 0;border-top: 1px solid var(--color-border-subtle);font-size: var(--text-small)}
-.dec-history-actions{display: flex;gap: 12px}
+.dec-history-actions{display: flex;flex-wrap: wrap;align-items: center;gap: 12px}
+.dec-history-row--edit{display: block}
+.dec-history-row--edit .dec-form{margin: 0}
+.dec-delete{color: var(--color-danger)}
 
 /* Fristen & Aufgaben: Zeitachse „Termine & Aufgaben“ */
 .tl{position: relative;margin: 0;padding: 0;list-style: none}
 .tl::before{content: "";position: absolute;top: 18px;bottom: 18px;left: 7px;width: 2px;background: var(--color-border-subtle)}
-.tl-row{position: relative;display: grid;grid-template-columns: 16px 96px 132px minmax(0,1fr) 170px auto;align-items: center;gap: 12px;padding: 10px 0}
+/* Feste Spalten, damit Person und Knöpfe in allen Zeilen (offen und erledigt) untereinander stehen. */
+.tl-row{position: relative;display: grid;grid-template-columns: 16px 96px 132px minmax(0,1fr) 160px 300px;align-items: center;gap: 12px;padding: 10px 0}
 .tl-row + .tl-row{border-top: 1px solid var(--color-border-subtle)}
 .tl-row--ai{margin: 0 -12px;padding-right: 12px;padding-left: 12px;border-radius: var(--radius-sm);background: var(--color-ai-bg)}
 .tl-row--ai + .tl-row,.tl-row + .tl-row--ai{border-top-color: transparent}
@@ -356,8 +360,8 @@
 .tl-date{font-size: var(--text-small);font-weight: var(--weight-semibold)}
 .tl-title{font-weight: var(--weight-medium)}
 .tl-title small{display: block;color: var(--color-text-muted);font-size: var(--text-small);font-weight: var(--weight-regular)}
-.tl-who{color: var(--color-text-muted);font-size: var(--text-small)}
-.tl-act,.tl-actions{display: flex;justify-content: flex-end;gap: 6px}
+.tl-who{min-width: 0;overflow: hidden;color: var(--color-text-muted);font-size: var(--text-small);white-space: nowrap;text-overflow: ellipsis}
+.tl-act,.tl-actions{display: flex;flex-wrap: wrap;justify-content: flex-end;gap: 6px}
 .tl-today{color: var(--color-accent);font-size: var(--text-small);font-weight: var(--weight-semibold)}
 .tl-compare{display: grid;grid-column: 2 / -1;gap: 12px;padding: 14px 16px;border: 1px solid var(--color-ai-border);border-radius: var(--radius-sm);background: var(--color-surface)}
 .tl-compare-cols{display: grid;grid-template-columns: 1fr 1fr;gap: 12px;margin: 0}
@@ -405,3 +409,7 @@
   .dec-seg button:nth-child(n+3){border-top: 1px solid var(--color-border-strong)}
 }
 .dec-followup{margin: 0;padding: 10px 14px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle);font-size: var(--text-small)}
+.dec-remind{display: grid;gap: 10px;padding-top: 4px;border-top: 1px solid var(--color-border)}
+.dec-remind .rg-check{font-weight: var(--weight-semibold)}
+.dec-remind-fields{display: grid;grid-template-columns: minmax(0,1fr) 220px;gap: 10px 16px}
+@media (max-width: 720px){.dec-remind-fields{grid-template-columns: 1fr}}

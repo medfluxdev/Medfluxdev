@@ -57,6 +57,7 @@ describe("Termine & Aufgaben", () => {
       deadline(),
       deadline({ id: "d-ret", system_key: "retention_review", kind: "loeschpruefung", title: "Löschprüfung (Aufbewahrungsfrist abgelaufen)", due_date: "2040-01-01", remind_on: "2040-01-01", assignee_name: null }),
       deadline({ id: "d-old", source: "manual", system_key: null, title: "Rückfrage beim Partner", status: "cancelled", due_date: "2025-08-20" }),
+      deadline({ id: "d-auto", source: "system", system_key: "set_ended", title: "Vertrag auf „Beendet“ setzen", status: "cancelled", due_date: "2026-01-02", note: "Automatisch entfernt: Die Grundlage der Frist hat sich geändert." }),
     ] });
     api.getContractRegister.mockResolvedValue({ as_of: "2026-10-13", terms: { reminder_dates: ["2028-11-30", "2029-01-06"] } });
     api.deadlineAction.mockResolvedValue({ items: [] });
@@ -75,6 +76,8 @@ describe("Termine & Aufgaben", () => {
     expect(rows[6]).toMatch(/^01\.01\.2040.*Löschprüfung/);
     expect(screen.getByText("Erledigte und abgebrochene (1)")).toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "Erledigte und abgebrochene" })).getByText("Abgebrochen")).toBeInTheDocument();
+    // Vom System ersetzte Termine erscheinen nicht als „Abgebrochen“.
+    expect(screen.queryByText("Vertrag auf „Beendet“ setzen")).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -115,13 +118,13 @@ describe("Termine & Aufgaben", () => {
     expect(api.deadlineAction).toHaveBeenCalledWith("test-klinik", "d-end", "done");
   });
 
-  it("„Kalender an“ schaltet die Kalendereinladung je Termin", async () => {
+  it("„In Kalender eintragen“ schaltet die Kalendereinladung je Termin", async () => {
     const user = userEvent.setup();
     api.updateDeadline.mockResolvedValue({ items: [] });
     render(<ContractTimeline contractId="c-1" orgSlug="test-klinik" workItems={[]} onOpenTarget={vi.fn()} />);
     const list = await screen.findByRole("list", { name: "Termine und Aufgaben" });
     const row = within(list).getAllByRole("listitem").find((item) => item.textContent?.startsWith("31.03.2029"))!;
-    const toggle = within(row).getByRole("button", { name: "Kalender an" });
+    const toggle = within(row).getByRole("button", { name: "In Kalender eintragen" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     await user.click(toggle);
     expect(api.updateDeadline).toHaveBeenCalledWith("test-klinik", "d-end", { send_ics: true });

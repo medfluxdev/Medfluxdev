@@ -9,9 +9,10 @@ import Signal, { type SignalTone } from "@/components/ui/Signal";
 import { PersonTag } from "@/components/ui/TagChip";
 import { useToast } from "@/components/ui/Toast";
 import { FINANCE_ENTRIES_TARGET, asFixTarget, contractHref, fixLabel } from "@/lib/fix-targets";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatISODateOnly } from "@/lib/format";
 import {
   createContractLifecycleDecision,
+  deleteContractLifecycleDecision,
   getContractLifecycle,
   updateContractLifecycleDecision,
   type ContractLifecycleDecision,
@@ -37,9 +38,51 @@ export const DECISIONS: { key: ContractLifecycleDecisionKind; label: string }[] 
   { key: "monitor", label: "Beobachten" },
 ];
 
+// Passender Termin zur Entscheidung, damit Entscheidung und Erinnerung ein Schritt sind.
+const FOLLOW_UP: Record<ContractLifecycleDecisionKind, { title: string; kind: string; todo: string }> = {
+  renew: { title: "Verlängerung umsetzen", kind: "pruefung", todo: "Verlängerung mit dem Vertragspartner vereinbaren und dokumentieren." },
+  renegotiate: { title: "Neu verhandeln", kind: "pruefung", todo: "Gespräch mit dem Vertragspartner führen und neue Konditionen festhalten." },
+  terminate: { title: "Kündigung versenden", kind: "kuendigungsfrist", todo: "Kündigung fristgerecht versenden und den Status auf „Gekündigt“ setzen." },
+  monitor: { title: "Entscheidung erneut prüfen", kind: "pruefung", todo: "Vertrag erneut bewerten und eine Entscheidung treffen." },
+};
+
+function reminderInput(decision: ContractLifecycleDecisionKind, title: string, due: string, note: string) {
+  const follow = FOLLOW_UP[decision];
+  return { title: title.trim() || follow.title, kind: follow.kind, due_date: due, todo_text: [follow.todo, note.trim()].filter(Boolean).join(" ").slice(0, 500) };
+}
+
+function shiftDate(iso: string, days: number, months = 0): string {
+  const date = new Date(`${iso}T00:00:00`);
+  date.setMonth(date.getMonth() + months);
+  date.setDate(date.getDate() + days);
+  return formatISODateOnly(date);
+}
+
+/** Fälligkeit des Folgetermins: Kündigungsfrist, sonst Wirksamkeit, nie in der Vergangenheit; Beobachten = in 3 Monaten. */
+export function followUpDue(decision: ContractLifecycleDecisionKind, brief: Pick<RenewalBrief, "cancel_by" | "current_end"> | null, effective: string, today = formatISODateOnly(new Date())): string {
+  if (decision === "monitor") return shiftDate(today, 0, 3);
+  const candidates = decision === "terminate" ? [brief?.cancel_by, effective] : [brief?.cancel_by, effective, brief?.current_end];
+  const due = candidates.find((value): value is string => Boolean(value) && value! >= today);
+  return due ?? shiftDate(today, 7);
+}
+
 const STATUS_WORD: Record<ContractLifecycleStatus, string> = {
   planned: "geplant", in_progress: "in Bearbeitung", completed: "abgeschlossen", cancelled: "storniert",
 };
+
+interface DecisionEdit {
+  id: string;
+  decision: ContractLifecycleDecisionKind;
+  status: ContractLifecycleStatus;
+  effective: string;
+  note: string;
+  /** Erinnerung: an = offene behalten/ändern bzw. neu anlegen; aus = offene abbrechen. */
+  remind: boolean;
+  remindTitle: string;
+  remindDue: string;
+  /** Verknüpfte Erinnerung ist offen (Ändern statt Neu anlegen). */
+  hasOpenReminder: boolean;
+}
 
 const HINT_LABEL = { action: "Handlungsbedarf", check: "Prüfen", info: "Hinweis" } as const;
 
@@ -63,19 +106,22 @@ function errorText(error: unknown, fallback: string) {
  * Fristen & Aufgaben → „Entscheidung“: was zum nächsten Termin mit dem Vertrag passieren soll.
  * Fakten und Beträge berechnet das Backend (Entscheidungsvorlage); gespeichert wird über die Lifecycle-API.
  */
-export default function ContractDecisionCard({ contractId, orgSlug }: { contractId: string; orgSlug: string }) {
+export default function ContractDecisionCard({ contractId, orgSlug, onReminderCreated }: { contractId: string; orgSlug: string; onReminderCreated?: () => void }) {
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const toast = useToast();
   const [brief, setBrief] = useState<RenewalBrief | null>(null);
   const [decisions, setDecisions] = useState<ContractLifecycleDecision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<{ decision: ContractLifecycleDecisionKind; effective: string; note: string } | null>(null);
+  const [form, setForm] = useState<{ decision: ContractLifecycleDecisionKind; effective: string; note: string; remind: boolean; remindTitle: string; remindDue: string } | null>(null);
   const [busy, setBusy] = useState(false);
   // Nach „Kündigen“: die Kündigung selbst wird über den Status „Gekündigt“ dokumentiert.
   const [terminated, setTerminated] = useState(false);
   const [summary, setSummary] = useState<{ loading: boolean; text: string | null; note: string | null }>({ loading: false, text: null, note: null });
   const effectiveRef = useRef<HTMLInputElement | null>(null);
+  // Bisherige Entscheidungen: eine Zeile bearbeiten bzw. das Löschen bestätigen.
+  const [editing, setEditing] = useState<DecisionEdit | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [briefResult, lifecycleResult] = await Promise.allSettled([getRenewalBrief(orgSlug, contractId), getContractLifecycle(orgSlug, contractId)]);
@@ -91,7 +137,11 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
   useEffect(() => { if (form) effectiveRef.current?.focus(); }, [form?.decision]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function choose(decision: ContractLifecycleDecisionKind) {
-    setForm((current) => current?.decision === decision ? null : { decision, effective: current?.effective ?? brief?.current_end ?? "", note: current?.note ?? "" });
+    setForm((current) => {
+      if (current?.decision === decision) return null;
+      const effective = current?.effective ?? brief?.current_end ?? "";
+      return { decision, effective, note: current?.note ?? "", remind: true, remindTitle: FOLLOW_UP[decision].title, remindDue: followUpDue(decision, brief, effective) };
+    });
   }
 
   async function save() {
@@ -99,10 +149,14 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
     setBusy(true);
     setError(null);
     try {
-      await createContractLifecycleDecision(orgSlug, contractId, { decision: form.decision, status: "planned", effective_date: form.effective || null, note: form.note.trim() || null });
+      // Entscheidung und Erinnerung in einem Schritt; die Erinnerung bleibt mit der Entscheidung verknüpft
+      // (änderbar und löschbar mit ihr).
+      const remind = form.remind && form.remindDue ? reminderInput(form.decision, form.remindTitle, form.remindDue, form.note) : null;
+      await createContractLifecycleDecision(orgSlug, contractId, { decision: form.decision, status: "planned", effective_date: form.effective || null, note: form.note.trim() || null, ...(remind ? { reminder: remind } : {}) });
+      if (remind) onReminderCreated?.();
       setTerminated(form.decision === "terminate");
       setForm(null);
-      toast("Entscheidung gespeichert.", "success");
+      toast(remind ? `Entscheidung gespeichert, Erinnerung am ${formatDate(remind.due_date)} angelegt.` : "Entscheidung gespeichert.", "success");
       await load();
     } catch (err) {
       setError(errorText(err, "Die Entscheidung konnte nicht gespeichert werden."));
@@ -119,6 +173,64 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
       setDecisions((current) => (current ?? []).map((row) => (row.id === updated.id ? updated : row)));
     } catch (err) {
       setError(errorText(err, "Der Status der Entscheidung konnte nicht geändert werden."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEdit(item: ContractLifecycleDecision) {
+    setConfirmDelete(null);
+    const open = item.reminder?.status === "open" ? item.reminder : null;
+    const effective = item.effective_date ?? "";
+    setEditing({
+      id: item.id, decision: item.decision, status: item.status, effective, note: item.note ?? "",
+      remind: Boolean(open), hasOpenReminder: Boolean(open),
+      remindTitle: open?.title ?? FOLLOW_UP[item.decision].title,
+      remindDue: open?.due_date ?? followUpDue(item.decision, brief, effective),
+    });
+  }
+
+  /** Andere Entscheidung gewählt: eine unveränderte Standard-Bezeichnung der Erinnerung zieht mit. */
+  function changeEditDecision(decision: ContractLifecycleDecisionKind) {
+    setEditing((current) => current && ({
+      ...current,
+      decision,
+      remindTitle: current.remindTitle === FOLLOW_UP[current.decision].title ? FOLLOW_UP[decision].title : current.remindTitle,
+    }));
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const remind = editing.remind && editing.remindDue ? reminderInput(editing.decision, editing.remindTitle, editing.remindDue, editing.note) : null;
+      const updated = await updateContractLifecycleDecision(orgSlug, contractId, editing.id, {
+        decision: editing.decision, status: editing.status, effective_date: editing.effective || null, note: editing.note.trim() || null,
+        ...(remind ? { reminder: remind } : editing.hasOpenReminder ? { remove_reminder: true } : {}),
+      });
+      setDecisions((current) => (current ?? []).map((row) => (row.id === updated.id ? updated : row)));
+      setEditing(null);
+      if (remind || editing.hasOpenReminder) onReminderCreated?.();
+      toast(remind ? `Entscheidung geändert, Erinnerung am ${formatDate(remind.due_date)}.` : editing.hasOpenReminder ? "Entscheidung geändert, Erinnerung entfernt." : "Entscheidung geändert.", "success");
+    } catch (err) {
+      setError(errorText(err, "Die Entscheidung konnte nicht geändert werden."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(item: ContractLifecycleDecision) {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteContractLifecycleDecision(orgSlug, contractId, item.id);
+      setDecisions((current) => (current ?? []).filter((row) => row.id !== item.id));
+      setConfirmDelete(null);
+      if (item.reminder?.status === "open") onReminderCreated?.();
+      toast(item.reminder?.status === "open" ? "Entscheidung und Erinnerung gelöscht." : "Entscheidung gelöscht.", "success");
+    } catch (err) {
+      setError(errorText(err, "Die Entscheidung konnte nicht gelöscht werden."));
     } finally {
       setBusy(false);
     }
@@ -187,6 +299,14 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
       {form ? <form className="dec-form" aria-label={`Entscheidung: ${DECISIONS.find((item) => item.key === form.decision)?.label}`} onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <div className="dec-field"><label htmlFor="dec-effective">Wirksam am</label><input ref={effectiveRef} id="dec-effective" className="num" type="date" value={form.effective} onChange={(event) => setForm((current) => current && ({ ...current, effective: event.target.value }))} /></div>
         <div className="dec-field dec-full"><label htmlFor="dec-note">Notiz</label><textarea id="dec-note" rows={3} maxLength={2000} placeholder="Begründung, Ansprechpartner, nächste Schritte …" value={form.note} onChange={(event) => setForm((current) => current && ({ ...current, note: event.target.value }))} /></div>
+        <div className="dec-full dec-remind">
+          <label className="rg-check"><input type="checkbox" checked={form.remind} onChange={(event) => setForm((current) => current && ({ ...current, remind: event.target.checked }))} />Erinnerung anlegen</label>
+          {form.remind ? <div className="dec-remind-fields">
+            <div className="dec-field"><label htmlFor="dec-remind-title">Termin</label><input id="dec-remind-title" type="text" maxLength={200} value={form.remindTitle} onChange={(event) => setForm((current) => current && ({ ...current, remindTitle: event.target.value }))} /></div>
+            <div className="dec-field"><label htmlFor="dec-remind-due">Fällig am</label><input id="dec-remind-due" className="num" type="date" required value={form.remindDue} onChange={(event) => setForm((current) => current && ({ ...current, remindDue: event.target.value }))} /></div>
+            <p className="cw-muted dec-full">Erscheint unter „Termine & Aufgaben“; Sie werden am Fälligkeitstag erinnert (Glocke und E-Mail).</p>
+          </div> : null}
+        </div>
         {form.decision === "terminate" ? <p className="rg-hint dec-full">Die Entscheidung wird nur erfasst. Die Kündigung selbst versenden Sie und dokumentieren sie anschließend über den Status „Gekündigt“.</p> : null}
         <div className="rg-actions dec-full"><button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Entscheidung speichern</button></div>
       </form> : null}
@@ -199,16 +319,46 @@ export default function ContractDecisionCard({ contractId, orgSlug }: { contract
       <div className="dec-history">
         <h3>Bisherige Entscheidungen</h3>
         {decisions === null ? <p role="status">Wird geladen…</p> : sorted.length === 0 ? <EmptyState variant="calm">Noch keine Entscheidung erfasst.</EmptyState> : <ul aria-label="Bisherige Entscheidungen">
-          {sorted.map((item) => <li key={item.id} className="dec-history-row">
-            <span className="num">{item.created_at ? formatDate(item.created_at) : "–"}</span>
-            <Signal tone="neutral" size="sm">{DECISIONS.find((entry) => entry.key === item.decision)?.label ?? item.decision}</Signal>
-            <PersonTag name={item.actor_display_name} />
-            <span className="cw-muted">{[item.effective_date ? `wirksam am ${formatDate(item.effective_date)}` : null, item.note, item.status !== "planned" ? STATUS_WORD[item.status] : null].filter(Boolean).join(" · ")}</span>
-            {editable && (item.status === "planned" || item.status === "in_progress") ? <span className="dec-history-actions">
-              <button type="button" className="rg-link" disabled={busy} onClick={() => void changeStatus(item, "completed")}>Abschließen</button>
-              <button type="button" className="rg-link" disabled={busy} onClick={() => void changeStatus(item, "cancelled")}>Stornieren</button>
-            </span> : null}
-          </li>)}
+          {sorted.map((item) => {
+            const label = DECISIONS.find((entry) => entry.key === item.decision)?.label ?? item.decision;
+            const date = item.created_at ? formatDate(item.created_at) : "–";
+            if (editing?.id === item.id) return <li key={item.id} className="dec-history-row dec-history-row--edit">
+              <form className="dec-form" aria-label={`Entscheidung vom ${date} bearbeiten`} onSubmit={(event) => { event.preventDefault(); void saveEdit(); }}>
+                <div className="dec-field"><label htmlFor={`dec-edit-kind-${item.id}`}>Entscheidung</label><select id={`dec-edit-kind-${item.id}`} value={editing.decision} onChange={(event) => changeEditDecision(event.target.value as ContractLifecycleDecisionKind)}>{DECISIONS.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}</select></div>
+                <div className="dec-field"><label htmlFor={`dec-edit-status-${item.id}`}>Stand</label><select id={`dec-edit-status-${item.id}`} value={editing.status} onChange={(event) => setEditing((current) => current && ({ ...current, status: event.target.value as ContractLifecycleStatus }))}>{(Object.keys(STATUS_WORD) as ContractLifecycleStatus[]).map((key) => <option key={key} value={key}>{STATUS_WORD[key]}</option>)}</select></div>
+                <div className="dec-field"><label htmlFor={`dec-edit-effective-${item.id}`}>Wirksam am</label><input id={`dec-edit-effective-${item.id}`} className="num" type="date" value={editing.effective} onChange={(event) => setEditing((current) => current && ({ ...current, effective: event.target.value }))} /></div>
+                <div className="dec-field dec-full"><label htmlFor={`dec-edit-note-${item.id}`}>Notiz</label><textarea id={`dec-edit-note-${item.id}`} rows={2} maxLength={2000} value={editing.note} onChange={(event) => setEditing((current) => current && ({ ...current, note: event.target.value }))} /></div>
+                <div className="dec-full dec-remind">
+                  <label className="rg-check"><input type="checkbox" checked={editing.remind} onChange={(event) => setEditing((current) => current && ({ ...current, remind: event.target.checked }))} />{editing.hasOpenReminder ? "Erinnerung" : "Erinnerung anlegen"}</label>
+                  {editing.remind ? <div className="dec-remind-fields">
+                    <div className="dec-field"><label htmlFor={`dec-edit-remind-title-${item.id}`}>Termin</label><input id={`dec-edit-remind-title-${item.id}`} type="text" maxLength={200} value={editing.remindTitle} onChange={(event) => setEditing((current) => current && ({ ...current, remindTitle: event.target.value }))} /></div>
+                    <div className="dec-field"><label htmlFor={`dec-edit-remind-due-${item.id}`}>Fällig am</label><input id={`dec-edit-remind-due-${item.id}`} className="num" type="date" required value={editing.remindDue} onChange={(event) => setEditing((current) => current && ({ ...current, remindDue: event.target.value }))} /></div>
+                  </div> : <p className="cw-muted">{editing.hasOpenReminder ? "Die Erinnerung wird beim Speichern entfernt." : item.reminder?.status === "done" ? `Erinnerung „${item.reminder.title}“ ist erledigt.` : "Keine Erinnerung zu dieser Entscheidung."}</p>}
+                </div>
+                <div className="rg-actions dec-full"><button type="button" className="btn btn-ghost" onClick={() => setEditing(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Änderung speichern</button></div>
+              </form>
+            </li>;
+            return <li key={item.id} className="dec-history-row">
+              <span className="num">{date}</span>
+              <Signal tone="neutral" size="sm">{label}</Signal>
+              <PersonTag name={item.actor_display_name} />
+              <span className="cw-muted">{[item.effective_date ? `wirksam am ${formatDate(item.effective_date)}` : null, item.note, item.status !== "planned" ? STATUS_WORD[item.status] : null, item.reminder?.status === "open" ? `Erinnerung am ${formatDate(item.reminder.due_date)}` : null].filter(Boolean).join(" · ")}</span>
+              {editable ? (confirmDelete === item.id
+                ? <span className="dec-history-actions" role="group" aria-label={`Löschen von „${label}“ bestätigen`}>
+                  <span>{item.reminder?.status === "open" ? `Wirklich löschen? Die Erinnerung am ${formatDate(item.reminder.due_date)} wird mit entfernt.` : "Wirklich löschen?"}</span>
+                  <button type="button" className="rg-link dec-delete" disabled={busy} onClick={() => void remove(item)}>Endgültig löschen</button>
+                  <button type="button" className="rg-link" onClick={() => setConfirmDelete(null)}>Abbrechen</button>
+                </span>
+                : <span className="dec-history-actions">
+                  {item.status === "planned" || item.status === "in_progress" ? <>
+                    <button type="button" className="rg-link" disabled={busy} onClick={() => void changeStatus(item, "completed")}>Abschließen</button>
+                    <button type="button" className="rg-link" disabled={busy} onClick={() => void changeStatus(item, "cancelled")}>Stornieren</button>
+                  </> : null}
+                  <button type="button" className="rg-link" disabled={busy} aria-label={`${label} vom ${date} bearbeiten`} onClick={() => startEdit(item)}>Bearbeiten</button>
+                  <button type="button" className="rg-link" disabled={busy} aria-label={`${label} vom ${date} löschen`} onClick={() => { setEditing(null); setConfirmDelete(item.id); }}>Löschen</button>
+                </span>) : null}
+            </li>;
+          })}
         </ul>}
       </div>
     </div>}

@@ -125,7 +125,7 @@ Three setups exist (`docs/DATABASE_CONFIGURATION.md`):
   - UUID PKs come from server-side `uuidv7()`. `OrgOwnedMixin`/`organization_id` sit on tenant rows. A naming convention covers `pk_/fk_/ix_/uq_/ck_`.
   - Use `session_scope()` for short transactions and keep expensive work outside them.
 - **Alembic migrations:**
-  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `x6a8b0c12016` (`contract.reminder_extra_leads` + `contract_deadline.extra_remind_on`: additional reminders; before it `w5f7a9b01015` added device types).
+  - Files are named `YYYYMMDD_<rev>_<slug>.py`; the current head is `y7b9c1d23017` (`contract_lifecycle_decision.reminder_deadline_id`: the reminder created with a decision; before it `x6a8b0c12016` added additional reminders).
   - Add FKs onto populated tables as `NOT VALID` (precedent: step16 `app_user` provenance).
   - Tests don't exercise migrations, so a new migration needs `alembic upgrade head` against a disposable DB.
 - **Auth:** a cookie session (`medflux_session`), not JWT. Account roles are admin, contract_manager, reviewer and viewer, plus an `is_developer` flag, with per-org `account_membership`. Passwords use PBKDF2-SHA256. Cookie writes require an allowed `Origin`. Viewers are read-only.

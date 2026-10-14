@@ -18,7 +18,7 @@ const field = (label: string) => ({ value: null, label });
 function Gaps(props: { hasAnnualCost: boolean; reviewPending: boolean; documentCount: number }) {
   const gaps = useContractGaps({ contractId: "c-1", orgSlug: "test-klinik", ...props });
   if (gaps === null) return null;
-  const points = buildOpenPoints({ gaps, tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10, slaMissing: [] });
+  const points = buildOpenPoints({ gaps, tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10 });
   return <OpenPoints contractId="c-1" points={points} onOpen={() => undefined} />;
 }
 

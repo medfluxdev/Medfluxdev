@@ -249,6 +249,8 @@ export interface ScopeStatusItem {
   page: number | null;
   snippet: string | null;
   evidence_ref: string | null;
+  /** Ja/Nein der KI-Analyse (nur Vorschlag; `status` entscheidet). */
+  ai_suggestion?: boolean | null;
 }
 
 export interface ContractScopeSection {
@@ -332,6 +334,26 @@ export interface DetailWarning {
   requires_action: boolean;
   requires_review: boolean;
   action_state: string | null;
+  /** Quellfelder (z. B. `dates.end_date`), verbinden die Warnung mit der Faktprüfung. */
+  source_refs?: string[];
+  /** Prüf-Warnung, deren Angaben eine Person geprüft hat. */
+  review_resolved?: boolean;
+  /** Widerspruch verständlich (nur Berechnungskonflikte). */
+  conflict?: WarningConflict | null;
+}
+
+export interface WarningConflict {
+  topic: string;
+  title_de: string;
+  question_de: string;
+  explanation_de: string;
+  /** Prüf-Angabe, in der die Entscheidung gespeichert wird. */
+  fact_key: string | null;
+  /** Zur Wahl stehende Werte (ISO-Datum) mit Herkunft; leer = nur Erklärung. */
+  options: { key: string; label_de: string; value: string; detail_de: string; fact_keys: string[] }[];
+  inputs?: { label_de: string; value: string }[];
+  decided_value?: unknown;
+  decided_by?: string | null;
 }
 
 export interface DetailDocument {
@@ -421,6 +443,12 @@ export interface FactReviewStateDto {
   linked_evidence_refs: string[];
   needs_evidence: boolean;
   is_critical: boolean;
+  /** Sicherheit der KI zu ihrem Vorschlag (0..1, bester Beleg); null = keine Angabe. */
+  ai_confidence?: number | null;
+  /** Angabe aus einem Nachweis ohne feste Prüf-Angabe. */
+  is_evidence_item?: boolean;
+  /** Keine KI-Sicherheit: von festen Regeln wörtlich im Text gefunden. */
+  found_by_rule?: boolean;
 }
 
 /** Vertragsebene: Prüfstatus + Abschluss-Metadaten + Vollständigkeit. */

@@ -1,13 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export type TagKind = "type" | "partner" | "department" | "cost" | "device";
+export type TagKind = "type" | "category" | "partner" | "hospital" | "department" | "cost" | "device";
 
 export const TAG_ICON_PATHS: Record<TagKind, string> = {
   type: "M7 3h7l5 5v13H7zM14 3v5h5",
+  category: "M3 12V4h8l10 10-8 8zM7.5 8h.01",
   partner: "M4 21V7l6-4 6 4v14M16 11h4v10M8 9h4M8 13h4M8 17h4",
   department: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 20a6 6 0 0 0-3-5",
   cost: "M9 4 7 20M17 4l-2 16M4 9h16M3 15h16",
+  hospital: "M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16M2 21h20M12 7v6M9 10h6M10 21v-4h4v4",
   device: "M5 4h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 20h8M12 16v4",
 };
 
@@ -22,7 +24,7 @@ export function PersonTag({ name }: { name: string }) {
 }
 
 type Props = {
-  /** Kennfarbe + Symbol: Vertragstyp, Vertragspartner, Abteilung, Kostenstelle, Geräteart. */
+  /** Kennfarbe + Symbol: Vertragstyp, Kategorie, Vertragspartner, Krankenhaus, Abteilung, Kostenstelle, Geräteart. */
   kind: TagKind;
   children: ReactNode;
   /** Nummer vor dem Namen (Kostenstelle), in Mono mit feinem Trenner. */

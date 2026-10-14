@@ -20,9 +20,8 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
       { work_item_id: "t2", item_type: "review_required", severity: "medium", title_de: "KI-Wert prüfen", why_de: null, requires_review: true },
     ],
     warnings: [warning("high", "Berechnungskonflikt", true), warning("critical", "Frist verstrichen")],
-    scopeToCheck: 10,
-    scopeTotal: 10,
-    slaMissing: ["Reaktionszeit", "Lösungszeit"],
+    scopeToCheck: 3,
+    scopeTotal: 4,
   });
 
   it("ordnet Kritisch → Prüfen (hoch) → KI-Prüfung → Prüfen → Hinweis", () => {
@@ -33,13 +32,12 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
       ["KI-Prüfung", "KI-Wert prüfen"],
       ["Prüfen", "Vertragspartner"],
       ["Prüfen", "Leistungsumfang ungeklärt"],
-      ["Prüfen", "SLA unvollständig"],
       ["Hinweis", "Kosten nachtragen"],
     ]);
     // Eine Warnung, die eine Prüfung verlangt, folgt ihrem Schweregrad – mit „Priorität hoch“.
     expect(points[2].why).toBe("Bitte prüfen · Priorität hoch");
-    expect(points[5].why).toBe("10 von 10 Leistungen sind noch zu prüfen.");
-    expect(points[6].why).toBe("Reaktionszeit und Lösungszeit wurden im Vertrag nicht gefunden.");
+    expect(points[5].why).toBe("3 von 4 Leistungen aus dem Dokument sind noch nicht bestätigt.");
+    // Nicht im Vertrag und nicht von der KI gefunden = nichts zu prüfen (kein Punkt „SLA unvollständig“).
   });
 
   it("zeigt Signal + Wort, Zähler und genau einen Primärknopf; Knöpfe führen zur Stelle", async () => {
@@ -47,23 +45,33 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
     const onOpen = vi.fn();
     const { container } = render(<OpenPoints contractId="c-1" points={points} onOpen={onOpen} />);
     const section = screen.getByRole("region", { name: /Offene Punkte/ });
-    expect(within(section).getByLabelText("8 offen")).toBeInTheDocument();
+    expect(within(section).getByLabelText("7 offen")).toBeInTheDocument();
     expect(section.querySelectorAll(".btn-primary")).toHaveLength(1);
     await user.click(within(section).getByRole("link", { name: "Vertragsart erfassen" }));
     expect(onOpen).toHaveBeenCalledWith({ tab: "register", field: "term_model" });
-    expect(within(section).getByRole("link", { name: "SLA" })).toHaveAttribute("href", "#sla-heading");
+    expect(within(section).getByRole("link", { name: "Leistungen" })).toHaveAttribute("href", "#leistungsumfang-heading");
     expect(await axe(container)).toHaveNoViolations();
   });
 });
 
 describe("Offene Punkte – Kündbar bis nicht berechenbar", () => {
   it("steht als erster kritischer Punkt, außer eine fristrelevante Lücke ist schon genannt", () => {
-    const base = { tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10, slaMissing: [], cancelByUnknown: true };
+    const base = { tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10, cancelByUnknown: true };
     expect(buildOpenPoints({ ...base, gaps: [] }).map((point) => [point.word, point.title, point.action])).toEqual([
       ["Kritisch", "Kündigungstermin nicht berechenbar", "Kündigungsfrist erfassen"],
     ]);
     const withGap = buildOpenPoints({ ...base, gaps: [{ key: "notice_period_value", label: "Kündigungsfrist", reason: "nötig für die Fristberechnung", command: "Kündigungsfrist erfassen", target: { tab: "register", field: "notice_period_value" }, blocksDeadline: true }] });
     expect(withGap.map((point) => point.title)).toEqual(["Kündigungsfrist fehlt"]);
+  });
+
+  it("zählt nur noch nicht bestätigte Werte; alles bestätigt = kein Punkt", () => {
+    const base = { gaps: [], tasks: [], warnings: [] };
+    const open = buildOpenPoints({ ...base, scopeToCheck: 1, scopeTotal: 4, slaToCheck: 2 });
+    expect(open.map((point) => point.why)).toEqual([
+      "1 von 4 Leistungen aus dem Dokument ist noch nicht bestätigt.",
+      "2 SLA-Werte aus dem Dokument sind noch nicht bestätigt.",
+    ]);
+    expect(buildOpenPoints({ ...base, scopeToCheck: 0, scopeTotal: 4, slaToCheck: 0 })).toEqual([]);
   });
 });
 

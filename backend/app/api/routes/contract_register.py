@@ -194,6 +194,14 @@ def patch_register(contract_id: UUID, payload: RegisterUpdate, request: Request,
         except RegisterError as exc:
             session.rollback()
             raise _http(exc)
+        if payload.confirm:
+            # Vertragsdaten und Faktprüfung zeigen denselben Prüfstand.
+            from app.contracts.review.service import confirm_facts_from_register
+
+            confirm_facts_from_register(
+                session, organization_id=actor.organization_id, contract_id=contract.id,
+                register_keys=payload.confirm, reviewer_display_name=actor.display_name,
+            )
         sync_system_deadlines(session, contract, today_local())
         session.commit()
         return _register_payload(session, contract, actor)

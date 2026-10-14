@@ -1574,6 +1574,7 @@ def _scope_section(snapshot, pages=None, version_to_file=None, document_version_
             "page": page,
             "snippet": snippet,
             "evidence_ref": evidence_ref,
+            "ai_suggestion": ai_bools.get(k),
         }
         scope_status[k] = item
         if status == "excluded" and snippet:
@@ -1739,6 +1740,7 @@ def _warning_item(w) -> dict:
         "requires_action": bool(w.requires_action),
         "requires_review": bool(w.requires_review),
         "action_state": w.action_state,
+        "source_refs": [str(ref) for ref in (getattr(w, "source_field_refs", None) or []) if ref],
     }
 
 
@@ -1849,6 +1851,7 @@ def _evidence_ref(e, version_to_file, evidence_version_id, resolved_page=None) -
         "source_type": e.source_type,
         "snippet": _cap(e.source_text),
         "confidence": float(e.confidence) if e.confidence is not None else None,
+        "extraction_method": getattr(e, "extraction_method", None),
         "requires_review": bool(e.requires_review),
         "bbox": bbox_obj.model_dump() if bbox_obj else None,
         "precision": "coarse" if bbox_obj else "none",
@@ -1905,6 +1908,7 @@ def _recovered_evidence_ref(
         "source_type": "table" if bbox_obj else "paragraph",
         "snippet": _cap(snippet),
         "confidence": None,
+        "extraction_method": "programmatic",
         "requires_review": False,
         "bbox": bbox_obj.model_dump() if bbox_obj else None,
         "precision": "coarse" if bbox_obj else "none",
@@ -1991,6 +1995,8 @@ def _merge_evidence_duplicate(target: dict, other: dict) -> None:
         target["evidence_id"] = other.get("evidence_id")
     if _ref_confidence(other) > _ref_confidence(target):
         target["confidence"] = other.get("confidence")
+    if other.get("extraction_method") == "ai":
+        target["extraction_method"] = "ai"
     if (target.get("bbox") is None) and other.get("bbox") is not None:
         target["bbox"] = other.get("bbox")
         target["precision"] = other.get("precision")

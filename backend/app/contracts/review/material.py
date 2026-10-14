@@ -51,6 +51,57 @@ def _equipment_serial_value(r: dict) -> Optional[str]:
     return " | ".join(parts) or None
 
 
+# Trenner fuer Listen-Angaben (weitere Leistungen) im Pruef-Wert.
+LIST_SEPARATOR = "; "
+
+
+def _joined(items) -> Optional[str]:
+    values = [str(item).strip() for item in items or [] if str(item or "").strip()]
+    return LIST_SEPARATOR.join(values) or None
+
+
+SCOPE_VALUE_INCLUDED = "Inklusive"
+SCOPE_VALUE_EXCLUDED = "Exklusive"
+SCOPE_VALUE_MENTIONED = "Erwähnt – bitte festlegen"
+
+
+def _scope_reader(key: str) -> Reader:
+    """Leistung laut Dokument; nicht belegte Leistungen gelten als nicht vorliegend."""
+
+    def read(r: dict) -> Optional[str]:
+        scope = r.get("scope") or {}
+        item = (scope.get("scope_status") or {}).get(key) or {}
+        status = item.get("status")
+        if status is None:
+            legacy = scope.get(key)
+            status = "included" if legacy is True else "excluded" if legacy is False else None
+        # Ohne eindeutigen Beleg im Text: das Ja/Nein der KI als Vorschlag (bleibt zu pruefen).
+        if status not in ("included", "excluded") and item.get("ai_suggestion") is not None:
+            status = "included" if item["ai_suggestion"] else "excluded"
+        return {
+            "included": SCOPE_VALUE_INCLUDED,
+            "excluded": SCOPE_VALUE_EXCLUDED,
+            "mentioned": SCOPE_VALUE_MENTIONED,
+        }.get(status or "")
+
+    return read
+
+
+# Leistungen des Leistungsumfangs (Schluessel wie `scope.scope_status` im Lesemodell).
+SCOPE_FACTS: tuple[tuple[str, str], ...] = (
+    ("maintenance", "Wartung"),
+    ("inspection", "Inspektion"),
+    ("repair", "Reparatur"),
+    ("calibration", "Kalibrierung"),
+    ("software_updates", "Software-Updates"),
+    ("remote_support", "Remote-Support"),
+    ("technical_support", "Technischer Support"),
+    ("spare_parts_included", "Ersatzteile"),
+    ("consumables_included", "Verbrauchsmaterial"),
+    ("emergency_service", "Notdienst"),
+)
+
+
 MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
     (
         "identity.contract_number",
@@ -191,10 +242,44 @@ MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
         "Serien- / Inventarnummer",
         _equipment_serial_value,
     ),
+    *[
+        (f"scope.{key}", f"Leistungsumfang: {label}", _scope_reader(key))
+        for key, label in SCOPE_FACTS
+    ],
     (
-        "services.coverage",
-        "Service- / Wartungsabdeckung",
-        lambda r: _scope_or_sla_present(r),
+        "scope.other_included",
+        "Leistungsumfang: weitere inklusive Leistungen",
+        lambda r: _joined((r.get("scope") or {}).get("included_services")),
+    ),
+    (
+        "scope.other_excluded",
+        "Leistungsumfang: exklusive Leistungen",
+        lambda r: _joined((r.get("scope") or {}).get("excluded_services")),
+    ),
+    (
+        "sla.response_time",
+        "Reaktionszeit (SLA)",
+        lambda r: (r.get("sla") or {}).get("response_time"),
+    ),
+    (
+        "sla.resolution_time",
+        "Lösungszeit (SLA)",
+        lambda r: (r.get("sla") or {}).get("resolution_time"),
+    ),
+    (
+        "sla.service_hours",
+        "Servicezeiten (SLA)",
+        lambda r: (r.get("sla") or {}).get("service_hours"),
+    ),
+    (
+        "sla.emergency_availability",
+        "Notfallverfügbarkeit (SLA)",
+        lambda r: _emergency_value(r),
+    ),
+    (
+        "sla.sla_notes",
+        "Weitere SLA-Angaben",
+        lambda r: (r.get("sla") or {}).get("sla_notes"),
     ),
 ]
 
@@ -211,7 +296,8 @@ CRITICAL_FACTS = frozenset({
     "dates.latest_cancellation",
     "termination.auto_renewal",
     "equipment.identity",
-    "services.coverage",
+    "sla.response_time",
+    "sla.resolution_time",
 })
 
 
@@ -219,17 +305,66 @@ def fact_is_critical(fact_key: str) -> bool:
     return fact_key in CRITICAL_FACTS
 
 
-def _scope_or_sla_present(r: dict) -> Optional[str]:
-    scope = r.get("scope") or {}
-    if any(v is True for v in scope.values() if isinstance(v, bool)):
-        return "Vorhanden"
+def _emergency_value(r: dict) -> Optional[str]:
     sla = r.get("sla") or {}
-    if any(sla.get(k) for k in ("response_time", "resolution_time", "service_hours")):
-        return "Vorhanden"
+    if sla.get("emergency_availability"):
+        return sla["emergency_availability"]
+    if sla.get("availability_24_7") is True:
+        return "24/7 erreichbar"
+    if sla.get("availability_24_7") is False:
+        return "Nicht 24/7"
     return None
 
 
+# Pruef-Angaben aus Nachweisen ohne feste Angabe: „evidence.<Quellfeld>“.
+EVIDENCE_FACT_PREFIX = "evidence."
+
+_EVIDENCE_LABELS = {
+    "identity.system_identity": "System / Gerät (laut Betreff)",
+    "identity_equipment": "Gerät",
+    "equipment": "Gerät",
+    "payment.payment_start": "Zahlungsbeginn",
+    "costs.scheduled_prices": "Preisstaffel",
+    "costs.tax_table": "Steuertabelle",
+    "scope.included_services": "Leistungsumfang (Inklusiv-Liste)",
+    "scope.excluded_services": "Leistungsumfang (Ausschlüsse)",
+}
+_GROUP_LABELS = {
+    "identity": "Vertragsangaben",
+    "dates": "Laufzeit",
+    "termination": "Kündigung",
+    "costs": "Kosten",
+    "payment": "Zahlung",
+    "services": "Leistungen",
+    "scope": "Leistungsumfang",
+    "sla": "SLA",
+    "equipment": "Gerät",
+}
+
+
+def evidence_base(field_ref: str) -> str:
+    """Quellfeld eines Belegs ohne Beleg-Zaehler (`dates.duration.evidence.0` -> `dates.duration`)."""
+    return str(field_ref).split(".evidence", 1)[0] or str(field_ref)
+
+
+def evidence_fact_label(base: str) -> str:
+    from app.reextract.facts import LABELS
+
+    parts = base.split(".")
+    if len(parts) == 3 and parts[1] == "cost_line" and parts[2].isdigit():
+        return f"Kostenposition {int(parts[2]) + 1}"
+    for key in (base, ".".join(parts[:2]), parts[0]):
+        if key in LABELS:
+            return LABELS[key]
+        if key in _EVIDENCE_LABELS:
+            return _EVIDENCE_LABELS[key]
+    group = _GROUP_LABELS.get(parts[0], "Angabe")
+    return f"{group} (weiterer Nachweis)" if len(parts) == 1 else f"{group}: {' '.join(parts[1:]).replace('_', ' ')}"
+
+
 def fact_label(fact_key: str) -> str:
+    if fact_key.startswith(EVIDENCE_FACT_PREFIX):
+        return f"Nachweis: {evidence_fact_label(fact_key[len(EVIDENCE_FACT_PREFIX):])}"
     for key, label, _ in MATERIAL_FACTS:
         if key == fact_key:
             return label
