@@ -7,7 +7,11 @@ import type { EvidenceRef, FactReviewStateDto } from "@/lib/contract-detail-type
 import type { EvidenceReviewItem } from "@/lib/domain-api/register";
 import { evidenceNumbers, factsByEvidence } from "@/lib/evidence";
 
-const api = vi.hoisted(() => ({ reviewContractFact: vi.fn(), saveEvidenceReview: vi.fn(), logEvidenceRound: vi.fn(), getDocumentPageText: vi.fn() }));
+const api = vi.hoisted(() => ({ reviewContractFact: vi.fn(), saveEvidenceReview: vi.fn(), logEvidenceRound: vi.fn(), getDocumentPageText: vi.fn(), startReextraction: vi.fn() }));
+vi.mock("@/lib/domain-api/reextraction", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/domain-api/reextraction")>()),
+  startReextraction: api.startReextraction,
+}));
 vi.mock("@/lib/domain-api/contracts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/domain-api/contracts")>()),
   reviewContractFact: api.reviewContractFact,
@@ -210,6 +214,21 @@ describe("Nachweise prüfen (geführt)", () => {
     await user.click(within(dialog).getByRole("button", { name: "2 bestätigen" }));
     await waitFor(() => expect(api.saveEvidenceReview).toHaveBeenCalledTimes(2));
     expect(api.saveEvidenceReview.mock.calls.map((call) => call[2].evidence_id).sort()).toEqual(["e-cost", "e-customer"]);
+  });
+
+  it("„Nachweis neu erkennen“ liest die Seite gezielt neu, sonst die ganze Seite", async () => {
+    const user = userEvent.setup();
+    const { ApiError } = await import("@/lib/api");
+    api.startReextraction.mockRejectedValueOnce(new ApiError("Unbekannte Angaben ausgewählt.", { status: 422 })).mockResolvedValue({});
+    const started = vi.fn();
+    renderMode({ canRecognize: true, onRecognizeStarted: started });
+    await user.click(screen.getByRole("button", { name: "Weitere Aktionen" }));
+    await user.click(screen.getByRole("menuitem", { name: "Nachweis neu erkennen" }));
+    await waitFor(() => expect(started).toHaveBeenCalled());
+    expect(api.startReextraction.mock.calls.map((call) => call[2])).toEqual([
+      { mode: "missing_fields", fields: ["identity.customer"], page_hint: [1] },
+      { mode: "full", page_hint: [1] },
+    ]);
   });
 
   it("ohne Prüfrecht nur lesen und blättern", () => {

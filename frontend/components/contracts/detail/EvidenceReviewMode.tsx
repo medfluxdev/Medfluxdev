@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { EvidenceRef, FactReviewStateDto } from "@/lib/contract-detail-types";
 import { reviewContractFact } from "@/lib/domain-api/contracts";
+import { startReextraction } from "@/lib/domain-api/reextraction";
 import { getDocumentPageText, logEvidenceRound, saveEvidenceReview, type EvidenceReviewItem, type EvidenceReviewStatus } from "@/lib/domain-api/register";
 import {
   PRECISION, STATUS_VIEW, confidenceOf, documentValue, evidenceRows, evidenceStatus, guidedOrder, percent, precisionOf,
@@ -64,7 +65,7 @@ function Diff({ tokens }: { tokens: { text: string; changed: boolean }[] }) {
  */
 export default function EvidenceReviewMode({
   contractId, orgSlug, contractTitle, evidence, numbers, factByEvidence, reviews, startId, canReview, viewer,
-  onShow, onExit, onReload, onSearchAgain,
+  onShow, onExit, onReload, canRecognize = false, onRecognizeStarted,
 }: {
   contractId: string;
   orgSlug: string;
@@ -83,8 +84,10 @@ export default function EvidenceReviewMode({
   onExit: () => void;
   /** Vertrag und Prüfstand neu laden. */
   onReload: () => void;
-  /** „Nachweis neu erkennen“ für Angaben mit Vertragsdaten-Feld. */
-  onSearchAgain?: (field: string) => void;
+  /** „Nachweis neu erkennen“ erlaubt (Recht `contract.reanalyze`, kein Lauf aktiv). */
+  canRecognize?: boolean;
+  /** Ein Lauf wurde gestartet (Stand der erneuten Erfassung neu laden). */
+  onRecognizeStarted?: () => void;
 }) {
   const toast = useToast();
   const order = useMemo(() => guidedOrder(evidence, factByEvidence), [evidence, factByEvidence]);
@@ -273,6 +276,40 @@ export default function EvidenceReviewMode({
     setDeviation({ choice, value, note: "", picker: false });
   }
 
+  /**
+   * „Nachweis neu erkennen“: die KI liest die Seite des Nachweises erneut – gezielt für diese Angabe, wenn sie als
+   * eigene Angabe erfasst werden kann, sonst die ganze Seite. Das Ergebnis erscheint oben als „Neue Auswertung“
+   * und wird erst nach Auswahl übernommen.
+   */
+  async function recognizeAgain() {
+    if (!current) return;
+    const base = (fact?.fact_key ?? current.field_ref ?? "").replace(/^evidence\./, "").split(".evidence")[0];
+    const keys = Array.from(new Set([base, base.split(".").slice(0, 2).join(".")].filter(Boolean)));
+    const pageHint = current.page != null ? [current.page] : [];
+    const attempts = [
+      ...keys.map((key) => ({ mode: "missing_fields" as const, fields: [key], page_hint: pageHint })),
+      { mode: "full" as const, page_hint: pageHint },
+    ];
+    setBusy(true);
+    try {
+      for (const attempt of attempts) {
+        try {
+          await startReextraction(orgSlug, contractId, attempt);
+          toast(`Erkennung gestartet${current.page != null ? ` (Seite ${current.page})` : ""}. Das Ergebnis erscheint oben unter „Neue Auswertung“.`, "success");
+          onRecognizeStarted?.();
+          return;
+        } catch (err) {
+          // Angabe nicht einzeln erfassbar: nächster Versuch (zuletzt die ganze Seite).
+          if (!(err instanceof ApiError && err.status === 422)) throw err;
+        }
+      }
+    } catch (err) {
+      toast(err instanceof ApiError && err.message ? err.message : "Die Erkennung konnte nicht gestartet werden.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copyQuote() {
     if (!current?.snippet) return;
     try {
@@ -319,7 +356,7 @@ export default function EvidenceReviewMode({
       <button type="button" className="btn erm-all" onClick={() => setDrawer(true)}>{LIST}Alle Nachweise</button>
       <ActionMenu items={[
         { label: "Zitat kopieren", onSelect: () => void copyQuote(), disabled: !current?.snippet },
-        { label: "Nachweis neu erkennen", onSelect: () => { if (fact?.register_field) onSearchAgain?.(fact.register_field); }, disabled: !fact?.register_field || !onSearchAgain || !canReview },
+        { label: "Nachweis neu erkennen", onSelect: () => void recognizeAgain(), disabled: !canRecognize || !current || busy },
         { label: `Alle sicheren ≥ 0,95 bestätigen${safe.length ? ` (${safe.length})` : ""}`, onSelect: () => setConfirmAll(true), disabled: safe.length === 0 || busy },
       ]} />
     </header>

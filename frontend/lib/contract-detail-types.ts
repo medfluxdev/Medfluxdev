@@ -546,6 +546,8 @@ export interface SourceNavigationTarget {
   /** Verweis auf die Quellen-Evidenz (field_ref bspw. `termination.evidence`). */
   field_ref?: string | null;
   evidence_id?: string | null;
+  /** Wortlaut steht nachweislich in der Box (Backend `location: exact`): grün markieren statt „ungefähre Lage“. */
+  verified?: boolean;
 }
 
 // Deutsche Abschnitts-/Gruppen-Bezeichnungen fuer den Contract-360-Workspace.

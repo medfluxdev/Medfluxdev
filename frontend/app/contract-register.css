@@ -997,7 +997,7 @@ a.fin-basis-sub { color: var(--color-link); }
 
 .pdf-marker{position: absolute;z-index: var(--z-raised);display: grid;place-items: center;min-width: 24px;height: 24px;padding: 0 5px;border: 2px solid var(--color-surface);border-radius: 999px;background: var(--color-accent);color: var(--color-surface);font: inherit;font-size: var(--text-caption);font-weight: var(--weight-bold);box-shadow: var(--shadow-md);cursor: pointer}
 .pdf-marker:hover{transform: scale(1.1)}
-.pdf-marker.is-active{background: var(--color-warning);outline: 3px solid var(--color-warning-border)}
+.pdf-marker.is-active{background: var(--color-success);outline: 3px solid var(--color-success-border)}
 .pdf-marker:focus-visible{outline: 3px solid var(--color-focus, var(--color-accent));outline-offset: 2px}
 @media (forced-colors: active){.pdf-marker{forced-color-adjust: none;background: Highlight;color: HighlightText}}
 
@@ -1138,8 +1138,8 @@ a.fin-basis-sub { color: var(--color-link); }
 .pdf-slim-space{flex: 1}
 .pdf-viewer .pdf-controls--slim .pdf-slim-fit{min-height: 28px}
 .pdf-frame{position: absolute;z-index: var(--z-raised);border: 1px dashed var(--color-border-strong);border-radius: 4px;pointer-events: none}
-.pdf-frame.is-current{border: 2px solid var(--color-focus)}
-.pdf-frame.is-current.is-approx{border: 2px dashed var(--color-warning)}
-.pdf-frame-number{position: absolute;top: -13px;left: -13px;display: grid;place-items: center;min-width: 24px;height: 24px;padding: 0 4px;border-radius: 999px;background: var(--color-focus);color: var(--color-accent-contrast);font-size: var(--text-caption);font-weight: var(--weight-bold)}
+.pdf-frame.is-current{border: 2px solid var(--color-success);border-radius: 8px;background: color-mix(in srgb, var(--color-success) 10%, transparent)}
+.pdf-frame.is-current.is-approx{border: 2px dashed var(--color-warning);background: color-mix(in srgb, var(--color-warning) 8%, transparent)}
+.pdf-frame-number{position: absolute;top: -14px;left: -14px;border: 2px solid var(--color-surface);display: grid;place-items: center;min-width: 24px;height: 24px;padding: 0 4px;border-radius: 999px;background: var(--color-success);color: var(--color-accent-contrast);font-size: var(--text-caption);font-weight: var(--weight-bold)}
 .pdf-frame.is-approx .pdf-frame-number{background: var(--color-warning)}
 @media (forced-colors: active){.pdf-frame.is-current{border-color: Highlight}.pdf-frame-number{forced-color-adjust: none;background: Highlight;color: HighlightText}.erm-seg i{forced-color-adjust: none}}

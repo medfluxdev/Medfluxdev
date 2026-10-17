@@ -174,6 +174,7 @@ function evidenceTarget(ref: EvidenceRef): SourceNavigationTarget {
     label: ref.snippet || ref.field_ref || "Quelle",
     field_ref: ref.field_ref,
     evidence_id: ref.evidence_id,
+    verified: precisionOf(ref) === "exact",
   };
 }
 
@@ -916,7 +917,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onShow={(ref) => openEvidence(ref, "evidence")}
             onExit={() => { setReviewMode(null); reloadEvidenceReviews(); }}
             onReload={() => { reload(); reloadEvidenceReviews(); }}
-            onSearchAgain={(field) => { setReviewMode(null); router.replace(documentSearchHref(data.contract_id, field), { scroll: false }); }}
+            canRecognize={Boolean(reextraction.state?.can_start) && !reextractionBusy}
+            onRecognizeStarted={reextraction.reload}
             viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
           /> : null}
           {inDocumentWorkspace && !reviewMode && <div className="dw">

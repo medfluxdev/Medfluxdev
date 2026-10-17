@@ -57,6 +57,12 @@ export interface PageMarker {
 }
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
+
+/** Farbe aus den Design-Tokens für das Zeichnen auf der Leinwand (Hell/Dunkel). */
+function cssColor(token: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(token).trim() || fallback;
+}
 type PdfJsModule = typeof import("pdfjs-dist");
 type PdfDoc = Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>;
 
@@ -366,7 +372,29 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (!rect) return;
     const pagePoints = { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) };
     const precision = evidencePrecision(bbox, bboxSpace, pagePoints);
-    if (!useRefined || precision === "coarse") {
+    // Belegte Fundstelle (Wortlaut in der Box): grün hinterlegt, wie „Bestätigt“.
+    if (navTarget.verified || (useRefined && precision !== "coarse")) {
+      const success = cssColor("--color-success", "rgb(11, 107, 87)");
+      const pad = 6;
+      const box = { x: rect.x - pad, y: rect.y - pad, w: rect.width + pad * 2, h: rect.height + pad * 2 };
+      const outline = () => {
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") ctx.roundRect(box.x, box.y, box.w, box.h, 8);
+        else ctx.rect(box.x, box.y, box.w, box.h);
+      };
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = success;
+      outline();
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = success;
+      ctx.lineWidth = 2;
+      outline();
+      ctx.stroke();
+      return;
+    }
+    {
       ctx.fillStyle = "rgba(255, 200, 0, 0.12)";
       ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       ctx.strokeStyle = "#d97706";
@@ -376,14 +404,9 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
       ctx.setLineDash([]);
       ctx.font = "12px sans-serif";
       ctx.fillStyle = "#92400e";
-      ctx.fillText("ungefähre Lage (Seitenbereich)", rect.x + 6, rect.y + 16);
+      ctx.fillText("ungefähre Lage (Seitenbereich)", rect.x + 2, rect.y > 16 ? rect.y - 4 : rect.y + rect.height + 14);
       return;
     }
-    ctx.fillStyle = "rgba(255, 200, 0, 0.25)";
-    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-    ctx.strokeStyle = "#d97706";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(rect.x + 1, rect.y + 1, Math.max(0, rect.width - 2), Math.max(0, rect.height - 2));
   }, [navTarget, dims, documentVersionId, pageNumber, zoom, refined, orgSlug, review]);
 
   // Prüfmodus: den aktuellen Rahmen in den sichtbaren Bereich holen (beim Wechsel des Nachweises oder der Größe).
@@ -470,8 +493,9 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
             const rect = resolveEvidenceRect(marker.bbox, marker.bbox_space, BASE_SCALE * zoom, pageBox);
             if (!rect) return null;
             // Prüfmodus: der aktuelle Nachweis mit Rahmen und Nummer, die übrigen der Seite nur gestrichelt (ohne Nummer).
+            const pad = marker.active ? 6 : 2;
             if (review) return <div key={marker.id} className={`pdf-frame${marker.active ? " is-current" : ""}${marker.approx ? " is-approx" : ""}`}
-              style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }} aria-hidden="true">
+              style={{ left: rect.x - pad, top: rect.y - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} aria-hidden="true">
               {marker.active ? <span className="pdf-frame-number">{marker.number}</span> : null}
             </div>;
             return <button key={marker.id} type="button" className={`pdf-marker${marker.active ? " is-active" : ""}`} style={{ left: Math.max(0, rect.x - 12), top: Math.max(0, rect.y - 12) }}
@@ -482,6 +506,8 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
         <p className="pdf-nav-info" aria-live="polite">
           {refined?.key === `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}` && refined.status === "exact" && refined.bbox
             ? `Quelle im Original lokalisiert: ${navTarget.label}`
+            : navTarget.verified && navTarget.bbox
+              ? `Quelle im Original markiert (Seite ${navTarget.page})`
             : navTarget.supports_exact_navigation && navTarget.bbox
               ? `Quelle: ${navTarget.label} · ungefähre Lage auf Seite ${navTarget.page} (keine exakte Position)`
               : `Quelle: ${navTarget.label} (ohne exakte Position)`}
