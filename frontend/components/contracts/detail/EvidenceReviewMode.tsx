@@ -367,7 +367,7 @@ export default function EvidenceReviewMode({
           <div className="erm-main">
             <div className="erm-compare">
               <div className="erm-box erm-box--doc">
-                <span className="erm-box-label">{FILE}Im Dokument (erkannt)</span>
+                <span className="erm-box-label"><span>{FILE}Im Dokument (erkannt)</span></span>
                 <span className="erm-box-value">{doc == null ? <span className="erm-muted">Kein Wert erkannt{current.snippet ? <> · Wortlaut: „{current.snippet}“</> : null}</span> : diff ? <Diff tokens={diff.a} /> : doc}</span>
               </div>
               <div className="erm-box erm-box--sys">
