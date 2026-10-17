@@ -28,11 +28,13 @@ vi.mock("pdfjs-dist", () => {
 
 const CONTRACT_ID = "11111111-1111-1111-1111-111111111111";
 
+const routerReplace = vi.hoisted(() => vi.fn());
+
 vi.mock("next/navigation", () => ({
   useParams: () => ({ "contract-id": CONTRACT_ID }),
   usePathname: () => `/contracts/${CONTRACT_ID}`,
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace, refresh: vi.fn() }),
 }));
 
 function detailFixture(overrides: Partial<ContractDetailResponse> = {}): ContractDetailResponse {
@@ -220,11 +222,12 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(await screen.findByText("Kündigungsfrist nähert sich")).toBeInTheDocument();
 
     await openTab("Fristen & Aufgaben");
-    expect(await screen.findByRole("heading", { name: "Entscheidung" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Vertragsentscheidung" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Termine & Aufgaben" })).toBeInTheDocument();
 
+    // „Im Dokument gefunden“ gibt es nicht mehr; Verknüpfungen zeigt Rahmenvertrag und Gerätearten.
     await openTab("Verknüpfungen");
-    expect(screen.getAllByText("MRT Magnetom").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole("heading", { name: "Im Dokument gefunden" })).not.toBeInTheDocument();
   });
 
   it("Kopf: Vertragsbeginn, farbiger Status und Vertragspartner zum Öffnen", async () => {
@@ -247,10 +250,69 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     }));
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
     expect(within(header).getByRole("button", { name: "Vertragstyp: Wartungsvertrag" })).toHaveClass("tag-chip--type");
-    expect(within(header).getByRole("button", { name: /Kostenstelle 950000/ })).toHaveClass("tag-chip--cost");
-    expect(within(header).getByRole("button", { name: "Verantwortliche Abteilung: Medizintechnik" })).toHaveClass("tag-chip--department");
+    const who = within(header).getByRole("group", { name: "Zuständigkeit" });
+    expect(within(who).getByText("Radiologie").closest(".tag-chip")).toHaveClass("tag-chip--cost");
+    expect(within(who).getByText("Medizintechnik").closest(".tag-chip")).toHaveClass("tag-chip--department");
     expect(within(header).getByRole("button", { name: "05.05.2025" })).toHaveAttribute("title", "In den Vertragsdaten ansehen");
     expect(within(header).getByRole("button", { name: "Fristen ansehen" })).toBeInTheDocument();
+  });
+
+  it("Kopf: Zeile „Vertrag“ und Zeile „Zuständig“ – jede Angabe einmal, „Ändern“ öffnet die Organisationszuordnung", async () => {
+    const user = userEvent.setup();
+    const { container } = await renderWithData(detailFixture({
+      business_status: "gueltig",
+      partner: { id: "p-1", name: "ABIOMED Europe GmbH", short_name: "ABIOMED" },
+      assignment: { contract_type: "Wartungsvertrag", contract_category: "Medizingerät", hospital: "Nordwest Krankenhaus", responsible_department: "Medizintechnik", beneficiary_departments: ["Röntgen Diagnostik", "Medizintechnik"], other_departments: [], cost_center: { code: "950000", name: "Radiologie" }, device_types: ["CT", "MRT", "Angiographie"], responsible: "Developer", further_responsible: [] },
+    }));
+    const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
+    const what = within(header).getByRole("group", { name: "Vertrag" });
+    expect(within(what).getByRole("button", { name: "Kategorie: Medizingerät" })).toHaveClass("tag-chip--category");
+    expect(within(what).getByRole("link", { name: "Vertragspartner: ABIOMED Europe GmbH" })).toBeInTheDocument();
+    // Status steht rechts neben dem Titel, nicht in den Chip-Zeilen.
+    expect(within(what).queryByText("Gültig")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).toContainElement(within(header).getByText("Gültig"));
+    const who = within(header).getByRole("group", { name: "Zuständigkeit" });
+    expect(within(who).getByText("Developer").closest(".tag-chip")).toHaveClass("tag-chip--person");
+    expect(within(who).getByText("Nordwest Krankenhaus").closest(".tag-chip")).toHaveClass("tag-chip--hospital");
+    expect(within(who).getByText("Röntgen Diagnostik").closest(".tag-chip")).toHaveClass("tag-chip--secondary");
+    expect(within(who).getByText("CT · MRT +1").closest(".tag-chip")).toHaveClass("tag-chip--device");
+    // Keine Angabe doppelt: Abteilung nur einmal, Kostenstelle und Abteilung nicht mehr in Zeile 1.
+    expect(within(header).getAllByText("Medizintechnik")).toHaveLength(1);
+    expect(within(what).queryByText("Radiologie")).not.toBeInTheDocument();
+    // Übersicht ohne Karte Zuständigkeit und ohne Kacheln (Finanzen, Leistungen & SLA, Daten & Nachweise).
+    expect(screen.queryByRole("heading", { name: "Zuständigkeit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Daten & Nachweise" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Anzeigen/ })).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    // „Bearbeiten“ steht bei den Kopfknöpfen (nicht in der Chip-Zeile) und öffnet die Vertragsdaten.
+    expect(within(who).queryByRole("button", { name: /Ändern|Bearbeiten/ })).not.toBeInTheDocument();
+    // Deckblatt nicht mehr als eigener Knopf, sondern als letzte Option unter „⋯“.
+    expect(within(header).queryByText("Deckblatt (PDF)")).not.toBeInTheDocument();
+    await user.click(within(header).getByRole("button", { name: "Weitere Aktionen" }));
+    const options = within(screen.getByRole("menu", { name: "Weitere Aktionen" })).getAllByRole("menuitem").map((item) => item.textContent);
+    expect(options[0]).toBe("Archivieren");
+    expect(options[options.length - 1]).toBe("Deckblatt (PDF)");
+    await user.keyboard("{Escape}");
+    await user.click(within(header).getByRole("button", { name: "Bearbeiten" }));
+    expect(screen.getByRole("tab", { name: "Vertragsdaten" })).toHaveAttribute("aria-selected", "true");
+    // Jede Angabe führt zu ihrer Karte: Kostenstelle → Organisationszuordnung, Status → Karte „Vertragsstatus“ (Übersicht).
+    routerReplace.mockClear();
+    await user.click(within(who).getByRole("button", { name: /Kostenstelle: 950000/ }));
+    expect(routerReplace).toHaveBeenLastCalledWith(`/contracts/${CONTRACT_ID}?tab=register&abschnitt=ownership`, { scroll: false });
+    await user.click(within(header).getByRole("button", { name: /Gültig/ }));
+    expect(routerReplace).toHaveBeenLastCalledWith(`/contracts/${CONTRACT_ID}?abschnitt=status`, { scroll: false });
+  });
+
+  it("KI-Plakette im Kopf führt direkt zur Prüfung der Angabe, aus der der Wert stammt", async () => {
+    const fact = (fact_key: string, label_de: string, value: string) => ({ fact_key, label_de, present: true, state: "unreviewed", state_label_de: "Ungeprüft", original_value: value, effective_value: value, reviewer_display_name: null, reviewer_identity_type: null, reviewed_at: null, evidence_ref: null, has_history: false, evidence_count: 0, linked_evidence: [], linked_evidence_refs: [], needs_evidence: false, is_critical: false });
+    await renderWithData(detailFixture({
+      register_facts: { contract_start: "2025-05-05", cancel_by: null, contract_end: null, annual_cost: null },
+      fact_review_states: [fact("identity.contract_number", "Vertragsnummer", "CN-9876"), fact("costs.annual", "Jahreskosten", "42.500 EUR")],
+    } as Partial<ContractDetailResponse>));
+    const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
+    await userEvent.click(within(header).getByRole("button", { name: /KI · Ungeprüft.*Prüfung öffnen/ }));
+    expect(await screen.findByRole("heading", { level: 3, name: "Jahreskosten" })).toBeInTheDocument();
+    expect(screen.getByText("Angabe 2 von 2")).toBeInTheDocument();
   });
 
   it("Kopf: feste Laufzeit braucht kein „Kündbar bis“ – nichts Kritisches dazu", async () => {
@@ -261,25 +323,23 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(within(header).getByText("Feste Laufzeit – endet ohne Kündigung")).toBeInTheDocument();
   });
 
-  it("Abschnitte je Vertragstyp: Mietvertrag blendet Leistungsumfang/SLA aus, KI-Angaben über „Trotzdem anzeigen“", async () => {
+  it("Leistungen & SLA: Mietvertrag ohne Angaben ohne Reiter, „Leistungen & SLA hinzufügen“; mit KI-Angaben sichtbar", async () => {
     const user = userEvent.setup();
     const empty = { ...detailFixture().scope, maintenance: null, repair: null, remote_support: null } as ContractDetailResponse["scope"];
     const noSla = { response_time: null, resolution_time: null, service_hours: null, emergency_availability: null, availability_24_7: null, sla_notes: null };
     const rent = { type_label: "Mietvertrag", scope: false, sla: false, maintenance: false, equipment: true };
     const { unmount } = await renderWithData(detailFixture({ sections: rent, scope: empty, sla: noSla }));
-    expect(screen.queryByRole("heading", { name: "Leistungsumfang" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "SLA" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Leistungen & SLA" })).not.toBeInTheDocument();
     expect(screen.queryByText("SLA unvollständig")).not.toBeInTheDocument();
-    expect(screen.getByText(/Für Mietvertrag ausgeblendet: Leistungsumfang, SLA/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Trotzdem anzeigen" }));
-    expect(screen.getByRole("heading", { name: "SLA" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Leistungen & SLA hinzufügen" }));
+    expect(screen.getByRole("tab", { name: "Leistungen & SLA" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Service-Level (SLA)" })).toBeInTheDocument();
     unmount();
 
-    // Der Typ entscheidet auch bei von der KI gelesenen Angaben; der Hinweis nennt sie, „Trotzdem anzeigen“ zeigt sie.
+    // Von der KI gelesene Angaben halten den Reiter sichtbar, auch wenn der Typ keinen Leistungsumfang vorsieht.
     await renderWithData(detailFixture({ sections: rent }));
-    expect(screen.queryByRole("heading", { name: "Leistungsumfang" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "SLA" })).not.toBeInTheDocument();
-    expect(screen.getByText(/ausgeblendet: Leistungsumfang \(mit Angaben aus dem Dokument\), SLA \(mit Angaben aus dem Dokument\)/)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Leistungen & SLA" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Leistungen & SLA hinzufügen" })).not.toBeInTheDocument();
   });
 
   it("Kopf: nicht zugeordneter Vertragspartner führt zur Zuordnung, fehlender Beginn zum Feld", async () => {
@@ -289,38 +349,44 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(within(header).getByRole("button", { name: "Vertragsbeginn erfassen" })).toBeInTheDocument();
   });
 
-  it("zeigt den belegten Systemnamen, wenn device_name fehlt", async () => {
-    const equipment = detailFixture().equipment;
-    await renderWithData(detailFixture({
-      equipment: [{ ...equipment[0], device_name: null, system_name: "Impella AIC System", model: null }],
-    }));
-    await openTab("Verknüpfungen");
-    expect(screen.getByText("Impella AIC System")).toBeInTheDocument();
-  });
-
-  it("zeigt den belegten Modellnamen, wenn Geräte- und Systemname fehlen", async () => {
-    const equipment = detailFixture().equipment;
-    await renderWithData(detailFixture({
-      equipment: [{ ...equipment[0], device_name: null, system_name: null, model: "Accutron MR" }],
-    }));
-    await openTab("Verknüpfungen");
-    expect(screen.getAllByText("Accutron MR").length).toBeGreaterThanOrEqual(1);
-  });
-
   it("zeigt die Quelldokumente und lädt den PDF-Viewer", async () => {
     await renderWithData(detailFixture());
     await openDocuments();
-    expect(screen.getByRole("button", { name: /wartung\.pdf/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /anhang\.docx/ })).toBeInTheDocument();
+    // Arbeitsplatz: links Dateien (nach Art gruppiert), Stand oben rechts mit nächstem Schritt.
+    const files = screen.getByRole("navigation", { name: "Quelldokumente" });
+    expect(within(files).getByRole("button", { name: /wartung\.pdf/ })).toHaveAttribute("aria-current", "true");
+    expect(within(files).getByRole("button", { name: /anhang\.docx/ })).toHaveTextContent("Anlage");
+    expect(screen.getByLabelText("Stand der Dokumente")).toHaveTextContent(/Dateien · 2 Nachweise/);
+    expect(screen.getByRole("button", { name: "Dateien" })).toHaveAttribute("aria-pressed", "true");
+    // Seitenvorschau ist im Arbeitsplatz anfangs zu (die Leiste links ist schon da) und lässt sich öffnen.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Seiten" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Seiten" }));
     await waitFor(() => expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Seiten" })).toBeInTheDocument());
+    expect(within(screen.getByRole("navigation", { name: "Seiten" })).getAllByRole("button", { name: /^Seite \d$/ })).toHaveLength(3);
+    await userEvent.click(screen.getByRole("button", { name: "Seite 3" }));
+    await waitFor(() => expect(document.querySelector(".page-indicator")).toHaveTextContent("Seite 3 / 3"));
+  });
+
+  it("Dateien und Nachweise teilen sich das Original; der Unterreiter „Nachweise“ ist eine Leiste im Arbeitsplatz", async () => {
+    await renderWithData(detailFixture());
+    await openDocuments();
+    expect(screen.queryByRole("button", { name: "Nachweise", pressed: true })).not.toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).queryByRole("button", { name: "Nachweise" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Nachweise" }));
+    expect(screen.getByRole("button", { name: "Nachweise" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Nachweise durchsuchen" })).toBeInTheDocument();
   });
 
   it("zeigt Nachweise mit ehrlicher Navigations-Präzision", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    expect(screen.getByText("Positionsbestimmt")).toBeInTheDocument();
-    expect(screen.getByText("Ohne Positionsangabe")).toBeInTheDocument();
-    expect(screen.getAllByText(/KI-Konfidenz 98 %/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Genau")).toBeInTheDocument();
+    expect(screen.getByText("Ohne Seite")).toBeInTheDocument();
+    expect(screen.getAllByText(/KI 98 %/).length).toBeGreaterThan(0);
+    expect(screen.getByText("2 Nachweise")).toBeInTheDocument();
+    expect(screen.getByText("Einen Nachweis links wählen – die Stelle wird hier im Original gezeigt.")).toBeInTheDocument();
   });
 
   it("markiert eine ausgewählte Quelle und öffnet das Original im PDF-Viewer", async () => {
@@ -330,7 +396,11 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await userEvent.click(sourceBtn);
     expect(sourceBtn).toHaveAttribute("aria-pressed", "true");
     await waitFor(() => expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector(".page-indicator")).toHaveTextContent("Seite 2 / 3"));
+    // Gleiche Nummer auf der Seite wie in der Liste; die gewählte Marke ist hervorgehoben.
+    const marker = await screen.findByRole("button", { name: /^Nachweis 1: /, pressed: true });
+    expect(marker).toHaveTextContent("1");
+    expect(screen.getByText(/^Nachweis 1 · Seite 2/)).toBeInTheDocument();
   });
 
   it("Quelle ohne Seitenangabe erfindet keine Hervorhebung", async () => {
@@ -338,8 +408,13 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await openDocuments("Nachweise");
     const sourceBtn = screen.getByRole("button", { name: /annual cost/i });
     await userEvent.click(sourceBtn);
-    expect(screen.getByText(/Keine Seitenangabe/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Keine Seitenangabe/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/hervorgehoben/)).not.toBeInTheDocument();
+    // Detailkarte: blättern zum anderen Nachweis.
+    const detail = screen.getByRole("region", { name: /annual cost/i });
+    expect(within(detail).getByText("2 von 2")).toBeInTheDocument();
+    await userEvent.click(within(detail).getByRole("button", { name: "Vorheriger Nachweis" }));
+    expect(screen.getByRole("region", { name: /start date/i })).toBeInTheDocument();
   });
 
   it("hat im Dokument-Workspace keine automatisierten WCAG-A11y-Verstöße", async () => {
@@ -354,7 +429,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
     await userEvent.click(screen.getByRole("button", { name: /start date/i }));
-    await waitFor(() => expect(screen.getByText(/Seite 2 \/ 3/)).toBeInTheDocument());
+    await waitFor(() => expect(document.querySelector(".page-indicator")).toHaveTextContent("Seite 2 / 3"));
     await openTab("Übersicht");
     expect(screen.getByRole("heading", { name: "MRT Wartungsvertrag" })).toBeInTheDocument();
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();

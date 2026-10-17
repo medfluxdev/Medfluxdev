@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { ApiError } from "@/lib/api";
 import { reviewContractFact } from "@/lib/domain-api/contracts";
 import type { FactReviewStateDto } from "@/lib/contract-detail-types";
-import Signal, { SignalIcon } from "@/components/ui/Signal";
+import AiOrigin, { AiReviewContext } from "@/components/ui/AiOrigin";
+import ActionMenu, { type ActionMenuItem } from "@/components/ui/ActionMenu";
+import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
 
@@ -174,12 +176,12 @@ function SuggestionHint({ edit, row }: { edit: FactCardEdit; row: CardFactRow })
     const present = new Set(splitList(draft).map((item) => item.toLocaleLowerCase("de")));
     const missing = splitList(suggestion).filter((item) => !present.has(item.toLocaleLowerCase("de")));
     if (!missing.length) return null;
-    return <span className="card-fact-hint"><Signal tone="ai" size="sm">KI-Vorschlag</Signal>{missing.map((item) => <button key={item} type="button" className="rg-link" onClick={() => edit.set(row.factKey, [...splitList(draft), item].join(LIST_SEPARATOR))} aria-label={`${item} wieder aufnehmen`}>+ {item}</button>)}</span>;
+    return <span className="card-fact-hint"><StaticAiOrigin />{missing.map((item) => <button key={item} type="button" className="rg-link" onClick={() => edit.set(row.factKey, [...splitList(draft), item].join(LIST_SEPARATOR))} aria-label={`${item} wieder aufnehmen`}>+ {item}</button>)}</span>;
   }
   if (!same) {
-    return <span className="card-fact-hint"><Signal tone="ai" size="sm">KI-Vorschlag</Signal><span>{row.list ? splitList(suggestion).join(", ") : suggestion}</span><button type="button" className="rg-link" onClick={() => edit.set(row.factKey, suggestion)} aria-label={`KI-Vorschlag für ${row.label} wiederherstellen`}>Wiederherstellen</button></span>;
+    return <span className="card-fact-hint"><StaticAiOrigin /><span>{row.list ? splitList(suggestion).join(", ") : suggestion}</span><button type="button" className="rg-link" onClick={() => edit.set(row.factKey, suggestion)} aria-label={`KI-Vorschlag für ${row.label} wiederherstellen`}>Wiederherstellen</button></span>;
   }
-  return <label className="card-fact-hint"><input type="checkbox" checked={edit.willConfirm(row.factKey)} onChange={(event) => edit.toggleConfirm(row.factKey, event.target.checked)} /><span className="rg-origin rg-origin-ai"><SignalIcon tone="ai" />KI · Vorschlag</span>bestätigen</label>;
+  return <label className="card-fact-hint"><input type="checkbox" checked={edit.willConfirm(row.factKey)} onChange={(event) => edit.toggleConfirm(row.factKey, event.target.checked)} /><StaticAiOrigin />bestätigen</label>;
 }
 
 /** Liste eigener Einträge: entfernen mit ✕, hinzufügen über das Eingabefeld. */
@@ -219,27 +221,53 @@ export function FactInput({ edit, row }: { edit: FactCardEdit; row: CardFactRow 
   return <span className="card-fact-field">{control}<SuggestionHint edit={edit} row={row} /></span>;
 }
 
+/** Öffnet die Fundstelle einer Angabe (von der Vertragsseite bereitgestellt); ohne Fundstelle null. */
+/** Im Bearbeiten: Plakette ohne Sprung (sonst gingen Eingaben verloren). */
+const StaticAiOrigin = () => <AiReviewContext.Provider value={null}><AiOrigin state="unreviewed" /></AiReviewContext.Provider>;
+
+export const FactSourceContext = createContext<((fact: FactReviewStateDto | undefined) => (() => void) | null) | null>(null);
+
 /** Herkunft wie in Vertragsdaten: „KI · Vorschlag“ (mit „Bestätigen“), „KI · bestätigt“, „KI · korrigiert“, „Manuell“. */
-export function FactStatus({ edit, row, canEdit }: { edit: FactCardEdit; row: CardFactRow; canEdit: boolean }) {
+export function FactStatus({ edit, row, canEdit, compact = false }: { edit: FactCardEdit; row: CardFactRow; canEdit: boolean; /** Nur die Plakette; Bestätigen/Zurücknehmen stehen dann im „⋯“-Menü (`FactMenu`). */ compact?: boolean }) {
   const state = row.fact?.state ?? "unreviewed";
   const who = row.fact?.reviewer_display_name;
   const fromDocument = row.fact?.original_value != null && row.fact.original_value !== "";
   // Jede Entscheidung bleibt änderbar: „Zurücknehmen“ öffnet die Angabe wieder (ein eigener Wert ohne KI-Wert entfällt dann).
-  const undo = canEdit ? <button type="button" className="rg-link" disabled={edit.busy} onClick={() => edit.reopen(row)} aria-label={`${row.label}: Prüfung zurücknehmen`} title={fromDocument ? "Wieder als KI-Vorschlag offen" : "Eigenen Wert entfernen"}>Zurücknehmen</button> : null;
+  const openSource = useContext(FactSourceContext)?.(row.fact) ?? null;
+  const undo = canEdit && !compact ? <button type="button" className="rg-link" disabled={edit.busy} onClick={() => edit.reopen(row)} aria-label={`${row.label}: Prüfung zurücknehmen`} title={fromDocument ? "Wieder als KI-Vorschlag offen" : "Eigenen Wert entfernen"}>Zurücknehmen</button> : null;
   if (state === "auto_accepted") {
-    return <><span className="rg-origin" title="Automatisch übernommen (Prüfmodus der Organisation), von keiner Person bestätigt">KI · übernommen</span>{undo}</>;
+    return <><AiOrigin state="auto" onOpenSource={openSource} factKey={row.factKey} subject={row.label} />{undo}</>;
   }
   if (state === "confirmed") {
-    return <><span className="rg-origin rg-origin-ai_confirmed" title={who ? `Bestätigt von ${who}` : undefined}><SignalIcon tone="done" />KI · bestätigt</span>{undo}</>;
+    return <><AiOrigin state="confirmed" onOpenSource={openSource} factKey={row.factKey} subject={row.label} detail={who ? `bestätigt von ${who}` : null} />{undo}</>;
   }
   if (state === "corrected") {
     return <><span className={`rg-origin ${fromDocument ? "rg-origin-ai_corrected" : "rg-origin-manual"}`} title={who ? `Eingetragen von ${who}` : undefined}>{fromDocument ? "KI · korrigiert" : "Manuell"}</span>{undo}</>;
   }
   if (!row.fact?.present || !OPEN_STATES.has(state)) return null;
   return <>
-    <span className="rg-origin rg-origin-ai" title="Aus dem Dokument gelesen, noch nicht bestätigt"><SignalIcon tone="ai" />KI · Vorschlag{row.fact.ai_confidence != null ? ` · ${Math.round(row.fact.ai_confidence * 100)} %` : row.fact.found_by_rule ? " · Regel" : ""}</span>
-    {canEdit ? <button type="button" className="rg-link" disabled={edit.busy} onClick={() => edit.confirm(row)} aria-label={`${row.label} bestätigen`}>Bestätigen</button> : null}
+    <AiOrigin state="unreviewed" onOpenSource={openSource} factKey={row.factKey} subject={row.label} detail={row.fact.ai_confidence != null ? `KI-Sicherheit ${Math.round(row.fact.ai_confidence * 100)} %` : row.fact.found_by_rule ? "von festen Regeln wörtlich gefunden" : null} />
+    {canEdit && !compact ? <button type="button" className="rg-link" disabled={edit.busy} onClick={() => edit.confirm(row)} aria-label={`${row.label} bestätigen`}>Bestätigen</button> : null}
   </>;
+}
+
+const MENU_ICON = {
+  source: <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h4" /></svg>,
+  confirm: <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>,
+  undo: <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" /></svg>,
+};
+
+/** „⋯“ je Angabe: Quelle öffnen, Bestätigen (offener KI-Wert) bzw. Bestätigung zurücknehmen. Ohne Aktion nichts. */
+export function FactMenu({ edit, row, canEdit }: { edit: FactCardEdit; row: CardFactRow; canEdit: boolean }) {
+  const openSource = useContext(FactSourceContext)?.(row.fact) ?? null;
+  const state = row.fact?.state ?? "unreviewed";
+  const items: ActionMenuItem[] = [];
+  if (openSource) items.push({ label: "Quelle öffnen", icon: MENU_ICON.source, onSelect: openSource });
+  if (canEdit && row.fact?.present && OPEN_STATES.has(state)) items.push({ label: "Bestätigen", icon: MENU_ICON.confirm, onSelect: () => void edit.confirm(row), disabled: edit.busy });
+  if (canEdit && (state === "confirmed" || state === "corrected" || state === "auto_accepted")) {
+    items.push({ label: state === "corrected" && !(row.fact?.original_value != null && row.fact.original_value !== "") ? "Eigenen Wert entfernen" : "Bestätigung zurücknehmen", icon: MENU_ICON.undo, onSelect: () => void edit.reopen(row), disabled: edit.busy });
+  }
+  return items.length ? <ActionMenu label={`Weitere Aktionen: ${row.label}`} items={items} /> : null;
 }
 
 /** Speicherleiste unter der Karte (wie in Vertragsdaten), mit „Alle KI-Vorschläge übernehmen“. */

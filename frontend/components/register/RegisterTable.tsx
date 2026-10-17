@@ -7,7 +7,7 @@ import { BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/regi
 import type { GridColumn, GridResponse, GridSpec, MoneyTotals } from "@/lib/domain-api/registerGrid";
 import { coverageNote, formatCurrency } from "@/lib/format";
 import { rememberReviewQueue } from "@/lib/review-queue";
-import { contractHref, listRowTarget } from "@/lib/fix-targets";
+import { contractHref } from "@/lib/fix-targets";
 import { formatCell } from "./register-state";
 
 type Props = {
@@ -56,7 +56,6 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
   const cells = layout(shown);
   const hasContractCell = cells.some((cell) => cell.kind === "contract");
   // Nach einer Lücke gefiltert („ohne Kosten“ …): der Vertrag öffnet dort, wo sie behoben wird.
-  const rowTarget = listRowTarget(spec.filters);
   const actionColumn = (archiveMode && canRestore) || reviewMode;
   const groupIndex = new Map((data.groups ?? []).map((item) => [JSON.stringify(item.path), item]));
   const width = cells.length + (actionColumn ? 1 : 0);
@@ -95,7 +94,8 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
       previous = row.group;
       const number = row.values.register_number == null ? "" : String(row.values.register_number);
       const description = row.values.short_description == null ? "" : String(row.values.short_description).trim();
-      const href = contractHref(row.contract_id, rowTarget);
+      // Der Vertrag öffnet immer in der Übersicht; Offene Punkte führen von dort zur Stelle.
+      const href = contractHref(row.contract_id);
       return <Fragment key={row.contract_id}>
         {headers}
         <tr>

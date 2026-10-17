@@ -18,8 +18,9 @@ describe("formatRelativeDate", () => {
     expect(formatRelativeDate("2026-12-09", TODAY)).toBe("in 8 Wochen");
     expect(formatRelativeDate("2027-01-06", TODAY)).toBe("in 12 Wochen");
     expect(formatRelativeDate("2027-01-07", TODAY)).toBe("in 3 Monaten");
-    expect(formatRelativeDate("2027-11-14", TODAY)).toBe("in 1 Jahr");
-    expect(formatRelativeDate("2029-03-31", TODAY)).toBe("in 2 Jahren");
+    expect(formatRelativeDate("2027-10-20", TODAY)).toBe("in 1 Jahr");
+    expect(formatRelativeDate("2027-11-14", TODAY)).toBe("in 1 Jahr, 1 Monat");
+    expect(formatRelativeDate("2029-03-31", TODAY)).toBe("in 2 Jahren, 5 Monaten");
   });
 
   it("Vergangenes mit „vor …“ und Einzahl", () => {

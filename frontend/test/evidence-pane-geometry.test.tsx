@@ -32,7 +32,7 @@ function renderPane(items: EvidenceRef[]) {
 }
 
 describe("EvidencePane: Ehrliche Geometrie-Auszeichnung (UAT Defect D)", () => {
-  it("kennzeichnet eine seitenfüllende Region als 'Ungefähre Lage'", () => {
+  it("kennzeichnet eine seitenfüllende Region als „Ungefähr“", () => {
     const { container } = renderPane([
       ref({
         evidence_id: "coarse",
@@ -40,21 +40,18 @@ describe("EvidencePane: Ehrliche Geometrie-Auszeichnung (UAT Defect D)", () => {
         bbox: { x0: 89.66, y0: 69.16, x1: 543.86, y1: 725.15 },
       }),
     ]);
-    expect(screen.getByText("Ungefähre Lage")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Seitenbereich grob markiert – die Quelle ist dort nur ungefähr/
-      )
-    ).toBeInTheDocument();
-    expect(container.textContent).not.toContain("Positionsbestimmt");
+    expect(screen.getByText("Ungefähr")).toBeInTheDocument();
+    // Erklärung auch für Screenreader im Eintrag (nicht nur als Tooltip).
+    expect(screen.getByText(/Nur der Seitenbereich ist bekannt/)).toBeInTheDocument();
+    expect(container.querySelector(".evidence-list")?.textContent).not.toContain("Genau");
   });
 
-  it("behält 'Positionsbestimmt' für eine schmale, vertrauenswürdige Region", () => {
+  it("„Genau“ nur für eine schmale, vertrauenswürdige Region", () => {
     renderPane([
       ref({ evidence_id: "exact", bbox: { x0: 100, y0: 200, x1: 160, y1: 212 } }),
     ]);
-    expect(screen.queryByText("Ungefähre Lage")).not.toBeInTheDocument();
-    expect(screen.getByText("Positionsbestimmt")).toBeInTheDocument();
+    expect(screen.queryByText("Ungefähr")).not.toBeInTheDocument();
+    expect(screen.getByText("Genau")).toBeInTheDocument();
   });
 
   it("differenziert Seite-ohne-Position und Ohne-Positionsangabe ehrlich", () => {
@@ -62,8 +59,8 @@ describe("EvidencePane: Ehrliche Geometrie-Auszeichnung (UAT Defect D)", () => {
       ref({ evidence_id: "page-only", page: 3, bbox: null, supports_exact_navigation: false }),
       ref({ evidence_id: "no-page", page: null, bbox: null, supports_exact_navigation: false }),
     ]);
-    expect(screen.getByText("Seite, ohne Position")).toBeInTheDocument();
-    expect(screen.getByText("Ohne Positionsangabe")).toBeInTheDocument();
+    expect(screen.getByText("Nur Seite")).toBeInTheDocument();
+    expect(screen.getByText("Ohne Seite")).toBeInTheDocument();
   });
 
   it("stellt Quellenangaben ohne erfundene Hervorhebung dar (Kontext sichtbar)", () => {

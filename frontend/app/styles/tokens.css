@@ -150,18 +150,28 @@
   --color-tag-department: #4a3f9b;
   --color-tag-department-bg: #eeecfa;
   --color-tag-department-border: #c1bbeb;
-  --color-tag-cost: #8a3b62;
-  --color-tag-cost-bg: #f8e9f0;
-  --color-tag-cost-border: #e2b6cb;
-  --color-tag-device: #3f5873;
-  --color-tag-device-bg: #eaeff5;
-  --color-tag-device-border: #b9c7d6;
+  /* Kennfarbe Kosten: Waldgrün – Identität, nicht Status */
+  --color-tag-cost: #2f6b3f;
+  --color-tag-cost-bg: #e6f2e8;
+  --color-tag-cost-border: #a9d3b3;
+  /* Kennfarbe Einzelpreise: Identität, nicht Status */
+  --color-tag-unit: #8a5a00;
+  --color-tag-unit-bg: #fcefd2;
+  --color-tag-unit-border: #e6c77a;
+  --color-tag-device: #9b2c5a;
+  --color-tag-device-bg: #fbe8f0;
+  --color-tag-device-border: #eeb3cc;
   --color-tag-hospital: #7a4a12;
   --color-tag-hospital-bg: #f6eddf;
   --color-tag-hospital-border: #dcc29c;
   --color-tag-category: #4f5b16;
   --color-tag-category-bg: #f0f3df;
   --color-tag-category-border: #c6cf96;
+  /* Kostenstellen-Aufteilung: Farbe je Anteil (Reihenfolge, keine Bedeutung) */
+  --color-split-0: var(--color-tag-type);
+  --color-split-1: var(--color-tag-department);
+  --color-split-2: var(--color-tag-hospital);
+  --color-split-3: var(--color-tag-category);
   /* Kennfarben der Termin-Typen: Identität, nicht Status. Immer mit Symbol + Wort, nur in Terminlisten. */
   --color-termin-aufgabe: #1d4f91;
   --color-termin-aufgabe-bg: #e4edf9;
@@ -181,6 +191,24 @@
   --color-termin-ki: #5b3fa6;
   --color-termin-ki-bg: #ece6fa;
   --color-termin-ki-border: #c2b3ec;
+  /* Kennfarben der Entscheidungen (Art, nicht Zustand) */
+  --color-decision-renew: #2f6b3f;
+  --color-decision-renew-bg: #e3f1e6;
+  --color-decision-renew-border: #a6d1b0;
+  --color-decision-renegotiate: #1d4f91;
+  --color-decision-renegotiate-bg: #e4edf9;
+  --color-decision-renegotiate-border: #a9c3e8;
+  --color-decision-terminate: #a0351f;
+  --color-decision-terminate-bg: #fbe6e0;
+  --color-decision-terminate-border: #eeb0a0;
+  --color-decision-monitor: #7a4b00;
+  --color-decision-monitor-bg: #fbefd6;
+  --color-decision-monitor-border: #e0c07f;
+  /* Kennfarbe „Notiz“ (Petrol/Grün; Art, nicht Zustand) */
+  --color-tag-note: #0f6b5c;
+  --color-tag-note-bg: #e6f4f1;
+  --color-tag-note-paper: #f7faf9;
+  --color-tag-note-border: #a8d5cc;
   /* kraeftige Flaechen (Punkte, Balken, Banner) und getoente Rahmen */
   --color-success-fill: var(--green-600);
   --color-warning-fill: var(--amber-500);
@@ -310,12 +338,17 @@
     --color-tag-department: #b9b1f2;
     --color-tag-department-bg: #24213f;
     --color-tag-department-border: #45407a;
-    --color-tag-cost: #eeaccb;
-    --color-tag-cost-bg: #37202c;
-    --color-tag-cost-border: #6b3c53;
-    --color-tag-device: #a9c1dc;
-    --color-tag-device-bg: #1c2836;
-    --color-tag-device-border: #3a4c62;
+    /* Kennfarbe Kosten: Waldgrün – Identität, nicht Status */
+    --color-tag-cost: #8fd3a0;
+    --color-tag-cost-bg: #16301d;
+    --color-tag-cost-border: #2c5a38;
+    /* Kennfarbe Einzelpreise: Identität, nicht Status */
+    --color-tag-unit: #f2c66d;
+    --color-tag-unit-bg: #3a2c0e;
+    --color-tag-unit-border: #6a5120;
+    --color-tag-device: #f2a3c4;
+    --color-tag-device-bg: #3a1426;
+    --color-tag-device-border: #6e2e4a;
     --color-tag-hospital: #e7bf86;
     --color-tag-hospital-bg: #33261a;
     --color-tag-hospital-border: #654a2c;
@@ -341,6 +374,22 @@
     --color-termin-ki: #c9b8f5;
     --color-termin-ki-bg: #2a2244;
     --color-termin-ki-border: #4a3d78;
+    --color-decision-renew: #8fd3a0;
+    --color-decision-renew-bg: #12301b;
+    --color-decision-renew-border: #2e5c3a;
+    --color-decision-renegotiate: #9cc0f5;
+    --color-decision-renegotiate-bg: #15273f;
+    --color-decision-renegotiate-border: #2f4a70;
+    --color-decision-terminate: #f4a08c;
+    --color-decision-terminate-bg: #3e1a12;
+    --color-decision-terminate-border: #6e3326;
+    --color-decision-monitor: #f0c070;
+    --color-decision-monitor-bg: #3a2a0c;
+    --color-decision-monitor-border: #6a4f1c;
+    --color-tag-note: #6fd1bf;
+    --color-tag-note-bg: #10302b;
+    --color-tag-note-paper: #152321;
+    --color-tag-note-border: #2a5a51;
     --color-success-fill: #3fae86;
     --color-warning-fill: #d99a2b;
     --color-danger-fill: #d9605a;
@@ -415,12 +464,17 @@
   --color-tag-department: #b9b1f2;
   --color-tag-department-bg: #24213f;
   --color-tag-department-border: #45407a;
-  --color-tag-cost: #eeaccb;
-  --color-tag-cost-bg: #37202c;
-  --color-tag-cost-border: #6b3c53;
-  --color-tag-device: #a9c1dc;
-  --color-tag-device-bg: #1c2836;
-  --color-tag-device-border: #3a4c62;
+  /* Kennfarbe Kosten: Waldgrün – Identität, nicht Status */
+  --color-tag-cost: #8fd3a0;
+  --color-tag-cost-bg: #16301d;
+  --color-tag-cost-border: #2c5a38;
+  /* Kennfarbe Einzelpreise: Identität, nicht Status */
+  --color-tag-unit: #f2c66d;
+  --color-tag-unit-bg: #3a2c0e;
+  --color-tag-unit-border: #6a5120;
+  --color-tag-device: #f2a3c4;
+  --color-tag-device-bg: #3a1426;
+  --color-tag-device-border: #6e2e4a;
   --color-tag-hospital: #e7bf86;
   --color-tag-hospital-bg: #33261a;
   --color-tag-hospital-border: #654a2c;
@@ -446,6 +500,22 @@
   --color-termin-ki: #c9b8f5;
   --color-termin-ki-bg: #2a2244;
   --color-termin-ki-border: #4a3d78;
+  --color-decision-renew: #8fd3a0;
+  --color-decision-renew-bg: #12301b;
+  --color-decision-renew-border: #2e5c3a;
+  --color-decision-renegotiate: #9cc0f5;
+  --color-decision-renegotiate-bg: #15273f;
+  --color-decision-renegotiate-border: #2f4a70;
+  --color-decision-terminate: #f4a08c;
+  --color-decision-terminate-bg: #3e1a12;
+  --color-decision-terminate-border: #6e3326;
+  --color-decision-monitor: #f0c070;
+  --color-decision-monitor-bg: #3a2a0c;
+  --color-decision-monitor-border: #6a4f1c;
+  --color-tag-note: #6fd1bf;
+  --color-tag-note-bg: #10302b;
+  --color-tag-note-paper: #152321;
+  --color-tag-note-border: #2a5a51;
   --color-success-fill: #3fae86;
   --color-warning-fill: #d99a2b;
   --color-danger-fill: #d9605a;

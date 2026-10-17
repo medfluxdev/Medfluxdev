@@ -15,6 +15,7 @@ function Page() {
     <section className="cw-section collapsible"><div className="cw-section-head"><h2>Eigener Knopf</h2></div></section>
     <section className="cw-section" data-no-collapse><div className="cw-section-head"><h2>Ohne</h2></div></section>
     <section className="cw-section"><p>Ohne Überschrift</p></section>
+    <section className="cw-section reg-table-wrap"><h2 className="visually-hidden">Vertragsliste</h2><p>3 Verträge</p></section>
   </main>;
 }
 

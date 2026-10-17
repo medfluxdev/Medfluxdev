@@ -11,6 +11,7 @@ import Signal, { SignalIcon, type SignalTone } from "@/components/ui/Signal";
 import Skeleton from "@/components/ui/Skeleton";
 import { ICONS } from "@/components/shell/navigation";
 import { listDeadlines, type DeadlineDto } from "@/lib/domain-api/deadlines";
+import { KindChip, deadlineKind } from "@/components/deadlines/TerminKind";
 import { getGrid, getPortfolioReport, listRenewals, type NotEvaluableItem, type PortfolioReport, type RenewalListItem } from "@/lib/domain-api/registerGrid";
 import { coverageNote, formatCurrency, formatDate } from "@/lib/format";
 
@@ -201,7 +202,7 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
                 {[...overdue, ...state.deadlines.filter((item) => !item.overdue)].slice(0, 8).map((item) => (
                   <li key={item.id}>
                     <span className="my-day-date">{formatDate(item.due_date)}</span>
-                    <div><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.title}</Link><small>{item.contract_label ?? ""}</small></div>
+                    <div><span className="terminlist-kind"><KindChip kind={deadlineKind(item)} /></span><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.title}</Link><small>{item.contract_label ?? ""}</small></div>
                     {item.overdue ? <Signal tone="critical">Überfällig</Signal> : item.days_until_due === 0 ? <Signal tone="warning">Heute</Signal> : null}
                   </li>
                 ))}
@@ -218,7 +219,7 @@ export default function MyDay({ organizationSlug }: { organizationSlug: string }
                 {openDecisions.slice(0, 6).map((item) => (
                   <li key={item.contract_id}>
                     <span className="my-day-date">{formatDate(item.cancel_by)}</span>
-                    <div><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link><small>{item.partner ?? ""}{item.annual_cost ? ` · ${formatCurrency(item.annual_cost, "EUR")} jährlich` : ""}</small></div>
+                    <div><Link href={`/contracts/${item.contract_id}`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link><small>{item.partner ?? ""}{item.annual_cost ? ` · ${formatCurrency(item.annual_cost, "EUR")} jährlich` : ""}</small></div>
                     <Signal tone={item.days_left < 0 ? "critical" : item.days_left <= 30 ? "warning" : "neutral"}>{item.days_left < 0 ? "verstrichen" : `in ${item.days_left} Tagen`}</Signal>
                   </li>
                 ))}

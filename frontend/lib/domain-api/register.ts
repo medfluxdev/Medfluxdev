@@ -1,5 +1,5 @@
 import type { StatusTone } from "@/components/ui/StatusBadge";
-import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 
 export type FieldOrigin = "ai" | "manual" | "ai_confirmed" | "ai_corrected" | "imported_legacy" | "system";
 export type BusinessStatus = "in_arbeit" | "gueltig" | "gekuendigt" | "beendet" | "geloescht";
@@ -62,7 +62,8 @@ export interface ContractRegister {
   fields: Record<string, RegisterField>;
   terms: RegisterTerms;
   /** Erste Erinnerung (leer = Standard) und weitere Erinnerungen. */
-  reminders?: { default_lead_months: number; lead_months: number | null; extra_leads: ReminderLead[] };
+  /** Erinnerungen: Standard (Vertragstyp, sonst Organisation) und die eigenen Werte des Vertrags. */
+  reminders?: { default_lead_months: number; default_leads?: ReminderLead[]; default_escalation_days?: number | null; default_source?: "contract_type" | "organization"; lead_months: number | null; extra_leads: ReminderLead[] };
   missing_for_valid: string[];
   as_of: string;
   partner_suggestions: PartnerSuggestion[];
@@ -86,11 +87,24 @@ export interface ConfidentialityInfo {
   grants: { account_id: string; display_name: string }[];
 }
 
+export interface ContractRemarkRevision {
+  body: string;
+  author_name: string | null;
+  written_at: string | null;
+}
+
 export interface ContractRemark {
   id: string;
   author_name: string | null;
   body: string;
   created_at: string | null;
+  /** Letzte Bearbeitung (null = unverändert). */
+  edited_at?: string | null;
+  edited_by_name?: string | null;
+  /** Stand für die Konfliktprüfung beim Bearbeiten. */
+  version?: string;
+  /** Frühere Fassungen, neueste zuerst. */
+  revisions?: ContractRemarkRevision[];
 }
 
 export interface ContractHospitalLink {
@@ -244,6 +258,16 @@ export function listContractRemarks(organizationSlug: string, contractId: string
 
 export function addContractRemark(organizationSlug: string, contractId: string, body: string) {
   return apiPost<{ items: ContractRemark[] }>(contractPath(contractId, "remarks", organizationSlug), { body });
+}
+
+export function editContractRemark(organizationSlug: string, contractId: string, remarkId: string, body: string, expectedVersion?: string) {
+  return apiPatch<{ items: ContractRemark[] }>(contractPath(contractId, `remarks/${encodeURIComponent(remarkId)}`, organizationSlug), { body, expected_version: expectedVersion ?? null });
+}
+
+/** Notiz löschen (weich: verschwindet aus der Liste, bleibt mit „wer/wann“ erhalten); 409 bei veraltetem Stand. */
+export function deleteContractRemark(organizationSlug: string, contractId: string, remarkId: string, expectedVersion?: string) {
+  const path = contractPath(contractId, `remarks/${encodeURIComponent(remarkId)}`, organizationSlug);
+  return apiDelete<{ items: ContractRemark[] }>(expectedVersion ? `${path}&expected_version=${encodeURIComponent(expectedVersion)}` : path);
 }
 
 export function getContractHospitals(organizationSlug: string, contractId: string) {

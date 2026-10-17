@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import ChipPicker from "@/components/ui/ChipPicker";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import InfoTip from "@/components/ui/InfoTip";
+import AiOrigin from "@/components/ui/AiOrigin";
 import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { PersonTag } from "@/components/ui/TagChip";
 import { listContractDocuments } from "@/lib/domain-api/contractDocuments";
@@ -82,9 +83,8 @@ export default function ContractAccessCard({ register, contractId, orgSlug, assi
 
   const aiOrigin = dp?.origin === "ai" || dp?.origin === "ai_confirmed";
   const quote = aiOrigin && dp?.source_field?.startsWith("Dokumenttext") ? dp.source_field : null;
-  const badge = dp?.origin === "ai"
-    ? <span className="rg-origin rg-origin-ai"><SignalIcon tone="ai" />KI · Vorschlag</span>
-    : dp?.origin === "ai_confirmed" ? <span className="rg-origin rg-origin-ai_confirmed"><SignalIcon tone="done" />KI · bestätigt</span> : null;
+  const badge = dp?.origin === "ai" ? <AiOrigin state="unreviewed" subject="Datenschutzrelevant" detail={quote} />
+    : dp?.origin === "ai_confirmed" ? <AiOrigin state="confirmed" subject="Datenschutzrelevant" detail={quote} /> : null;
   const confidentialText = conf.effective ? (conf.type_confidential && !conf.is_confidential ? "Ja (über Vertragstyp)" : "Ja") : "Nein";
   const grantName = (id: string) => assignees.find((item) => item.id === id)?.display_name ?? conf.grants.find((item) => item.account_id === id)?.display_name ?? "Unbekannte Person";
 

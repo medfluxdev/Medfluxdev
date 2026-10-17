@@ -19,12 +19,14 @@ interface Props {
   triggerLabel?: string;
   /** Pfeil ▾ hinter dem Text (Standard: ja). */
   caret?: boolean;
+  /** Beim ersten Anzeigen geöffnet (z. B. Sprung über ?feld=). */
+  defaultOpen?: boolean;
 }
 
 // Aufklappfläche unter einem Knopf (Filterauswahl, Darstellung): nicht modal, Escape schließt und
 // gibt den Fokus an den Knopf zurück, ein Klick daneben schließt.
-export default function Popover({ label, panelLabel, children, active = false, align = "start", wide = false, className, triggerClassName, triggerLabel, caret = true }: Props) {
-  const [open, setOpen] = useState(false);
+export default function Popover({ label, panelLabel, children, active = false, align = "start", wide = false, className, triggerClassName, triggerLabel, caret = true, defaultOpen = false }: Props) {
+  const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);

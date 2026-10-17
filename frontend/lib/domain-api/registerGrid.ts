@@ -290,7 +290,13 @@ export interface RenewalBrief {
   documents: number;
   review_pending: boolean;
   open_deadlines: { due_date: string; title: string }[];
-  decision: { id: string; decision: string; label: string; status: string; note: string | null; by: string; at: string | null } | null;
+  decision: {
+    id: string; decision: string; label: string; status: string; note: string | null; by: string; at: string | null;
+    /** Erster offener Umsetzungsschritt und Fortschritt (nur offene Entscheidungen). */
+    next_step?: import("./lifecycle").DecisionStep | null;
+    steps_done?: number | null;
+    steps_total?: number | null;
+  } | null;
   hints: { kind: "action" | "check" | "info"; text: string; reason: string; target?: unknown }[];
   explanation: string[];
 }

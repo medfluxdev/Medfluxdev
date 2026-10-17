@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
+import { KindChip, deadlineKind } from "@/components/deadlines/TerminKind";
 import { formatDate } from "@/lib/format";
 import { listDeadlines, type DeadlineDto, type DeadlineStatus } from "@/lib/domain-api/deadlines";
 import { listRenewals } from "@/lib/domain-api/registerGrid";
@@ -52,8 +53,8 @@ function Rows({ items }: { items: DeadlineDto[] }) {
     <thead><tr><th scope="col">Fällig</th><th scope="col">Termin</th><th scope="col">Vertrag</th><th scope="col">Zuständig</th><th scope="col">Erinnerung</th><th scope="col">Herkunft</th></tr></thead>
     <tbody>{items.map((item) => <tr key={item.id}>
       <td>{formatDate(item.due_date)}{item.overdue ? <> <Signal tone="critical">Überfällig</Signal></> : item.days_until_due === 0 ? <> <Signal tone="warning">Heute</Signal></> : null}</td>
-      <th scope="row">{item.title}{item.todo_text ? <span className="contract-business-status">{item.todo_text}</span> : null}</th>
-      <td><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.contract_label ?? "Vertrag"}</Link></td>
+      <th scope="row"><span className="terminlist-kind"><KindChip kind={deadlineKind(item)} /></span>{item.title}{item.todo_text ? <span className="contract-business-status">{item.todo_text}</span> : null}</th>
+      <td><Link href={`/contracts/${item.contract_id}`}>{item.contract_label ?? "Vertrag"}</Link></td>
       <td>{item.assignee_name ?? "Vertragsverantwortliche/r"}</td>
       <td>{formatDate(item.remind_on)}</td>
       <td>{item.source === "system" ? "Berechnet aus den Vertragsdaten" : "Manuelle Wiedervorlage"}{item.basis_unconfirmed ? <> <Link className="signal-link" href={contractHref(item.contract_id, REVIEW_TARGET)} title="Zugrunde liegende KI-Werte jetzt prüfen"><Signal tone="ai">Ungeprüfte KI-Werte</Signal></Link></> : null}</td>

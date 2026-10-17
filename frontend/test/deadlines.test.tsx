@@ -39,7 +39,7 @@ vi.mock("@/lib/domain-api/notifications", () => ({
   }),
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/", useSearchParams: () => new URLSearchParams() }));
 
 function deadline(overrides: Partial<DeadlineDto> = {}): DeadlineDto {
   return {
@@ -76,7 +76,8 @@ describe("Termine eines Vertrags", () => {
     const row = within(list).getAllByRole("listitem").find((item) => item.textContent?.startsWith("30.06.2027"))!;
     expect(row).toHaveTextContent("Kündbar bis");
     expect(within(row).getByText("Basiert auf ungeprüften KI-Werten")).toBeInTheDocument();
-    expect(row).toHaveTextContent("Eskalation an Chefin");
+    // Eskalation steht in den Erinnerungseinstellungen; unter dem Termin erst, wenn sie ausgelöst wurde.
+    expect(row).not.toHaveTextContent("Eskalation an Chefin");
     expect(within(row).queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();
     expect(screen.getByText("Erledigte und abgebrochene (1)")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();

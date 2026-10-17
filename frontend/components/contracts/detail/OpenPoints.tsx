@@ -5,7 +5,8 @@ import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
 import Signal, { type SignalTone } from "@/components/ui/Signal";
 import type { DetailWarning } from "@/lib/contract-detail-types";
-import { contractHref, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
+import { SCOPE_TARGET, SLA_TARGET, asFixTarget, contractHref, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
+import { formatDate } from "@/lib/format";
 import type { Gap } from "./ContractGaps";
 
 /** Offene Aufgabe aus der Vertragsakte (Auszug der benötigten Felder). */
@@ -31,6 +32,8 @@ export interface OpenPoint {
   rank: number;
 }
 
+const STEP_ACTION_LABEL: Record<string, string> = { term: "Laufzeit eintragen", status: "Status setzen", finance: "Kosten erfassen", documents: "Dokument hochladen" };
+
 // Freigegebene Zuordnung (Plan Vertragsseite, Schritt 5): Reihenfolge Kritisch → Prüfen (Priorität hoch)
 // → KI-Prüfung → Prüfen → Hinweis.
 const RANK = { critical: 0, high: 1, ai: 2, warning: 3, info: 4 } as const;
@@ -42,7 +45,7 @@ function bySeverity(severity: string): { tone: SignalTone; word: string; rank: n
   return { tone: "info", word: "Hinweis", rank: RANK.info, priority: false };
 }
 
-export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, cancelByUnknown = false }: {
+export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, cancelByUnknown = false, decision = null, decisionStep = null }: {
   gaps: Gap[];
   tasks: OpenTask[];
   warnings: DetailWarning[];
@@ -55,8 +58,36 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
   reviewOpen?: number;
   /** Kündbar-bis lässt sich nicht berechnen (Kopf zeigt „Nicht berechenbar“). */
   cancelByUnknown?: boolean;
+  /** Keine Entscheidung zum nächsten Termin erfasst (`pendingDecision`), sonst null. */
+  decision?: { due: string; byCancel: boolean; urgency: string } | null;
+  /** Erster offener Umsetzungsschritt der gültigen Entscheidung (Backend), mit Stichtag `today`. */
+  decisionStep?: { label: string; title: string; detail: string; due: string | null; target: Record<string, string> | null; done: number; total: number; today: string } | null;
 }): OpenPoint[] {
   const points: OpenPoint[] = [];
+  if (decisionStep) {
+    const days = decisionStep.due ? Math.round((Date.parse(`${decisionStep.due}T00:00:00Z`) - Date.parse(`${decisionStep.today}T00:00:00Z`)) / 86_400_000) : null;
+    const level = days != null && days < 0 ? { tone: "critical" as const, word: "Kritisch", rank: RANK.critical }
+      : days != null && days <= 14 ? { tone: "warning" as const, word: "Prüfen", rank: RANK.high }
+        : { tone: "info" as const, word: "Hinweis", rank: RANK.info };
+    const target = asFixTarget(decisionStep.target);
+    const when = days == null ? "" : days < 0 ? ` Überfällig seit ${formatDate(decisionStep.due)}.` : ` Bis ${formatDate(decisionStep.due)}.`;
+    points.push({
+      key: "decision-step", ...level, title: `${decisionStep.label}: ${decisionStep.title}`,
+      why: `Schritt ${decisionStep.done + 1} von ${decisionStep.total}.${when} ${decisionStep.detail}`,
+      action: target ? STEP_ACTION_LABEL[target.tab === "register" ? (target.section === "status" ? "status" : "term") : target.tab] ?? "Öffnen" : "Umsetzung ansehen",
+      target: target ?? { tab: "deadlines", section: "decision" },
+    });
+  }
+  if (decision) {
+    const level = decision.urgency === "missed" ? { tone: "critical" as const, word: "Kritisch", rank: RANK.critical }
+      : decision.urgency === "critical" ? { tone: "warning" as const, word: "Prüfen", rank: RANK.high }
+        : { tone: "info" as const, word: "Hinweis", rank: RANK.info };
+    points.push({
+      key: "decision", ...level, title: "Entscheidung treffen",
+      why: `${decision.urgency === "missed" ? "Kündigungsfrist verstrichen" : `Bis ${formatDate(decision.due)} entscheiden`}: verlängern, neu verhandeln, kündigen oder beobachten${decision.byCancel ? "" : " (Vertrag endet dann)"}.`,
+      action: "Entscheiden", target: { tab: "deadlines", section: "decision" },
+    });
+  }
   // Gleiche Aussage wie im Kopf; entfällt, wenn eine fristrelevante Lücke schon genannt ist.
   if (cancelByUnknown && !gaps.some((gap) => gap.blocksDeadline)) {
     points.push({ key: "cancel-by", tone: "critical", word: "Kritisch", title: "Kündigungstermin nicht berechenbar", why: "Ohne Kündigungsfrist wird der Kündigungstermin nicht berechnet und nicht überwacht.", action: "Kündigungsfrist erfassen", target: { tab: "register", field: "notice_period_value" }, rank: RANK.critical });
@@ -87,13 +118,16 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
     points.push({ key: `warning-${warning.warning_type}-${index}`, tone: level.tone, word: level.word, title: warning.title_de, why: [warning.requires_review ? "Bitte prüfen" : null, level.priority ? "Priorität hoch" : null].filter(Boolean).join(" · ") || "Hinweis aus der Berechnung", action: "Ansehen", target: warningTarget(warning.warning_type, false) ?? { tab: "deadlines" }, rank: level.rank });
   });
   if (scopeToCheck > 0) {
-    points.push({ key: "scope", tone: "warning", word: "Prüfen", title: "Leistungsumfang ungeklärt", why: `${scopeToCheck} von ${scopeTotal} Leistungen aus dem Dokument ${scopeToCheck === 1 ? "ist" : "sind"} noch nicht bestätigt.`, action: "Leistungen", target: null, anchor: "leistungsumfang-heading", rank: RANK.warning });
+    points.push({ key: "scope", tone: "warning", word: "Prüfen", title: "Leistungsumfang ungeklärt", why: `${scopeToCheck} von ${scopeTotal} Leistungen aus dem Dokument ${scopeToCheck === 1 ? "ist" : "sind"} noch nicht bestätigt.`, action: "Leistungen", target: SCOPE_TARGET, rank: RANK.warning });
   }
   if (slaToCheck > 0) {
-    points.push({ key: "sla-check", tone: "warning", word: "Prüfen", title: "SLA-Werte bestätigen", why: `${slaToCheck} ${slaToCheck === 1 ? "SLA-Wert aus dem Dokument ist" : "SLA-Werte aus dem Dokument sind"} noch nicht bestätigt.`, action: "SLA", target: null, anchor: "sla-heading", rank: RANK.warning });
+    points.push({ key: "sla-check", tone: "warning", word: "Prüfen", title: "SLA-Werte bestätigen", why: `${slaToCheck} ${slaToCheck === 1 ? "SLA-Wert aus dem Dokument ist" : "SLA-Werte aus dem Dokument sind"} noch nicht bestätigt.`, action: "SLA", target: SLA_TARGET, rank: RANK.warning });
   }
   return points.map((point, index) => ({ point, index })).sort((a, b) => a.point.rank - b.point.rank || a.index - b.index).map(({ point }) => point);
 }
+
+/** Liste mit Punkten (dekorativ). */
+const OPEN_POINTS_ART = <><rect x="11" y="7" width="26" height="34" rx="3" /><circle cx="18" cy="17" r="1.6" /><circle cx="18" cy="24" r="1.6" /><circle cx="18" cy="31" r="1.6" /><path d="M23 17h8M23 24h8M23 31h8" /></>;
 
 /** „Offene Punkte“: alles, was an diesem Vertrag zu tun ist, nach Dringlichkeit. Ein Primärknopf. */
 export default function OpenPoints({ contractId, points, searchHref, onOpen }: {
@@ -109,11 +143,11 @@ export default function OpenPoints({ contractId, points, searchHref, onOpen }: {
     <div className="cw-section-head">
       <div>
         <h2 id="open-points-heading">Offene Punkte{points?.length ? <span className="count-chip" aria-label={`${points.length} offen`}>{points.length}</span> : null}</h2>
-        <p>Nach Dringlichkeit – jeder Punkt führt direkt zur Stelle, an der er erledigt wird. Auch über Strg+K erreichbar.</p>
+        <p>Nach Dringlichkeit sortiert.</p>
       </div>
       {searchHref ? <Link className="btn btn-sm" href={searchHref}>Fehlende Angaben im Dokument suchen</Link> : null}
     </div>
-    {points === null ? <p className="cw-muted" role="status">Wird geladen…</p> : points.length === 0 ? <EmptyState variant="calm" title="Keine offenen Punkte">Für diesen Vertrag ist gerade nichts zu tun.</EmptyState> : <ul className="open-points-list">
+    {points === null ? <p className="cw-muted" role="status">Wird geladen…</p> : points.length === 0 ? <EmptyState variant="illustrated" illustration={OPEN_POINTS_ART} title="Keine offenen Punkte">Jeder Punkt führt direkt zur passenden Stelle im Vertrag.</EmptyState> : <ul className="open-points-list">
       {points.map((point, index) => {
         const className = `btn ${index === primary ? "btn-primary" : "btn-sm"}`;
         return <li key={point.key} className="open-point">
@@ -127,5 +161,12 @@ export default function OpenPoints({ contractId, points, searchHref, onOpen }: {
         </li>;
       })}
     </ul>}
+    <Link className="card-foot-link" href={contractHref(contractId, { tab: "deadlines" })} onClick={(event) => { event.preventDefault(); onOpen({ tab: "deadlines" }); }}>
+      Fristen &amp; Aufgaben anzeigen<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6" /></svg>
+    </Link>
+    <p className="card-foot-note">
+      <svg className="signal-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h.5M11 10h.5M15 10h.5M8 14h8" /></svg>
+      Schnellzugriff <kbd>Strg</kbd> + <kbd>K</kbd>
+    </p>
   </section>;
 }

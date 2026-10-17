@@ -6,8 +6,8 @@
  * Nur Attribute (`data-box`, `data-collapsed`) und ein eingefügter Knopf: React verwaltet die
  * Klassen der Kästen weiter selbst.
  *
- * Ausgenommen: Kästen mit eigenem Einklappen (`CollapsibleSection`, Klasse `collapsible`) und
- * Kästen mit `data-no-collapse`. Neben dem Knopf steht eine Kachel mit Symbol und Kennfarbe aus der
+ * Ausgenommen: Kästen mit eigenem Einklappen (`CollapsibleSection`, Klasse `collapsible`),
+ * Kästen mit `data-no-collapse` und Kästen, deren Überschrift nur für Screenreader da ist (`visually-hidden`). Neben dem Knopf steht eine Kachel mit Symbol und Kennfarbe aus der
  * Überschrift (`lib/card-icons.ts`), außer der Kasten zeigt schon eine eigene (`.collapsible-icon`).
  */
 
@@ -100,7 +100,8 @@ function setCollapsed(box: HTMLElement, collapsed: boolean) {
 function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
   if (box.hasAttribute("data-box") || box.classList.contains("collapsible") || box.closest("[data-no-collapse]")) return;
   const head = heading(box);
-  if (!head || !title(head)) return;
+  // Nur für Screenreader beschriftete Kästen (z. B. die Vertragsliste) haben keinen sichtbaren Kopf für Knopf und Kachel.
+  if (!head || !title(head) || head.classList.contains("visually-hidden")) return;
   const name = title(head);
   const key = boxKey(box, head);
   box.setAttribute("data-box", "");

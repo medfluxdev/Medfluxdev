@@ -113,13 +113,26 @@ describe("Verknüpfungen", () => {
   it("bestätigt einen KI-Vorschlag und verknüpft manuell", async () => {
     const user = userEvent.setup();
     render(<ContractRelationsPanel contractId="c-1" orgSlug="test-klinik" />);
-    expect(await screen.findByText("KI-Vorschlag – bitte bestätigen")).toBeInTheDocument();
+    expect(await screen.findByText("KI · Ungeprüft")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Bestätigen" }));
     expect(api.linkFramework).toHaveBeenCalledWith("test-klinik", "c-1", "f-1");
-    expect(screen.queryByText("KI-Vorschlag – bitte bestätigen")).not.toBeInTheDocument();
+    expect(screen.queryByText("KI · Ungeprüft")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Rahmenvertrag auswählen"), "f-2");
     await user.click(screen.getByRole("button", { name: "Verknüpfen" }));
     expect(api.linkFramework).toHaveBeenLastCalledWith("test-klinik", "c-1", "f-2");
+  });
+});
+
+describe("Verknüpfungen – ohne Rahmenvertrag", () => {
+  it("„Nicht zugeordnet“, kurzer Satz ohne Auswahl, Link zur gefilterten Vertragsliste", async () => {
+    vi.clearAllMocks();
+    api.getContractRelations.mockResolvedValue({ ...RELATIONS, frameworks: [], framework_options: [] });
+    render(<ContractRelationsPanel contractId="c-1" orgSlug="test-klinik" />);
+    const card = (await screen.findByRole("heading", { name: "Rahmenvertrag" })).closest("section")!;
+    expect(within(card).getByText("Nicht zugeordnet")).toBeInTheDocument();
+    expect(within(card).getByText("Kein Rahmenvertrag zugeordnet – noch keiner verfügbar.")).toBeInTheDocument();
+    expect(within(card).queryByLabelText("Rahmenvertrag auswählen")).not.toBeInTheDocument();
+    expect(within(card).getByRole("link", { name: "Rahmenverträge verwalten" }).getAttribute("href")).toContain("is_framework");
   });
 });
 

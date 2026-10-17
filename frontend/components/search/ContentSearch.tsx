@@ -66,7 +66,7 @@ export default function ContentSearch({ organizationSlug }: { organizationSlug: 
       </div></div>
       <ol className="search-results">
         {result.items.map((item) => <li key={item.contract_id}>
-          <h3><Link href={`/contracts/${item.contract_id}?tab=register`}>{item.register_number ?? "–"} · {item.short_description ?? "Vertrag"}</Link></h3>
+          <h3><Link href={`/contracts/${item.contract_id}`}>{item.register_number ?? "–"} · {item.short_description ?? "Vertrag"}</Link></h3>
           <ul>
             {item.hits.map((hit) => <li key={`${hit.document_version_id}-${hit.page}`}>
               <p className="search-snippet">{hit.snippet}</p>

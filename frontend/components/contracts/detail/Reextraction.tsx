@@ -112,10 +112,12 @@ interface PanelProps {
   onEditManually?: () => void;
   /** „Stelle im Dokument markieren“: Angabe aus dem Text übernehmen. */
   onMarkInDocument?: () => void;
+  /** Ruhezustand als eine Zeile (Hinweis + „Erneut erfassen“); laufende/fertige Auswertung wie bisher als Karte. */
+  compact?: boolean;
 }
 
 /** Abschnitt „Erneut aus dem Dokument erfassen“ (Dokumente → Dokument). */
-export default function ReextractionPanel({ contractId, orgSlug, state, reload, onApplied, onShowPage, onEditManually, onMarkInDocument }: PanelProps) {
+export default function ReextractionPanel({ contractId, orgSlug, state, reload, onApplied, onShowPage, onEditManually, onMarkInDocument, compact = false }: PanelProps) {
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -175,6 +177,31 @@ export default function ReextractionPanel({ contractId, orgSlug, state, reload, 
     return next;
   });
 
+  const startDialog = dialog ? <StartDialog
+    contractId={contractId}
+    orgSlug={orgSlug}
+    state={state}
+    advanced={dialog.advanced}
+    preset={dialog.fields}
+    onClose={() => setDialog(null)}
+    onStarted={() => { setDialog(null); toast("Erneute Erfassung gestartet.", "info"); reload(); }}
+  /> : null;
+
+  // Ruhezustand kompakt: eine Hinweiszeile, die Aktion steht oben rechts am Reiter.
+  if (compact && !active && !ready && run?.status !== "failed") {
+    return <div className="reextract-bar">
+      <p><svg className="reextract-bar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18zM12 11v6M12 7.5v.5" /></svg>
+        {state.can_start
+          ? <><strong>{state.first_analysis ? "Mit der KI erfassen:" : "Neue Auswertung:"}</strong> Vertragsdaten ändern sich erst nach Übernahme.</>
+          : state.blocked_reason ?? "Eine erneute Erfassung ist derzeit nicht möglich."}
+        {run?.status === "applied" ? <span className="cw-muted"> · Zuletzt übernommen: {run.applied_keys.length} Angabe{run.applied_keys.length === 1 ? "" : "n"}</span> : null}
+      </p>
+      {state.can_start ? <Button size="sm" onClick={() => setDialog({ advanced: false })}>{state.first_analysis ? "Auswerten" : "Erneut erfassen"}</Button> : null}
+      {error ? <InlineAlert tone="critical" role="alert">{error}</InlineAlert> : null}
+      {startDialog}
+    </div>;
+  }
+
   return <section className="cw-section reextraction" aria-labelledby="rg-reextraction-heading">
     <div className="cw-section-head">
       <div>
@@ -221,15 +248,7 @@ export default function ReextractionPanel({ contractId, orgSlug, state, reload, 
       nothingFound={selectable.length === 0}
     /> : null}
 
-    {dialog ? <StartDialog
-      contractId={contractId}
-      orgSlug={orgSlug}
-      state={state}
-      advanced={dialog.advanced}
-      preset={dialog.fields}
-      onClose={() => setDialog(null)}
-      onStarted={() => { setDialog(null); toast("Erneute Erfassung gestartet.", "info"); reload(); }}
-    /> : null}
+    {startDialog}
   </section>;
 }
 

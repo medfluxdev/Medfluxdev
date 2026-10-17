@@ -1,5 +1,6 @@
 "use client";
 
+import AiOrigin from "@/components/ui/AiOrigin";
 import Signal from "@/components/ui/Signal";
 
 export type ValueOriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
@@ -20,8 +21,10 @@ const ICONS = {
   pen: <path d="M4 20h4L19 9l-4-4L4 16v4z" />,
 };
 
-export default function ValueOriginBadge({ kind, detail }: { kind: ValueOriginKind; detail?: string | null }) {
-  if (kind === "extracted") return <Signal tone="ai" size="sm" title={detail ?? "Aus dem Dokument gelesen, noch nicht bestätigt"}>KI-Vorschlag</Signal>;
+export default function ValueOriginBadge({ kind, detail, onOpenSource, factKey }: { kind: ValueOriginKind; detail?: string | null; onOpenSource?: (() => void) | null; factKey?: string | null }) {
+  // KI-Werte: einheitliche Plakette „KI · Ungeprüft“ / „KI · Bestätigt“ (öffnet die Quelle, wenn übergeben).
+  if (kind === "extracted") return <AiOrigin state="unreviewed" detail={detail} onOpenSource={onOpenSource} factKey={factKey} />;
+  if (kind === "reviewed") return <AiOrigin state="confirmed" detail={detail} onOpenSource={onOpenSource} factKey={factKey} />;
   if (kind === "missing") return <Signal tone="critical" size="sm" title={detail ?? undefined}>Fehlt</Signal>;
   const quiet = QUIET[kind]!;
   return (

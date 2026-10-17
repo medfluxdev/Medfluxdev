@@ -19,6 +19,21 @@ export interface DecisionReminderInput {
   todo_text?: string | null;
 }
 
+/** Umsetzungsschritt einer offenen Entscheidung (Backend: app/reports/decision_steps.py). */
+export interface DecisionStep {
+  key: string;
+  title: string;
+  detail: string;
+  due: string | null;
+  done: boolean;
+  /** auto = aus den Vertragsdaten erkannt, manual = von einer Person abgehakt. */
+  done_how: "auto" | "manual" | null;
+  done_by: string | null;
+  done_at: string | null;
+  /** Ort in der Vertragsakte oder `{ action: "change_decision" }`. */
+  target: Record<string, string> | null;
+}
+
 export interface ContractLifecycleDecision {
   id: string;
   contract_id: string;
@@ -30,6 +45,8 @@ export interface ContractLifecycleDecision {
   created_at: string | null;
   updated_at: string | null;
   reminder?: DecisionReminder | null;
+  /** Nur bei offenen Entscheidungen (geplant / in Bearbeitung). */
+  steps?: DecisionStep[] | null;
 }
 
 export interface ContractLifecycleResponse {
@@ -68,6 +85,11 @@ export function updateContractLifecycleDecision(
   input: { status: ContractLifecycleStatus; decision?: ContractLifecycleDecisionKind; effective_date?: string | null; note?: string | null; reminder?: DecisionReminderInput | null; remove_reminder?: boolean },
 ) {
   return apiPatch<ContractLifecycleDecision>(`/api/lifecycle/contracts/${encodeURIComponent(contractId)}/${encodeURIComponent(decisionId)}?${orgQuery(organizationSlug)}`, input);
+}
+
+/** Umsetzungsschritt abhaken oder zurücknehmen; der erste Haken setzt die Entscheidung auf „in Bearbeitung“. */
+export function updateDecisionStep(organizationSlug: string, contractId: string, decisionId: string, stepKey: string, done: boolean) {
+  return apiPost<ContractLifecycleDecision>(`/api/lifecycle/contracts/${encodeURIComponent(contractId)}/${encodeURIComponent(decisionId)}/steps/${encodeURIComponent(stepKey)}?${orgQuery(organizationSlug)}`, { done });
 }
 
 /** Löscht die Entscheidung; ihre offene Erinnerung wird abgebrochen, außer keepReminder. */

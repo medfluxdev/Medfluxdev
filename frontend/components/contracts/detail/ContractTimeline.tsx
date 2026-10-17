@@ -1,43 +1,38 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ActionMenu, { type ActionMenuItem } from "@/components/ui/ActionMenu";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import EmptyState from "@/components/ui/EmptyState";
-import Signal from "@/components/ui/Signal";
+import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import type { DetailWorkItem } from "@/lib/contract-detail-types";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
 import { createContractDeadline, deadlineAction, listContractDeadlines, updateDeadline, type DeadlineDto, type DeadlineValues } from "@/lib/domain-api/deadlines";
 import { listOwnershipAssignees, type AssigneeDto } from "@/lib/domain-api/ownership";
-import { getContractRegister } from "@/lib/domain-api/register";
+import { getContractRegister, type ContractRegister, type ReminderLead } from "@/lib/domain-api/register";
+import ContractReminderSettings, { LeadsEditor } from "./ContractReminderSettings";
+import { leadsOf, standardLeads } from "@/lib/reminder-leads";
 import { REVIEW_TARGET, workItemTarget, type FixTarget } from "@/lib/fix-targets";
 import { formatDate } from "@/lib/format";
 import { buildIcs, downloadIcs } from "@/lib/ics";
-import { formatLeadTime, formatRelativeDate } from "@/lib/relative-date";
+import { KindChip, TERMIN_KINDS, TERMIN_KIND_ORDER, deadlineKind, type TerminFilter, type TerminKind } from "@/components/deadlines/TerminKind";
+import { formatRelativeDate } from "@/lib/relative-date";
 
-export type TerminKind = "Aufgabe" | "Erinnerung" | "Frist" | "Wartung" | "Löschprüfung" | "KI-Prüfung";
-type Filter = "all" | "aufgaben" | "erinnerungen" | "fristen";
+type Filter = "all" | TerminFilter;
 
 const icon = (path: ReactNode, className = "signal-icon") => <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">{path}</svg>;
-
-// Kennfarbe je Typ (Identität, nicht Status) – immer mit Symbol und Wort.
-const KINDS: Record<TerminKind, { slug: string; icon: ReactNode; filter: Exclude<Filter, "all"> }> = {
-  Aufgabe: { slug: "aufgabe", filter: "aufgaben", icon: icon(<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12 3 3 5-6" /></>) },
-  Erinnerung: { slug: "erinnerung", filter: "erinnerungen", icon: icon(<><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></>) },
-  Frist: { slug: "frist", filter: "fristen", icon: icon(<><path d="M12 3.5 22 20H2z" /><path d="M12 10v4M12 17v.5" /></>) },
-  Wartung: { slug: "wartung", filter: "fristen", icon: icon(<><path d="M14.7 6.3a4 4 0 0 0 5 5L13 18a2.1 2.1 0 0 1-3-3l6.7-6.7a4 4 0 0 0-2-2z" /><path d="m3 21 6-6" /></>) },
-  Löschprüfung: { slug: "loeschung", filter: "fristen", icon: icon(<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />) },
-  "KI-Prüfung": { slug: "ki", filter: "aufgaben", icon: icon(<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />) },
-};
-const KIND_ORDER = Object.keys(KINDS) as TerminKind[];
+const KINDS = TERMIN_KINDS;
+const KIND_ORDER = TERMIN_KIND_ORDER;
 
 const META_ICONS = {
   calendar: icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>, "tl-meta-icon"),
   escalate: icon(<path d="M12 19V5M5 12l7-7 7 7" />, "tl-meta-icon"),
   todo: icon(<><rect x="4" y="4" width="16" height="16" rx="2" /><path d="m8 12 3 3 5-6" /></>, "tl-meta-icon"),
   info: icon(<><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5v.5" /></>, "tl-meta-icon"),
+  bell: icon(<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16M10 20a2 2 0 0 0 4 0" />, "tl-meta-icon"),
 };
 const MENU_ICONS = {
   edit: icon(<><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>, "action-menu-icon"),
@@ -45,12 +40,15 @@ const MENU_ICONS = {
   calendar: icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>, "action-menu-icon"),
   done: icon(<path d="M20 6 9 17l-5-5" />, "action-menu-icon"),
   cancel: icon(<path d="M6 6l12 12M18 6 6 18" />, "action-menu-icon"),
+  bell: icon(<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16M10 20a2 2 0 0 0 4 0" />, "action-menu-icon"),
 };
-
-/** Typ-Chip: Symbol + Wort + Kennfarbe. */
-export function KindChip({ kind }: { kind: TerminKind }) {
-  return <span className={`signal signal--sm tl-kind-chip tl-kind-chip--${KINDS[kind].slug}`}>{KINDS[kind].icon}<span className="signal-label">{kind}</span></span>;
-}
+const BUTTON_ICONS = {
+  done: icon(<path d="M20 6 9 17l-5-5" />, "btn-icon-svg"),
+  reopen: icon(<><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-3" /></>, "btn-icon-svg"),
+  add: icon(<path d="M12 5v14M5 12h14" />, "btn-icon-svg"),
+  cancelled: icon(<path d="M6 6l12 12M18 6 6 18" />),
+};
+const CARD_ICON = icon(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>);
 
 /** Vergleich Dokument ↔ Vertragsdaten beim Vertragsende (KI-Prüfung ohne eigenen Arbeitsvorrat-Eintrag). */
 export interface EndCheck {
@@ -72,8 +70,8 @@ interface Row {
   meta: ReactNode[];
   person: string | null;
   personId: string | null;
-  /** Zweite Zeile unter dem Datum statt der Zeit ab heute (Erinnerungen: Vorlauf). */
-  lead?: string;
+  /** Automatische Erinnerungen dieses Termins (Unterzeile statt eigener Zeilen). */
+  reminders?: { date: string; to: string | null }[];
   primary?: ReactNode;
   menu?: ActionMenuItem[];
   expand?: ReactNode;
@@ -82,7 +80,7 @@ interface Row {
   duplicateKey?: string;
 }
 
-type Editor = { id: string; mode: "edit" | "assign" | "cancel" };
+type Editor = { id: string; mode: "edit" | "assign" | "cancel" | "remind" };
 
 const EMPTY_FORM = { title: "", kind: "pruefung", due_date: "", remind_on: "", assignee_account_id: "", escalation_account_id: "", todo_text: "", send_email: true, send_ics: false };
 type DeadlineForm = typeof EMPTY_FORM;
@@ -96,20 +94,15 @@ function localToday() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-function deadlineKind(item: DeadlineDto): TerminKind {
-  if (item.source === "manual") return "Aufgabe";
-  if (item.system_key === "maintenance_due") return "Wartung";
-  if (item.system_key === "retention_review") return "Löschprüfung";
-  if (item.system_key === "set_ended") return "Aufgabe";
-  return "Frist";
+// Titel = Handlung bzw. Termin, nie eine Person (die steht in „Zuständig“). Systemtermine einheitlich benannt,
+// auch solange ältere Zeilen noch den alten Titel tragen (der nächste Fristenabgleich übernimmt ihn).
+const SYSTEM_TITLES: Record<string, string> = { cancel_by: "Kündigung prüfen", contract_end: "Vertragsende", retention_review: "Löschprüfung" };
+function deadlineTitle(item: DeadlineDto) {
+  return (item.system_key && SYSTEM_TITLES[item.system_key]) || item.title;
 }
 
-// Ein Name je Tatsache: Kündigungstermin = „Kündbar bis“, Ende = „Vertragsende“.
-function deadlineTitle(item: DeadlineDto) {
-  if (item.system_key === "cancel_by") return "Kündbar bis";
-  if (item.system_key === "contract_end") return "Vertragsende";
-  return item.title;
-}
+// Vorschläge für eigene Termine (frei änderbar).
+const TITLE_SUGGESTIONS = ["Kündigung prüfen", "Kündigung versenden", "Verlängerung umsetzen", "Neu verhandeln", "Angebot einholen", "Vertragsende", "Wartung abstimmen", "Rechnung prüfen", "Löschprüfung"];
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -121,7 +114,13 @@ function Person({ name }: { name: string | null }) {
   return <span className="tl-person"><span className="tl-avatar" aria-hidden="true">{initials(name)}</span><span className="tl-person-name">{name}</span></span>;
 }
 
+const REMINDER_FIELDS = new Set(["reminder_lead_months", "reminder_extra_leads", "reminder_recipient_account_id", "escalation_recipient_account_id"]);
+
 const normalizeTitle = (value: string) => value.trim().toLocaleLowerCase("de-DE");
+
+// Am Termin angepasst (Erinnerungen bzw. bei Systemterminen der Empfänger); sonst gilt der Vertrag.
+const assigneeOverridden = (item: DeadlineDto) => item.source === "system" && Boolean(item.custom_fields?.includes("assignee_account_id"));
+const remindersOverridden = (item: DeadlineDto) => Boolean(item.custom_fields?.includes("reminder_leads")) || assigneeOverridden(item);
 
 function formFromDeadline(item: DeadlineDto): DeadlineForm {
   return {
@@ -148,14 +147,17 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   const toast = useToast();
   const [items, setItems] = useState<DeadlineDto[] | null>(null);
-  const [reminderDates, setReminderDates] = useState<string[]>([]);
-  const [reminderTodo, setReminderTodo] = useState<string | null>(null);
+  const [register, setRegister] = useState<ContractRegister | null>(null);
+  // Sprung auf ein Erinnerungsfeld (?feld=…) öffnet die Einstellungen.
+  const targetField = useSearchParams()?.get("feld") ?? null;
+  const settingsTarget = targetField !== null && REMINDER_FIELDS.has(targetField);
   const [today, setToday] = useState(localToday);
   const [kinds, setKinds] = useState<LookupDto[]>([]);
   const [assignees, setAssignees] = useState<AssigneeDto[]>([]);
   const [form, setForm] = useState<DeadlineForm | null>(null);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [editForm, setEditForm] = useState<DeadlineForm | null>(null);
+  const [remindDraft, setRemindDraft] = useState<{ leads: ReminderLead[]; assignee: string } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [mine, setMine] = useState(false);
   const [comparing, setComparing] = useState(false);
@@ -167,9 +169,7 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
     if (deadlines.status === "fulfilled") setItems(deadlines.value?.items ?? []);
     else { setItems([]); setError(errorText(deadlines.reason, "Termine konnten nicht geladen werden.")); }
     if (register.status === "fulfilled" && register.value) {
-      setReminderDates(register.value.terms?.reminder_dates ?? []);
-      const todo = register.value.fields?.reminder_todo?.value;
-      setReminderTodo(typeof todo === "string" && todo.trim() ? todo.trim() : null);
+      setRegister(register.value);
       if (register.value.as_of) setToday(register.value.as_of);
     }
   }, [contractId, orgSlug, version]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -222,6 +222,28 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
   function openEditor(item: DeadlineDto, mode: Editor["mode"]) {
     setEditor({ id: item.id, mode });
     setEditForm(formFromDeadline(item));
+    if (mode === "remind") setRemindDraft({ leads: currentLeads(item), assignee: assigneeOverridden(item) || item.source === "manual" ? item.assignee_account_id ?? "" : "" });
+  }
+
+  // Ausgangswert für „Erinnerung anpassen“: eigene Erinnerungen des Termins, sonst die des Vertrags (Kündigung/Vertragsende).
+  function currentLeads(item: DeadlineDto): ReminderLead[] {
+    if (item.reminder_leads) return item.reminder_leads;
+    if (register && (item.system_key === "cancel_by" || item.system_key === "contract_end")) {
+      const own = leadsOf(register);
+      const months = own.some((lead) => lead.unit === "months");
+      const standard = standardLeads(register);
+      return months ? own : [...standard, ...own];
+    }
+    return [];
+  }
+
+  async function saveReminders(item: DeadlineDto, reset = false) {
+    if (!remindDraft) return;
+    const values: DeadlineValues = reset
+      ? { reminder_leads: null, ...(item.source === "system" ? { assignee_account_id: null } : {}) }
+      : { reminder_leads: remindDraft.leads, ...(item.source === "system" || remindDraft.assignee !== (item.assignee_account_id ?? "") ? { assignee_account_id: remindDraft.assignee || null } : {}) };
+    const ok = await act(() => updateDeadline(orgSlug, item.id, values), reset ? "Erinnerung folgt wieder dem Vertrag." : "Erinnerung angepasst.");
+    if (ok) { setEditor(null); setRemindDraft(null); }
   }
 
   async function saveEdit(item: DeadlineDto) {
@@ -264,6 +286,25 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
 
   function deadlineEditor(item: DeadlineDto) {
     if (!editor || editor.id !== item.id) return null;
+    if (editor.mode === "remind" && remindDraft) {
+      const custom = remindersOverridden(item);
+      return <form className="rg-transition tl-editor tl-reminder-form" aria-label={`Erinnerung für „${deadlineTitle(item)}“ anpassen`} onSubmit={(event) => { event.preventDefault(); void saveReminders(item); }}>
+        <fieldset>
+          <legend>Erinnern</legend>
+          <LeadsEditor leads={remindDraft.leads} onChange={(next) => setRemindDraft((current) => current && ({ ...current, leads: next }))} />
+        </fieldset>
+        <label>Erinnerung an<select value={remindDraft.assignee} onChange={(event) => setRemindDraft((current) => current && ({ ...current, assignee: event.target.value }))}>
+          <option value="">{item.source === "system" ? "Wie im Vertrag eingestellt" : "Niemand"}</option>
+          {assignees.map((entry) => <option key={entry.id} value={entry.id}>{entry.display_name}</option>)}
+        </select></label>
+        <p className="field-hint">Gilt nur für diesen Termin. Alle anderen folgen den Erinnerungen des Vertrags.</p>
+        <div className="rg-actions">
+          {custom ? <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void saveReminders(item, true)}>Zurück zum Standard</button> : null}
+          <button type="button" className="btn" onClick={() => { setEditor(null); setRemindDraft(null); }}>Abbrechen</button>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button>
+        </div>
+      </form>;
+    }
     if (editor.mode === "cancel") return <div className="tl-confirm" role="group" aria-label={`„${deadlineTitle(item)}“ abbrechen`}>
       <span>Termin „{deadlineTitle(item)}“ abbrechen? Er erscheint danach unter „Erledigte und abgebrochene“.</span>
       <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => void cancelDeadline(item)}>Ja, abbrechen</button>
@@ -275,16 +316,16 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
     const assigneeSelect = <label>Zuständig<select value={editForm.assignee_account_id} onChange={(event) => set({ assignee_account_id: event.target.value })}><option value="">Niemand</option>{assignees.map((entry) => <option key={entry.id} value={entry.id}>{entry.display_name}</option>)}</select></label>;
     return <form className="rg-transition tl-editor" aria-label={editor.mode === "assign" ? `„${deadlineTitle(item)}“ zuweisen` : `„${deadlineTitle(item)}“ bearbeiten`} onSubmit={(event) => { event.preventDefault(); void saveEdit(item); }}>
       {editor.mode === "assign" ? <div className="rg-form-grid">{assigneeSelect}</div> : <div className="rg-form-grid">
-        {allowed.has("title") ? <label>Bezeichnung *<input required maxLength={255} value={editForm.title} onChange={(event) => set({ title: event.target.value })} /></label> : null}
+        {allowed.has("title") ? <label>Bezeichnung *<input required maxLength={255} list="tl-title-suggestions" value={editForm.title} onChange={(event) => set({ title: event.target.value })} /></label> : null}
         {allowed.has("kind") ? <label>Art<select value={editForm.kind} onChange={(event) => set({ kind: event.target.value })}>{kinds.length === 0 ? <option value={editForm.kind}>{editForm.kind === "pruefung" ? "Prüfung" : editForm.kind}</option> : kinds.map((entry) => <option key={entry.id} value={entry.code}>{entry.label}</option>)}</select></label> : null}
         {allowed.has("due_date") ? <label>Fällig am *<input type="date" required value={editForm.due_date} onChange={(event) => set({ due_date: event.target.value })} /></label> : null}
         {allowed.has("remind_on") ? <label>Erinnern am<input type="date" value={editForm.remind_on} max={editForm.due_date || undefined} onChange={(event) => set({ remind_on: event.target.value })} /></label> : null}
         {allowed.has("assignee_account_id") ? assigneeSelect : null}
         {allowed.has("escalation_account_id") ? <label>Eskalation an<select value={editForm.escalation_account_id} onChange={(event) => set({ escalation_account_id: event.target.value })}><option value="">Niemand</option>{assignees.map((entry) => <option key={entry.id} value={entry.id}>{entry.display_name}</option>)}</select></label> : null}
-        {allowed.has("todo_text") ? <label className="span-full">ToDo<input maxLength={500} value={editForm.todo_text} onChange={(event) => set({ todo_text: event.target.value })} /></label> : null}
+        {allowed.has("todo_text") ? <label className="span-full">Was zu tun ist<input maxLength={500} value={editForm.todo_text} onChange={(event) => set({ todo_text: event.target.value })} /></label> : null}
         {allowed.has("send_email") ? <label className="rg-check"><input type="checkbox" checked={editForm.send_email} onChange={(event) => set({ send_email: event.target.checked })} />Erinnerungs-E-Mail</label> : null}
         {allowed.has("send_ics") ? <label className="rg-check"><input type="checkbox" checked={editForm.send_ics} onChange={(event) => set({ send_ics: event.target.checked })} />Kalendereinladung (ICS) mit der Erinnerung</label> : null}
-        {item.source === "system" ? <p className="cw-muted span-full">Datum, Zuständigkeit und ToDo kommen aus den Vertragsdaten (Laufzeit, Erinnerung &amp; Verantwortung).</p> : null}
+        {item.source === "system" ? <p className="cw-muted span-full">Datum und Zuständigkeit kommen aus den Vertragsdaten (Laufzeit, Erinnerungen). Leer lassen = Standardtext.</p> : null}
       </div>}
       <div className="rg-actions"><button type="button" className="btn" onClick={() => { setEditor(null); setEditForm(null); }}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Speichern</button></div>
     </form>;
@@ -326,9 +367,6 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
     open.push(row);
   }
 
-  // Erinnerungen der Laufzeitfrist hängen an „Kündbar bis“ bzw. dem Vertragsende.
-  const anchor = (items ?? []).find((item) => item.status === "open" && item.system_key === "cancel_by")
-    ?? (items ?? []).find((item) => item.status === "open" && item.system_key === "contract_end");
   for (const item of items ?? []) {
     const kind = deadlineKind(item);
     const title = deadlineTitle(item);
@@ -342,26 +380,32 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
         meta: [<span key="by" className="tl-meta-text">{`${item.status === "cancelled" ? "abgebrochen" : "erledigt"}${when}${by}`}</span>],
         person: item.done_by_name ?? item.assignee_name, personId: item.assignee_account_id,
         closed: item.status === "cancelled" ? "cancelled" : "done",
-        primary: editable ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => void act(() => deadlineAction(orgSlug, item.id, "reopen"), "Termin wieder geöffnet.")}>Wieder öffnen</button> : null,
+        primary: editable ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={() => void act(() => deadlineAction(orgSlug, item.id, "reopen"), "Termin wieder geöffnet.")}>{BUTTON_ICONS.reopen}Wieder öffnen</button> : null,
       });
       continue;
     }
     const meta: ReactNode[] = [];
     if (item.system_key === "contract_end") meta.push(<span key="what" className="tl-meta-text">Feste Laufzeit, endet ohne Kündigung</span>);
-    else if (item.system_key === "cancel_by") meta.push(<span key="what" className="tl-meta-text">Spätester Eingang der Kündigung beim Vertragspartner</span>);
+    else if (item.system_key === "cancel_by") meta.push(<span key="what" className="tl-meta-text">Kündbar bis – spätester Eingang der Kündigung beim Vertragspartner</span>);
     if (item.todo_text && kind !== "Frist") meta.push(<span key="todo" className="tl-meta-chip tl-meta-text" title={item.todo_text}>{META_ICONS.todo}{item.todo_text}</span>);
-    if (item.escalation_name) meta.push(<span key="esc" className="tl-meta-chip">{META_ICONS.escalate}Eskalation an {item.escalation_name}</span>);
+    // Eskalation steht einmal in den Erinnerungseinstellungen; hier nur, wenn sie ausgelöst wurde.
+    if (item.escalated_at) meta.push(<span key="esc" className="tl-meta-chip">{META_ICONS.escalate}Eskaliert{item.escalation_name ? ` an ${item.escalation_name}` : ""} am {formatDate(item.escalated_at.slice(0, 10))}</span>);
+    if (remindersOverridden(item)) meta.push(<span key="custom" className="rg-origin rg-origin-manual" title="Erinnerung für diesen Termin angepasst">Angepasst</span>);
     if (item.basis_unconfirmed) meta.push(<button key="ai" type="button" className="signal-link" onClick={() => onOpenTarget(REVIEW_TARGET)}><Signal tone="ai" size="sm">Basiert auf ungeprüften KI-Werten</Signal></button>);
 
     const termTarget: FixTarget | null = item.system_key === "cancel_by" || item.system_key === "contract_end" ? { tab: "register", section: "term" } : null;
     const done = () => void act(() => deadlineAction(orgSlug, item.id, "done"), "Termin erledigt.");
-    const assign = item.source === "manual"
-      ? () => openEditor(item, "assign")
-      : () => onOpenTarget({ tab: "deadlines", field: "reminder_recipient_account_id" });
-    const description = [item.todo_text, item.escalation_name ? `Eskalation an ${item.escalation_name}` : null].filter(Boolean).join("\n");
+    const assign = () => openEditor(item, "assign");
+    const description = item.todo_text;
+    // Erinnerungen gehören zum Termin: erste und weitere Erinnerungstage vor der Fälligkeit, an die zuständige Person.
+    const reminders = [...new Set([item.remind_on, ...(item.extra_remind_on ?? [])])]
+      .filter((value) => value && value < item.due_date)
+      .sort()
+      .map((value) => ({ date: value, to: item.assignee_name }));
     const menu: ActionMenuItem[] = editable ? [
       { label: "Bearbeiten", icon: MENU_ICONS.edit, onSelect: () => openEditor(item, "edit") },
       { label: "Zuweisen …", icon: MENU_ICONS.assign, onSelect: assign },
+      ...(item.editable_fields.includes("reminder_leads") ? [{ label: "Erinnerung anpassen", icon: MENU_ICONS.bell, onSelect: () => openEditor(item, "remind") }] : []),
       { label: "In Kalender eintragen", icon: MENU_ICONS.calendar, onSelect: () => calendar({ date: item.due_date, title, key: item.id }, description) },
       ...(termTarget ? [{ label: "Erledigt", icon: MENU_ICONS.done, onSelect: done }] : []),
       ...(item.source === "manual" ? ["separator" as const, { label: "Abbrechen", icon: MENU_ICONS.cancel, danger: true, onSelect: () => setEditor({ id: item.id, mode: "cancel" }) }] : []),
@@ -371,34 +415,12 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
       person: item.assignee_name, personId: item.assignee_account_id,
       primary: termTarget
         ? <button type="button" className="btn btn-sm btn-ghost" onClick={() => onOpenTarget(termTarget)}>Öffnen</button>
-        : editable ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={done}>Erledigt</button> : null,
+        : editable ? <button type="button" className="btn btn-sm btn-ghost" disabled={busy} onClick={done}>{BUTTON_ICONS.done}Erledigt</button> : null,
       menu,
       expand: deadlineEditor(item),
       duplicateKey: kind === "Aufgabe" ? normalizeTitle(title) : undefined,
+      reminders,
     });
-
-    // Erinnerungen: Titel = was zu tun ist (ToDo aus „Erinnerung & Verantwortung“), der Termin steht in der zweiten Zeile.
-    const reminders = new Set<string>();
-    const isAnchor = anchor !== undefined && item.id === anchor.id;
-    if (item.remind_on && item.remind_on < item.due_date) reminders.add(item.remind_on);
-    if (isAnchor) for (const value of reminderDates) if (value < item.due_date) reminders.add(value);
-    for (const value of reminders) {
-      if (value < today) continue;
-      const todo = isAnchor ? reminderTodo : item.source === "manual" ? item.todo_text : null;
-      const reminderTitle = todo || `Erinnerung: ${title}`;
-      const reminderMeta: ReactNode[] = [<span key="anchor" className="tl-meta-chip">{META_ICONS.calendar}{title} {formatDate(item.due_date)}</span>];
-      if (item.escalation_name) reminderMeta.push(<span key="esc" className="tl-meta-chip">{META_ICONS.escalate}Eskalation an {item.escalation_name}</span>);
-      open.push({
-        key: `reminder:${item.id}:${value}`, date: value, kind: "Erinnerung", title: reminderTitle, meta: reminderMeta,
-        person: item.assignee_name, personId: item.assignee_account_id,
-        lead: formatLeadTime(value, item.due_date, title),
-        menu: editable ? [
-          { label: "Bearbeiten", icon: MENU_ICONS.edit, onSelect: () => openEditor(item, "edit") },
-          { label: "Zuweisen …", icon: MENU_ICONS.assign, onSelect: assign },
-          { label: "In Kalender eintragen", icon: MENU_ICONS.calendar, onSelect: () => calendar({ date: value, title: reminderTitle, key: `${item.id}-${value}` }, `${title} am ${formatDate(item.due_date)}`) },
-        ] : [{ label: "In Kalender eintragen", icon: MENU_ICONS.calendar, onSelect: () => calendar({ date: value, title: reminderTitle, key: `${item.id}-${value}` }, `${title} am ${formatDate(item.due_date)}`) }],
-      });
-    }
   }
 
   // Doppelt angelegte offene Aufgaben (gleicher Titel): ab der zweiten ein Hinweis, nichts wird gelöscht.
@@ -411,8 +433,12 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
   }
 
   const counts: Record<Filter, number> = { all: open.length, aufgaben: 0, erinnerungen: 0, fristen: 0 };
-  for (const row of open) counts[KINDS[row.kind].filter] += 1;
-  const visible = open.filter((row) => (filter === "all" || KINDS[row.kind].filter === filter) && (!mine || (row.personId != null && row.personId === account?.id)));
+  // „Erinnerungen“: eigene Erinnerungen und Termine, die erinnern.
+  const inFilter = (row: Row, key: Filter) => key === "all" || KINDS[row.kind].filter === key || (key === "erinnerungen" && Boolean(row.reminders?.length));
+  for (const key of ["aufgaben", "erinnerungen", "fristen"] as const) counts[key] = open.filter((row) => inFilter(row, key)).length;
+  const matches = (row: Row) => inFilter(row, filter) && (!mine || (row.personId != null && row.personId === account?.id));
+  const visible = open.filter(matches);
+  const closedVisible = closed.filter(matches);
   const filtered = filter !== "all" || mine;
 
   // Ohne Datum („offen“) zuerst, dann chronologisch; „Heute“ trennt Vergangenes von Kommendem.
@@ -434,9 +460,9 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
 
   const renderRow = (row: Row) => {
     const overdue = !row.closed && row.date != null && row.date < today;
-    const relative = row.closed || !row.date ? null : row.lead ?? formatRelativeDate(row.date, today);
+    const relative = row.closed || !row.date ? null : formatRelativeDate(row.date, today);
     const meta = [...row.meta];
-    if (duplicates.has(row.key)) meta.push(<span key="dup" className="tl-dup"><Signal tone="warning" size="sm">Doppelt angelegt – eine Aufgabe genügt</Signal></span>);
+    if (duplicates.has(row.key)) meta.push(<span key="dup" className="tl-dup"><SignalIcon tone="warning" />Doppelt angelegt – eine Aufgabe genügt</span>);
     return <li key={row.key} className={`tl-row${row.closed ? " tl-row--closed" : ""}`}>
       <span className={dotClass(row)} aria-hidden="true" />
       <span className="tl-when">
@@ -444,11 +470,14 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
         {relative ? <small className={overdue ? "tl-rel tl-rel--overdue" : "tl-rel"}>{overdue ? `überfällig · ${relative}` : relative}</small> : null}
       </span>
       <span className="tl-kind">{row.closed
-        ? <Signal tone={row.closed === "done" ? "done" : "neutral"} size="sm">{row.closed === "done" ? "Erledigt" : "Abgebrochen"}</Signal>
+        ? <Signal tone={row.closed === "done" ? "done" : "neutral"} size="sm" icon={row.closed === "cancelled" ? BUTTON_ICONS.cancelled : undefined}>{row.closed === "done" ? "Erledigt" : "Abgebrochen"}</Signal>
         : <KindChip kind={row.kind} />}</span>
       <span className="tl-what">
         <span className="tl-title" title={row.title}>{row.title}</span>
         {meta.length || row.person ? <span className="tl-meta">{meta}{row.person ? <span className="tl-meta-chip tl-meta-person">{row.person}</span> : null}</span> : null}
+        {row.reminders?.length && !row.closed ? <span className="tl-subreminders">{row.reminders.map((reminder) => <span key={reminder.date} className={reminder.date < today ? "tl-meta-chip tl-subreminder tl-subreminder--sent" : "tl-meta-chip tl-subreminder"}>
+          {META_ICONS.bell}{reminder.date < today ? "Erinnert am" : "Erinnerung am"} {formatDate(reminder.date)}{reminder.to ? ` an ${reminder.to}` : ""}
+        </span>)}</span> : null}
       </span>
       <span className="tl-who"><Person name={row.person} /></span>
       <span className="tl-act">{row.primary}{row.menu && row.menu.length ? <ActionMenu items={row.menu} label={`Weitere Aktionen: ${row.title}`} disabled={busy} /> : null}</span>
@@ -478,28 +507,32 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
   return <CollapsibleSection
     id="tl"
     title="Termine & Aufgaben"
-    description="Alle Termine, Erinnerungen und Aufgaben zu diesem Vertrag"
-    summary={items === null ? null : nothing ? "Keine Termine" : <span>{`${open.filter((row) => row.kind !== "Erinnerung").length} offen`}{allUpcoming[0]?.date ? <> · nächster: <b>{formatDate(allUpcoming[0].date)}</b> {allUpcoming[0].title}</> : null}{overdueCount ? ` · ${overdueCount} überfällig` : ""}</span>}
-    icon={KINDS.Erinnerung.icon}
+    description="Was ansteht, wer zuständig ist und wann erinnert wird"
+    summary={items === null ? null : nothing ? "Keine Termine" : <span>{`${open.length} offen`}{allUpcoming[0]?.date ? <> · nächster: <b>{formatDate(allUpcoming[0].date)}</b> {allUpcoming[0].title}</> : null}{overdueCount ? ` · ${overdueCount} überfällig` : ""}</span>}
+    icon={CARD_ICON}
     iconClassName="section-tile--type"
-    actions={editable && !form ? <button type="button" className="btn btn-sm" onClick={() => setForm(EMPTY_FORM)}>Termin hinzufügen</button> : null}
+    actions={editable && !form ? <button type="button" className="btn btn-sm" onClick={() => setForm(EMPTY_FORM)}>{BUTTON_ICONS.add}Termin hinzufügen</button> : null}
   >
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
+    {editable && !form ? <datalist id="tl-title-suggestions">{TITLE_SUGGESTIONS.map((value) => <option key={value} value={value} />)}</datalist> : null}
     {form ? <form className="rg-transition" aria-label="Neuer Termin" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <div className="rg-form-grid">
-        <label>Bezeichnung *<input required maxLength={255} value={form.title} onChange={(event) => setForm((current) => current && ({ ...current, title: event.target.value }))} /></label>
+        <label>Bezeichnung *<input required maxLength={255} list="tl-title-suggestions" placeholder="z. B. Kündigung prüfen" value={form.title} onChange={(event) => setForm((current) => current && ({ ...current, title: event.target.value }))} /></label>
+        <datalist id="tl-title-suggestions">{TITLE_SUGGESTIONS.map((value) => <option key={value} value={value} />)}</datalist>
         <label>Art<select value={form.kind} onChange={(event) => setForm((current) => current && ({ ...current, kind: event.target.value }))}>{kinds.length === 0 ? <option value="pruefung">Prüfung</option> : kinds.map((item) => <option key={item.id} value={item.code}>{item.label}</option>)}</select></label>
         <label>Fällig am *<input type="date" required value={form.due_date} onChange={(event) => setForm((current) => current && ({ ...current, due_date: event.target.value }))} /></label>
         <label>Erinnern am<input type="date" value={form.remind_on} max={form.due_date || undefined} onChange={(event) => setForm((current) => current && ({ ...current, remind_on: event.target.value }))} /></label>
         <label>Zuständig<select value={form.assignee_account_id} onChange={(event) => setForm((current) => current && ({ ...current, assignee_account_id: event.target.value }))}><option value="">Ich selbst</option>{assignees.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}</select></label>
         <label>Eskalation an<select value={form.escalation_account_id} onChange={(event) => setForm((current) => current && ({ ...current, escalation_account_id: event.target.value }))}><option value="">Niemand</option>{assignees.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}</select></label>
-        <label className="span-full">ToDo<input maxLength={500} value={form.todo_text} onChange={(event) => setForm((current) => current && ({ ...current, todo_text: event.target.value }))} /></label>
+        <label className="span-full">Was zu tun ist<input maxLength={500} value={form.todo_text} onChange={(event) => setForm((current) => current && ({ ...current, todo_text: event.target.value }))} /></label>
         <label className="rg-check"><input type="checkbox" checked={form.send_email} onChange={(event) => setForm((current) => current && ({ ...current, send_email: event.target.checked }))} />Erinnerungs-E-Mail</label>
         <label className="rg-check"><input type="checkbox" checked={form.send_ics} onChange={(event) => setForm((current) => current && ({ ...current, send_ics: event.target.checked }))} />Kalendereinladung (ICS)</label>
       </div>
       <div className="rg-actions"><button type="button" className="btn" onClick={() => setForm(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Termin anlegen</button></div>
     </form> : null}
 
+    {register ? <ContractReminderSettings key={targetField ?? "settings"} register={register} contractId={contractId} orgSlug={orgSlug} editable={editable} openInitially={settingsTarget && editable}
+      onSaved={(next) => { setRegister(next); void load(); }} /> : null}
     {items === null ? <p role="status" aria-busy="true">Termine werden geladen…</p> : nothing
       ? <EmptyState variant="calm" action={<button type="button" className="rg-link" onClick={() => onOpenTarget({ tab: "register", section: "term" })}>Vertragsdaten öffnen</button>}>Keine Termine. Sie entstehen automatisch aus den Vertragsdaten.</EmptyState>
       : <>
@@ -523,8 +556,8 @@ export default function ContractTimeline({ contractId, orgSlug, workItems, endCh
             </li>
             {withYears(upcoming)}
           </ol>}
-        {closed.length > 0 ? <details className="tl-done"><summary>Erledigte und abgebrochene ({closed.length})</summary>
-          <ol className="tl tl--closed" aria-label="Erledigte und abgebrochene">{closed.map((row) => <Fragment key={row.key}>{renderRow(row)}</Fragment>)}</ol>
+        {closedVisible.length > 0 ? <details className="tl-done"><summary>{icon(<path d="m9 6 6 6-6 6" />, "tl-done-chevron")}Erledigte und abgebrochene ({closedVisible.length})</summary>
+          <ol className="tl tl--closed" aria-label="Erledigte und abgebrochene">{closedVisible.map((row) => <Fragment key={row.key}>{renderRow(row)}</Fragment>)}</ol>
         </details> : null}
         <div className="tl-legend" aria-label="Kennfarben der Typen">
           <span>Typen:</span>

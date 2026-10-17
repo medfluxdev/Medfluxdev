@@ -79,7 +79,7 @@ describe("Vertragsregister – Raster", () => {
     const { container } = render(<RegisterGrid organizationSlug="test-klinik" />);
     const table = await screen.findByRole("table");
     // Nr. und Kurzbeschreibung erscheinen als eine Spalte „Vertrag“; der Link führt in die Vertragsakte.
-    expect(within(table).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1?tab=register");
+    expect(within(table).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1");
     expect(within(table).getByText("000001")).toBeInTheDocument();
     expect(within(table).getByRole("button", { name: "Nach Nr. sortieren" })).toBeInTheDocument();
     expect(within(table).getByText("31.12.2026")).toBeInTheDocument();

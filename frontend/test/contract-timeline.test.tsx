@@ -36,7 +36,7 @@ vi.mock("@/lib/domain-api/ownership", () => ({ listOwnershipAssignees: vi.fn().m
 function deadline(overrides: Partial<DeadlineDto> = {}): DeadlineDto {
   return {
     id: "d-end", contract_id: "c-1", contract_label: null, source: "system", system_key: "contract_end",
-    kind: "vertragsende", title: "Vertragsende (feste Laufzeit)", due_date: "2029-03-31", remind_on: "2028-11-30", days_until_due: 900,
+    kind: "vertragsende", title: "Vertragsende", due_date: "2029-03-31", remind_on: "2028-11-30", extra_remind_on: ["2029-03-03"], days_until_due: 900,
     overdue: false, assignee_account_id: "u-1", assignee_name: "Ahmad", escalation_account_id: null, escalation_name: null,
     todo_text: null, note: null, status: "open", send_email: true, send_ics: false, done_by_name: null,
     done_at: null, basis_unconfirmed: false, editable_fields: ["note", "send_email", "send_ics"], ...overrides,
@@ -84,12 +84,12 @@ describe("Termine & Aufgaben", () => {
     expect(rows[0]).toMatch(/^offen.*KI-Prüfung.*Abweichung beim Vertragsende prüfen/);
     expect(rows[1]).toMatch(/^01\.09\.2026.*überfällig · vor 6 Wochen.*Aufgabe.*Kosten fehlen/);
     expect(rows[2]).toMatch(/^Heute · 13\.10\.2026/);
-    expect(rows[3]).toMatch(/^30\.11\.2028.*4 Monate vor Vertragsende.*Erinnerung.*Verlängerung prüfen.*Vertragsende 31\.03\.2029/);
-    expect(rows[4]).toMatch(/^03\.03\.2029.*4 Wochen vor Vertragsende.*Erinnerung/);
-    expect(rows[5]).toMatch(/^31\.03\.2029.*in 2 Jahren.*Frist.*Vertragsende.*Feste Laufzeit, endet ohne Kündigung/);
-    expect(rows[6]).toMatch(/^01\.01\.2040.*Löschprüfung/);
+    // Erinnerungen sind keine eigenen Zeilen, sondern Unterzeilen ihres Termins.
+    expect(rows[3]).toMatch(/^31\.03\.2029.*in 2 Jahren, 5 Monaten.*Frist.*Vertragsende.*Feste Laufzeit, endet ohne Kündigung.*Erinnerung am 30\.11\.2028 an Ahmad.*Erinnerung am 03\.03\.2029 an Ahmad/);
+    expect(rows[4]).toMatch(/^01\.01\.2040.*Löschprüfung/);
+    expect(rows).toHaveLength(5);
     // Jahresüberschriften (dekorativ) bei jedem Jahreswechsel.
-    expect([...list.querySelectorAll(".tl-year")].map((item) => item.textContent)).toEqual(["2026", "2028", "2029", "2040"]);
+    expect([...list.querySelectorAll(".tl-year")].map((item) => item.textContent)).toEqual(["2026", "2029", "2040"]);
     // Jede Zeile hat dieselben sechs Spalten.
     for (const row of list.querySelectorAll(".tl-row:not(.tl-row--today)")) {
       expect([...row.children].slice(0, 6).map((cell) => cell.className.split(" ")[0])).toEqual(["tl-dot", "tl-when", "tl-kind", "tl-what", "tl-who", "tl-act"]);
@@ -104,13 +104,17 @@ describe("Termine & Aufgaben", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("Erinnerung ohne ToDo: „Erinnerung: Vertragsende“; Person als Initialen + Name", async () => {
-    api.getContractRegister.mockResolvedValue({ as_of: "2026-10-13", terms: { reminder_dates: [] }, fields: {} });
+  it("Titel = Handlung (alter Systemtitel wird vereinheitlicht); Person als Initialen + Name", async () => {
+    api.listContractDeadlines.mockResolvedValue({ items: [
+      deadline({ title: "Vertragsende (feste Laufzeit)" }),
+      deadline({ id: "d-ret", system_key: "retention_review", kind: "loeschpruefung", title: "Löschprüfung (Aufbewahrungsfrist abgelaufen)", due_date: "2040-01-01", remind_on: "2040-01-01", extra_remind_on: [], assignee_name: null, assignee_account_id: null }),
+    ] });
     renderTimeline();
     const list = await screen.findByRole("list", { name: "Termine und Aufgaben" });
-    const reminder = rowStarting(list, "30.11.2028");
-    expect(within(reminder).getByText("Erinnerung: Vertragsende")).toBeInTheDocument();
-    expect(reminder.querySelector(".tl-avatar")).toHaveTextContent("A");
+    const row = rowStarting(list, "31.03.2029");
+    expect(within(row).getByText("Vertragsende", { selector: ".tl-title" })).toBeInTheDocument();
+    expect(row.querySelector(".tl-avatar")).toHaveTextContent("A");
+    expect(within(rowStarting(list, "01.01.2040")).getByText("Löschprüfung", { selector: ".tl-title" })).toBeInTheDocument();
     expect(rowStarting(list, "01.01.2040").querySelector(".tl-who")).toHaveTextContent("–");
   });
 
@@ -235,9 +239,9 @@ describe("Termine & Aufgaben", () => {
     api.listContractDeadlines.mockResolvedValue({ items: [deadline(), task()] });
     renderTimeline();
     const group = await screen.findByRole("group", { name: "Termine filtern" });
-    // Offen: Frist, Aufgabe, zwei Erinnerungen (30.11.2028 aus remind_on, 03.03.2029 aus den Vertragsdaten).
-    expect(within(group).getByRole("button", { name: /^Alle/ })).toHaveTextContent("Alle 4");
-    expect(within(group).getByRole("button", { name: /^Erinnerungen/ })).toHaveTextContent("2");
+    // Offen: Frist (mit zwei Erinnerungen als Unterzeile) und Aufgabe; „Erinnerungen“ zählt Termine, die erinnern.
+    expect(within(group).getByRole("button", { name: /^Alle/ })).toHaveTextContent("Alle 2");
+    expect(within(group).getByRole("button", { name: /^Erinnerungen/ })).toHaveTextContent("1");
     await user.click(within(group).getByRole("button", { name: /^Fristen/ }));
     let list = screen.getByRole("list", { name: "Termine und Aufgaben" });
     expect(rowTexts(list).filter((text) => !text.startsWith("Heute"))).toHaveLength(1);
@@ -265,6 +269,14 @@ describe("Termine & Aufgaben", () => {
     expect(within(row).getAllByRole("button").map((button) => button.textContent)).toEqual(["Wieder öffnen"]);
     await user.click(within(row).getByRole("button", { name: "Wieder öffnen" }));
     expect(api.deadlineAction).toHaveBeenCalledWith("test-klinik", "d-old", "reopen");
+  });
+
+  it("Filter gilt auch für Erledigtes: „Fristen“ blendet die abgebrochene Aufgabe aus", async () => {
+    const user = userEvent.setup();
+    renderTimeline();
+    expect(await screen.findByText("Erledigte und abgebrochene (1)")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("group", { name: "Termine filtern" })).getByRole("button", { name: /^Fristen/ }));
+    expect(screen.queryByText(/Erledigte und abgebrochene/)).not.toBeInTheDocument();
   });
 
   it("leer nur, wenn es gar nichts gibt – mit Link zu den Vertragsdaten", async () => {

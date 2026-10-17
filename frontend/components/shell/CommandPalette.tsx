@@ -79,7 +79,7 @@ export default function CommandPalette({ open, onClose, onShowShortcuts }: { ope
         const found: Command[] = [];
         if (contracts.status === "fulfilled") {
           for (const item of contracts.value.items) {
-            found.push({ id: `contract:${item.contract_id}`, section: "Verträge", label: `${item.values.register_number ?? "–"} · ${item.values.short_description ?? ""}`, hint: String(item.values.partner ?? ""), icon: "contracts", run: go(`/contracts/${item.contract_id}?tab=register`) });
+            found.push({ id: `contract:${item.contract_id}`, section: "Verträge", label: `${item.values.register_number ?? "–"} · ${item.values.short_description ?? ""}`, hint: String(item.values.partner ?? ""), icon: "contracts", run: go(`/contracts/${item.contract_id}`) });
           }
         }
         if (partners.status === "fulfilled") {

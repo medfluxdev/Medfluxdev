@@ -2,25 +2,24 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ContractDecisionCard, { deadlineSignal, followUpDue } from "@/components/contracts/detail/ContractDecisionCard";
+import ContractDecisionCard, { pendingDecision, deadlineSignal, followUpDue } from "@/components/contracts/detail/ContractDecisionCard";
 import RenewalOverview from "@/components/deadlines/RenewalOverview";
-import type { ContractLifecycleDecision } from "@/lib/domain-api/lifecycle";
+import type { ContractLifecycleDecision, DecisionStep } from "@/lib/domain-api/lifecycle";
 import type { RenewalBrief } from "@/lib/domain-api/registerGrid";
 
 const api = vi.hoisted(() => ({
   getRenewalBrief: vi.fn(),
-  getRenewalSummary: vi.fn(),
   listRenewals: vi.fn(),
   getContractLifecycle: vi.fn(),
   createContractLifecycleDecision: vi.fn(),
   updateContractLifecycleDecision: vi.fn(),
   deleteContractLifecycleDecision: vi.fn(),
+  updateDecisionStep: vi.fn(),
 }));
 
 vi.mock("@/lib/domain-api/registerGrid", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/domain-api/registerGrid")>()),
   getRenewalBrief: api.getRenewalBrief,
-  getRenewalSummary: api.getRenewalSummary,
   listRenewals: api.listRenewals,
 }));
 vi.mock("@/lib/domain-api/lifecycle", () => ({
@@ -28,6 +27,7 @@ vi.mock("@/lib/domain-api/lifecycle", () => ({
   createContractLifecycleDecision: api.createContractLifecycleDecision,
   updateContractLifecycleDecision: api.updateContractLifecycleDecision,
   deleteContractLifecycleDecision: api.deleteContractLifecycleDecision,
+  updateDecisionStep: api.updateDecisionStep,
 }));
 
 
@@ -61,7 +61,6 @@ describe("Entscheidung", () => {
   });
 
   it("zeigt Kennzahlen, „Ohne Handeln“ und Hinweise; ohne Verstöße (axe)", async () => {
-    const user = userEvent.setup();
     const { container } = render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
     expect(await screen.findByText("Frist in 46 Tagen")).toBeInTheDocument();
     const kpi = (label: string) => screen.getByText(label, { selector: "dt" }).nextElementSibling;
@@ -72,9 +71,8 @@ describe("Entscheidung", () => {
     expect(screen.getByText("Grundlage: Hochrechnung.")).toBeInTheDocument();
     expect(screen.getByText("Weitere Verträge mit MEDTEC (1)")).toBeInTheDocument();
     expect(screen.getByText("Noch keine Entscheidung erfasst.")).toBeInTheDocument();
-    api.getRenewalSummary.mockResolvedValue({ available: true, text: "Der Vertrag ist bis 30.09.2026 kündbar.", message: null, model: "qwen3:8b" });
-    await user.click(screen.getByRole("button", { name: "Kurzfassung mit lokaler KI" }));
-    expect(await screen.findByText("Der Vertrag ist bis 30.09.2026 kündbar.")).toBeInTheDocument();
+    // Keine KI-Kurzfassung in der Entscheidung (entfernt 2026-10-16).
+    expect(screen.queryByRole("button", { name: /Kurzfassung/ })).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -85,12 +83,12 @@ describe("Entscheidung", () => {
     expect(deadlineSignal({ urgency: "missed", days_left: -3 })).toEqual({ tone: "critical", label: "Frist überschritten" });
   });
 
-  it("feste Laufzeit: „Kündbar bis“ und Verlängerungskosten bleiben „–“", async () => {
-    api.getRenewalBrief.mockResolvedValue(brief({ urgency: "none", days_left: null, cancel_by: null, renewal_cost: null, hints: [], partner_contracts: [] }));
+  it("feste Laufzeit: „Keine Kündigungsfrist – Vertrag endet am …“; ohne „Kündbar bis“ und Verlängerungskosten", async () => {
+    api.getRenewalBrief.mockResolvedValue(brief({ urgency: "none", days_left: null, cancel_by: null, current_end: "2099-12-31", renewal_cost: null, hints: [], partner_contracts: [] }));
     render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
-    expect(await screen.findByText("Keine offene Frist")).toBeInTheDocument();
-    expect(screen.getByText("Kündbar bis", { selector: "dt" }).nextElementSibling).toHaveTextContent("–");
-    expect(screen.getByText("Kosten bei Verlängerung", { selector: "dt" }).nextElementSibling).toHaveTextContent("–");
+    expect(await screen.findByText("Keine Kündigungsfrist – Vertrag endet am 31.12.2099")).toBeInTheDocument();
+    expect(screen.queryByText("Kündbar bis", { selector: "dt" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Kosten bei Verlängerung", { selector: "dt" })).not.toBeInTheDocument();
   });
 
   it("Knopf öffnet das Formular darunter, erneuter Klick schließt; Speichern zeigt die Entscheidung in der Liste", async () => {
@@ -122,7 +120,7 @@ describe("Entscheidung", () => {
     expect(within(list).getByText("Ahmad")).toBeInTheDocument();
     expect(screen.queryByLabelText("Wirksam am")).not.toBeInTheDocument();
     // Nach „Kündigen“: Hinweis auf den Statuswechsel, der die Kündigung dokumentiert.
-    expect(screen.getByRole("link", { name: "Status auf „Gekündigt“ setzen" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=status");
+    expect(screen.getByRole("link", { name: "Status auf „Gekündigt“ setzen" })).toHaveAttribute("href", "/contracts/c-1?abschnitt=status");
   });
 });
 
@@ -244,5 +242,83 @@ describe("Kündigungsentscheidungen", () => {
     expect(screen.getByText("1 Verträge · 1 ohne erfasste Entscheidung")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Zeitraum"), "365");
     await waitFor(() => expect(api.listRenewals).toHaveBeenLastCalledWith("test-klinik", 365));
+  });
+});
+
+describe("Entscheidung – noch nicht entschieden", () => {
+  it("zeigt den offenen Zustand mit Frist; pendingDecision nur für laufende Verträge ohne Entscheidung", async () => {
+    vi.clearAllMocks();
+    api.getRenewalBrief.mockResolvedValue(brief());
+    api.getContractLifecycle.mockReset().mockResolvedValue({ items: [] });
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
+    expect(await screen.findByText("Noch nicht entschieden")).toBeInTheDocument();
+    expect(screen.getByText("Entscheidung offen")).toBeInTheDocument();
+    expect(screen.getByText("Bis 30.09.2026 entscheiden (Kündbar bis)")).toBeInTheDocument();
+    // Jede Entscheidung trägt ihre Kennfarbe.
+    const group = screen.getByRole("group", { name: "Entscheidung" });
+    expect(within(group).getByRole("button", { name: "Kündigen" })).toHaveClass("dec-kind--terminate");
+    expect(within(group).getByRole("button", { name: "Verlängern" })).toHaveClass("dec-kind--renew");
+
+    expect(pendingDecision(brief())).toEqual({ due: "2026-09-30", byCancel: true, urgency: "soon" });
+    expect(pendingDecision(brief({ cancel_by: null }))).toEqual({ due: "2026-12-31", byCancel: false, urgency: "soon" });
+    expect(pendingDecision(brief({ business_status: "gekuendigt" }))).toBeNull();
+    expect(pendingDecision(brief({ decision: { id: "l-1", decision: "renew", label: "Verlängern", status: "planned", note: null, by: "Ahmad", at: null } }))).toBeNull();
+    // Abgeschlossen = umgesetzt: für den nächsten Termin ist wieder zu entscheiden (wie auf der Karte).
+    expect(pendingDecision(brief({ decision: { id: "l-1", decision: "renew", label: "Verlängern", status: "completed", note: null, by: "Ahmad", at: null } }))).toEqual({ due: "2026-09-30", byCancel: true, urgency: "soon" });
+  });
+});
+
+describe("Entscheidung – Umsetzung", () => {
+  const step = (key: string, title: string, extra: Partial<DecisionStep> = {}): DecisionStep => ({
+    key, title, detail: `${title} – so geht es.`, due: null, done: false, done_how: null, done_by: null, done_at: null, target: null, ...extra,
+  });
+  const steps = [
+    step("send", "Kündigung an MEDTEC senden", { due: "2026-08-20" }),
+    step("status", "Status auf „Gekündigt“ setzen", { target: { tab: "register", section: "status" } }),
+    step("confirmation", "Kündigungsbestätigung ablegen", { done: true, done_how: "auto" }),
+  ];
+  const decision = (items: DecisionStep[]): ContractLifecycleDecision => ({ ...SAVED, steps: items });
+
+  it("zeigt Schritte mit Fortschritt, „Als Nächstes“, Fälligkeit und Sprung zur Stelle; Haken speichert", async () => {
+    const user = userEvent.setup();
+    vi.clearAllMocks();
+    api.getRenewalBrief.mockResolvedValue(brief());
+    api.getContractLifecycle.mockReset().mockResolvedValue({ items: [decision(steps)] });
+    api.updateDecisionStep.mockResolvedValue({ ...decision([{ ...steps[0], done: true, done_how: "manual", done_by: "Ahmad", done_at: "2026-08-15T10:00:00Z" }, steps[1], steps[2]]), status: "in_progress" });
+    const onDecisionChanged = vi.fn();
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" onDecisionChanged={onDecisionChanged} />);
+    const plan = (await screen.findByRole("heading", { name: "Umsetzung: Kündigen" })).closest("section")!;
+    expect(within(plan).getByText("1 von 3 erledigt")).toBeInTheDocument();
+    const rows = within(plan).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Als Nächstes");
+    expect(rows[0]).toHaveTextContent("bis 20.08.2026 · noch 5 Tage");
+    expect(within(rows[1]).getByRole("link", { name: "Status setzen →" })).toHaveAttribute("href", "/contracts/c-1?abschnitt=status");
+    expect(rows[2]).toHaveTextContent("Erledigt – aus den Vertragsdaten erkannt.");
+    expect(within(rows[2]).getByRole("checkbox")).toBeDisabled();
+
+    await user.click(within(rows[0]).getByRole("checkbox", { name: "Kündigung an MEDTEC senden: offen" }));
+    expect(api.updateDecisionStep).toHaveBeenCalledWith("test-klinik", "c-1", "l-1", "send", true);
+    expect(await within(plan).findByText("2 von 3 erledigt")).toBeInTheDocument();
+    expect(within(plan).getByText("Erledigt von Ahmad am 15.08.2026.")).toBeInTheDocument();
+    expect(onDecisionChanged).toHaveBeenCalled();
+    expect(within(plan).getByRole("button", { name: "Ohne alle Schritte abschließen" })).toBeInTheDocument();
+  });
+
+  it("alles erledigt: „Entscheidung abschließen“; „Entscheidung ändern“ als Schritt öffnet die Auswahl", async () => {
+    const user = userEvent.setup();
+    vi.clearAllMocks();
+    api.getRenewalBrief.mockResolvedValue(brief());
+    api.getContractLifecycle.mockReset().mockResolvedValue({ items: [
+      { ...SAVED, decision: "monitor", steps: [step("watch", "Wiedervorlage festlegen", { done: true, done_how: "auto" }), step("decide", "Erneut entscheiden", { target: { action: "change_decision" } })] },
+    ] });
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
+    const plan = (await screen.findByRole("heading", { name: "Umsetzung: Beobachten" })).closest("section")!;
+    await user.click(within(plan).getByRole("button", { name: "Entscheidung ändern" }));
+    expect(screen.getByRole("group", { name: "Neue Entscheidung" })).toBeInTheDocument();
+
+    api.getContractLifecycle.mockReset().mockResolvedValue({ items: [decision(steps.map((item) => ({ ...item, done: true, done_how: "auto" as const })))] });
+    render(<ContractDecisionCard contractId="c-1" orgSlug="test-klinik" />);
+    expect(await screen.findByRole("button", { name: "Entscheidung abschließen" })).toBeInTheDocument();
+    expect(screen.getByText("Alle Schritte erledigt")).toBeInTheDocument();
   });
 });

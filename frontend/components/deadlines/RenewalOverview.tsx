@@ -45,7 +45,7 @@ export default function RenewalOverview({ organizationSlug }: { organizationSlug
       <thead><tr><th scope="col">Kündbar bis</th><th scope="col">Vertrag</th><th scope="col">Partner</th><th scope="col">Jährliche Kosten</th><th scope="col">Verantwortlich</th><th scope="col">Entscheidung</th></tr></thead>
       <tbody>{items.map((item) => <tr key={item.contract_id}>
         <td>{formatDate(item.cancel_by)} <Signal tone={URGENCY[item.urgency].tone}>{item.days_left >= 0 ? `in ${item.days_left} Tagen` : "verstrichen"}</Signal></td>
-        <th scope="row"><Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link></th>
+        <th scope="row"><Link href={`/contracts/${item.contract_id}`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link></th>
         <td>{item.partner ?? "–"}</td>
         <td className="num">{item.annual_cost ? formatCurrency(item.annual_cost, "EUR") : <Link href={contractHref(item.contract_id, FINANCE_ENTRIES_TARGET)} aria-label={`Kosten für ${item.register_number ?? "Vertrag"} erfassen`}>Kosten erfassen</Link>}</td>
         <td>{item.responsible ?? "–"}</td>

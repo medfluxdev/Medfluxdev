@@ -19,29 +19,33 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { removeWarningsRepresentedByTasks } from "@/lib/action-dedup";
 import { archiveContract, getContractDeletionCapabilities, requestContractDeletion, reviewContractFact } from "@/lib/domain-api/contracts";
 import { updateContractRegister } from "@/lib/domain-api/register";
+import { getOrganizationStructure } from "@/lib/domain-api/organizations";
 import { PdfViewer } from "./lazy";
 import EvidencePane from "./EvidencePane";
 import FactReviewPanel from "./FactReviewPanel";
 import OverridePanel from "./OverridePanel";
-import CalculationBasisPanel, { hasCalculationBasis } from "./CalculationBasisPanel";
+import { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
 import Tabs from "@/components/ui/Tabs";
 import Signal from "@/components/ui/Signal";
+import ActionMenu from "@/components/ui/ActionMenu";
 import TagChip, { TagIcon } from "@/components/ui/TagChip";
 import ReviewQueueNav from "./ReviewQueueNav";
 import { coverPdfUrl } from "@/lib/domain-api/registerGrid";
 
 import Dialog from "@/components/ui/Dialog";
 import ContractHistoryPanel from "./ContractHistoryPanel";
-import ContractDecisionCard from "./ContractDecisionCard";
+import ContractDecisionCard, { pendingDecision } from "./ContractDecisionCard";
+import { getRenewalBrief, type RenewalBrief } from "@/lib/domain-api/registerGrid";
 import ContractTimeline, { type EndCheck } from "./ContractTimeline";
 import ContractAttachmentsPanel from "./ContractAttachmentsPanel";
 import ContractRelationsPanel from "./ContractRelationsPanel";
 import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import StatusBadge from "@/components/ui/StatusBadge";
-import { CONFLICT_TARGET, FIELD_PARAM, FINANCE_ENTRIES_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
+import { servicesVisible as servicesVisibleFor } from "@/lib/contract-services";
+import { CONFLICT_TARGET, FIELD_PARAM, FINANCE_ENTRIES_TARGET, FINANCE_SUGGESTIONS_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
 import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
@@ -49,15 +53,22 @@ import SourceCapture from "./SourceCapture";
 import AiReviewButton from "./AiReviewButton";
 import RiskButton from "./RiskButton";
 import ValueOriginBadge from "./ValueOriginBadge";
+import { AiReviewContext, type AiOriginTarget } from "@/components/ui/AiOrigin";
+import { findReviewFact } from "@/lib/review-facts";
 import ContractTermBar from "./ContractTermBar";
 import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
 import OpenPoints, { buildOpenPoints } from "./OpenPoints";
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
+import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
+import EvidenceDetail from "./EvidenceDetail";
+import EvidenceReviewMode from "./EvidenceReviewMode";
+import { evidenceNumbers, factsByEvidence, orderEvidence, titleOf } from "./EvidencePane";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
-import ContractAssignmentCard from "./ContractAssignmentCard";
-import { LIST_SEPARATOR, factValue } from "./CardFact";
-import { SCOPE_CHOICES, ScopeCard, SlaCard } from "./FactCards";
+import ResponsibilityChips, { ChipRow } from "./ContractHeaderChips";
+import ContractAiSummary from "./ContractAiSummary";
+import { FactSourceContext, LIST_SEPARATOR, factValue } from "./CardFact";
+import { SCOPE_CHOICES, ScopeCard, ScopeListCard, SlaCard } from "./FactCards";
 import ConflictCard from "./ConflictCard";
 
 const [SCOPE_INCLUDED, SCOPE_EXCLUDED] = SCOPE_CHOICES;
@@ -76,7 +87,7 @@ function scopeLabel(value: unknown): string | null {
 }
 import { useAuth } from "@/components/auth/AuthProvider";
 
-export type WorkspaceSlot = "overview" | "register" | "deadlines" | "finance";
+export type WorkspaceSlot = "overview" | "register" | "deadlines";
 
 interface Props {
   data: ContractDetailResponse;
@@ -86,9 +97,9 @@ interface Props {
   slots?: Partial<Record<WorkspaceSlot, React.ReactNode>>;
 }
 
-type TabKey = "overview" | "register" | "deadlines" | "finance" | "documents" | "relations" | "history";
+type TabKey = "overview" | "register" | "services" | "deadlines" | "finance" | "documents" | "relations" | "notes" | "history";
 // Fruehere Reiter (Links aus E-Mails, Lesezeichen) zeigen auf den neuen Ort.
-const TAB_ALIASES: Record<string, TabKey> = { term: "deadlines", services: "overview", equipment: "relations", remarks: "history" };
+const TAB_ALIASES: Record<string, TabKey> = { term: "deadlines", leistungen: "services", equipment: "relations", remarks: "notes", notizen: "notes" };
 type DocumentTab = "document" | "attachments" | "evidence" | "review" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
@@ -98,14 +109,18 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "register", label: "Vertragsdaten" },
   { key: "deadlines", label: "Fristen & Aufgaben" },
   { key: "finance", label: "Finanzen" },
+  { key: "services", label: "Leistungen & SLA" },
   { key: "documents", label: "Dokumente" },
   { key: "relations", label: "Verknüpfungen" },
+  { key: "notes", label: "Notizen" },
   { key: "history", label: "Verlauf" },
 ];
 
+const REVIEW_ICON = <svg className="dw-review-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" /></svg>;
+const DOC_INFO_ICON = <svg className="cw-doc-foot-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18zM12 11v6M12 7.5v.5" /></svg>;
+
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
   { key: "document", label: "Dokument" },
-  { key: "evidence", label: "Nachweise" },
   { key: "review", label: "Prüfung" },
   { key: "attachments", label: "Anlagen" },
   { key: "history", label: "Korrekturen" },
@@ -172,16 +187,6 @@ function calculatedOrigin(value: unknown, basis: CalcBasis | null | undefined): 
   return hasCalculationBasis(basis) ? "calculated" : "system";
 }
 
-function InfoCard({ label, value, hint, origin }: { label: string; value: React.ReactNode; hint?: React.ReactNode; origin?: OriginKind }) {
-  return (
-    <div className="cw-info-card">
-      <span className="cw-info-label">{label}</span>
-      <strong className="cw-info-value">{value}</strong>
-      {origin ? <OriginBadge origin={origin} /> : null}
-      {hint ? <span className="cw-info-hint">{hint}</span> : null}
-    </div>
-  );
-}
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
@@ -197,6 +202,7 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
+
 function toTab(value: string | null): TabKey | null {
   if (!value) return null;
   if (TAB_ALIASES[value]) return TAB_ALIASES[value];
@@ -204,8 +210,13 @@ function toTab(value: string | null): TabKey | null {
 }
 
 function isDocumentTab(value: string | null): value is DocumentTab {
-  return DOCUMENT_TABS.some((tab) => tab.key === value);
+  // „evidence“ ist kein eigener Unterreiter mehr, aber die Nachweise-Leiste des Arbeitsplatzes (alte Links bleiben gültig).
+  return value === "evidence" || DOCUMENT_TABS.some((tab) => tab.key === value);
 }
+
+const ARCHIVE_ICON = <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4" /></svg>;
+const DELETE_ICON = <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>;
+const COVER_ICON = <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>;
 
 export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} }: Props) {
   const pathname = usePathname();
@@ -223,9 +234,13 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [documentTab, setDocumentTab] = useState<DocumentTab>(initialSubtab);
   const [showAllSections, setShowAllSections] = useState(false);
+  // „Leistungen & SLA hinzufügen“: Reiter auf Wunsch zeigen, auch ohne passenden Vertragstyp oder Angaben.
+  const [servicesRevealed, setServicesRevealed] = useState(false);
   const [documentVersionId, setDocumentVersionId] = useState<string | null>(data.documents[0]?.document_version_id ?? null);
   const [navTarget, setNavTarget] = useState<SourceNavigationTarget | null>(null);
   const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
+  // Angabe, die die Prüfung nach einem Klick auf eine KI-Plakette zeigt (n: auch wiederholte Klicks).
+  const [reviewFocus, setReviewFocus] = useState<{ key: string; n: number } | null>(null);
   const [sourceLinkError, setSourceLinkError] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archivePending, setArchivePending] = useState(false);
@@ -241,6 +256,25 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   // „Angabe aus dem Text übernehmen“: Stelle auf der angezeigten PDF-Seite markieren.
   const [captureOpen, setCaptureOpen] = useState(false);
   const [aiOpenCount, setAiOpenCount] = useState(0);
+  // Krankenhaus im Kopf nur, wenn die Organisation mehrere hat; unbekannt (lädt/Fehler) = zeigen.
+  const [hospitalCount, setHospitalCount] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    getOrganizationStructure(orgSlug)
+      .then((value) => { if (active) setHospitalCount(Array.isArray(value?.hospitals) ? value.hospitals.filter((item) => item.is_active).length : null); })
+      .catch(() => { if (active) setHospitalCount(null); });
+    return () => { active = false; };
+  }, [orgSlug]);
+  // Entscheidungsvorlage (Backend) für „Offene Punkte: Entscheidung treffen“; neu laden nach jeder Entscheidung.
+  const [decisionBrief, setDecisionBrief] = useState<RenewalBrief | null>(null);
+  const [decisionVersion, setDecisionVersion] = useState(0);
+  useEffect(() => {
+    let active = true;
+    getRenewalBrief(orgSlug, data.contract_id)
+      .then((value) => { if (active) setDecisionBrief(value && Array.isArray(value.hints) ? value : null); })
+      .catch(() => { if (active) setDecisionBrief(null); });
+    return () => { active = false; };
+  }, [orgSlug, data.contract_id, decisionVersion]);
   const [pdfPage, setPdfPage] = useState(1);
   const onPdfPage = useCallback((page: number) => setPdfPage(page), []);
   // „Fehlende Angaben im Dokument suchen“: nur mit Recht, ohne laufende Auswertung und wenn etwas fehlt.
@@ -370,6 +404,36 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
   // „Direkt zur Stelle“ innerhalb der Vertragsakte: Reiter, Abschnitt oder Feld über die Adresse ansteuern.
   const mainDocumentId = data.documents[0]?.document_version_id ?? null;
+  const manyDocuments = data.documents.length > DOCUMENT_LIST_THRESHOLD;
+  // „Dokument“ und „Nachweise“ sind ein Arbeitsplatz (Seitenleiste wechselt, das Original bleibt).
+  const inDocumentWorkspace = documentTab === "document" || documentTab === "evidence";
+  // Nachweise: gewählter Eintrag, sichtbare Reihenfolge (Filter) für „Vorheriger/Nächster“.
+  const [visibleEvidence, setVisibleEvidence] = useState<string[]>([]);
+  const evidenceFacts = useMemo(() => factsByEvidence(data.fact_review_states ?? []), [data.fact_review_states]);
+  const documentIds = useMemo(() => data.documents.map((doc) => doc.document_version_id), [data.documents]);
+  const orderedEvidence = useMemo(() => orderEvidence(data.evidence, documentIds), [data.evidence, documentIds]);
+  const evidenceNumber = useMemo(() => evidenceNumbers(orderedEvidence), [orderedEvidence]);
+  // „Nachweise prüfen“: geführter Modus, ein Nachweis nach dem anderen (startet beim gewählten oder ersten offenen).
+  const [reviewMode, setReviewMode] = useState<{ startId: string | null } | null>(null);
+  const openEvidenceCount = orderedEvidence.filter((ref) => { const fact = evidenceFacts.get(ref.evidence_id); return fact ? !["confirmed", "corrected", "auto_accepted"].includes(fact.state) : false; }).length;
+  // Marken auf der Seite: nur Nachweise mit Lage auf dem geöffneten Dokument, gleiche Nummern wie die Liste.
+  const pageMarkers = useMemo(() => data.evidence
+    .filter((ref) => ref.document_version_id === documentVersionId && ref.page != null && ref.bbox)
+    .map((ref) => ({ id: ref.evidence_id, number: evidenceNumber.get(ref.evidence_id) ?? 0, label: titleOf(ref, evidenceFacts), page: ref.page!, bbox: ref.bbox!, bbox_space: ref.bbox_space, active: ref.evidence_id === activeEvidenceId })),
+  [data.evidence, documentVersionId, evidenceNumber, evidenceFacts, activeEvidenceId]);
+  const activeEvidence = activeEvidenceId ? data.evidence.find((ref) => ref.evidence_id === activeEvidenceId) ?? null : null;
+  const evidencePosition = activeEvidenceId ? visibleEvidence.indexOf(activeEvidenceId) : -1;
+  function stepEvidence(step: number) {
+    const id = visibleEvidence[evidencePosition + step];
+    const ref = id ? data.evidence.find((item) => item.evidence_id === id) : null;
+    if (ref) openEvidence(ref, "evidence");
+  }
+  function selectDocument(doc: { document_version_id: string }) {
+    setDocumentVersionId(doc.document_version_id);
+    setNavTarget(null);
+    setActiveEvidenceId(null);
+  }
+
   function openCapture() {
     setCaptureOpen(true);
     setRoute("documents", "document");
@@ -469,6 +533,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     setDocumentTab("document");
   }, [linkedDocumentId, linkedPage, data.documents]);
 
+  // Fundstelle einer Angabe der Faktprüfung (für die KI-Plakette in den Faktkarten).
+  const factSource = (fact: FactReviewStateDto | undefined) => {
+    const ref = evidenceById(fact?.evidence_ref);
+    return ref ? () => openEvidence(ref) : null;
+  };
+
   function SourceButton({ evidence }: { evidence: EvidenceRef | null }) {
     if (!evidence) return null;
     return <button type="button" className="cw-source-button" onClick={() => openEvidence(evidence)}>Quelle</button>;
@@ -479,9 +549,6 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const cancellationEvidence = findExactEvidence("dates.latest_cancellation_date", "termination.latest_cancellation_date", "termination.notice_period");
   const contractNumberEvidence = findExactEvidence("identity.contract_number", "contract_number");
   const annualCostEvidence = findExactEvidence("costs.annual_recurring", "cost.annual_recurring", "payment.annual_cost", "annual_cost");
-  const monthlyCostEvidence = findExactEvidence("costs.monthly_recurring", "cost.monthly_recurring", "payment.monthly_cost", "monthly_cost");
-  const taxRateEvidence = evidenceById(data.costs.tax_breakdown?.evidence_field_refs?.vat_rate) ?? findExactEvidence("costs.tax_rate_percent", "cost.tax_rate_percent", "vat_rate");
-  const taxBasisEvidence = findExactEvidence("costs.tax_basis", "cost.tax_basis");
 
   const factByKey = new Map((data.fact_review_states ?? []).map((fact) => [fact.fact_key, fact]));
   const canReviewFacts = role === "admin" || role === "contract_manager" || role === "reviewer";
@@ -509,7 +576,6 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const hasAi = data.documents.length > 0;
   const maintenanceHidden = !showAllSections && data.sections && !data.sections.maintenance ? new Set(["maintenance"]) : undefined;
   const endOrigin: OriginKind = data.dates.documented_end_date ? (endEvidence ? "extracted" : "system") : calculatedOrigin(data.dates.calculated_end_date, data.dates.calculated_end_basis);
-  const annualOrigin: OriginKind = data.costs.annual_recurring.amount == null ? "missing" : hasCalculationBasis(data.costs.annual_recurring_basis) ? "calculated" : annualCostEvidence ? "extracted" : "system";
   // Gepflegter Wert (Finanzposten) vor KI-Wert; der KI-Wert wird nie als gepflegt ausgegeben.
   const maintainedAnnual = data.register_facts?.annual_cost ?? null;
   // Gepflegter Vertragsbeginn vor dem Wert aus dem Dokument.
@@ -577,14 +643,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const sections = showAllSections ? null : data.sections ?? null;
   const scopeHasData = scopeCounts.included + scopeCounts.excluded > 0;
   const slaHasData = Boolean(data.sla.response_time || data.sla.resolution_time || data.sla.service_hours || data.sla.emergency_availability || data.sla.availability_24_7 != null);
-  // Der Vertragstyp entscheidet. Nur von einer Person gepflegte Angaben (Gerätearten, Wartungsdaten) halten
-  // einen Abschnitt sichtbar; von der KI gelesene Angaben stehen im Hinweis und sind über „Trotzdem anzeigen“ erreichbar.
-  const showScope = hasAi && sectionVisible("scope", sections, false);
-  const showSla = hasAi && sectionVisible("sla", sections, false);
+  // Reiter „Leistungen & SLA“: bei Vertragstypen mit Leistungsumfang/SLA (Wartung, Service, Dienstleistung …)
+  // oder sobald Angaben vorliegen; sonst ausgeblendet und über „Leistungen & SLA hinzufügen“ erreichbar.
+  const service = data.register_facts?.service;
+  const servicesVisible = activeTab === "services" || servicesVisibleFor({ sections: data.sections, service, scopeHasData, slaHasData, revealed: servicesRevealed });
+  // Angaben unter „Details aus dem Dokument“ (nur vorhandene zählen).
+  const showScope = hasAi && servicesVisible;
+  const showSla = hasAi && servicesVisible;
+  // Der Vertragstyp entscheidet. Nur von einer Person gepflegte Angaben (Gerätearten) halten einen Abschnitt sichtbar;
+  // von der KI gelesene Angaben stehen im Hinweis und sind über „Trotzdem anzeigen“ erreichbar.
   const showEquipment = sectionVisible("equipment", sections, (data.assignment?.device_types?.length ?? 0) > 0);
   const hiddenSections = data.sections ? ([
-    ["scope", showScope || !hasAi, scopeHasData],
-    ["sla", showSla || !hasAi, slaHasData],
     ["equipment", showEquipment, data.equipment.length > 0],
   ] as const).filter(([, shown]) => !shown).map(([key, , found]) => `${SECTION_LABELS[key]}${found ? " (mit Angaben aus dem Dokument)" : ""}`) : [];
   // Erst mit geladenen Lücken berechnen, sonst stünde kurz ein unvollständiges Bild da.
@@ -597,10 +666,21 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     slaToCheck: showSla ? slaRows.filter((row) => factOpen(row.fact)).length : 0,
     reviewOpen: data.contract_review?.unresolved_count ?? 0,
     cancelByUnknown: !headerCancelBy && !fixedTerm,
+    decision: pendingDecision(decisionBrief),
+    decisionStep: decisionBrief?.decision?.next_step ? {
+      label: decisionBrief.decision.label,
+      title: decisionBrief.decision.next_step.title,
+      detail: decisionBrief.decision.next_step.detail,
+      due: decisionBrief.decision.next_step.due,
+      target: decisionBrief.decision.next_step.target,
+      done: decisionBrief.decision.steps_done ?? 0,
+      total: decisionBrief.decision.steps_total ?? 0,
+      today: decisionBrief.as_of,
+    } : null,
   });
   // Reiter zeigen, wo Arbeit wartet (Symbol mit Namen für Screenreader).
   const deadlineCritical = (openPoints ?? []).some((point) => point.tone === "critical" && (point.target?.tab === "deadlines" || point.target?.tab === "register"));
-  const tabItems = TABS.map((tab) => ({
+  const tabItems = TABS.filter((tab) => tab.key !== "services" || servicesVisible).map((tab) => ({
     ...tab,
     badge: tab.key === "deadlines" && deadlineCritical
       ? <span className="tab-signal tab-signal--critical" role="img" aria-label="Kritischer offener Punkt"><SignalIcon tone="critical" /></span>
@@ -611,7 +691,21 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           : undefined,
   }));
 
+  // KI-Plakette: zur Prüfung der Angabe, aus der der Wert stammt; ohne passende Angabe zur Fundstelle,
+  // sonst zur Prüfung insgesamt. Nichts wird geraten außer über Schlüssel bzw. gleiche Bezeichnung.
+  function openAiReview({ factKeys, subject, openSource }: AiOriginTarget) {
+    const fact = findReviewFact(data, factKeys, subject);
+    if (fact) {
+      setReviewFocus((current) => ({ key: fact.fact_key, n: (current?.n ?? 0) + 1 }));
+      setRoute("documents", "review");
+      return;
+    }
+    if (openSource) { openSource(); return; }
+    setRoute("documents", "review");
+  }
+
   return (
+    <AiReviewContext.Provider value={openAiReview}>
     <div className="contract-workspace">
       <nav className="object-crumbs" aria-label="Brotkrümelnavigation"><Link href="/register">Vertragsliste</Link><span aria-hidden="true">›</span><span aria-current="page">{data.contract_title ?? data.contract_number ?? "Vertrag"}</span></nav>
       <header className="object-header">
@@ -620,49 +714,50 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             ? <button type="button" className="header-link" onClick={() => openTarget({ tab: "register", section: "identity" })} title="In den Vertragsdaten ansehen">Vertrag <span className="mono">{data.register_number}</span></button>
             : "Vertrag ohne Nummer"}{data.contract_number ? <> · {contractNumberEvidence
               ? <button type="button" className="header-link" onClick={() => openEvidence(contractNumberEvidence)} title="Fundstelle im Dokument zeigen">Nr. lt. Dokument <span className="mono">{data.contract_number}</span></button>
-              : <>Nr. lt. Dokument <span className="mono">{data.contract_number}</span></>}</> : null}</p>
-          <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
-          <div className="object-header-meta object-header-who">
-            {/* Hauptangaben mit eigener Kennfarbe, Symbol und Wort; jede führt zur Stelle, an der sie gepflegt wird. */}
-            {data.assignment?.contract_type
-              ? <TagChip kind="type" as="button" srLabel="Vertragstyp" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Vertragstyp – in der Organisationszuordnung ändern">{data.assignment.contract_type}</TagChip>
-              : canEditData ? <button type="button" className="tag-chip tag-chip--missing" onClick={() => openTarget({ tab: "register", section: "ownership" })}><TagIcon kind="type" />Vertragstyp festlegen</button> : null}
-            {data.partner
-              ? <TagChip kind="partner" as="link" srLabel="Vertragspartner" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten">{data.partner.name}</TagChip>
-              : data.supplier
-                ? <TagChip kind="partner" as="button" className="tag-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet">{data.supplier}<span className="partner-chip-hint">zuordnen</span></TagChip>
-                : null}
-            {data.assignment?.responsible_department ? <TagChip kind="department" as="button" srLabel="Verantwortliche Abteilung" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Verantwortliche Abteilung – in der Organisationszuordnung ändern">{data.assignment.responsible_department}</TagChip> : null}
-            {data.assignment?.cost_center ? <TagChip kind="cost" as="button" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Kostenstelle – in der Organisationszuordnung ändern">Kostenstelle <span className="mono">{data.assignment.cost_center.code}</span> · {data.assignment.cost_center.name}</TagChip> : null}
+              : <button type="button" className="header-link" onClick={() => openTarget({ tab: "register", section: "identity" })} title="In den Vertragsdaten ansehen">Nr. lt. Dokument <span className="mono">{data.contract_number}</span></button>}</> : null}</p>
+          <div className="object-header-title">
+            <h1>{data.contract_title ?? data.contract_number ?? "Vertrag"}</h1>
+            {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => openTarget({ tab: "overview", section: "status" })} title="Vertragsstatus ansehen oder ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
           </div>
+          {/* Zeile 1 „was und mit wem“, Zeile 2 „wer und wo“: jede Angabe genau einmal, hier im Kopf (sichtbar in allen Reitern). */}
+          <ChipRow label="Vertrag" families={[[
+            data.assignment?.contract_type
+              ? { key: "type", node: <TagChip kind="type" as="button" srLabel="Vertragstyp" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Vertragstyp – in der Organisationszuordnung ändern">{data.assignment.contract_type}</TagChip> }
+              : canEditData ? { key: "type", node: <button type="button" className="tag-chip tag-chip--missing" onClick={() => openTarget({ tab: "register", section: "ownership" })}><TagIcon kind="type" />Vertragstyp festlegen</button> } : null,
+            data.assignment?.contract_category ? { key: "category", node: <TagChip kind="category" as="button" srLabel="Kategorie" onClick={() => openTarget({ tab: "register", section: "ownership" })} title="Kategorie – in der Organisationszuordnung ändern">{data.assignment.contract_category}</TagChip> } : null,
+            data.partner
+              ? { key: "partner", node: <TagChip kind="partner" as="link" srLabel="Vertragspartner" href={`/stammdaten/vertragspartner?id=${encodeURIComponent(data.partner.id)}`} title="Vertragspartner öffnen und bearbeiten">{data.partner.name}</TagChip> }
+              : data.supplier
+                ? { key: "partner", node: <TagChip kind="partner" as="button" className="tag-chip--unlinked" onClick={() => openTarget({ tab: "register", field: "partner_id" })} title="Noch keinem Vertragspartner aus den Stammdaten zugeordnet">{data.supplier}<span className="partner-chip-hint">zuordnen</span></TagChip> }
+                : null,
+          ]]} />
+          <ResponsibilityChips assignment={data.assignment} canEdit={canEditData} hospitalCount={hospitalCount} onOpen={() => openTarget({ tab: "register", section: "ownership" })} />
           <div className="object-header-meta object-header-signals">
-            {data.business_status ? <button type="button" className="badge-button status-button" onClick={() => setRoute("register")} title="Status in den Vertragsdaten ändern"><StatusBadge label={BUSINESS_STATUS_LABEL[data.business_status as BusinessStatus] ?? data.business_status} tone={BUSINESS_STATUS_TONE[data.business_status as BusinessStatus] ?? "neutral"} /></button> : null}
             {openPoints?.length ? <Link className="open-points-link" href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><Signal tone={openPoints[0].tone === "critical" ? "critical" : "warning"}>Offene Punkte · {openPoints.length}</Signal></Link> : null}
             <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={(data.contract_review?.unresolved_count ?? 0) > 0} canEdit={canEditData} version={data} onCount={setAiOpenCount} />
             <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings.filter((warning) => !warning.review_resolved).map((warning) => (warning.conflict ? { ...warning, title_de: warning.conflict.title_de } : warning))} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>
         <dl className={`object-header-facts${fixedTerm ? " object-header-facts--three" : ""}`}>
-          <div><dt>Vertragsbeginn</dt><dd>{contractStart ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (data.register_facts?.contract_start || !startEvidence ? openTarget({ tab: "register", field: "term_start_date" }) : openEvidence(startEvidence))} title={data.register_facts?.contract_start || !startEvidence ? "In den Vertragsdaten ansehen" : "Fundstelle im Dokument zeigen"}>{formatDate(contractStart)}</button><ValueOriginBadge kind={data.register_facts?.contract_start ? "system" : "extracted"} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></span>}</dd></div>
-          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (data.register_facts?.contract_end || !endEvidence ? openTarget({ tab: "register", section: "term" }) : openEvidence(endEvidence))} title={data.register_facts?.contract_end || !endEvidence ? "Berechnung in den Vertragsdaten (Laufzeit) ansehen" : "Fundstelle im Dokument zeigen"}>{formatDate(headerEnd)}</button><ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} /><SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} /></span> : (openEnded ? <span className="fact-value">unbefristet</span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })}>Laufzeit &amp; Kündigung ergänzen</button></span>)}</dd></div>
+          <div><dt>Vertragsbeginn</dt><dd>{contractStart ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (data.register_facts?.contract_start || !startEvidence ? openTarget({ tab: "register", field: "term_start_date" }) : openEvidence(startEvidence))} title={data.register_facts?.contract_start || !startEvidence ? "In den Vertragsdaten ansehen" : "Fundstelle im Dokument zeigen"}>{formatDate(contractStart)}</button><ValueOriginBadge kind={data.register_facts?.contract_start ? "system" : "extracted"} onOpenSource={!data.register_facts?.contract_start && startEvidence ? () => openEvidence(startEvidence) : null} factKey="dates.start_date" /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "term_start_date" })} aria-label="Vertragsbeginn erfassen">Beginn erfassen</button></span>}</dd></div>
+          <div><dt>Vertragsende</dt><dd>{headerEnd ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (data.register_facts?.contract_end || !endEvidence ? openTarget({ tab: "register", section: "term" }) : openEvidence(endEvidence))} title={data.register_facts?.contract_end || !endEvidence ? "Berechnung in den Vertragsdaten (Laufzeit) ansehen" : "Fundstelle im Dokument zeigen"}>{formatDate(headerEnd)}</button>{(() => { const aiEnd = !data.register_facts?.contract_end && endOrigin === "extracted" && endEvidence ? () => openEvidence(endEvidence) : null; return <><ValueOriginBadge kind={data.register_facts?.contract_end ? "calculated" : endOrigin} onOpenSource={aiEnd} factKey="dates.end_date" />{aiEnd ? null : <SourceButton evidence={data.dates.documented_end_date && !data.register_facts?.contract_end ? endEvidence : null} />}</>; })()}</span> : (openEnded ? <span className="fact-value">unbefristet</span> : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "term" })}>Laufzeit &amp; Kündigung ergänzen</button></span>)}</dd></div>
           {fixedTerm ? null : <div className={headerCancelBy ? undefined : "fact--alert"}><dt>Kündbar bis</dt><dd>{headerCancelBy ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => setRoute("deadlines")} title="Fristen ansehen">{formatDate(headerCancelBy)}</button><ValueOriginBadge kind="calculated" /><SourceButton evidence={data.register_facts?.cancel_by ? null : cancellationEvidence} /></span> : <span className="fact-value"><Signal tone="critical" size="sm">Nicht berechenbar</Signal><button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", field: "notice_period_value" })}>Kündigungsfrist erfassen</button></span>}</dd></div>}
           <div><dt>Jährliche Kosten</dt><dd className="num">{maintainedAnnual
             ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} title="Finanzposten ansehen">{moneyLike(maintainedAnnual.amount, maintainedAnnual.currency)}</button><ValueOriginBadge kind="system" detail="Aus den gepflegten Finanzposten" /></span>
             : aiAnnual
-              ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (annualCostEvidence ? openEvidence(annualCostEvidence) : setRoute("finance"))} title={annualCostEvidence ? "Fundstelle im Dokument zeigen" : "Finanzen ansehen"}>{money(data.costs.annual_recurring)}</button><ValueOriginBadge kind="extracted" detail="Aus der KI-Analyse, noch nicht in die Finanzen übernommen" /><SourceButton evidence={annualCostEvidence} /><button type="button" className="rg-link" onClick={() => setRoute("finance")}>In Finanzen übernehmen</button></span>
+              ? <span className="fact-value"><button type="button" className="fact-link" onClick={() => (annualCostEvidence ? openEvidence(annualCostEvidence) : setRoute("finance"))} title={annualCostEvidence ? "Fundstelle im Dokument zeigen" : "Finanzen ansehen"}>{money(data.costs.annual_recurring)}</button><ValueOriginBadge kind="extracted" detail="noch nicht in die Finanzen übernommen" onOpenSource={annualCostEvidence ? () => openEvidence(annualCostEvidence) : null} factKey="costs.annual" /><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_SUGGESTIONS_TARGET)}>In Finanzen übernehmen</button></span>
               : <span className="fact-value"><Signal tone="critical" size="sm">Fehlt</Signal><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)} aria-label="Jährliche Kosten erfassen">Kosten erfassen</button></span>}</dd></div>
         </dl>
         <div className="object-header-term"><ContractTermBar start={contractStart} end={headerEnd} cancelBy={headerCancelBy} fixedTerm={fixedTerm} openEnded={openEnded} onOpen={() => setRoute("deadlines")} /></div>
         <div className="object-header-actions">
-          <a className="btn" href={coverPdfUrl(orgSlug, data.contract_id)} target="_blank" rel="noopener noreferrer"><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6" /></svg>Deckblatt (PDF)</a>
-          <button type="button" className="btn" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>KI-Assistent</button>
-          <details className="shell-menu">
-            <summary className="btn btn-icon" aria-label="Weitere Aktionen">⋯</summary>
-            <div className="shell-menu-panel">
-              <button type="button" className="btn btn-ghost" onClick={() => { setArchiveError(null); setArchiveDialogOpen(true); }}>Archivieren</button>
-              {canRequestDeletion ? <button type="button" className="btn btn-ghost" onClick={() => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); }}>Löschung beantragen</button> : null}
-            </div>
-          </details>
+          {canEditData ? <button type="button" className="btn" onClick={() => setRoute("register")} title="Vertragsdaten bearbeiten"><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg>Bearbeiten</button> : null}
+          <button type="button" className="btn btn-ai" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}><svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></svg>KI-Assistent</button>
+          <ActionMenu items={[
+            { label: "Archivieren", icon: ARCHIVE_ICON, onSelect: () => { setArchiveError(null); setArchiveDialogOpen(true); } },
+            ...(canRequestDeletion ? [{ label: "Löschung beantragen", icon: DELETE_ICON, danger: true, onSelect: () => { setDeleteAcknowledged(false); setDeleteError(null); setDeleteDialogOpen(true); } }] : []),
+            "separator",
+            { label: "Deckblatt (PDF)", icon: COVER_ICON, onSelect: () => { window.open(coverPdfUrl(orgSlug, data.contract_id), "_blank", "noopener,noreferrer"); } },
+          ]} />
         </div>
       </header>
       <ReextractionBanner state={reextraction.state} onOpen={() => openTarget({ tab: "documents", subtab: "document", section: "reextraction" })} />
@@ -696,27 +791,24 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
       <div className="cw-content" id="contract-tab-panel" role="tabpanel" aria-labelledby={`contract-tab-${activeTab}`} tabIndex={0}>
         {activeTab === "overview" && <div className="cw-overview">
+          {/* Erste Karte: Vertragsstatus (Statusweg, nächster Schritt, Statuswechsel). */}
+          <ContractRegisterPanel view="status" contractId={data.contract_id} orgSlug={orgSlug} onChanged={reload}
+            onOpenField={(key, view) => openTarget({ tab: view === "deadlines" ? "deadlines" : "register", field: key })} />
+          <ConflictCard contractId={data.contract_id} orgSlug={orgSlug} warnings={openConflicts} facts={factByKey} evidence={data.evidence} canDecide={canReviewFacts} onOpenEvidence={(ref) => openEvidence(ref, "document")} onOpenTarget={() => openTarget({ tab: "register", section: "term" })} onSaved={reload} />
+          {/* Entwurf: links KI-Zusammenfassung und Vertragsanalyse, rechts Offene Punkte. */}
+          <div className="cw-overview-cols">
           <div className="cw-overview-main">
-            <ConflictCard contractId={data.contract_id} orgSlug={orgSlug} warnings={openConflicts} facts={factByKey} evidence={data.evidence} canDecide={canReviewFacts} onOpenEvidence={(ref) => openEvidence(ref, "document")} onOpenTarget={() => openTarget({ tab: "register", section: "term" })} onSaved={reload} />
-            <OpenPoints contractId={data.contract_id} points={openPoints} searchHref={searchMissingHref} onOpen={openTarget} />
-            {showScope ? <ScopeCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={scopeRows} lists={scopeLists} counts={scopeCounts} source={(evidence) => <SourceButton evidence={evidence} />} /> : null}
-            {showSla ? <SlaCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={slaRows} /> : null}
+            <ContractAiSummary contractId={data.contract_id} orgSlug={orgSlug} />
+            {!servicesVisible && canEditData ? <p className="sections-hidden-note">Kein Leistungsumfang und keine SLA erfasst. <button type="button" className="rg-link" onClick={() => { setServicesRevealed(true); setRoute("services"); }}>Leistungen &amp; SLA hinzufügen</button></p> : null}
             {hiddenSections.length ? <p className="sections-hidden-note">Für {data.sections!.type_label} ausgeblendet: {hiddenSections.join(", ")}. <button type="button" className="rg-link" onClick={() => setShowAllSections(true)}>Trotzdem anzeigen</button></p> : null}
             {showAllSections && data.sections ? <p className="sections-hidden-note">Alle Abschnitte werden angezeigt. <button type="button" className="rg-link" onClick={() => setShowAllSections(false)}>Nur passende Abschnitte</button></p> : null}
             {hasAi && !data.sections ? <p className="sections-hidden-note">Mit einem Vertragstyp zeigt die Akte nur die passenden Abschnitte. {canEditData ? <button type="button" className="rg-link" onClick={() => openTarget({ tab: "register", section: "ownership" })}>Vertragstyp festlegen</button> : null}</p> : null}
             {slots.overview}
           </div>
-          <aside className="cw-overview-aside" aria-label="Nachschlagen">
-            <ContractAssignmentCard contractId={data.contract_id} assignment={data.assignment} canEdit={canEditData} />
-            <section className="cw-section" aria-labelledby="data-proof-heading">
-              <div className="cw-section-head"><div><h2 id="data-proof-heading">Daten &amp; Nachweise</h2></div></div>
-              <ul className="side-nav-list">
-                <li><button type="button" onClick={() => setRoute("documents", "evidence")}>Nachweise<b>{data.evidence.length}</b><span aria-hidden="true">›</span></button></li>
-                <li><button type="button" onClick={() => setRoute("documents", "document")}>Dokumente<b>{data.documents.length}</b><span aria-hidden="true">›</span></button></li>
-                <li><button type="button" onClick={() => setRoute("documents", "review")}>Ungeprüfte Angaben<b>{data.contract_review.unresolved_count}</b><span aria-hidden="true">›</span></button></li>
-              </ul>
-            </section>
-          </aside>
+          <div className="cw-overview-side">
+            <OpenPoints contractId={data.contract_id} points={openPoints} searchHref={searchMissingHref} onOpen={openTarget} />
+          </div>
+          </div>
         </div>}
 
         {activeTab === "register" && <><ContractRegisterPanel
@@ -729,51 +821,65 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           hiddenSections={maintenanceHidden}
           afterStatus={slots.register}
           onOpenField={(key, view) => openTarget({ tab: view === "deadlines" ? "deadlines" : "register", field: key })}
+          onOpenStatus={() => openTarget({ tab: "overview", section: "status" })}
         /></>}
 
-        {activeTab === "history" && <div className="stack-4"><ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} /><ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} /></div>}
+        {activeTab === "services" && <FactSourceContext.Provider value={factSource}><div className="stack-4">
+          {/* Entwurf „Leistungsumfang & SLA“: links Leistungen, rechts SLA; darunter weitere und exklusive Leistungen. */}
+          {showScope || showSla ? <div className="svc-grid">
+            {/* Entwurf: links Leistungsumfang + weitere inklusive Leistungen, rechts SLA + exklusive Leistungen. */}
+            <div className="svc-col">
+              {showScope ? <ScopeCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={scopeRows} historyHref={contractHref(data.contract_id, { tab: "documents", subtab: "history" })} /> : null}
+              {showScope ? scopeLists.filter((list) => list.key === "other_included").map((list) => <ScopeListCard key={list.key} contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} list={list} />) : null}
+            </div>
+            <div className="svc-col">
+              {showSla ? <SlaCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={slaRows} /> : null}
+              {showScope ? scopeLists.filter((list) => list.key === "other_excluded").map((list) => <ScopeListCard key={list.key} contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} list={list} />) : null}
+            </div>
+          </div> : null}
+          {!hasAi ? <p className="sections-hidden-note">Ohne KI-Analyse gibt es keine Leistungsliste und keine SLA-Werte aus dem Dokument.</p> : null}
+        </div></FactSourceContext.Provider>}
+
+        {activeTab === "notes" && <ContractRemarksPanel contractId={data.contract_id} orgSlug={orgSlug} />}
+
+        {activeTab === "history" && <ContractHistoryPanel contractId={data.contract_id} orgSlug={orgSlug} />}
 
         {activeTab === "deadlines" && <div className="stack-4">
-          <ContractDecisionCard contractId={data.contract_id} orgSlug={orgSlug} onReminderCreated={() => setTimelineVersion((value) => value + 1)} />
+          <ContractDecisionCard contractId={data.contract_id} orgSlug={orgSlug} onReminderCreated={() => setTimelineVersion((value) => value + 1)} onDecisionChanged={() => setDecisionVersion((value) => value + 1)} />
           <ContractTimeline contractId={data.contract_id} orgSlug={orgSlug} workItems={data.work_items} endCheck={endCheck} onOpenTarget={openTarget} version={timelineVersion} />
-          {/* Erinnerungen: Einstellungen dessen, was hier passiert (Vertragsdaten-Felder, eine Implementierung). */}
-          <ContractRegisterPanel
-            view="deadlines"
-            contractId={data.contract_id}
-            orgSlug={orgSlug}
-            onChanged={() => { reload(); setTimelineVersion((value) => value + 1); }}
-            onShowSource={showSource}
-            hiddenSections={maintenanceHidden}
-            onOpenField={(key, view) => openTarget({ tab: view === "deadlines" ? "deadlines" : "register", field: key })}
-          />
         </div>}
 
         {activeTab === "relations" && <ContractRelationsPanel contractId={data.contract_id} orgSlug={orgSlug} />}
-        {activeTab === "finance" && <>
-          <ContractFinancePanel contractId={data.contract_id} orgSlug={orgSlug} />
-          {hasAi && <>
-          <h2 className="cw-subheading">KI-Analyse der Vertragskosten</h2>
-          <div className="cw-kpi-grid cw-kpi-grid-four"><InfoCard label="Jährlich wiederkehrend" value={money(data.costs.annual_recurring)} origin={annualOrigin} hint={<SourceButton evidence={annualCostEvidence} />} /><InfoCard label="Monatlich wiederkehrend" value={money(data.costs.monthly_recurring)} origin={data.costs.monthly_recurring.amount == null ? "missing" : monthlyCostEvidence ? "extracted" : "system"} hint={<SourceButton evidence={monthlyCostEvidence} />} /><InfoCard label="Steuersatz" value={data.costs.tax_rate_percent != null ? `${data.costs.tax_rate_percent} %` : "Nicht verfügbar"} origin={data.costs.tax_rate_percent != null ? (taxRateEvidence ? "extracted" : "system") : "missing"} hint={<SourceButton evidence={taxRateEvidence} />} /><InfoCard label="Bezugsperiode" value={data.costs.source_period ?? "Nicht verfügbar"} origin={data.costs.source_period ? "system" : "missing"} /></div>
-          {hasCalculationBasis(data.costs.annual_recurring_basis) ? <Section title="Kostenberechnung" description="Nachvollziehbare Grundlage des jährlichen Betrags"><CalculationBasisPanel title="Jährlich wiederkehrende Kosten" basis={data.costs.annual_recurring_basis} /></Section> : null}
-          {data.costs.availability && (data.costs.annual_recurring.amount == null || data.costs.availability.manual_input_required) ? <Section title="Warum Kosten noch nicht vollständig berechnet sind" description={data.costs.availability.summary_de}><div className="cw-finance-availability">{data.costs.availability.explanation_de ? <p>{data.costs.availability.explanation_de}</p> : null}{data.costs.availability.found_facts.length > 0 ? <div><strong>Gefundene Angaben</strong><ul>{data.costs.availability.found_facts.map((fact) => <li key={fact.key}>{fact.label_de}: {fact.value}{fact.period_hint ? ` · ${fact.period_hint}` : ""}</li>)}</ul></div> : null}{data.costs.availability.missing_inputs.length > 0 ? <div><strong>Noch benötigte Angaben</strong><ul>{data.costs.availability.missing_inputs.map((item) => <li key={item}>{item}</li>)}</ul><button type="button" className="rg-link" onClick={() => openTarget(FINANCE_ENTRIES_TARGET)}>Finanzeintrag erfassen</button></div> : null}</div></Section> : null}
-          <Section title="Abrechnung & Steuer"><dl className="cw-definition-grid"><div><dt>Steuerbasis <SourceButton evidence={taxBasisEvidence} /></dt><dd>{data.costs.tax_basis ?? "Nicht verfügbar"}</dd></div><div><dt>Währung</dt><dd>{data.costs.annual_recurring.currency ?? data.costs.monthly_recurring.currency ?? "Nicht verfügbar"}</dd></div><div><dt>Währungskonflikt</dt><dd>{data.costs.currency_conflict ? "Ja – prüfen" : "Nein"}</dd></div></dl></Section>
-          {(data.costs.scheduled_prices ?? []).length > 0 && <Section title="Preisplan (Staffel)" description="Belegte Preisstufen je Vertragsjahr – nie annualisiert"><div className="cw-finance-schedule">{data.costs.scheduled_prices.map((row) => <div className="cw-finance-schedule-row" key={`${row.period_index ?? "x"}-${row.period_label ?? ""}`}><span>{row.period_index ? `${row.period_index}. Vertragsjahr` : row.period_label ?? "Vertragsjahr"}</span><strong>{moneyLike(row.amount, row.currency)}</strong></div>)}</div></Section>}
-          {(data.costs.variable_charges ?? []).length > 0 && <Section title="Bedingte Kosten (nicht im Fixwert enthalten)" description="Verbrauchs- oder einsatzabhängige Positionen, getrennt vom wiederkehrenden Jahresbetrag"><div className="cw-finance-variable">{data.costs.variable_charges.map((item, idx) => <dl className="cw-definition-grid" key={`${item.label}-${idx}`}><div><dt>Position</dt><dd>{item.label}</dd></div><div><dt>Betrag</dt><dd>{moneyLike(item.amount, item.currency)}{item.unit_label_de ? ` ${item.unit_label_de}` : ""}</dd></div>{item.condition ? <div><dt>Bedingung</dt><dd>{item.condition}</dd></div> : null}<div><dt>Hinweis</dt><dd className="cw-muted">{item.note_de ?? "Wird nicht zum Fixwert addiert."}</dd></div></dl>)}</div></Section>}
-          </>}
-        </>}
+        {activeTab === "finance" && <ContractFinancePanel
+          contractId={data.contract_id}
+          orgSlug={orgSlug}
+          documentCosts={hasAi ? data.costs : null}
+          contractStart={data.register_facts?.contract_start ?? null}
+          findSource={(field) => { const ref = findExactEvidence(field); return ref ? () => openEvidence(ref) : null; }}
+          documentBasis={hasAi ? { tax_basis: data.costs.tax_basis, tax_rate_percent: data.costs.tax_rate_percent, currency: data.costs.annual_recurring.currency ?? data.costs.monthly_recurring.currency ?? null, source_period: data.costs.source_period } : null}
+        />}
 
 
-        {activeTab === "relations" && showEquipment && <Section title="Geräte" description="Gerätearten für Filter und Vergleich unter Analysen; darunter die im Dokument gefundenen Geräte.">
-          <ContractDeviceTypesPanel contractId={data.contract_id} orgSlug={orgSlug} canEdit={canEditData} responsibleDepartment={data.assignment?.responsible_department ?? null} onSaved={reload} />
-          <h3 className="device-found-heading">Im Dokument gefunden</h3>
-          {data.equipment.length === 0 ? <p className="cw-muted">Die Analyse hat keine einzelnen Geräte erkannt.</p> : <div className="cw-equipment-list">{data.equipment.map((item) => <article key={item.id ?? item.equipment_id ?? item.serial_number ?? item.device_name} className="cw-equipment-card"><strong>{item.equipment_id ? <Link href={`/equipment/${item.equipment_id}`}>{item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät"}</Link> : (item.device_name || item.system_name || item.model || item.equipment_type || item.equipment_category || "Gerät")}</strong><span>{[item.manufacturer, item.model].filter(Boolean).join(" · ") || "Hersteller/Modell nicht verfügbar"}</span><span>{item.serial_number ? `Seriennr. ${item.serial_number}` : "Seriennummer nicht verfügbar"}</span>{item.department ? <span>{item.department}</span> : null}</article>)}</div>}</Section>}
+        {activeTab === "relations" && showEquipment && <>
+          <ContractDeviceTypesPanel contractId={data.contract_id} orgSlug={orgSlug} canEdit={canEditData} responsibleDepartment={data.assignment?.responsible_department ?? null} onSaved={reload} /></>}
 
         {activeTab === "deadlines" && slots.deadlines}
-        {activeTab === "finance" && slots.finance}
         {activeTab === "documents" && <>
-          <div className="cw-document-summary"><InfoCard label="Dokumente" value={String(data.documents.length)} /><InfoCard label="Nachweise" value={String(data.evidence.length)} /><InfoCard label="Prüfstatus" value={data.contract_review.status_label_de} hint={`${data.contract_review.reviewed_count} von ${data.contract_review.relevant_count} geprüft`} /><InfoCard label="Ungeprüfte Angaben" value={String(data.contract_review.unresolved_count)} /></div>
-          <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={documentTab === tab.key ? "active" : ""} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
-          {documentTab === "document" && <ReextractionPanel
+          {/* Kopf: Unterreiter links; rechts Stand der Prüfung mit dem nächsten Schritt. */}
+          <div className="cw-doc-head">
+            <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "active" : ""} aria-current={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "page" : undefined} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
+            <div className="dw-status" aria-label="Stand der Dokumente">
+              <span className="dw-status-counts">{data.documents.length} {data.documents.length === 1 ? "Datei" : "Dateien"} · {data.evidence.length} Nachweise</span>
+              {data.contract_review.relevant_count > 0 ? <span className="dw-progress">
+                <span className="dw-progress-bar" role="progressbar" aria-label="Geprüfte Angaben" aria-valuemin={0} aria-valuemax={data.contract_review.relevant_count} aria-valuenow={data.contract_review.reviewed_count}><span style={{ width: `${(data.contract_review.reviewed_count / data.contract_review.relevant_count) * 100}%` }} /></span>
+                <span>{data.contract_review.reviewed_count} von {data.contract_review.relevant_count} geprüft</span>
+              </span> : null}
+              {data.contract_review.unresolved_count > 0
+                ? <button type="button" className="btn btn-sm btn-primary" onClick={() => setRoute("documents", "review")}>{data.contract_review.unresolved_count} {data.contract_review.unresolved_count === 1 ? "Angabe" : "Angaben"} prüfen</button>
+                : data.contract_review.relevant_count > 0 ? <Signal tone="done" size="sm">Alles geprüft</Signal> : null}
+            </div>
+          </div>
+          {inDocumentWorkspace && <ReextractionPanel
             contractId={data.contract_id}
             orgSlug={orgSlug}
             state={reextraction.state}
@@ -782,9 +888,54 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onShowPage={showDocumentPage}
             onEditManually={() => setRoute("register")}
             onMarkInDocument={canEditData && mainDocumentId ? openCapture : undefined}
+            compact
           />}
-          {documentTab === "document" && <div className="cw-document-layout"><aside className="cw-document-sidebar"><h2>Quelldokumente</h2>{data.documents.length === 0 ? <p className="cw-muted">Keine Dokumente vorhanden.</p> : data.documents.map((doc) => <button key={doc.document_version_id} type="button" className={documentVersionId === doc.document_version_id ? "active" : ""} onClick={() => { setDocumentVersionId(doc.document_version_id); setNavTarget(null); setActiveEvidenceId(null); }}>{doc.original_filename ?? "Dokument"}<small>{doc.role ?? "Quelle"}</small></button>)}<button type="button" className="cw-evidence-shortcut" onClick={() => setRoute("documents", "evidence")}>{data.evidence.length} Nachweise anzeigen</button></aside><div className="cw-pdf-shell">{canEditData && documentVersionId && !captureOpen ? <div className="source-capture-open"><button type="button" className="btn btn-sm" onClick={openCapture}>Angabe aus dem Text übernehmen</button></div> : null}<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} /></div></div>}
-          {documentTab === "document" && captureOpen && documentVersionId ? <SourceCapture
+          {inDocumentWorkspace && sourceLinkError ? <p role="alert" className="rg-error">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p> : null}
+          {/* Ein Arbeitsplatz: links Dateien oder Nachweise, rechts immer dasselbe Original (bleibt beim Umschalten offen). */}
+          {inDocumentWorkspace && reviewMode ? <EvidenceReviewMode
+            contractId={data.contract_id}
+            orgSlug={orgSlug}
+            evidence={orderedEvidence}
+            numbers={evidenceNumber}
+            factByEvidence={evidenceFacts}
+            startId={reviewMode.startId}
+            canReview={canReviewFacts}
+            onShow={(ref) => openEvidence(ref, "evidence")}
+            onExit={() => setReviewMode(null)}
+            onReload={reload}
+            viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} pagesOpen={false} markers={pageMarkers} />}
+          /> : null}
+          {inDocumentWorkspace && !reviewMode && <div className="dw">
+            <aside className="dw-side" aria-label="Dateien und Nachweise">
+              <div className="dw-switch" role="group" aria-label="Seitenleiste">
+                <button type="button" aria-pressed={documentTab === "document"} onClick={() => setRoute("documents", "document")}>Dateien<span className="dw-count" aria-hidden="true">{data.documents.length}</span></button>
+                <button type="button" aria-pressed={documentTab === "evidence"} onClick={() => setRoute("documents", "evidence")}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>
+              </div>
+              {documentTab === "evidence" && data.evidence.length ? <button type="button" className={`btn dw-review${openEvidenceCount ? " btn-primary" : ""}`} onClick={() => setReviewMode({ startId: activeEvidenceId })}>
+                {REVIEW_ICON}Nachweise prüfen{openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}
+              </button> : null}
+              {documentTab === "evidence"
+                ? <div className="dw-panel"><EvidencePane evidence={data.evidence} facts={data.fact_review_states} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} onVisibleChange={setVisibleEvidence} showFile={data.documents.length > 1} documentIds={documentIds} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
+                : data.documents.length === 0 ? <p className="cw-muted dw-empty">Keine Dokumente vorhanden.</p>
+                  : <DocumentList documents={data.documents} selectedId={documentVersionId} mainId={mainDocumentId} onSelect={selectDocument} compact={!manyDocuments} />}
+            </aside>
+            <div className="dw-main">
+              {documentTab === "evidence" ? (activeEvidence
+                ? <EvidenceDetail refItem={activeEvidence} number={evidenceNumber.get(activeEvidence.evidence_id) ?? null} factByEvidence={evidenceFacts} position={evidencePosition >= 0 ? evidencePosition + 1 : null} total={visibleEvidence.length}
+                  onPrev={evidencePosition > 0 ? () => stepEvidence(-1) : null}
+                  onNext={evidencePosition >= 0 && evidencePosition < visibleEvidence.length - 1 ? () => stepEvidence(1) : null}
+                  onOpenReview={(factKey) => { setReviewFocus((current) => ({ key: factKey, n: (current?.n ?? 0) + 1 })); setRoute("documents", "review"); }} />
+                : <p className="ev-hint">Einen Nachweis links wählen – die Stelle wird hier im Original gezeigt.</p>) : null}
+              <div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} pagesOpen={false}
+                markers={documentTab === "evidence" ? pageMarkers : []}
+                onMarker={(id) => { const ref = data.evidence.find((item) => item.evidence_id === id); if (ref) openEvidence(ref, "evidence"); }} /></div>
+              <div className="cw-doc-foot">
+                <span>{DOC_INFO_ICON}{canEditData ? "Eine Stelle im Text markieren, um daraus eine Angabe zu übernehmen." : "Nachweise zeigen, wo jede Angabe im Dokument steht."}</span>
+                {canEditData && documentVersionId ? <button type="button" className="btn btn-sm" disabled={captureOpen} onClick={openCapture}>Angabe übernehmen</button> : null}
+              </div>
+            </div>
+          </div>}
+          {inDocumentWorkspace && captureOpen && documentVersionId ? <SourceCapture
             contractId={data.contract_id}
             orgSlug={orgSlug}
             documentVersionId={documentVersionId}
@@ -793,12 +944,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onClose={() => setCaptureOpen(false)}
           /> : null}
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
-          {documentTab === "evidence" && <Section title="Nachweise" description="Quellenangaben aus den Vertragsdokumenten">{sourceLinkError && <p role="alert">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p>}<div className="cw-evidence-layout"><div className="cw-evidence-pane"><EvidencePane evidence={data.evidence} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div><div className="cw-evidence-preview"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} /></div></div></Section>}
           {documentTab === "review" && <ReviewQueueNav contractId={data.contract_id} />}
-          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} onReload={reload} onNavigate={(ref) => openEvidence(ref, "document")} onOpenConflict={() => openTarget(CONFLICT_TARGET)} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
+          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} focusFact={reviewFocus} onReload={reload} onNavigate={(ref) => openEvidence(ref, "evidence")} onOpenConflict={() => openTarget(CONFLICT_TARGET)} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}
       </div>
     </div>
+    </AiReviewContext.Provider>
   );
 }

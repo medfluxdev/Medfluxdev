@@ -3,7 +3,7 @@ import type { GridFilter } from "@/lib/domain-api/registerGrid";
 // „Direkt zur Stelle“: jede Meldung über eine fehlende Angabe trägt ein Ziel, an dem sie behoben wird.
 // Alle Links in eine Vertragsakte oder in die gefilterte Vertragsliste entstehen hier.
 
-export type ContractTab = "overview" | "register" | "deadlines" | "finance" | "documents" | "relations" | "history";
+export type ContractTab = "overview" | "register" | "services" | "deadlines" | "finance" | "documents" | "relations" | "history";
 export type DocumentSubtab = "document" | "evidence" | "review" | "attachments" | "history";
 
 export interface FixTarget {
@@ -33,6 +33,10 @@ export function registerField(key: string): FixTarget {
 
 export const REVIEW_TARGET: FixTarget = { tab: "documents", subtab: "review" };
 export const FINANCE_ENTRIES_TARGET: FixTarget = { tab: "finance", section: "entries" };
+export const FINANCE_SUGGESTIONS_TARGET: FixTarget = { tab: "finance", section: "suggestions" };
+/** Reiter „Leistungen & SLA“: Leistungsumfang bzw. SLA. */
+export const SCOPE_TARGET: FixTarget = { tab: "services", section: "leistungsumfang" };
+export const SLA_TARGET: FixTarget = { tab: "services", section: "sla" };
 
 export function contractHref(contractId: string, raw?: FixTarget): string {
   const target = raw ? normalizeTarget(raw) : undefined;
@@ -66,15 +70,25 @@ export function registerHref(filters: GridFilter[], extra?: Record<string, strin
 // Felder, die nicht im Formular „Vertragsdaten“ stehen, sondern im Abschnitt „Zuständigkeit“ darunter.
 const OWNERSHIP_FIELDS = new Set(["responsible_account_id", "cost_center_id", "hospital_id", "department_id"]);
 
-// Felder, die unter „Fristen & Aufgaben“ → „Erinnerungen“ gepflegt werden, nicht in den Vertragsdaten.
-const DEADLINE_FIELDS = new Set(["reminder_lead_months", "reminder_extra_leads", "reminder_recipient_account_id", "escalation_recipient_account_id", "reminder_todo"]);
+// Felder der Erinnerungseinstellungen in „Fristen & Aufgaben“ → „Termine & Aufgaben“ (nicht in den Vertragsdaten).
+const DEADLINE_FIELDS = new Set(["reminder_lead_months", "reminder_extra_leads", "reminder_recipient_account_id", "escalation_recipient_account_id"]);
 const DEADLINE_SECTIONS = new Set(["reminder"]);
+// Felder des Reiters „Leistungen & SLA“ (nie in den Vertragsdaten).
+const SERVICE_FIELDS = new Set(["service_scope_text", "sla_availability_percent", "penalty_terms"]);
+const SERVICE_SECTIONS = new Set(["service", "leistungsumfang", "sla"]);
 
 /** Ziele vereinheitlichen: Zuständigkeitsfelder führen zum Abschnitt „Zuständigkeit“, Erinnerungen zu „Fristen & Aufgaben“. */
+// Statuswechsel und Kündigungsdaten stehen in der Karte „Vertragsstatus“ auf der Übersicht.
+const STATUS_FIELDS = new Set(["business_status", "terminated_on", "terminated_effective"]);
+
 export function normalizeTarget(target: FixTarget): FixTarget {
+  if (target.field && STATUS_FIELDS.has(target.field)) return { tab: "overview", section: "status" };
+  if ((target.tab === "register" || target.tab === "overview") && !target.field && target.section === "status") return { tab: "overview", section: "status" };
   if (target.field && OWNERSHIP_FIELDS.has(target.field)) return { tab: "register", section: "ownership" };
   if (target.tab === "register" && target.field && DEADLINE_FIELDS.has(target.field)) return { ...target, tab: "deadlines" };
   if (target.tab === "register" && !target.field && target.section && DEADLINE_SECTIONS.has(target.section)) return { ...target, tab: "deadlines" };
+  if (target.field && SERVICE_FIELDS.has(target.field)) return { ...target, tab: "services" };
+  if ((target.tab === "register" || target.tab === "overview") && !target.field && target.section && SERVICE_SECTIONS.has(target.section)) return { ...target, tab: "services" };
   return target;
 }
 
@@ -91,13 +105,15 @@ const SECTION_ANCHORS: Record<string, string> = {
   intelligence: "contract-intelligence-heading",
   "offene-punkte": "open-points-heading",
   widerspruch: "conflict-heading",
+  leistungsumfang: "leistungsumfang-heading",
+  sla: "sla-heading",
 };
 
 export function sectionAnchor(section: string): string {
   return SECTION_ANCHORS[section] ?? `rg-${section}-heading`;
 }
 
-const TABS = new Set<ContractTab>(["overview", "register", "deadlines", "finance", "documents", "relations", "history"]);
+const TABS = new Set<ContractTab>(["overview", "register", "services", "deadlines", "finance", "documents", "relations", "history"]);
 
 /** Ziel aus einer API-Antwort prüfen (unbekannte Werte werden ignoriert, nie geraten). */
 export function asFixTarget(value: unknown): FixTarget | null {
@@ -174,38 +190,4 @@ export const NO_FINANCE_FILTERS: GridFilter[] = [{ column: "cost_current_year", 
 /** Verträge ohne berechenbare Frist: ein einzelner direkt in seine Laufzeitangaben, sonst die gefilterte Liste. */
 export function notEvaluableLink(items: { contract_id: string }[]): string {
   return items.length === 1 ? contractHref(items[0].contract_id, { tab: "register", section: "term" }) : registerHref(NOT_EVALUABLE_FILTERS);
-}
-
-const EMPTY_COLUMN_TARGETS: Record<string, FixTarget> = {
-  annual_cost: FINANCE_ENTRIES_TARGET,
-  cost_current_year: FINANCE_ENTRIES_TARGET,
-  reminder_recipient: { tab: "register", field: "reminder_recipient_account_id" },
-  responsible: { tab: "register", section: "ownership" },
-  hospital: { tab: "register", section: "ownership" },
-  department: { tab: "register", section: "ownership" },
-  cost_center: { tab: "register", section: "ownership" },
-  partner: { tab: "register", field: "partner_id" },
-  contract_type: { tab: "register", field: "contract_type_id" },
-  cancel_by: { tab: "register", section: "term" },
-  possible_end: { tab: "register", section: "term" },
-};
-
-/**
- * Vertragsliste: wohin ein Vertrag aus einer gefilterten Liste führt. Ist die Liste nach einer Lücke gefiltert
- * („ohne Kosten“, „ohne Verantwortliche“, „Laufzeit unvollständig“ …), öffnet der Vertrag dort, wo sie behoben wird.
- */
-export function listRowTarget(filters: GridFilter[]): FixTarget {
-  for (const filter of filters) {
-    if (filter.column === "review_pending" && filter.op === "is" && filter.value === true) return REVIEW_TARGET;
-  }
-  for (const filter of filters) {
-    if (filter.op === "empty" && EMPTY_COLUMN_TARGETS[filter.column]) return EMPTY_COLUMN_TARGETS[filter.column];
-  }
-  for (const filter of filters) {
-    if (filter.column === "term_status") return { tab: "register", section: "term" };
-    if (filter.column === "rules_status" || filter.column === "rules_violated") return { tab: "register", section: "rules" };
-    if (filter.column === "deletion_from") return { tab: "register", section: "protection" };
-    if (filter.column === "cancel_by") return { tab: "deadlines", section: "renewal" };
-  }
-  return { tab: "register" };
 }

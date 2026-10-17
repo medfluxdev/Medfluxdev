@@ -57,7 +57,8 @@ function register(overrides: Partial<ContractRegister> = {}, termModel: string |
   } as ContractRegister;
 }
 
-const hint = () => screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")!;
+// „Erfassen“ direkt am leeren Feld (die Liste „Für „Gültig“ fehlen noch“ steht in der Karte „Vertragsstatus“).
+const fieldButton = (key: string, name: string) => within(document.getElementById(`rg-field-${key}`)!).getByRole("button", { name });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -98,8 +99,8 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
   it("ein Klick auf „Vertragsbeginn“ öffnet die Bearbeitung und setzt den Cursor ins Feld", async () => {
     const user = userEvent.setup();
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(within(hint()).getByRole("button", { name: "Vertragsbeginn erfassen" }));
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
+    await user.click(fieldButton("term_start_date", "Vertragsbeginn erfassen"));
     await waitFor(() => expect(document.getElementById("rg-term_start_date")).toHaveFocus());
     expect(screen.getByRole("button", { name: "Speichern" })).toBeInTheDocument();
     expect(document.getElementById("rg-field-term_start_date")).toHaveClass("rg-field--target");
@@ -126,12 +127,43 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
     await waitFor(() => expect(document.getElementById("rg-partner_id")).toHaveFocus());
   });
 
-  it("ohne Vertragsart führt „Vertragsbeginn“ zuerst zur Vertragsart", async () => {
-    const user = userEvent.setup();
-    api.getContractRegister.mockResolvedValue(register({}, null));
+  it("„In den Vertragsdaten ändern“ (Preisanpassung) öffnet die Karte Preisanpassung beim Feld Art", async () => {
+    api.getContractRegister.mockResolvedValue(register({ fields: {
+      ...register().fields,
+      price_adjustment_kind: field("Preisanpassung", "percent"),
+      price_adjustment_percent: field("Prozent", "10"),
+      price_adjustment_index_name: field("Index", null),
+      price_adjustment_next_date: field("Nächste Anpassung", "2027-01-01"),
+      price_adjustment_interval_months: field("Intervall (Monate)", 12),
+    } }));
+    window.history.replaceState(null, "", "/contracts/c-1?tab=register&feld=price_adjustment_kind");
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(within(hint()).getByRole("button", { name: "Vertragsbeginn erfassen" }));
+    await waitFor(() => expect(document.getElementById("rg-price_adjustment_kind")).toHaveFocus());
+  });
+
+  it("hält das Ziel im Blick, wenn Karten darüber nachladen und es nach unten schieben", async () => {
+    const scroll = vi.fn();
+    const original = { scroll: Element.prototype.scrollIntoView, rect: Element.prototype.getBoundingClientRect };
+    Element.prototype.scrollIntoView = scroll;
+    // Nach dem ersten Sprung liegt die Zeile (durch Nachladen darüber) unterhalb des Fensters.
+    Element.prototype.getBoundingClientRect = function () {
+      return { top: this.id === "rg-field-partner_id" ? 5000 : 0, bottom: 5040, left: 0, right: 0, width: 0, height: 40, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    };
+    try {
+      window.history.replaceState(null, "", "/contracts/c-1?tab=register&feld=partner_id");
+      render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+      await waitFor(() => expect(document.getElementById("rg-partner_id")).toHaveFocus());
+      await waitFor(() => expect(scroll.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    } finally {
+      Element.prototype.scrollIntoView = original.scroll;
+      Element.prototype.getBoundingClientRect = original.rect;
+    }
+  });
+
+  it("ohne Vertragsart führt „Vertragsbeginn“ zuerst zur Vertragsart", async () => {
+    api.getContractRegister.mockResolvedValue(register({}, null));
+    window.history.replaceState(null, "", "/contracts/c-1?tab=register&feld=term_start_date");
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     await waitFor(() => expect(document.getElementById("rg-term_model")).toHaveFocus());
     expect(screen.getByText("Erst die Vertragsart wählen – danach erscheint „Vertragsbeginn“.")).toBeInTheDocument();
   });
@@ -139,11 +171,11 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
   it("eine offene Bearbeitung bleibt erhalten, wenn man zu einem anderen Feld springt", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(within(hint()).getByRole("button", { name: "Vertragsbeginn erfassen" }));
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
+    await user.click(fieldButton("term_start_date", "Vertragsbeginn erfassen"));
     const start = await waitFor(() => { const el = document.getElementById("rg-term_start_date") as HTMLInputElement; expect(el).toHaveFocus(); return el; });
     await user.type(start, "2026-01-01");
-    await user.click(within(hint()).getByRole("button", { name: "Vertragspartner erfassen" }));
+    await user.click(fieldButton("partner_id", "Vertragspartner erfassen"));
     await waitFor(() => expect(document.getElementById("rg-partner_id")).toHaveFocus());
     expect((document.getElementById("rg-term_start_date") as HTMLInputElement).value).toBe("2026-01-01");
   });
@@ -151,9 +183,8 @@ describe("Direkt zur Stelle: Vertragsdaten", () => {
   it("ohne Bearbeitungsrecht: springt zum Feld, hebt es hervor und sagt warum nichts zu bearbeiten ist", async () => {
     const user = userEvent.setup();
     auth.role = "viewer";
+    window.history.replaceState(null, "", "/contracts/c-1?tab=register&feld=term_start_date");
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(within(hint()).getByRole("button", { name: "Vertragsbeginn erfassen" }));
     await waitFor(() => expect(document.getElementById("rg-field-term_start_date")).toHaveFocus());
     expect(screen.queryByRole("button", { name: "Speichern" })).not.toBeInTheDocument();
     expect(screen.getByText("Nur Lesen – Änderungen über das Vertragsmanagement.")).toBeInTheDocument();
@@ -209,9 +240,9 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
     expect(onShowSource).toHaveBeenCalledWith(source);
   });
 
-  it("zeigt den Bearbeitungsstatus in seiner Farbe wie in der Vertragsliste (Gültig = grün)", async () => {
+  it("zeigt den Vertragsstatus in seiner Farbe wie in der Vertragsliste (Gültig = grün)", async () => {
     api.getContractRegister.mockResolvedValue(register({ business_status: "gueltig", business_status_label: "Gültig", allowed_transitions: [] }));
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" />);
     const badge = (await screen.findAllByText("Gültig")).map((node) => node.closest(".status-badge")).find(Boolean);
     expect(badge).toHaveClass("status-badge--success");
   });
@@ -219,7 +250,7 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
   it("jeder Kasten hat Bearbeiten/Speichern und Einklappen in seiner Ecke; Abbrechen verwirft nur seine Änderungen", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     await user.type(screen.getByLabelText("Kurzbeschreibung"), " Neu");
     await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));

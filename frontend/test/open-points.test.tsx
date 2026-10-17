@@ -49,7 +49,7 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
     expect(section.querySelectorAll(".btn-primary")).toHaveLength(1);
     await user.click(within(section).getByRole("link", { name: "Vertragsart erfassen" }));
     expect(onOpen).toHaveBeenCalledWith({ tab: "register", field: "term_model" });
-    expect(within(section).getByRole("link", { name: "Leistungen" })).toHaveAttribute("href", "#leistungsumfang-heading");
+    expect(within(section).getByRole("link", { name: "Leistungen" })).toHaveAttribute("href", "/contracts/c-1?tab=services&abschnitt=leistungsumfang");
     expect(await axe(container)).toHaveNoViolations();
   });
 });
@@ -75,3 +75,28 @@ describe("Offene Punkte – Kündbar bis nicht berechenbar", () => {
   });
 });
 
+describe("Offene Punkte – Entscheidung treffen", () => {
+  const base = { gaps: [], tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 0 };
+  it("nennt eine fehlende Entscheidung, Dringlichkeit nach der Frist, mit Sprung zur Karte", () => {
+    const [soon] = buildOpenPoints({ ...base, decision: { due: "2026-09-30", byCancel: true, urgency: "soon" } });
+    expect([soon.word, soon.title, soon.action]).toEqual(["Hinweis", "Entscheidung treffen", "Entscheiden"]);
+    expect(soon.why).toBe("Bis 30.09.2026 entscheiden: verlängern, neu verhandeln, kündigen oder beobachten.");
+    expect(soon.target).toEqual({ tab: "deadlines", section: "decision" });
+    expect(buildOpenPoints({ ...base, decision: { due: "2026-09-30", byCancel: true, urgency: "critical" } })[0].word).toBe("Prüfen");
+    expect(buildOpenPoints({ ...base, decision: { due: "2026-09-30", byCancel: true, urgency: "missed" } })[0].word).toBe("Kritisch");
+    expect(buildOpenPoints({ ...base, decision: null })).toEqual([]);
+  });
+});
+
+describe("Offene Punkte – nächster Umsetzungsschritt", () => {
+  it("nennt den ersten offenen Schritt mit Frist; überfällig = Kritisch", () => {
+    const base = { gaps: [], tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 0 };
+    const stepInput = { label: "Kündigen", title: "Status auf „Gekündigt“ setzen", detail: "Mit Datum.", due: "2026-08-20", target: { tab: "register", section: "status" }, done: 1, total: 4, today: "2026-08-15" };
+    const [point] = buildOpenPoints({ ...base, decisionStep: stepInput });
+    expect([point.word, point.title, point.action]).toEqual(["Prüfen", "Kündigen: Status auf „Gekündigt“ setzen", "Status setzen"]);
+    expect(point.why).toBe("Schritt 2 von 4. Bis 20.08.2026. Mit Datum.");
+    expect(point.target).toEqual({ tab: "register", section: "status" });
+    const [late] = buildOpenPoints({ ...base, decisionStep: { ...stepInput, today: "2026-09-01", target: { action: "change_decision" } } });
+    expect([late.word, late.action, late.target]).toEqual(["Kritisch", "Umsetzung ansehen", { tab: "deadlines", section: "decision" }]);
+  });
+});

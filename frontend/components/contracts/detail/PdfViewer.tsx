@@ -4,12 +4,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EvidenceBbox, SourceNavigationTarget } from "@/lib/contract-detail-types";
 import { contentUrl, sourceRegionUrl } from "@/lib/api";
 import { resolveEvidenceRect, evidencePrecision } from "@/lib/source-geometry";
-import PageControls from "./PageControls";
 
 const BASE_SCALE = 1.25;
 const ZOOM_STEP = 0.25;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 3;
+const THUMB_WIDTH = 110;
+const THUMB_STEP = 6;
+type FitMode = "width" | "page" | "actual";
+
+const toolIcon = (body: JSX.Element) => <svg className="pdf-tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{body}</svg>;
+const TOOL_ICON = {
+  pages: toolIcon(<path d="M8 6h13M8 12h13M8 18h13M3 6h.5M3 12h.5M3 18h.5" />),
+  search: toolIcon(<path d="M11 4a7 7 0 1 1 0 14a7 7 0 1 1 0-14zM20 20l-4-4" />),
+  prev: toolIcon(<path d="m15 6-6 6 6 6" />),
+  next: toolIcon(<path d="m9 6 6 6-6 6" />),
+  minus: toolIcon(<path d="M5 12h14" />),
+  plus: toolIcon(<path d="M12 5v14M5 12h14" />),
+  expand: toolIcon(<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />),
+  collapse: toolIcon(<path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />),
+  chevron: toolIcon(<path d="m6 9 6 6 6-6" />),
+};
 
 interface Props {
   contractId: string;
@@ -19,6 +34,21 @@ interface Props {
   navTarget: SourceNavigationTarget | null;
   /** Meldet die angezeigte Seite (z. B. für „Angabe aus dem Text übernehmen“). */
   onPageChange?: (page: number) => void;
+  /** Seitenleiste mit Vorschaubildern anfangs offen (in schmalen Spalten wie „Nachweise“ geschlossen). */
+  pagesOpen?: boolean;
+  /** Nummerierte Marken der Nachweise auf der Seite (gleiche Nummern wie die Liste); Klick wählt den Nachweis. */
+  markers?: PageMarker[];
+  onMarker?: (id: string) => void;
+}
+
+export interface PageMarker {
+  id: string;
+  number: number;
+  label: string;
+  page: number;
+  bbox: EvidenceBbox;
+  bbox_space: "pdf_points" | "normalized";
+  active: boolean;
 }
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -33,13 +63,15 @@ function sourceErrorMessage(status: number | null, aborted: boolean): string {
   return "Quelle konnte nicht geladen werden.";
 }
 
-export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget, onPageChange }: Props) {
+export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget, onPageChange, pagesOpen = true, markers = [], onMarker }: Props) {
   const [status, setStatus] = useState<LoadStatus>("idle");
   const [errorText, setErrorText] = useState("Quelle konnte nicht geladen werden.");
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [dims, setDims] = useState<{ width: number; height: number } | null>(null);
+  // Seitengröße in Pixeln, sobald der Maßstab feststeht (vor dem Zeichnen) – für die Nachweis-Marken.
+  const [pageBox, setPageBox] = useState<{ width: number; height: number } | null>(null);
   const [retrySeq, setRetrySeq] = useState(0);
   const [refined, setRefined] = useState<{
     key: string;
@@ -53,6 +85,16 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   const pageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const requestSeq = useRef(0);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  // Seitenleiste mit Vorschaubildern, Suche im Text, Vollbild.
+  const [showPages, setShowPages] = useState(pagesOpen);
+  const [thumbCount, setThumbCount] = useState(THUMB_STEP);
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchHits, setSearchHits] = useState<number[] | null>(null);
+  const [hitIndex, setHitIndex] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
   const renderSeq = useRef(0);
   const canRender = status === "ready";
 
@@ -75,6 +117,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     setStatus("loading");
     setErrorText("Quelle konnte nicht geladen werden.");
     setDims(null);
+    setPageBox(null);
     const seq = ++requestSeq.current;
     // Never reuse geometry or an old page count across document versions.
     setRefined(null);
@@ -131,6 +174,67 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (docRef.current) void docRef.current.destroy();
   }, []);
 
+  // Neues Dokument: Suche und Vorschau zurücksetzen.
+  useEffect(() => { setSearchHits(null); setQuery(""); setThumbCount(THUMB_STEP); }, [documentVersionId]);
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement === rootRef.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void rootRef.current?.requestFullscreen?.();
+  }
+
+  /** Seiten mit dem Suchbegriff (Text der PDF-Seiten, ohne Groß-/Kleinschreibung); springt zum ersten Treffer. */
+  async function search() {
+    const doc = docRef.current;
+    const needle = query.trim().toLocaleLowerCase("de-DE");
+    if (!doc || !needle) { setSearchHits(null); return; }
+    setSearching(true);
+    const hits: number[] = [];
+    try {
+      for (let page = 1; page <= doc.numPages; page += 1) {
+        const content = await (await doc.getPage(page)).getTextContent();
+        const text = content.items.map((item) => ("str" in item ? item.str : "")).join(" ").replace(/\s+/g, " ").toLocaleLowerCase("de-DE");
+        if (text.includes(needle)) hits.push(page);
+      }
+    } catch {
+      // Ohne Textebene (z. B. Scan ohne Texterkennung) gibt es keine Treffer.
+    } finally {
+      setSearching(false);
+    }
+    setSearchHits(hits);
+    setHitIndex(0);
+    if (hits.length) setPageNumber(hits[0]);
+  }
+
+  function jumpHit(step: number) {
+    if (!searchHits?.length) return;
+    const next = (hitIndex + step + searchHits.length) % searchHits.length;
+    setHitIndex(next);
+    setPageNumber(searchHits[next]);
+  }
+
+  /** Größe an den sichtbaren Bereich anpassen (Seitenbreite, ganze Seite) oder 100 %. */
+  async function fit(mode: FitMode) {
+    if (mode === "actual") { setZoom(1); return; }
+    const doc = docRef.current;
+    const stage = stageRef.current;
+    if (!doc || !stage) return;
+    try {
+      const base = (await doc.getPage(pageNumber)).getViewport({ scale: BASE_SCALE });
+      const byWidth = (stage.clientWidth - 32) / base.width;
+      const byHeight = (stage.clientHeight - 32) / base.height;
+      const next = mode === "width" ? byWidth : Math.min(byWidth, byHeight);
+      if (Number.isFinite(next) && next > 0) setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)));
+    } catch {
+      // Ohne Maße bleibt die aktuelle Größe.
+    }
+  }
+
   const renderPage = useCallback(async () => {
     const seq = ++renderSeq.current;
     const pdfjs = pdfRef.current;
@@ -155,6 +259,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (seq !== renderSeq.current || doc !== docRef.current || canvas !== pageCanvasRef.current) return;
     const scale = BASE_SCALE * zoom;
     const viewport = page.getViewport({ scale });
+    setPageBox({ width: Math.floor(viewport.width), height: Math.floor(viewport.height) });
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
     canvas.style.width = `${canvas.width}px`;
@@ -279,19 +384,44 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     return <div className="pdf-viewer pdf-idle" role="region" aria-label="Quellansicht"><p className="pdf-placeholder">Wählen Sie oben ein Quelldokument aus, um die Quelle zu öffnen.</p></div>;
   }
 
+  const hitNow = searchHits && searchHits.length ? searchHits[hitIndex] : null;
   return (
-    <section className="pdf-viewer" aria-label="Quellansicht (PDF)">
-      <PageControls
-        pageNumber={pageNumber}
-        pageCount={pageCount}
-        zoom={zoom}
-        canRender={canRender}
-        onPrev={() => setPageNumber((p) => Math.max(1, p - 1))}
-        onNext={() => setPageNumber((p) => Math.min(pageCount, p + 1))}
-        onZoomOut={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}
-        onZoomIn={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
-        onResetZoom={() => setZoom(1)}
-      />
+    <section className="pdf-viewer" aria-label="Quellansicht (PDF)" ref={rootRef}>
+      <div className="pdf-controls" role="toolbar" aria-label="PDF-Ansicht steuern">
+        <button type="button" className="pdf-tool" aria-pressed={showPages} onClick={() => setShowPages((open) => !open)}>{TOOL_ICON.pages}Seiten</button>
+        <form className="pdf-search" role="search" onSubmit={(event) => { event.preventDefault(); void search(); }}>
+          {TOOL_ICON.search}
+          <label className="visually-hidden" htmlFor={`pdf-search-${documentVersionId}`}>Im Dokument suchen</label>
+          <input id={`pdf-search-${documentVersionId}`} type="search" placeholder="Im Dokument suchen" value={query} disabled={!canRender}
+            onChange={(event) => { setQuery(event.target.value); setSearchHits(null); }} />
+          {searchHits ? <span className="pdf-search-result" aria-live="polite">
+            {searchHits.length === 0 ? "Kein Treffer" : <>
+              <button type="button" aria-label="Vorheriger Treffer" disabled={searchHits.length < 2} onClick={() => jumpHit(-1)}>‹</button>
+              {hitIndex + 1}/{searchHits.length} · S. {hitNow}
+              <button type="button" aria-label="Nächster Treffer" disabled={searchHits.length < 2} onClick={() => jumpHit(1)}>›</button>
+            </>}
+          </span> : searching ? <span className="pdf-search-result" role="status">Suche …</span> : null}
+        </form>
+        <span className="pdf-tool-group">
+          <button type="button" className="pdf-icon-btn" aria-label="Vorherige Seite" disabled={!canRender || pageNumber <= 1} onClick={() => setPageNumber((p) => Math.max(1, p - 1))}>{TOOL_ICON.prev}</button>
+          <span className="page-indicator" aria-live="polite"><span className="visually-hidden">Seite </span>{pageNumber} / {pageCount}</span>
+          <button type="button" className="pdf-icon-btn" aria-label="Nächste Seite" disabled={!canRender || pageNumber >= pageCount} onClick={() => setPageNumber((p) => Math.min(pageCount, p + 1))}>{TOOL_ICON.next}</button>
+        </span>
+        <span className="pdf-tool-group">
+          <button type="button" className="pdf-icon-btn" aria-label="Zoom verkleinern" disabled={!canRender} onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}>{TOOL_ICON.minus}</button>
+          <button type="button" className="zoom-value" aria-label="Zoom zurücksetzen" disabled={!canRender} onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="pdf-icon-btn" aria-label="Zoom vergrößern" disabled={!canRender} onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}>{TOOL_ICON.plus}</button>
+        </span>
+        <label className="pdf-fit"><span className="visually-hidden">Größe anpassen</span>
+          <select value="" disabled={!canRender} onChange={(event) => { const mode = event.target.value as FitMode; if (mode) void fit(mode); }}>
+            <option value="">Anpassen</option>
+            <option value="width">Seitenbreite</option>
+            <option value="page">Ganze Seite</option>
+            <option value="actual">100 %</option>
+          </select>
+        </label>
+        <button type="button" className="pdf-tool pdf-fullscreen" onClick={toggleFullscreen}>{TOOL_ICON.expand}{fullscreen ? "Vollbild beenden" : "Vollbild"}</button>
+      </div>
       {status === "loading" && <p className="pdf-status" role="status">Quelle wird geladen…</p>}
       {status === "error" && (
         <div className="pdf-status pdf-error" role="alert">
@@ -300,7 +430,25 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
           <button type="button" className="btn-link" onClick={() => setRetrySeq((n) => n + 1)}>Erneut laden</button>
         </div>
       )}
-      {canRender && <div className="pdf-stage"><div className="pdf-page-wrap" style={{ width: dims?.width }}><canvas ref={pageCanvasRef} className="pdf-page-canvas" /><canvas ref={overlayCanvasRef} className="pdf-overlay-canvas" aria-hidden="true" /></div></div>}
+      {canRender && <div className={`pdf-body${showPages ? " has-pages" : ""}`}>
+        {showPages ? <nav className="pdf-thumbs" aria-label="Seiten">
+          <button type="button" className="pdf-thumbs-close" aria-label="Seitenleiste schließen" onClick={() => setShowPages(false)}>{TOOL_ICON.collapse}</button>
+          <ol>{Array.from({ length: Math.min(thumbCount, pageCount) }, (_, index) => index + 1).map((page) => <li key={page}>
+            <button type="button" className={page === pageNumber ? "is-current" : undefined} aria-current={page === pageNumber ? "page" : undefined} aria-label={`Seite ${page}`} onClick={() => setPageNumber(page)}>
+              <PageThumb docRef={docRef} page={page} version={documentVersionId} />
+              <span className="pdf-thumb-number" aria-hidden="true">{page}</span>
+            </button>
+          </li>)}</ol>
+          {thumbCount < pageCount ? <button type="button" className="btn btn-sm pdf-thumbs-more" onClick={() => setThumbCount((count) => count + THUMB_STEP)}>Weitere Seiten{TOOL_ICON.chevron}</button> : null}
+        </nav> : null}
+        <div className="pdf-stage" ref={stageRef}><div className="pdf-page-wrap" style={{ width: dims?.width ?? pageBox?.width }}><canvas ref={pageCanvasRef} className="pdf-page-canvas" /><canvas ref={overlayCanvasRef} className="pdf-overlay-canvas" aria-hidden="true" />
+          {pageBox ? markers.filter((marker) => marker.page === pageNumber).map((marker) => {
+            const rect = resolveEvidenceRect(marker.bbox, marker.bbox_space, BASE_SCALE * zoom, pageBox);
+            if (!rect) return null;
+            return <button key={marker.id} type="button" className={`pdf-marker${marker.active ? " is-active" : ""}`} style={{ left: Math.max(0, rect.x - 12), top: Math.max(0, rect.y - 12) }}
+              aria-label={`Nachweis ${marker.number}: ${marker.label}`} aria-pressed={marker.active} onClick={() => onMarker?.(marker.id)}>{marker.number}</button>;
+          }) : null}</div></div>
+      </div>}
       {navTarget && navTarget.document_version_id === documentVersionId && pageNumber === navTarget.page && navTarget.page != null && (
         <p className="pdf-nav-info" aria-live="polite">
           {refined?.key === `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}` && refined.status === "exact" && refined.bbox
@@ -312,4 +460,34 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
       )}
     </section>
   );
+}
+
+/** Vorschaubild einer Seite (klein gerendert, einmal je Dokument und Seite). */
+function PageThumb({ docRef, page, version }: { docRef: { current: PdfDoc | null }; page: number; version: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    let task: { cancel: () => void; promise: Promise<unknown> } | null = null;
+    (async () => {
+      const doc = docRef.current;
+      const canvas = canvasRef.current;
+      if (!doc || !canvas) return;
+      try {
+        const pdfPage = await doc.getPage(page);
+        if (cancelled) return;
+        const base = pdfPage.getViewport({ scale: 1 });
+        const viewport = pdfPage.getViewport({ scale: THUMB_WIDTH / base.width });
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        task = pdfPage.render({ canvasContext: ctx, viewport }) as unknown as { cancel: () => void; promise: Promise<unknown> };
+        await task.promise;
+      } catch {
+        // Vorschau ist nur Komfort; die Seite selbst bleibt erreichbar.
+      }
+    })();
+    return () => { cancelled = true; task?.cancel(); };
+  }, [docRef, page, version]);
+  return <canvas ref={canvasRef} className="pdf-thumb-canvas" aria-hidden="true" />;
 }

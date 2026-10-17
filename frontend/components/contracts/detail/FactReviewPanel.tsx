@@ -7,6 +7,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { useToast } from "@/components/ui/Toast";
 import { ROLE_LABELS } from "@/lib/auth-types";
 import type { ContractDetailResponse, EvidenceRef, FactReviewStateDto, FactReviewDto } from "@/lib/contract-detail-types";
+import AiOrigin from "@/components/ui/AiOrigin";
+import { visibleReviewFacts } from "@/lib/review-facts";
 import ValueOriginBadge, { type ValueOriginKind } from "./ValueOriginBadge";
 
 interface Props {
@@ -16,6 +18,8 @@ interface Props {
   onNavigate?: (ev: EvidenceRef) => void;
   /** Zu „Widerspruch klären“ (Übersicht). */
   onOpenConflict?: () => void;
+  /** Diese Angabe zeigen (Klick auf eine KI-Plakette); `n` ändert sich bei jedem Klick. */
+  focusFact?: { key: string; n: number } | null;
 }
 
 type ViewMode = "focus" | "table";
@@ -91,11 +95,15 @@ export function ConfidenceBadge({ value, byRule }: { value: number | null | unde
   return <Signal tone={percent < 70 ? "warning" : "neutral"} size="sm" title="Wie sicher die KI bei diesem Vorschlag ist (bester Beleg)">KI-Sicherheit {percent} %</Signal>;
 }
 
-function StateSignal({ state, label }: { state: string; label: string }) {
+function StateSignal({ state, label, present, factKey }: { state: string; label: string; present: boolean; factKey: string }) {
+  // KI-Werte tragen die einheitliche Plakette; Korrigiert/Verworfen und fehlende Angaben bleiben Signale.
+  if (present && state === "confirmed") return <AiOrigin state="confirmed" size="md" factKey={factKey} />;
+  if (present && state === "auto_accepted") return <AiOrigin state="auto" size="md" factKey={factKey} />;
+  if (present && stateSignal(state) === "ai") return <AiOrigin state="unreviewed" size="md" factKey={factKey} />;
   return <Signal tone={stateSignal(state)}>{RESULT_VERB[state] ?? (stateSignal(state) === "ai" ? "KI-Vorschlag" : label)}</Signal>;
 }
 
-export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate, onOpenConflict }: Props) {
+export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate, onOpenConflict, focusFact }: Props) {
   const toast = useToast();
   const panelRef = useRef<HTMLElement | null>(null);
   const { account, role } = useAuth();
@@ -116,9 +124,20 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate, o
   const cr = data.contract_review;
 
   const states = useMemo(
-    () => (data.fact_review_states ?? []).filter((s) => s.present || s.state !== "unreviewed" || s.has_history),
+    () => visibleReviewFacts({ fact_review_states: data.fact_review_states }),
     [data.fact_review_states]
   );
+
+  // Klick auf eine KI-Plakette: genau diese Angabe zeigen (Einzelansicht, alle Angaben in der Liste).
+  useEffect(() => {
+    if (!focusFact) return;
+    setActiveFact(focusFact.key);
+    setView("focus");
+    setNavFilter("all");
+    setEditFact(null);
+    setHistoryFact(null);
+    panelRef.current?.scrollIntoView?.({ block: "start" });
+  }, [focusFact]);
   const openStates = useMemo(() => states.filter((s) => s.present && !["confirmed", "corrected", "voided", "auto_accepted"].includes(s.state)), [states]);
   const navStates = navFilter === "open" ? openStates : states;
   const selected = states.find((s) => s.fact_key === (activeFact ?? states[0]?.fact_key)) ?? states[0] ?? null;
@@ -314,16 +333,16 @@ export default function FactReviewPanel({ data, orgSlug, onReload, onNavigate, o
       </div>
 
       {states.length === 0 ? <p className="muted">Keine Angaben vorhanden.</p> : view === "table" ? (
-        <div className="fr-table-wrap"><table className="fr-table"><thead><tr><th>Angabe</th><th>Original</th><th>Wirksam</th><th>Quelle</th><th>Status</th>{canReview ? <th>Aktion</th> : null}</tr></thead><tbody>{states.map((s) => <tr key={s.fact_key}><td><button className="fr-table-name" onClick={() => selectFact(s.fact_key)}>{s.label_de}</button>{s.is_critical && <small>kritisch</small>}</td><td><span className="fr-value-with-origin">{valueText(s.original_value)}<ValueOriginBadge kind={originKind(s, "original")} /><ConfidenceBadge value={s.ai_confidence} byRule={s.found_by_rule} /></span></td><td><span className="fr-value-with-origin"><strong>{valueText(s.effective_value)}</strong><ValueOriginBadge kind={originKind(s, "effective")} /></span></td><td><EvidenceButtons s={s} /></td><td><StateSignal state={s.state} label={s.state_label_de} />{s.reopen_note ? <small className="fr-reopen-note">{s.reopen_note}</small> : null}</td>{canReview ? <td><div className="fr-table-actions"><button title="Bestätigen" aria-label={`${s.label_de} bestätigen`} onClick={() => void confirmFact(s.fact_key)} disabled={busy}><span aria-hidden="true">✓</span></button><button title="Korrigieren" aria-label={`${s.label_de} korrigieren`} onClick={() => { setActiveFact(s.fact_key); setEditFact(s.fact_key); setView("focus"); }} disabled={busy}><span aria-hidden="true">✎</span></button><button title="Historie" aria-label={`Historie von ${s.label_de}`} onClick={() => { setActiveFact(s.fact_key); setHistoryFact(s.fact_key); setView("focus"); }}><span aria-hidden="true">◷</span></button></div></td> : null}</tr>)}</tbody></table></div>
+        <div className="fr-table-wrap"><table className="fr-table"><thead><tr><th>Angabe</th><th>Original</th><th>Wirksam</th><th>Quelle</th><th>Status</th>{canReview ? <th>Aktion</th> : null}</tr></thead><tbody>{states.map((s) => <tr key={s.fact_key}><td><button className="fr-table-name" onClick={() => selectFact(s.fact_key)}>{s.label_de}</button>{s.is_critical && <small>kritisch</small>}</td><td><span className="fr-value-with-origin">{valueText(s.original_value)}<ValueOriginBadge kind={originKind(s, "original")} /><ConfidenceBadge value={s.ai_confidence} byRule={s.found_by_rule} /></span></td><td><span className="fr-value-with-origin"><strong>{valueText(s.effective_value)}</strong><ValueOriginBadge kind={originKind(s, "effective")} /></span></td><td><EvidenceButtons s={s} /></td><td><StateSignal state={s.state} label={s.state_label_de} present={s.present} factKey={s.fact_key} />{s.reopen_note ? <small className="fr-reopen-note">{s.reopen_note}</small> : null}</td>{canReview ? <td><div className="fr-table-actions"><button title="Bestätigen" aria-label={`${s.label_de} bestätigen`} onClick={() => void confirmFact(s.fact_key)} disabled={busy}><span aria-hidden="true">✓</span></button><button title="Korrigieren" aria-label={`${s.label_de} korrigieren`} onClick={() => { setActiveFact(s.fact_key); setEditFact(s.fact_key); setView("focus"); }} disabled={busy}><span aria-hidden="true">✎</span></button><button title="Historie" aria-label={`Historie von ${s.label_de}`} onClick={() => { setActiveFact(s.fact_key); setHistoryFact(s.fact_key); setView("focus"); }}><span aria-hidden="true">◷</span></button></div></td> : null}</tr>)}</tbody></table></div>
       ) : (
         <div className="fr-focus-layout">
           <nav ref={navRef} className="fr-fact-nav" aria-label="Materiale Angaben" onKeyDown={navKey}><div className="fr-nav-head"><strong>Angaben</strong><span className="fr-nav-filter" role="group" aria-label="Angaben filtern"><button type="button" aria-pressed={navFilter === "open"} onClick={() => setNavFilter("open")}>Offen {openStates.length}</button><button type="button" aria-pressed={navFilter === "all"} onClick={() => setNavFilter("all")}>Alle {states.length}</button></span></div>{data.evidence.length ? <p className="fr-nav-note">{data.evidence.length} Nachweise in {states.length} Angaben – mehrere Belege zum selben Wert stehen bei einer Angabe.</p> : null}{navFilter === "open" && !openStates.length ? <p className="fr-nav-note">Keine offenen Angaben – alles geprüft.</p> : null}{navStates.map((s) => <button key={s.fact_key} type="button" className={selected?.fact_key === s.fact_key ? "active" : ""} onClick={() => selectFact(s.fact_key)}><span className="fr-nav-index">{states.indexOf(s) + 1}</span><span><strong>{s.label_de}</strong><small>{s.is_critical ? "Kritisch" : s.is_evidence_item ? "Weiterer Nachweis" : "Standard"}{originNote(s)}</small></span><SignalIcon tone={stateSignal(s.state)} className={`fr-status-icon fr-status-icon--${stateSignal(s.state)}`} /><span className="sr-only">{RESULT_VERB[s.state] ?? "KI-Vorschlag"}</span></button>)}</nav>
           {selected && <article className="fr-fact-detail">
-            <div className="fr-detail-head"><div><span className="fr-step">Angabe {selectedIndex + 1} von {states.length}</span><h3>{selected.label_de}</h3>{selected.is_critical && <span className="fr-critical-label">Kritische Angabe</span>}</div><StateSignal state={selected.state} label={selected.state_label_de} /></div>{selected.reopen_note ? <p className="fr-reopen-note" role="status">{selected.reopen_note}</p> : null}
+            <div className="fr-detail-head"><div><span className="fr-step">Angabe {selectedIndex + 1} von {states.length}</span><h3>{selected.label_de}</h3>{selected.is_critical && <span className="fr-critical-label">Kritische Angabe</span>}</div><StateSignal state={selected.state} label={selected.state_label_de} present={selected.present} factKey={selected.fact_key} /></div>{selected.reopen_note ? <p className="fr-reopen-note" role="status">{selected.reopen_note}</p> : null}
             {(data.warnings ?? []).filter((warning) => warning.requires_review && warning.conflict?.fact_key === selected.fact_key).map((warning) => <p key={warning.conflict!.title_de} className="fr-conflict-note" role="status"><Signal tone="warning" size="sm">Widerspruch</Signal><span>{warning.conflict!.explanation_de}</span>{onOpenConflict ? <button type="button" className="rg-link" onClick={onOpenConflict}>Widerspruch klären</button> : null}</p>)}
             <div className="fr-value-grid">
-              <div><label>Original aus Dokument <ValueOriginBadge kind={originKind(selected, "original")} /> <ConfidenceBadge value={selected.ai_confidence} byRule={selected.found_by_rule} /></label><div className="fr-value-box">{valueText(selected.original_value)}</div></div>
-              <div><label>Wirksam im System <ValueOriginBadge kind={originKind(selected, "effective")} /></label><div className="fr-value-box effective">{valueText(selected.effective_value)}</div></div>
+              <div><label>Original aus Dokument <ValueOriginBadge kind={originKind(selected, "original")} factKey={selected.fact_key} /> <ConfidenceBadge value={selected.ai_confidence} byRule={selected.found_by_rule} /></label><div className="fr-value-box">{valueText(selected.original_value)}</div></div>
+              <div><label>Wirksam im System <ValueOriginBadge kind={originKind(selected, "effective")} factKey={selected.fact_key} /></label><div className="fr-value-box effective">{valueText(selected.effective_value)}</div></div>
             </div>
             <div className="fr-source-block"><strong>Quellen-Beleg</strong><EvidenceButtons s={selected} /></div>
             {selected.reviewed_at && <p className="fr-reviewed"><strong>{RESULT_VERB[selected.state] ?? "Geprüft"}</strong> · {selected.reviewer_display_name ?? "–"} · {stampTime(selected.reviewed_at)}</p>}

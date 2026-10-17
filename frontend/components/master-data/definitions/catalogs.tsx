@@ -14,6 +14,8 @@ import {
   type LookupDto,
 } from "@/lib/domain-api/catalogs";
 import { SECTION_KEYS, SECTION_LABELS, type SectionKey } from "@/lib/contract-sections";
+import type { ReminderLead, ReminderUnit } from "@/lib/domain-api/register";
+import { leadText } from "@/lib/reminder-leads";
 import { optional, text, type EntityDefinition } from "../types";
 
 export interface TypeContext {
@@ -36,6 +38,29 @@ function sections(form: Record<string, unknown>): SectionKey[] | null {
   if (form.sections_default === true) return null;
   const chosen = Array.isArray(form.sections) ? (form.sections as string[]) : [];
   return SECTION_KEYS.filter((key) => chosen.includes(key));
+}
+
+// Erinnerungs-Standard je Vertragstyp (deadlines/system.py): Auswahl fester Vorlaufzeiten, leer = Organisation (4 Monate).
+const LEAD_OPTIONS: ReminderLead[] = [
+  { value: 6, unit: "months" }, { value: 4, unit: "months" }, { value: 3, unit: "months" }, { value: 2, unit: "months" }, { value: 1, unit: "months" },
+  { value: 2, unit: "weeks" }, { value: 1, unit: "weeks" }, { value: 3, unit: "days" }, { value: 1, unit: "days" },
+];
+const leadKey = (lead: ReminderLead) => `${lead.value}:${lead.unit}`;
+
+function reminderLeads(form: Record<string, unknown>): ReminderLead[] | null {
+  const chosen = Array.isArray(form.reminder_leads) ? (form.reminder_leads as string[]) : [];
+  const leads = chosen.map((key) => { const [value, unit] = key.split(":"); return { value: Number(value), unit: unit as ReminderUnit }; });
+  return leads.length ? leads : null;
+}
+
+function escalationDays(form: Record<string, unknown>): number | null {
+  const raw = typeof form.escalation_days_before === "string" ? form.escalation_days_before.trim() : "";
+  return raw === "" ? null : Number(raw);
+}
+
+function reminderLabel(row: ContractTypeDto): string {
+  const leads = row.reminder_leads?.length ? row.reminder_leads.map(leadText).join(", ") : "Standard";
+  return row.escalation_days_before != null ? `${leads} · Eskalation ${row.escalation_days_before} Tage vorher` : leads;
 }
 
 function sectionsLabel(row: ContractTypeDto): string {
@@ -63,6 +88,7 @@ export const contractTypeDefinition: EntityDefinition<ContractTypeDto, TypeConte
     { key: "confidential", label: "Vertraulich", sortValue: (row) => (row.is_confidential ? 0 : 1), render: (row) => (row.is_confidential ? <Badge tone="info">Vertraulich</Badge> : "–") },
     { key: "retention", label: "Aufbewahrung", numeric: true, sortValue: (row) => row.retention_years ?? -1, render: (row) => (row.retention_years == null ? "Standard" : `${row.retention_years} Jahre`) },
     { key: "sections", label: "Abschnitte", sortValue: sectionsLabel, render: (row) => <>{sectionsLabel(row)}{row.sections_default === false ? <> <Badge tone="neutral">angepasst</Badge></> : null}</> },
+    { key: "reminders", label: "Erinnerung", sortValue: reminderLabel, render: (row) => reminderLabel(row) },
     { key: "categories", label: "Kategorien", numeric: true, render: (row) => context.categories.filter((item) => item.contract_type_ids.includes(row.id) && item.is_active).length },
   ],
   fields: () => [
@@ -76,14 +102,26 @@ export const contractTypeDefinition: EntityDefinition<ContractTypeDto, TypeConte
       hint: "Nicht gewählte Abschnitte werden ausgeblendet, solange sie leer sind – gepflegte oder gefundene Angaben bleiben immer sichtbar.",
     },
     { key: "sections_default", label: "Standard für diesen Vertragstyp verwenden", kind: "checkbox", hint: "Wartung/Service: alle; Dienstleistung, Lizenz u. Ä.: Leistungsumfang und SLA; Miete, Leasing, Kauf: Geräte; Versicherung, Mitgliedschaft u. Ä.: keine. Eigene Typen: alle." },
+    {
+      key: "reminder_leads", label: "Erinnern vor Kündigungstermin bzw. Vertragsende", kind: "checks", section: "Erinnerungen",
+      options: LEAD_OPTIONS.map((lead) => ({ value: leadKey(lead), label: leadText(lead) })),
+      hint: "Gilt für Verträge dieses Typs ohne eigene Einstellung („Standard“). Nichts gewählt = Standard der Organisation (4 Monate vorher). Beispiel Wartungsvertrag: 3 Monate und 1 Monat vorher.",
+    },
+    { key: "escalation_days_before", label: "Eskalation, wenn nicht erledigt (Tage vor dem Termin)", kind: "number", min: 0, max: 365, section: "Erinnerungen", hint: "Geht an die Eskalationsperson des Vertrags. Leer = erst, wenn der Termin überfällig ist. Beispiel: Wartungsvertrag 14, sonst 7." },
   ],
-  emptyForm: (_context, preset) => ({ label: "", description: "", is_confidential: false, retention_years: "", sections: [...SECTION_KEYS], sections_default: false, ...preset }),
-  toForm: (row) => ({ label: row.label, description: row.description ?? "", is_confidential: row.is_confidential, retention_years: row.retention_years == null ? "" : String(row.retention_years), sections: [...(row.sections ?? SECTION_KEYS)], sections_default: row.sections_default !== false }),
+  emptyForm: (_context, preset) => ({ label: "", description: "", is_confidential: false, retention_years: "", sections: [...SECTION_KEYS], sections_default: false, reminder_leads: [], escalation_days_before: "", ...preset }),
+  toForm: (row) => ({
+    label: row.label, description: row.description ?? "", is_confidential: row.is_confidential, retention_years: row.retention_years == null ? "" : String(row.retention_years),
+    sections: [...(row.sections ?? SECTION_KEYS)], sections_default: row.sections_default !== false,
+    reminder_leads: (row.reminder_leads ?? []).map(leadKey), escalation_days_before: row.escalation_days_before == null ? "" : String(row.escalation_days_before),
+  }),
   create: (organizationSlug, form) => createContractType(organizationSlug, {
     label: text(form, "label"), description: optional(form, "description"), is_confidential: form.is_confidential === true, retention_years: retention(form), sections: sections(form) ?? undefined,
+    reminder_leads: reminderLeads(form), escalation_days_before: escalationDays(form),
   }),
   update: (organizationSlug, row, form) => updateContractType(organizationSlug, row.id, {
     label: text(form, "label"), description: optional(form, "description"), is_confidential: form.is_confidential === true, retention_years: retention(form),
+    reminder_leads: reminderLeads(form), escalation_days_before: escalationDays(form),
     ...({ sections: sections(form) } as unknown as Partial<ContractTypeDto>),
   }),
   setActive: (organizationSlug, row, active) => updateContractType(organizationSlug, row.id, { is_active: active }),

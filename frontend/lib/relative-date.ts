@@ -33,9 +33,14 @@ const LEAD_WORDS: Record<Unit, { one: string; many: string }> = {
 function amount(days: number): { n: number; unit: Unit } {
   if (days <= 14) return { n: days, unit: "day" };
   if (days <= 84) return { n: Math.round(days / 7), unit: "week" };
-  const months = Math.round(days / 30.4375);
-  if (months < 12) return { n: months, unit: "month" };
-  return { n: Math.floor(days / 365.25), unit: "year" };
+  return { n: Math.round(days / 30.4375), unit: "month" };
+}
+
+/** Volle Kalendermonate zwischen zwei Daten (früheres zuerst). */
+function calendarMonths(from: string, to: string): number {
+  const [y1, m1, d1] = from.slice(0, 10).split("-").map(Number);
+  const [y2, m2, d2] = to.slice(0, 10).split("-").map(Number);
+  return (y2 - y1) * 12 + (m2 - m1) - (d2 < d1 ? 1 : 0);
 }
 
 /**
@@ -47,9 +52,15 @@ export function formatRelativeDate(date: string, today: string): string {
   if (days === 0) return "heute";
   if (days === 1) return "morgen";
   if (days === -1) return "gestern";
+  const prefix = days > 0 ? "in" : "vor";
   const { n, unit } = amount(Math.abs(days));
-  const word = n === 1 ? WORDS[unit].one : WORDS[unit].many;
-  return days > 0 ? `in ${n} ${word}` : `vor ${n} ${word}`;
+  if (unit !== "month" || n < 12) return `${prefix} ${n} ${n === 1 ? WORDS[unit].one : WORDS[unit].many}`;
+  // Ab einem Jahr: „in 2 Jahren, 5 Monaten“ (volle Kalendermonate).
+  const months = days > 0 ? calendarMonths(today, date) : calendarMonths(date, today);
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  const yearText = `${years} ${years === 1 ? WORDS.year.one : WORDS.year.many}`;
+  return rest ? `${prefix} ${yearText}, ${rest} ${rest === 1 ? WORDS.month.one : WORDS.month.many}` : `${prefix} ${yearText}`;
 }
 
 function isMonthEnd(iso: string): boolean {

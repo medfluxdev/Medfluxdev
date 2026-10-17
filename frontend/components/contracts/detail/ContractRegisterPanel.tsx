@@ -13,6 +13,7 @@ import ContractAccessCard, { type AccessChanges } from "./ContractAccessCard";
 import ContractRetentionCard from "./ContractRetentionCard";
 import type { FormValues } from "@/components/master-data/types";
 import MissingList from "@/components/ui/MissingList";
+import AiOrigin from "@/components/ui/AiOrigin";
 import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { useSaveShortcut, useUnsavedChanges } from "@/components/ui/useFormGuards";
@@ -36,7 +37,6 @@ import {
   acceptRegisterProposal,
   changeContractStatus,
   getContractRegister,
-  saveReminderLeads,
   updateContractConfidentiality,
   updateContractRegister,
   type BusinessStatus,
@@ -45,32 +45,33 @@ import {
   type NoticeTo,
   type RegisterField,
   type RegisterValue,
-  type ReminderLead,
-  type ReminderUnit,
   type TermModel,
 } from "@/lib/domain-api/register";
 import { PRICE_ADJUSTMENT_LABEL } from "@/lib/domain-api/finance";
 import { usePermissions } from "@/lib/use-permissions";
-import { FIELD_PARAM, baseFieldKey } from "@/lib/fix-targets";
+import { FIELD_PARAM, REVIEW_TARGET, baseFieldKey, contractHref } from "@/lib/fix-targets";
+import Link from "next/link";
+import ActionMenu from "@/components/ui/ActionMenu";
 import { revealBox } from "@/lib/box-collapse";
 
 type Draft = Record<string, RegisterValue>;
-type FieldKind = "reminders" | "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "todo" | "auto_number";
+type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "auto_number";
 type FieldDef = { key: string; kind: FieldKind };
 
 const PERIODS = ["initial_term", "minimum_term", "notice_period", "renewal_period"] as const;
 
-// „data“ = Reiter Vertragsdaten (was der Vertrag ist), „deadlines“ = Reiter Fristen & Aufgaben (was zu tun ist).
-export type RegisterView = "data" | "deadlines";
+// „data“ = Reiter Vertragsdaten (was der Vertrag ist), „deadlines“ = Reiter Fristen & Aufgaben (was zu tun ist),
+/** data = Vertragsdaten, deadlines = Fristen & Aufgaben, status = Karte „Vertragsstatus“ auf der Übersicht. */
+export type RegisterView = "data" | "deadlines" | "status";
 
 const svgIcon = (body: ReactNode) => <svg viewBox="0 0 24 24" focusable="false">{body}</svg>;
 // Kachel je Kasten: Symbol + Kennfarbe der Art von Angabe (dekorativ, nie ein Zustand).
 const SECTION_ICONS: Record<string, { icon: ReactNode; tile: string }> = {
   identity: { icon: svgIcon(<><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4M10 12h5M10 16h5" /></>), tile: "section-tile--partner" },
   term: { icon: svgIcon(<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></>), tile: "section-tile--type" },
-  reminder: { icon: svgIcon(<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16M10 20a2 2 0 0 0 4 0" />), tile: "section-tile--dept" },
   organisation: { icon: svgIcon(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />), tile: "section-tile--cost" },
   price: { icon: svgIcon(<path d="M4 17l6-6 4 4 6-7M15 8h5v5" />), tile: "section-tile--cost" },
+  service: { icon: svgIcon(<><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></>), tile: "section-tile--device" },
 };
 const STATUS_ICON = svgIcon(<path d="M5 21V4h11l-1.5 4L16 12H5" />);
 
@@ -109,18 +110,6 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
     ],
   },
   {
-    id: "reminder",
-    title: "Erinnerungen",
-    description: "Wann und an wen vor Fristen erinnert wird",
-    view: "deadlines",
-    fields: [
-      { key: "reminder_lead_months", kind: "reminders" },
-      { key: "reminder_recipient_account_id", kind: "account" },
-      { key: "escalation_recipient_account_id", kind: "account" },
-      { key: "reminder_todo", kind: "todo" },
-    ],
-  },
-  {
     id: "organisation",
     title: "Ablage & Abrechnung",
     description: "Original, Konto und Abrechnungsart",
@@ -148,6 +137,63 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
 const RETENTION_KEYS = new Set(["retention_years_after_end"]);
 const ACCESS_KEYS = new Set(["data_protection_relevant"]);
 const TERMINATION_KEYS = new Set(["terminated_on", "terminated_effective"]);
+
+// Karte „Vertragsstatus“: der normale Weg eines Vertrags (Storniert liegt daneben).
+const STATUS_PATH = ["in_arbeit", "gueltig", "gekuendigt", "beendet"] as const;
+const STEP_CHECK = <svg viewBox="0 0 24 24" focusable="false"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>;
+const dateOf = (value: RegisterValue | undefined) => (value ? formatDate(String(value)) : null);
+
+/** Was der Status bedeutet und was als Nächstes zu tun ist. */
+const STATUS_STAGE: Partial<Record<BusinessStatus, { title: (r: ContractRegister) => string; text: (r: ContractRegister) => string }>> = {
+  in_arbeit: {
+    title: (r) => (r.missing_for_valid.length ? "In Arbeit – noch nicht freigegeben" : "Bereit zur Freigabe"),
+    text: (r) => (r.missing_for_valid.length
+      ? `Für „Gültig“ fehlen noch ${r.missing_for_valid.length} ${r.missing_for_valid.length === 1 ? "Angabe" : "Angaben"}. Erst danach werden Fristen und Kosten überwacht.`
+      : "Alle Pflichtangaben sind da. Mit „Gültig“ beginnt die Überwachung von Fristen, Erinnerungen und Kosten."),
+  },
+  gueltig: {
+    title: () => "Gültig – läuft",
+    text: (r) => `Fristen und Erinnerungen werden überwacht${r.terms.cancel_by ? ` · kündbar bis ${formatDate(r.terms.cancel_by)}` : ""}${r.terms.actual_end ?? r.terms.possible_end ? ` · Vertragsende ${formatDate((r.terms.actual_end ?? r.terms.possible_end)!)}` : ""}. Kündigung versendet? Hier erfassen, damit die Überwachung zum richtigen Tag endet.`,
+  },
+  gekuendigt: {
+    title: (r) => `Gekündigt${r.fields.terminated_effective?.value ? ` zum ${dateOf(r.fields.terminated_effective.value)}` : ""}`,
+    text: () => "Bis zum Vertragsende laufen Kosten und Termine weiter. Danach den Vertrag als beendet markieren.",
+  },
+  beendet: {
+    title: (r) => `Beendet${r.ended_on ? ` am ${formatDate(r.ended_on)}` : ""}`,
+    text: () => "Keine Fristen mehr. Aufbewahrung und Löschprüfung laufen weiter.",
+  },
+  geloescht: {
+    title: () => "Storniert",
+    text: () => "Der Vertrag ist als ungültig markiert und zählt in keiner Auswertung. Die Daten bleiben erhalten.",
+  },
+};
+
+/** Beschriftung eines Statuswechsels als Handlung. */
+function transitionLabel(target: BusinessStatus, current: BusinessStatus): string {
+  if (current === "geloescht") return `Stornierung aufheben (→ ${BUSINESS_STATUS_LABEL[target]})`;
+  if (target === "gueltig") return current === "in_arbeit" ? "Als gültig freigeben" : "Wieder auf „Gültig“ setzen";
+  if (target === "gekuendigt") return "Kündigung erfassen";
+  if (target === "beendet") return "Als beendet markieren";
+  if (target === "geloescht") return "Stornieren";
+  if (target === "in_arbeit") return "Zurück auf „In Arbeit“";
+  return `Auf „${BUSINESS_STATUS_LABEL[target]}“ setzen`;
+}
+
+/** Datum bzw. Hinweis unter einer Stufe (nur gepflegte bzw. berechnete Werte). */
+function stepNote(step: (typeof STATUS_PATH)[number], state: string, r: ContractRegister): string {
+  if (step === "gekuendigt") {
+    if (state !== "todo") return [dateOf(r.fields.terminated_on?.value) ? `am ${dateOf(r.fields.terminated_on?.value)}` : null, dateOf(r.fields.terminated_effective?.value) ? `zum ${dateOf(r.fields.terminated_effective?.value)}` : null].filter(Boolean).join(" · ");
+    return r.terms.cancel_by ? `kündbar bis ${formatDate(r.terms.cancel_by)}` : "";
+  }
+  if (step === "beendet") {
+    if (state !== "todo") return r.ended_on ? `am ${formatDate(r.ended_on)}` : "";
+    const end = r.terms.actual_end ?? r.terms.possible_end;
+    return end ? `Vertragsende ${formatDate(end)}` : "";
+  }
+  if (step === "in_arbeit" && state === "current" && r.missing_for_valid.length) return `${r.missing_for_valid.length} Angaben fehlen`;
+  return "";
+}
 
 const CALC_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></svg>;
 const FLAG_ICON = <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="signal-icon"><path d="M5 21V4h11l-1.5 4L16 12H5" /></svg>;
@@ -181,34 +227,6 @@ const PERIOD_LABEL: Record<(typeof PERIODS)[number], string> = {
   renewal_period: "Verlängerung um",
 };
 
-const LEAD_UNIT: Record<ReminderUnit, [string, string]> = { days: ["Tag", "Tage"], weeks: ["Woche", "Wochen"], months: ["Monat", "Monate"] };
-const LEAD_MAX: Record<ReminderUnit, number> = { days: 365, weeks: 104, months: 60 };
-
-export function leadText(lead: ReminderLead): string {
-  const [singular, plural] = LEAD_UNIT[lead.unit];
-  return `${lead.value} ${lead.value === 1 ? singular : plural} vorher`;
-}
-
-/** Eigene Erinnerungen: erste (Monate, leer = Standard) und weitere, als eine Liste. */
-function leadsOf(register: ContractRegister): ReminderLead[] {
-  const first = register.fields.reminder_lead_months?.value;
-  return [...(first != null && first !== "" ? [{ value: Number(first), unit: "months" as const }] : []), ...(register.reminders?.extra_leads ?? [])];
-}
-
-/** Die längste Erinnerung in Monaten wird die erste (eigenes Feld), alle übrigen sind weitere Erinnerungen. */
-function splitLeads(leads: ReminderLead[]): { first: number | null; extra: ReminderLead[] } {
-  const months = leads.filter((lead) => lead.unit === "months");
-  if (!months.length) return { first: null, extra: leads };
-  const longest = months.reduce((best, lead) => (lead.value > best.value ? lead : best));
-  const index = leads.indexOf(longest);
-  return { first: longest.value, extra: leads.filter((_, position) => position !== index) };
-}
-
-function sameLeads(left: ReminderLead[], right: ReminderLead[]) {
-  const key = (leads: ReminderLead[]) => leads.map((lead) => `${lead.value}${lead.unit}`).sort().join(",");
-  return key(left) === key(right);
-}
-
 // Tage zwischen zwei ISO-Daten (ohne Uhrzeit, unabhängig von der Zeitzone).
 function daysBetween(from: string, to: string) {
   return Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 86_400_000);
@@ -232,13 +250,15 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus, view = "data", onOpenField }: {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus, view = "data", onOpenField, onOpenStatus }: {
   contractId: string;
   /** Welche Kästen: Vertragsdaten (Standard, mit Status, Regeln, KI-Vorschlägen) oder Fristen & Aufgaben (Erinnerungen). */
   view?: RegisterView;
   /** Feld, das auf dem anderen Reiter steht (z. B. „Erinnerung an“ aus „Für Gültig fehlen“). */
   onOpenField?: (key: string, view: RegisterView) => void;
-  /** Direkt unter dem Bearbeitungsstatus (Organisationszuordnung). */
+  /** Statuswechsel steht auf der Übersicht (Karte „Vertragsstatus“): dorthin springen. */
+  onOpenStatus?: () => void;
+  /** Oben in den Vertragsdaten (Organisationszuordnung). */
   afterStatus?: ReactNode;
   /** Kästen, die der Vertragstyp nicht vorsieht; sie bleiben sichtbar, sobald ein Wert gepflegt ist. */
   hiddenSections?: Set<string>;
@@ -269,7 +289,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const [types, setTypes] = useState<ContractTypeDto[]>([]);
   const [categories, setCategories] = useState<ContractCategoryDto[]>([]);
   const [storage, setStorage] = useState<LookupDto[]>([]);
-  const [todos, setTodos] = useState<LookupDto[]>([]);
   const [assignees, setAssignees] = useState<AssigneeDto[]>([]);
   const [transition, setTransition] = useState<BusinessStatus | null>(null);
   const transitionFormRef = useRef<HTMLFormElement | null>(null);
@@ -288,8 +307,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   const [accessRequest, setAccessRequest] = useState(0);
   const [newPartner, setNewPartner] = useState<FormValues | null>(null);
   // „Erinnern“ im Bearbeitungsmodus: alle eigenen Erinnerungen; Hinzufügen über Anzahl + Einheit.
-  const [leadDraft, setLeadDraft] = useState<ReminderLead[] | null>(null);
-  const [leadAdd, setLeadAdd] = useState<{ value: string; unit: ReminderUnit } | null>(null);
   // Sprungziel „Direkt zur Stelle“: Feld, zu dem gesprungen wird, mit optionalem Hinweis.
   const [target, setTarget] = useState<{ key: string; note?: string; at: number } | null>(null);
   const handledLink = useRef<string | null>(null);
@@ -334,7 +351,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       if (lookupResult.status === "fulfilled") {
         const lookups = lookupResult.value?.items ?? [];
         setStorage(lookups.filter((item) => item.field_key === "storage_location"));
-        setTodos(lookups.filter((item) => item.field_key === "todo_template"));
       }
       if (assigneeResult.status === "fulfilled") setAssignees(assigneeResult.value?.items ?? []);
     });
@@ -343,7 +359,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
 
   // Ziel aus der Adresse (?feld=…) einmal anspringen, sobald die Daten da sind (?abschnitt= macht die Vertragsakte).
   useEffect(() => {
-    if (!register || !linkedField) return;
+    if (!register || !linkedField || view === "status") return;
     const link = `f:${linkedField}`;
     if (handledLink.current === link) return;
     handledLink.current = link;
@@ -353,18 +369,50 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   }, [register, linkedField]);
 
   // Nach dem Rendern (Bearbeitung offen): zum Feld scrollen, Cursor setzen, kurz hervorheben.
+  // Kurz nachfassen, bis das Feld gerendert ist (Reiterwechsel, aufklappende Karte). Danach im Blick halten,
+  // solange Karten darüber noch nachladen und die Stelle nach unten schieben – bis die Person selbst scrollt.
   useEffect(() => {
     if (!target) return;
-    const frame = window.requestAnimationFrame(() => {
+    let frame = 0;
+    let timer = 0;
+    let tries = 0;
+    let userMoved = false;
+    const stop = () => { userMoved = true; };
+    const events = ["wheel", "touchstart", "keydown", "mousedown"] as const;
+    events.forEach((name) => window.addEventListener(name, stop, { passive: true, once: true }));
+    const element = () => document.getElementById(`rg-field-${target.key}`) ?? document.getElementById(`rg-${target.key}`);
+    const keepInView = (left: number) => {
+      if (userMoved || left <= 0) return;
+      const row = element();
+      const box = row?.getBoundingClientRect();
+      if (row && box && (box.top < 0 || box.bottom > window.innerHeight)) row.scrollIntoView?.({ block: "center" });
+      timer = window.setTimeout(() => keepInView(left - 1), 150);
+    };
+    const seek = () => {
       const row = document.getElementById(`rg-field-${target.key}`);
       const control = document.getElementById(`rg-${target.key}`);
-      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      row?.scrollIntoView?.({ block: "center", behavior: reduce ? "auto" : "smooth" });
+      if (!row && !control && tries++ < 20) { timer = window.setTimeout(seek, 50); return; }
+      row?.scrollIntoView?.({ block: "center" });
       (control ?? row)?.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(frame);
+      timer = window.setTimeout(() => keepInView(14), 150);
+    };
+    frame = window.requestAnimationFrame(seek);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      events.forEach((name) => window.removeEventListener(name, stop));
+    };
   }, [target, editing]);
 
+  // Vertragsstatus: ein Hauptschritt je Status, seltene Wechsel im „⋯“-Menü.
+  const PRIMARY: Partial<Record<BusinessStatus, BusinessStatus>> = { in_arbeit: "gueltig", gueltig: "gekuendigt", gekuendigt: "beendet" };
+  const transitions = register?.allowed_transitions ?? [];
+  const primaryTransition = register
+    ? transitions.find((item) => item.target === PRIMARY[register.business_status]) ?? (register.business_status === "geloescht" ? transitions[0] : undefined)
+    : undefined;
+  const otherTransitions = transitions.filter((item) => item !== primaryTransition);
+  const primaryBlocked = Boolean(register && primaryTransition?.target === "gueltig" && register.missing_for_valid.length);
+  const nextHint = register ? STATUS_STAGE[register.business_status]?.text(register) ?? "" : "";
   const termModel = (editing ? draft.term_model : register?.fields.term_model?.value) as TermModel | null | undefined;
   const visibleTermFields = useMemo(() => new Set(termModel ? TERM_FIELDS[termModel] : ["term_model"]), [termModel]);
   const visibleCategories = useMemo(() => {
@@ -393,36 +441,25 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     }
   }
 
-  const extraDraft = leadDraft ? splitLeads(leadDraft).extra : null;
-  const extrasChanged = Boolean(register && extraDraft && !sameLeads(extraDraft, register.reminders?.extra_leads ?? []));
-
   async function save() {
     if (!register) return;
     const changes: Draft = {};
     for (const [key, field] of Object.entries(register.fields)) {
       if (!same(draft[key], field.value)) changes[key] = draft[key] ?? null;
     }
-    const extras = extrasChanged ? extraDraft : null;
-    if (Object.keys(changes).length === 0 && !extras) {
+    if (Object.keys(changes).length === 0) {
       closeAllEdits();
       return;
     }
-    // Erste Erinnerung ist ein Feld der Vertragsdaten, weitere Erinnerungen haben einen eigenen Endpunkt.
-    if (await run(async () => {
-      let next = Object.keys(changes).length ? await updateContractRegister(orgSlug, contractId, { changes }) : register;
-      if (extras) next = await saveReminderLeads(orgSlug, contractId, extras);
-      return next;
-    }, "Stammdaten gespeichert.")) closeAllEdits();
+    if (await run(() => updateContractRegister(orgSlug, contractId, { changes }), "Stammdaten gespeichert.")) closeAllEdits();
   }
 
   function closeAllEdits() {
     setEditSections(new Set());
-    setLeadDraft(null);
-    setLeadAdd(null);
     leaveTarget();
   }
 
-  const dirty = editing && Boolean(register) && (extrasChanged || Object.entries(register?.fields ?? {}).some(([key, field]) => !same(draft[key], field.value)));
+  const dirty = editing && Boolean(register) && Object.entries(register?.fields ?? {}).some(([key, field]) => !same(draft[key], field.value));
   useUnsavedChanges(dirty);
   useSaveShortcut(editing, () => { if (!busy) void save(); });
 
@@ -459,12 +496,28 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     return run(() => updateContractRegister(orgSlug, contractId, { changes: { retention_years_after_end: value } }), value == null ? "Aufbewahrung auf Standard zurückgesetzt." : "Aufbewahrung gespeichert.");
   }
 
-  // Kündigungsdaten ändert nur der Statuswechsel: zum Bearbeitungsstatus springen.
+  // Kündigungsdaten ändert nur der Statuswechsel: zur Karte „Vertragsstatus“ springen.
   function openStatus() {
+    if (view !== "status" && onOpenStatus) { onOpenStatus(); return; }
     const status = document.getElementById("rg-status-heading")?.closest("section");
     if (status) revealBox(status);
     status?.scrollIntoView?.({ block: "start" });
-    status?.querySelector<HTMLElement>(".rg-status-actions button")?.focus();
+    status?.querySelector<HTMLElement>(".vs-next button")?.focus();
+  }
+
+  /** Statuswechsel öffnen; Daten vorbelegt (heute bzw. berechnetes Vertragsende), änderbar. */
+  function startTransition(target: BusinessStatus) {
+    if (!register) return;
+    const today = register.as_of;
+    const end = register.terms.actual_end ?? register.terms.possible_end ?? "";
+    const effective = register.fields.terminated_effective?.value ? String(register.fields.terminated_effective.value) : "";
+    setTransition(target);
+    setTransitionForm({
+      terminated_on: target === "gekuendigt" ? today : "",
+      effective_date: target === "gekuendigt" ? end : target === "beendet" ? (effective || end || today) : "",
+      note: "",
+      acknowledge: false,
+    });
   }
 
   async function submitTransition() {
@@ -524,7 +577,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   }
 
   function viewOf(key: string): RegisterView {
-    if (key === "reminder_extra_leads") return "deadlines";
+    // Erinnerungseinstellungen stehen in „Termine & Aufgaben“ (ContractReminderSettings).
+    if (key.startsWith("reminder_") || key === "escalation_recipient_account_id") return "deadlines";
     return SECTIONS.find((section) => section.fields.some((def) => def.key === key))?.view ?? "data";
   }
 
@@ -540,21 +594,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       setDraft(draftFrom(register));
       setMessage(null);
     }
-    if (sectionId === "reminder" && !editSections.has("reminder")) setLeadDraft(leadsOf(register));
     setEditSections((current) => current.has(sectionId) ? current : new Set([...current, sectionId]));
-  }
-
-  function changeLeads(next: ReminderLead[]) {
-    setLeadDraft(next);
-    setDraft((current) => ({ ...current, reminder_lead_months: splitLeads(next).first }));
-  }
-
-  function addLead() {
-    if (!leadAdd || !leadDraft) return;
-    const value = Number(leadAdd.value);
-    if (!Number.isInteger(value) || value < 1 || value > LEAD_MAX[leadAdd.unit]) return;
-    if (!leadDraft.some((lead) => lead.value === value && lead.unit === leadAdd.unit)) changeLeads([...leadDraft, { value, unit: leadAdd.unit }]);
-    setLeadAdd(null);
   }
 
   function cancelEdit(sectionId: string) {
@@ -566,7 +606,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     const next = new Set(editSections);
     next.delete(sectionId);
     setEditSections(next);
-    if (sectionId === "reminder") { setLeadDraft(null); setLeadAdd(null); }
     if (next.size === 0) {
       setDraft(fresh);
       setNewPartner(null);
@@ -597,7 +636,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     }
     const field = register.fields[def.key];
     const value = field?.value;
-    if (def.kind === "reminders") return reminderChips(leadsOf(register)).map((chip) => chip.label).join(", ");
     if (value == null || value === "") return def.kind === "bool" ? "Nein" : "Nicht erfasst";
     switch (def.kind) {
       case "bool": return value ? "Ja" : "Nein";
@@ -614,13 +652,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       case "account": return field.display ?? "Auswahl nicht mehr verfügbar";
       default: return String(value);
     }
-  }
-
-  // Ohne eigene Erinnerung in Monaten gilt der Standard des Vertragstyps als erste Erinnerung.
-  function reminderChips(leads: ReminderLead[]): { label: string; lead: ReminderLead | null }[] {
-    const standard = register?.reminders?.default_lead_months ?? 4;
-    const chips = leads.map((lead) => ({ label: leadText(lead), lead }));
-    return leads.some((lead) => lead.unit === "months") ? chips : [{ label: `${leadText({ value: standard, unit: "months" })} (Standard)`, lead: null }, ...chips];
   }
 
   function originOf(def: FieldDef): RegisterField | undefined {
@@ -694,11 +725,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           <option value="">Nicht erfasst</option>
           {storage.map((item) => <option key={item.id} value={item.code}>{item.label}</option>)}
         </select>;
-      case "todo":
-        return <>
-          <input id={id} list="rg-todo-templates" value={text(key)} onChange={(event) => set(key, event.target.value)} />
-          <datalist id="rg-todo-templates">{todos.map((item) => <option key={item.id} value={item.label}>{item.description ?? ""}</option>)}</datalist>
-        </>;
       default:
         return <input id={id} type="text" value={text(key)} onChange={(event) => set(key, event.target.value)} />;
     }
@@ -756,11 +782,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           : terms.cancel_by ? <>Kündbar bis <b>{formatDate(terms.cancel_by)}</b></> : end ? <>Vertragsende <b>{formatDate(end)}</b></> : null,
       ]);
     }
-    if (sectionId === "reminder") {
-      const recipient = shown("reminder_recipient_account_id");
-      // Ohne eigenen Empfänger geht die Erinnerung an die hauptverantwortliche Person (deadlines/system.py).
-      return joinParts([`Erinnern ${reminderChips(leadsOf(register)).map((chip) => chip.label).join(", ")}`, recipient ? <>an <b>{recipient}</b></> : "an Hauptverantwortliche Person"]);
-    }
     return null;
   }
 
@@ -795,78 +816,76 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     </>}
   </div>;
 
-  function remindersRow(editing: boolean) {
-    if (!register) return null;
-    const leads = editing && leadDraft ? leadDraft : leadsOf(register);
-    const chips = reminderChips(leads);
-    const isTarget = target?.key === "reminder_lead_months";
-    return <div key="reminders" id="rg-field-reminder_lead_months" className={`rg-field rg-field--wide${isTarget ? " rg-field--target" : ""}`} tabIndex={isTarget ? -1 : undefined}>
-      <dt>Erinnern</dt>
-      <dd>
-        <ul className="rg-chips" aria-label="Erinnerungen">
-          {chips.map((chip) => <li key={chip.label} className={`rg-chip${editing && chip.lead ? " rg-chip--edit" : ""}`}>{chip.label}
-            {editing && chip.lead ? <button type="button" aria-label={`${chip.label} entfernen`} onClick={() => changeLeads(leads.filter((lead) => lead !== chip.lead))}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18" /></svg></button> : null}
-          </li>)}
-          {editing && !leadAdd && leads.length < 11 ? <li><button type="button" className="rg-chip-add" onClick={() => setLeadAdd({ value: "", unit: "weeks" })}>+ Erinnerung</button></li> : null}
-        </ul>
-        {editing && leadAdd ? <span className="rg-lead-add" role="group" aria-label="Erinnerung hinzufügen">
-          <label className="visually-hidden" htmlFor="rg-reminder_lead_months">Anzahl</label>
-          <input id="rg-reminder_lead_months" type="number" min={1} max={LEAD_MAX[leadAdd.unit]} inputMode="numeric" value={leadAdd.value} autoFocus
-            onChange={(event) => setLeadAdd((current) => current && ({ ...current, value: event.target.value }))}
-            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addLead(); } }} />
-          <label className="visually-hidden" htmlFor="rg-reminder-unit">Einheit</label>
-          <select id="rg-reminder-unit" value={leadAdd.unit} onChange={(event) => setLeadAdd((current) => current && ({ ...current, unit: event.target.value as ReminderUnit }))}>
-            <option value="weeks">Wochen</option><option value="months">Monate</option>
-          </select>
-          <span>vorher</span>
-          <button type="button" className="btn btn-sm" onClick={addLead}>Hinzufügen</button>
-          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setLeadAdd(null)}>Abbrechen</button>
-        </span> : null}
-        {editing ? <span className="field-hint rg-help">Standard des Vertragstyps: {leadText({ value: register.reminders?.default_lead_months ?? 4, unit: "months" })}. Jede Erinnerung erscheint in „Termine &amp; Aufgaben“.</span> : null}
-        {isTarget && target?.note ? <span className="rg-field-note" role="status">{target.note}</span> : null}
-      </dd>
-    </div>;
-  }
-
   return <div className="rg-panel">
-    {view === "data" ? <>
-    <CollapsibleSection
+    {view === "status" ? <CollapsibleSection
       id="rg-status"
-      className="rg-status"
-      title="Bearbeitungsstatus"
-      description={register.has_ai_analysis ? "Werte aus der KI-Analyse sind gekennzeichnet und können bestätigt oder korrigiert werden." : "Manuell angelegter Vertrag ohne KI-Analyse."}
+      className="rg-status vs-card"
+      title="Vertragsstatus"
+      description="Wo der Vertrag steht und was als Nächstes zu tun ist."
       summary={joinParts([
         <>Status <b>{register.business_status_label}</b></>,
         register.business_status === "in_arbeit" && register.missing_for_valid.length ? <Signal tone="warning" size="sm">{`Für „Gültig“ fehlen ${register.missing_for_valid.length}`}</Signal> : null,
-        register.has_ai_analysis ? (register.review_pending ? <Signal tone="ai" size="sm">KI-Prüfung offen</Signal> : "KI-Werte geprüft") : "Ohne KI-Analyse",
+        register.has_ai_analysis && register.review_pending ? <Signal tone="ai" size="sm">KI-Prüfung offen</Signal> : null,
       ])}
       icon={STATUS_ICON}
       iconClassName="section-tile--accent"
       forceOpen={transition !== null}
-      actions={<span className="rg-status-actions">
-        <StatusBadge label={register.business_status_label} tone={BUSINESS_STATUS_TONE[register.business_status] ?? "neutral"} />
-        {editable && register.allowed_transitions.map((item) => <button key={item.target} type="button" className={item.target === "geloescht" ? "btn btn-sm btn-ghost btn-danger" : "btn btn-sm"} disabled={busy} onClick={() => { setTransition(item.target); setTransitionForm({ terminated_on: "", effective_date: "", note: "", acknowledge: false }); }}>{register.business_status === "geloescht" ? `Stornierung aufheben → ${item.label}` : `→ ${item.label}`}</button>)}
-      </span>}
+      actions={<span className="rg-status-actions"><StatusBadge label={register.business_status_label} tone={BUSINESS_STATUS_TONE[register.business_status] ?? "neutral"} /></span>}
     >
-      {register.business_status === "in_arbeit" ? <MissingList
+      {/* Weg des Vertrags: erledigte Stufen mit Haken, die aktuelle hervorgehoben, Daten soweit gepflegt. */}
+      <ol className={`vs-steps vs-tone--${register.business_status}${register.business_status === "geloescht" ? " is-cancelled" : ""}`} aria-label="Statusverlauf">
+        {STATUS_PATH.map((step, index) => {
+          const position = STATUS_PATH.indexOf(register.business_status as (typeof STATUS_PATH)[number]);
+          const state = position < 0 ? "todo" : index < position ? "done" : index === position ? "current" : "todo";
+          // Jede erlaubte Stufe ist klickbar und öffnet den Statuswechsel (z. B. zurück auf „In Arbeit“).
+          const reachable = editable && transition === null && transitions.some((item) => item.target === step);
+          const body = <>
+            <span className="vs-dot" aria-hidden="true">{state === "done" ? STEP_CHECK : index + 1}</span>
+            <span className="vs-step-label">{BUSINESS_STATUS_LABEL[step]}</span>
+          </>;
+          return <li key={step} className={`vs-step is-${state}${reachable ? " is-reachable" : ""}`} aria-current={state === "current" ? "step" : undefined}>
+            {reachable
+              ? <button type="button" className="vs-step-button" disabled={busy || (step === "gueltig" && primaryBlocked)} title={step === "gueltig" && primaryBlocked ? "Erst die fehlenden Angaben ergänzen" : transitionLabel(step, register.business_status)} onClick={() => startTransition(step)} aria-label={`Status auf „${BUSINESS_STATUS_LABEL[step]}“ setzen`}>{body}</button>
+              : body}
+            <small className="vs-step-date">{stepNote(step, state, register)}</small>
+          </li>;
+        })}
+      </ol>
+      {register.business_status === "geloescht" ? <p className="vs-cancelled"><Signal tone="critical" size="sm">Storniert</Signal> Als ungültig markiert – alle Daten bleiben erhalten.</p> : null}
+
+      <div className={`vs-next vs-tone--${register.business_status}`}>
+        <div className="vs-next-text">
+          <strong>{STATUS_STAGE[register.business_status]?.title(register) ?? register.business_status_label}</strong>
+          <span>{nextHint}</span>
+        </div>
+        {editable && primaryTransition ? <button type="button" className={`btn ${primaryTransition.target === "geloescht" ? "btn-danger" : "btn-primary"}`} disabled={busy || transition !== null || primaryBlocked} title={primaryBlocked ? "Erst die fehlenden Angaben ergänzen" : undefined} onClick={() => startTransition(primaryTransition.target)}>{transitionLabel(primaryTransition.target, register.business_status)}</button> : null}
+        {editable && otherTransitions.length ? <ActionMenu label="Weitere Statuswechsel" disabled={busy || transition !== null} items={otherTransitions.map((item) => ({ label: transitionLabel(item.target, register.business_status), danger: item.target === "geloescht", onSelect: () => startTransition(item.target) }))} /> : null}
+      </div>
+
+      {register.business_status === "in_arbeit" && register.missing_for_valid.length ? <MissingList
         className="rg-hint"
         intro="Für „Gültig“ fehlen noch:"
-        items={register.missing_for_valid.map((key) => ({ key, label: labelFor(key), onSelect: () => jumpTo(key) }))}
+        items={register.missing_for_valid.map((key) => ({ key, label: labelFor(key), onSelect: () => onOpenField?.(key, viewOf(key)) }))}
       /> : null}
+      {register.has_ai_analysis && register.review_pending && register.business_status === "in_arbeit" ? <p className="vs-review"><Signal tone="ai" size="sm">KI-Prüfung offen</Signal> Vor der Freigabe die Werte aus dem Dokument bestätigen. <Link scroll={false} className="rg-link" href={contractHref(contractId, REVIEW_TARGET)}>KI-Werte prüfen →</Link></p> : null}
+
       {transition ? <form ref={transitionFormRef} className="rg-transition" onSubmit={(event) => { event.preventDefault(); void submitTransition(); }}>
         <strong>{register.business_status === "geloescht" ? "Stornierung aufheben" : `Statuswechsel nach „${BUSINESS_STATUS_LABEL[transition]}“`}</strong>
         {register.business_status === "geloescht" ? <p className="rg-hint">Der Vertrag kehrt in den Status vor der Stornierung zurück: „{BUSINESS_STATUS_LABEL[transition]}“. Die Daten bleiben unverändert.</p> : null}
         {transition === "gekuendigt" ? <>
           <label>Gekündigt am<input type="date" required value={transitionForm.terminated_on} onChange={(event) => setTransitionForm((form) => ({ ...form, terminated_on: event.target.value }))} /></label>
           <label>Gekündigt zum<input type="date" required value={transitionForm.effective_date} onChange={(event) => setTransitionForm((form) => ({ ...form, effective_date: event.target.value }))} /></label>
+          <p className="field-hint">Vorschlag: heute und das berechnete Vertragsende – bitte mit dem Kündigungsschreiben abgleichen.</p>
         </> : null}
         {transition === "beendet" ? <label>Beendet am<input type="date" value={transitionForm.effective_date} onChange={(event) => setTransitionForm((form) => ({ ...form, effective_date: event.target.value }))} /></label> : null}
         {transition === "gueltig" && register.review_pending ? <label className="rg-check"><input type="checkbox" checked={transitionForm.acknowledge} onChange={(event) => setTransitionForm((form) => ({ ...form, acknowledge: event.target.checked }))} />Die KI-Werte sind noch nicht vollständig geprüft. Ich gebe den Vertrag trotzdem frei.</label> : null}
+        {transition === "in_arbeit" && register.business_status !== "geloescht" ? <p className="rg-hint">Zurück in Bearbeitung: Fristen, Erinnerungen und Kosten werden nicht überwacht, bis der Vertrag wieder „Gültig“ ist. Die Daten bleiben unverändert.</p> : null}
         {transition === "geloescht" ? <p className="rg-hint">„Storniert“ markiert den Vertrag nur als ungültig; Daten bleiben. Einen Vertrag ganz entfernen: „⋯ → Löschung beantragen“ im Kopf.</p> : null}
         <label>Notiz (optional)<input type="text" maxLength={2000} value={transitionForm.note} onChange={(event) => setTransitionForm((form) => ({ ...form, note: event.target.value }))} /></label>
         <div className="rg-actions"><button type="button" className="btn" onClick={() => setTransition(null)}>Abbrechen</button><button type="submit" className="btn btn-primary" disabled={busy}>Status ändern</button></div>
       </form> : null}
-    </CollapsibleSection>
+    </CollapsibleSection> : null}
+    {view === "data" ? <>
 
     {afterStatus}
 
@@ -877,7 +896,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       <ul>
         {register.partner_suggestions.map((item) => <li key={item.id}>Vertragspartner „{register.supplier_text}“ entspricht vermutlich <strong>{item.short_name}</strong>{item.city ? ` (${item.city})` : ""} · Übereinstimmung {Math.round(item.score * 100)} % <button type="button" className="btn" disabled={busy} onClick={() => applySuggestion("partner_id", item.id)}>Übernehmen</button></li>)}
         {register.type_suggestion ? <li>Vertragstyp <strong>{register.type_suggestion.label}</strong> (aus {register.type_suggestion.reason}) <button type="button" className="btn" disabled={busy} onClick={() => applySuggestion("contract_type_id", register.type_suggestion!.id)}>Übernehmen</button></li> : null}
-        {proposalKeys.map((key) => <li key={key}>{register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button></li>)}
+        {proposalKeys.map((key) => <li key={key}><AiOrigin state="unreviewed" factKey={register.fields[key].ai_proposed_value?.source_field} subject={labelFor(key)} /> {register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button></li>)}
       </ul>
     </section> : null}
     </> : null}
@@ -912,7 +931,6 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={SECTION_ICONS[section.id]?.icon} iconClassName={SECTION_ICONS[section.id]?.tile}>
         {isTerm ? terminationRow : null}
         <dl className="rg-fields">{fields.map((def) => {
-          if (def.kind === "reminders") return remindersRow(editing);
           if (def.kind === "auto_number") {
             const earlier = register.fields.internal_number?.value;
             return <div key={def.key} id="rg-field-register_number" className="rg-field">
@@ -928,8 +946,13 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           const label = def.kind === "period" ? PERIOD_LABEL[def.key as (typeof PERIODS)[number]] : register.fields[def.key]?.label ?? def.key;
           const isTarget = target?.key === def.key;
           const empty = !editing && def.kind !== "bool" && display(def) === "Nicht erfasst";
-          const originBadge = provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{provenance.origin === "ai" ? <SignalIcon tone="ai" /> : provenance.origin === "ai_confirmed" ? <SignalIcon tone="done" /> : null}{ORIGIN_LABEL[provenance.origin]}</span> : null;
-          const sourceChip = provenance?.document_source && onShowSource ? <button type="button" className="cw-source-button" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>Quelle</button> : null;
+          // Erinnerungen: „Standard“ (geerbt) oder „Angepasst“ (geändert), nicht die Herkunft „Manuell“.
+          const openSource = provenance?.document_source && onShowSource ? () => onShowSource(provenance.document_source!) : null;
+          const aiState = provenance?.origin === "ai" ? "unreviewed" : provenance?.origin === "ai_confirmed" ? "confirmed" : null;
+          // KI-Werte: eine Plakette (Bestätigt/Ungeprüft), die die Quelle öffnet; sonst die stille Herkunft wie bisher.
+          const originBadge = aiState ? <AiOrigin state={aiState} onOpenSource={openSource} factKey={provenance?.source_field} subject={label} />
+            : provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null;
+          const sourceChip = !aiState && provenance?.document_source && onShowSource ? <button type="button" className="cw-source-button" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>Quelle</button> : null;
           return <div key={def.key} id={`rg-field-${def.key}`} className={isTarget ? "rg-field rg-field--target" : "rg-field"} tabIndex={isTarget ? -1 : undefined}>
             <dt>{editing && def.kind !== "period" ? <label htmlFor={`rg-${def.key}`}>{label}</label> : label}{editing && isTerm ? <>{originBadge}{sourceChip}</> : null}</dt>
             <dd>

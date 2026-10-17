@@ -63,7 +63,7 @@ describe("Organisationsweite Historie", () => {
     const user = userEvent.setup();
     const { container } = render(<OrganizationHistory organizationSlug="test-klinik" />);
     const row = (await screen.findByRole("rowheader", { name: /Stammdaten geändert/ })).closest("tr")!;
-    expect(within(row).getByRole("link", { name: "000001 · Wartung CT" })).toHaveAttribute("href", "/contracts/c-1?tab=history");
+    expect(within(row).getByRole("link", { name: "000001 · Wartung CT" })).toHaveAttribute("href", "/contracts/c-1");
     expect(await axe(container)).toHaveNoViolations();
 
     await user.selectOptions(screen.getByLabelText("Benutzer"), "u-1");

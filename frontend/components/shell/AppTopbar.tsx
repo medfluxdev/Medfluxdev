@@ -61,7 +61,7 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
       <div className="shell-topbar-actions">
         {membership ? <OrganizationScopePicker /> : null}
         {membership ? (
-          <button type="button" className="btn btn-ghost shell-assistant-button" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}>
+          <button type="button" className="btn btn-ai shell-assistant-button" onClick={() => window.dispatchEvent(new Event("medflux:assistant-toggle"))}>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="shell-icon"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></svg>
             <span>KI-Assistent</span>
           </button>

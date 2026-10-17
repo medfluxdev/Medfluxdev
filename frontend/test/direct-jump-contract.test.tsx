@@ -91,6 +91,8 @@ describe("Direkt zur Stelle: Vertragsakte", () => {
     api.getContractRules.mockResolvedValue({ status: "Erfüllt", items: [] });
     render(<Gaps hasAnnualCost reviewPending={false} documentCount={1} />);
     expect(await screen.findByText("Keine offenen Punkte")).toBeInTheDocument();
+    expect(screen.getByText("Jeder Punkt führt direkt zur passenden Stelle im Vertrag.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Fristen & Aufgaben anzeigen" })).toHaveAttribute("href", expect.stringContaining("tab=deadlines"));
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
 

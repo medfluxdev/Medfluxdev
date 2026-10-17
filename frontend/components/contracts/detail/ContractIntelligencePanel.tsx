@@ -60,6 +60,9 @@ function evidenceButton(refs: string[]) {
   );
 }
 
+/** Dokument mit Lupe (dekorativ). */
+const ANALYSIS_ART = <><path d="M13 7h13l7 7v12" /><path d="M26 7v7h7M13 7v32h12M17 18h9M17 23h6" /><circle cx="31" cy="33" r="5" /><path d="m35 37 4 4" /></>;
+
 export default function ContractIntelligencePanel({ contractId, organizationSlug }: Props) {
   const [state, setState] = useState<IntelligenceState>(EMPTY);
   const [loading, setLoading] = useState(true);
@@ -137,14 +140,14 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
       <div className="cw-section-head">
         <div>
           <h2 id="contract-intelligence-heading">Vertragsanalyse</h2>
-          <p>Beziehungen, Pflichten, Regelprüfungen und Handlungsvorschläge aus der Vertragsanalyse.</p>
+          <p>Beziehungen, Pflichten und Handlungsvorschläge.</p>
         </div>
         <button type="button" className="btn btn-sm" onClick={() => void load()} disabled={loading}>Aktualisieren</button>
       </div>
 
       {loading && <LoadingState>Vertragsanalyse wird geladen…</LoadingState>}
       {error && <InlineAlert tone="warning" role="status">{error}</InlineAlert>}
-      {!loading && total === 0 && !error && <EmptyState variant="calm" title="Noch keine Ergebnisse.">Für diesen Vertrag liegen keine zusätzlichen Analyseergebnisse vor.</EmptyState>}
+      {!loading && total === 0 && !error && <EmptyState variant="illustrated" layout="row" illustration={ANALYSIS_ART} title="Noch keine Ergebnisse.">Für diesen Vertrag liegen noch keine zusätzlichen Analyseergebnisse vor.</EmptyState>}
 
       {!loading && total > 0 && (
         <div className={styles.grid}>

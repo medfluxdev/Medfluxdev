@@ -1,4 +1,5 @@
 import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import type { ReminderLead } from "@/lib/domain-api/register";
 
 export type DeadlineStatus = "open" | "done" | "cancelled";
 
@@ -12,12 +13,16 @@ export interface DeadlineDto {
   title: string;
   due_date: string;
   remind_on: string;
+  /** Weitere Erinnerungstage (ISO, aufsteigend). */
+  extra_remind_on?: string[];
   days_until_due: number;
   overdue: boolean;
   assignee_account_id: string | null;
   assignee_name: string | null;
   escalation_account_id: string | null;
   escalation_name: string | null;
+  /** Zeitpunkt der ersten tatsächlich verschickten Eskalation; sonst null. */
+  escalated_at?: string | null;
   todo_text: string | null;
   note: string | null;
   status: DeadlineStatus;
@@ -27,6 +32,12 @@ export interface DeadlineDto {
   done_at: string | null;
   basis_unconfirmed: boolean;
   editable_fields: string[];
+  /** Am Termin angepasste Werte (z. B. reminder_leads, assignee_account_id); sonst gilt der Vertrag. */
+  custom_fields?: string[];
+  /** Erinnerungen nur dieses Termins; null = Einstellung des Vertrags. */
+  reminder_leads?: ReminderLead[] | null;
+  /** Eskalationsregel: ab diesem Tag, wenn nicht erledigt; null = erst bei Überfälligkeit. */
+  escalate_on?: string | null;
 }
 
 export interface DeadlineValues {
@@ -40,6 +51,8 @@ export interface DeadlineValues {
   note?: string | null;
   send_email?: boolean;
   send_ics?: boolean;
+  /** Erinnerungen nur dieses Termins; null = zurück zur Einstellung des Vertrags. */
+  reminder_leads?: ReminderLead[] | null;
 }
 
 export interface InboxNotification {

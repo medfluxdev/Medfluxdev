@@ -234,7 +234,7 @@ describe("Vertragsliste: Werkzeugleiste", () => {
   it("zeigt ohne Beschreibung „Vertrag <Nr.>“ und ehrlich unbekannte Kosten", async () => {
     render(<RegisterGrid organizationSlug="test-klinik" tab="bestand" />);
     const table = await screen.findByRole("table");
-    expect(within(table).getByRole("link", { name: "Vertrag 000004" })).toHaveAttribute("href", "/contracts/c-1?tab=register");
+    expect(within(table).getByRole("link", { name: "Vertrag 000004" })).toHaveAttribute("href", "/contracts/c-1");
     const summary = screen.getByText("3 Verträge").closest("p")!;
     expect(summary).toHaveTextContent("Keine gepflegten Kostendaten (3 Verträge)");
     expect(summary).not.toHaveTextContent("0,00");

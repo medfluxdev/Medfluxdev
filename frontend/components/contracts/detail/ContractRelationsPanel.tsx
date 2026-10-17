@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import AiOrigin, { AiReviewContext } from "@/components/ui/AiOrigin";
+import Signal from "@/components/ui/Signal";
+import { registerHref } from "@/lib/fix-targets";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
 import {
   getContractRelations,
@@ -11,6 +14,10 @@ import {
   type ContractRelationsDto,
   type RelatedContractDto,
 } from "@/lib/domain-api/contractDocuments";
+
+const svg = (body: JSX.Element) => <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">{body}</svg>;
+const LINK_ICON = svg(<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />);
+const GEAR_ICON = svg(<path d="M12 9a3 3 0 1 1 0 6a3 3 0 1 1 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />);
 
 export default function ContractRelationsPanel({ contractId, orgSlug }: { contractId: string; orgSlug: string }) {
   const { role, account } = useAuth();
@@ -49,7 +56,7 @@ export default function ContractRelationsPanel({ contractId, orgSlug }: { contra
       <div className="rg-deadline-main">
         <Link href={`/contracts/${item.contract_id}`}><strong>{item.register_number ?? "ohne Nummer"} · {item.short_description ?? "Vertrag"}</strong></Link>
         <span className="cw-muted">{item.business_status ? BUSINESS_STATUS_LABEL[item.business_status as BusinessStatus] ?? item.business_status : ""}{item.rationale ? ` · ${item.rationale}` : ""}</span>
-        {!item.confirmed ? <span className="rg-origin rg-origin-ai">KI-Vorschlag – bitte bestätigen</span> : null}
+        {!item.confirmed ? <AiReviewContext.Provider value={null}><AiOrigin state="unreviewed" subject="Zuordnung zum Rahmenvertrag" detail="Bitte bestätigen oder verwerfen" /></AiReviewContext.Provider> : null}
       </div>
       {editable ? <div className="rg-actions">
         {!item.confirmed ? <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void run(() => linkFramework(orgSlug, contractId, item.contract_id))}>Bestätigen</button> : null}
@@ -62,20 +69,34 @@ export default function ContractRelationsPanel({ contractId, orgSlug }: { contra
 
   const linked = new Set(data.frameworks.map((item) => item.contract_id));
   const options = data.framework_options.filter((item) => !linked.has(item.contract_id));
+  const confirmed = data.frameworks.filter((item) => item.confirmed);
+  const state = confirmed.length ? { label: "Zugeordnet", tone: "done" as const } : data.frameworks.length ? { label: "KI-Vorschlag", tone: "ai" as const } : { label: "Nicht zugeordnet", tone: "neutral" as const };
+  const manageHref = registerHref([{ column: "is_framework", op: "is", value: true }]);
 
   return <div className="rg-panel">
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
-    <section className="cw-section" aria-labelledby="relations-framework-heading">
-      <div className="cw-section-head"><div><h2 id="relations-framework-heading">Gehört zu Rahmenvertrag</h2><p>Einzelverträge werden ihrem Rahmenvertrag zugeordnet. Erkennt die KI eine Referenz im Dokument, erscheint sie als Vorschlag.</p></div></div>
-      {data.frameworks.length === 0 ? <p className="cw-muted">Keinem Rahmenvertrag zugeordnet.</p> : <ul className="rg-deadlines">{data.frameworks.map(row)}</ul>}
-      {editable ? <form className="rg-form-grid mt-3" onSubmit={(event) => { event.preventDefault(); if (selected) void run(() => linkFramework(orgSlug, contractId, selected)); }}>
-        <label className="span-2">Rahmenvertrag auswählen<select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">{options.length ? "Bitte auswählen" : "Keine Rahmenverträge verfügbar"}</option>{options.map((item) => <option key={item.contract_id} value={item.contract_id}>{item.register_number ?? "–"} · {item.short_description ?? "Vertrag"}</option>)}</select></label>
-        <button type="submit" className="btn btn-primary" disabled={busy || !selected}>Verknüpfen</button>
-      </form> : null}
+    <section className="cw-section rel-card" aria-labelledby="relations-framework-heading">
+      <span className="rel-tile rel-tile--framework" aria-hidden="true">{LINK_ICON}</span>
+      <div className="rel-main">
+        <div className="rel-title"><h2 id="relations-framework-heading">Rahmenvertrag</h2><Signal tone={state.tone} size="sm">{state.label}</Signal></div>
+        {data.frameworks.length === 0
+          ? <p className="rel-lead">{options.length ? "Kein Rahmenvertrag zugeordnet." : "Kein Rahmenvertrag zugeordnet – noch keiner verfügbar."}</p>
+          : <ul className="rg-deadlines">{data.frameworks.map(row)}</ul>}
+        {editable && options.length ? <form className="rel-link-form" onSubmit={(event) => { event.preventDefault(); if (selected) void run(() => linkFramework(orgSlug, contractId, selected)); }}>
+          <label>Rahmenvertrag auswählen<select value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Bitte auswählen</option>{options.map((item) => <option key={item.contract_id} value={item.contract_id}>{item.register_number ?? "–"} · {item.short_description ?? "Vertrag"}</option>)}</select></label>
+          <button type="submit" className="btn btn-primary" disabled={busy || !selected}>Verknüpfen</button>
+        </form> : null}
+      </div>
+      <div className="rel-side">
+        <Link className="btn" href={manageHref}>{GEAR_ICON}Rahmenverträge verwalten</Link>
+      </div>
     </section>
-    {data.is_framework || data.members.length > 0 ? <section className="cw-section" aria-labelledby="relations-members-heading">
-      <div className="cw-section-head"><div><h2 id="relations-members-heading">Einzelverträge dieses Rahmenvertrags</h2><p>{data.members.length} zugeordnet</p></div></div>
-      {data.members.length === 0 ? <p className="cw-muted">Noch keine Einzelverträge zugeordnet.</p> : <ul className="rg-deadlines">{data.members.map(row)}</ul>}
+    {data.is_framework || data.members.length > 0 ? <section className="cw-section rel-card" aria-labelledby="relations-members-heading">
+      <span className="rel-tile rel-tile--framework" aria-hidden="true">{LINK_ICON}</span>
+      <div className="rel-main">
+        <div className="rel-title"><h2 id="relations-members-heading">Einzelverträge dieses Rahmenvertrags</h2><Signal tone="neutral" size="sm">{`${data.members.length} zugeordnet`}</Signal></div>
+        {data.members.length === 0 ? <p className="rel-lead">Noch keine Einzelverträge zugeordnet.</p> : <ul className="rg-deadlines">{data.members.map(row)}</ul>}
+      </div>
     </section> : null}
   </div>;
 }

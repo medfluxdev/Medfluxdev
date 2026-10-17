@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import AiOrigin from "@/components/ui/AiOrigin";
 import Badge from "@/components/ui/Badge";
 import Breadcrumbs from "@/components/ui/Breadcrumbs";
 import Button from "@/components/ui/Button";
@@ -106,7 +107,7 @@ export default function ComponentReference() {
           <div className="stack-3">
             <div className="page-actions">
               <Badge>Neutral</Badge><Badge tone="info">Information</Badge><Badge tone="success">Erledigt</Badge>
-              <Badge tone="warning">Prüfen</Badge><Badge tone="danger">Überfällig</Badge><Badge tone="ai">KI-Vorschlag</Badge>
+              <Badge tone="warning">Prüfen</Badge><Badge tone="danger">Überfällig</Badge><Badge tone="ai">KI-Prüfung offen</Badge>
               <Tooltip text="Tooltips nur für Zusatzinfos, nie für Pflichtangaben."><Badge>Mit Tooltip</Badge></Tooltip>
             </div>
             <InlineAlert tone="info" role="status">Zusätzliche Information</InlineAlert>
@@ -123,8 +124,19 @@ export default function ComponentReference() {
             <Signal tone="warning">Prüfen</Signal>
             <Signal tone="info">Hinweis</Signal>
             <Signal tone="done">Bestätigt</Signal>
-            <Signal tone="ai">KI-Vorschlag</Signal>
+            <Signal tone="ai">KI-Prüfung offen</Signal>
             <Signal tone="neutral">Ruhig</Signal>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="KI-Herkunft eines Werts">
+          <p className="field-hint">Jeder Wert aus der KI trägt diese Plakette: „Bestätigt“ (von einer Person) oder „Ungeprüft“. Mit Fundstelle ist sie ein Knopf und öffnet die Quelle.</p>
+          <div className="sg-row">
+            <AiOrigin state="confirmed" />
+            <AiOrigin state="unreviewed" />
+            <AiOrigin state="confirmed" onOpenSource={() => {}} subject="Beispiel" />
+            <AiOrigin state="unreviewed" onOpenSource={() => {}} subject="Beispiel" />
+            <AiOrigin state="auto" />
           </div>
         </SectionCard>
 

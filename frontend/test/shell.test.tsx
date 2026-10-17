@@ -87,7 +87,7 @@ describe("App-Shell", () => {
     await user.type(within(palette).getByRole("combobox"), "wartung");
     const option = await within(palette).findByRole("option", { name: /000001 · Wartung CT/ });
     await user.click(option);
-    expect(push).toHaveBeenCalledWith("/contracts/c-1?tab=register");
+    expect(push).toHaveBeenCalledWith("/contracts/c-1");
   });
 
   it("bietet in der Palette die Volltextsuche und Seiten an", async () => {

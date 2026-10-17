@@ -64,6 +64,24 @@ export interface FinanceSummaryDto {
   notes: string[];
   /** Hinweise mit Ziel (gleiche Reihenfolge wie notes). */
   note_items?: { text: string; target: unknown }[];
+  /** Letzter laufender Eintrag endet nicht am Vertragsende (vom Backend verglichen). */
+  period_mismatch?: { last_entry_end: string; contract_end: string; kind: "after_end" | "before_end" } | null;
+  /** Ausgaben je Vertragsjahr (nur mit bekanntem Beginn und Ende), mit und ohne Preisanpassung. */
+  contract_years?: ContractYearDto[];
+  /** Gesamtlaufzeit ohne prozentuale Preisanpassung (nur mit bekanntem Ende). */
+  total_without_adjustment?: Money2 | null;
+}
+
+export interface ContractYearDto {
+  index: number;
+  start: string;
+  end: string;
+  months: number;
+  partial: boolean;
+  amount: Money2;
+  without_adjustment: Money2;
+  /** Faktor der Preisanpassung zu Jahresbeginn ("1.000000" = keine Erhöhung). */
+  factor: string;
 }
 
 export interface AllocationDto {
@@ -133,6 +151,10 @@ export function deleteFinanceEntry(organizationSlug: string, contractId: string,
 
 export function createServiceItem(organizationSlug: string, contractId: string, values: Record<string, unknown>) {
   return apiPost<FinanceDto>(base(contractId, "/services", organizationSlug), { values });
+}
+
+export function updateServiceItem(organizationSlug: string, contractId: string, serviceId: string, values: Record<string, unknown>) {
+  return apiPatch<FinanceDto>(base(contractId, `/services/${encodeURIComponent(serviceId)}`, organizationSlug), { values });
 }
 
 export function deleteServiceItem(organizationSlug: string, contractId: string, serviceId: string) {

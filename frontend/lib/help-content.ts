@@ -104,10 +104,11 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         id: "status",
-        question: "Welche Bearbeitungsstatus gibt es?",
+        question: "Welchen Vertragsstatus gibt es?",
         answer: [
           "Ein Vertrag beginnt „In Arbeit“. Sind alle nötigen Angaben da, setzen Sie ihn auf „Gültig“; später auf „Gekündigt“ oder „Beendet“. „Storniert“ markiert einen Vertrag als ungültig, die Daten bleiben erhalten.",
-          "Was für „Gültig“ noch fehlt, steht direkt unter dem Status – jeder Eintrag springt zum Feld. Eine Stornierung kann die Administration aufheben; der Vertrag kehrt dann in seinen früheren Status zurück.",
+          "Die Karte „Vertragsstatus“ steht als erste auf der Übersicht: sie zeigt den Weg In Arbeit → Gültig → Gekündigt → Beendet, was als Nächstes zu tun ist, und einen Knopf dafür (z. B. „Kündigung erfassen“). Seltenere Wechsel stehen unter „⋯“.",
+          "Was für „Gültig“ noch fehlt, steht direkt in der Karte – jeder Eintrag springt zum Feld. Eine Stornierung kann die Administration aufheben; der Vertrag kehrt dann in seinen früheren Status zurück.",
         ],
         keywords: "gültig gekündigt beendet storniert in arbeit freigabe",
       },
@@ -242,10 +243,10 @@ export const HELP_SECTIONS: HelpSection[] = [
         id: "finanzeintraege",
         question: "Wie erfasse ich die Kosten eines Vertrags?",
         answer: [
-          "Im Vertrag unter Finanzen → Finanzeinträge: Betrag, Zeitraum und Gültigkeit. Ändert sich der Preis, legen Sie einen neuen Eintrag mit neuem Zeitraum an – so bleibt die Entwicklung nachvollziehbar.",
-          "Einzelpreise wie Stundensätze, Reisekosten oder Pauschalen gehören in den Leistungskatalog.",
+          "Im Vertrag unter Finanzen → Finanzeinträge: Betrag, Zeitraum und Gültigkeit. Ändert sich der Preis, wählen Sie beim Eintrag „Preis ändern ab …“: Der bisherige Eintrag endet am Vortag, ein neuer übernimmt die übrigen Angaben – so bleibt die Entwicklung nachvollziehbar.",
+          "Vorschläge aus dem Vertrag (auch Preisstaffeln) stehen unter „Zu prüfen“ und zählen erst nach „Übernehmen“.",
         ],
-        keywords: "kosten preis betrag jahreskosten preiserhöhung stundensatz leistungskatalog",
+        keywords: "kosten preis betrag jahreskosten preiserhöhung preis ändern staffel",
       },
       {
         id: "kosten-berechnung",

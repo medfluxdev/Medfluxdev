@@ -1,3 +1,4 @@
+import type { ReminderLead } from "@/lib/domain-api/register";
 import type { SectionKey } from "@/lib/contract-sections";
 import { apiGet, apiPatch, apiPost } from "@/lib/api";
 
@@ -41,6 +42,10 @@ export interface ContractTypeDto {
   /** Typspezifische Abschnitte der Vertragsakte (wirksam) und ob der Standard nach Code gilt. */
   sections?: SectionKey[];
   sections_default?: boolean;
+  /** Erinnerungs-Standard für Verträge dieses Typs ohne eigene Einstellung; null = Standard der Organisation. */
+  reminder_leads?: ReminderLead[] | null;
+  /** Eskalation X Tage vor dem Termin, wenn nicht erledigt; null = erst bei Überfälligkeit. */
+  escalation_days_before?: number | null;
 }
 
 export interface ContractCategoryDto {

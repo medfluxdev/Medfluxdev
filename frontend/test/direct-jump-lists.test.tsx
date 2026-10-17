@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import RegisterTable from "@/components/register/RegisterTable";
-import { listRowTarget, notEvaluableLink, registerHref, NOT_EVALUABLE_FILTERS } from "@/lib/fix-targets";
+import { notEvaluableLink, registerHref, NOT_EVALUABLE_FILTERS } from "@/lib/fix-targets";
 import type { GridColumn, GridResponse, GridSpec } from "@/lib/domain-api/registerGrid";
 
 const COLUMNS: GridColumn[] = [
@@ -22,29 +22,20 @@ function table(filters: GridSpec["filters"]) {
 }
 
 describe("Direkt zur Stelle: Listen", () => {
-  it("öffnet Verträge aus einer nach Lücken gefilterten Liste dort, wo die Lücke behoben wird", () => {
-    expect(listRowTarget([])).toEqual({ tab: "register" });
-    expect(listRowTarget([{ column: "cost_current_year", op: "empty" }])).toEqual({ tab: "finance", section: "entries" });
-    expect(listRowTarget([{ column: "responsible", op: "empty" }])).toEqual({ tab: "register", section: "ownership" });
-    expect(listRowTarget([{ column: "cancel_by", op: "within_days", value: 90 }, { column: "reminder_recipient", op: "empty" }])).toEqual({ tab: "register", field: "reminder_recipient_account_id" });
-    expect(listRowTarget(NOT_EVALUABLE_FILTERS)).toEqual({ tab: "register", section: "term" });
-    expect(listRowTarget([{ column: "review_pending", op: "is", value: true }])).toEqual({ tab: "documents", subtab: "review" });
-    expect(listRowTarget([{ column: "deletion_from", op: "overdue" }])).toEqual({ tab: "register", section: "protection" });
-  });
-
   it("führt bei genau einem nicht bewertbaren Vertrag direkt in dessen Laufzeitangaben", () => {
     expect(notEvaluableLink([{ contract_id: "c-1" }])).toBe("/contracts/c-1?tab=register&abschnitt=term");
     expect(notEvaluableLink([{ contract_id: "c-1" }, { contract_id: "c-2" }])).toBe(registerHref(NOT_EVALUABLE_FILTERS));
   });
 
-  it("Tabellenzeilen folgen dem Filter; „Unvollständig“ führt zu den Laufzeitangaben", () => {
+  it("Vertragsname öffnet die Übersicht – auch in gefilterten Listen; „Unvollständig“ führt zu den Laufzeitangaben", () => {
     const filtered = table([{ column: "cost_current_year", op: "empty" }]);
-    expect(within(filtered).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1?tab=finance&abschnitt=entries");
+    // Der Vertragsname öffnet immer die Übersicht; die Aktion in der Zeile führt zur Stelle.
+    expect(within(filtered).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1");
     expect(within(filtered).getByRole("link", { name: "Laufzeitangaben von Wartung MRT ergänzen" })).toHaveAttribute("href", "/contracts/c-1?tab=register&abschnitt=term");
   });
 
-  it("ohne Lückenfilter bleibt der Link wie bisher bei den Vertragsdaten", () => {
+  it("ohne Filter öffnet der Vertrag ebenfalls die Übersicht", () => {
     const plain = table([]);
-    expect(within(plain).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1?tab=register");
+    expect(within(plain).getByRole("link", { name: "Wartung MRT" })).toHaveAttribute("href", "/contracts/c-1");
   });
 });

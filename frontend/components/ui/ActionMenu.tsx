@@ -13,7 +13,7 @@ interface Props {
   disabled?: boolean;
 }
 
-const MORE_ICON = <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></svg>;
+const MORE_ICON = <svg className="action-menu-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg>;
 
 /**
  * „⋯“-Menü für Zeilenaktionen (role="menu"): Pfeiltasten wechseln, Pos1/Ende springen,

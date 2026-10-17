@@ -4,6 +4,7 @@ import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractRegisterPanel from "@/components/contracts/detail/ContractRegisterPanel";
 import ContractRemarksPanel from "@/components/contracts/detail/ContractRemarksPanel";
+import ContractReminderSettings from "@/components/contracts/detail/ContractReminderSettings";
 import type { ContractRegister, RegisterField } from "@/lib/domain-api/register";
 
 const api = vi.hoisted(() => ({
@@ -14,6 +15,8 @@ const api = vi.hoisted(() => ({
   updateContractConfidentiality: vi.fn(),
   listContractRemarks: vi.fn(),
   addContractRemark: vi.fn(),
+  editContractRemark: vi.fn(),
+  deleteContractRemark: vi.fn(),
   saveReminderLeads: vi.fn(),
 }));
 
@@ -116,25 +119,25 @@ describe("Vertragsregister – Stammdaten", () => {
 
   it("zeigt Nummer, Status, berechnete Fristen und die Herkunft der Werte", async () => {
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    expect(await screen.findByRole("heading", { name: "Bearbeitungsstatus" })).toBeInTheDocument();
-    expect(screen.getByText("In Arbeit")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" })).toBeInTheDocument();
+    // Der Status steht nicht mehr in Vertragsdaten, sondern als Karte „Vertragsstatus“ auf der Übersicht.
+    expect(screen.queryByRole("heading", { name: "Vertragsstatus" })).not.toBeInTheDocument();
     const terms = screen.getByRole("heading", { name: "Laufzeit, Fristen & Kündigung" }).closest("section")!;
     expect(within(terms).getByText("Kündbar bis").nextElementSibling).toHaveTextContent("30.06.2027");
     expect(within(terms).queryByText(/Erinnerung/)).not.toBeInTheDocument();
     // Erinnerungen stehen unter Fristen & Aufgaben.
     expect(screen.queryByRole("heading", { name: "Erinnerungen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Wartung planen" })).not.toBeInTheDocument();
-    expect(screen.getByText("KI · Vorschlag")).toHaveAttribute("title", "Quelle: identity.contract_title");
+    expect(screen.getAllByText("KI · Ungeprüft")[0].closest(".ai-origin")).toHaveAttribute("title", expect.stringContaining("Bestätigung steht noch aus"));
     expect(screen.getByText("KI · korrigiert")).toBeInTheDocument();
-    expect(screen.getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
   });
 
   it("eingeklappt: Kurzfassung je Kasten, Fehlendes als Signal", async () => {
     const user = userEvent.setup();
     try {
       render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-      await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-      for (const title of ["Bearbeitungsstatus", "Vertrag & Partner", "Laufzeit, Fristen & Kündigung", "Ablage & Abrechnung", "Preisanpassung"]) {
+      await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
+      for (const title of ["Vertrag & Partner", "Laufzeit, Fristen & Kündigung", "Ablage & Abrechnung", "Preisanpassung"]) {
         await user.click(screen.getByRole("button", { name: `${title} einklappen` }));
       }
       const head = (title: string) => screen.getByRole("heading", { level: 2, name: title }).parentElement!;
@@ -142,7 +145,6 @@ describe("Vertragsregister – Stammdaten", () => {
       expect(head("Vertrag & Partner")).toHaveTextContent("Nr. 000042");
       expect(head("Laufzeit, Fristen & Kündigung")).toHaveTextContent("Kündbar bis 30.06.2027");
       // Jede eingeklappte Karte zeigt eine kurze Angabe unter dem Namen.
-      expect(head("Bearbeitungsstatus")).toHaveTextContent(/Status In Arbeit/);
       expect(head("Ablage & Abrechnung")).toHaveTextContent(/Ablage|Konto|Manuelle Abrechnung|Nichts erfasst/);
       expect(head("Preisanpassung")).toHaveTextContent(/Keine Preisanpassung erfasst|nächste/);
       // Bearbeiten bleibt auch eingeklappt erreichbar und klappt auf.
@@ -169,7 +171,7 @@ describe("Vertragsregister – Stammdaten", () => {
   it("ist barrierefrei in Ansicht und Bearbeitung", async () => {
     const user = userEvent.setup();
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
     expect(await axe(container)).toHaveNoViolations();
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     expect(await axe(container)).toHaveNoViolations();
@@ -178,7 +180,7 @@ describe("Vertragsregister – Stammdaten", () => {
   it("bestätigt einen KI-Wert und übernimmt Vorschläge nur auf Klick", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
 
     await user.click(screen.getByRole("button", { name: "Bestätigen" }));
     expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {}, confirm: ["short_description"] });
@@ -206,18 +208,59 @@ describe("Vertragsregister – Stammdaten", () => {
   it("speichert nur geänderte Felder", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     await user.type(screen.getByLabelText("Vertragsgegenstand"), "INT-7");
     await user.click(screen.getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { subject_text: "INT-7" } }));
   });
 
+  it("Vertragsstatus: fehlende Angaben sperren die Freigabe und springen zum Feld", async () => {
+    const user = userEvent.setup();
+    const onOpenField = vi.fn();
+    api.getContractRegister.mockResolvedValue(register({ allowed_transitions: [{ target: "gueltig", label: "Gültig" }, { target: "geloescht", label: "Storniert" }] }));
+    render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" onOpenField={onOpenField} />);
+    const card = (await screen.findByRole("heading", { name: "Vertragsstatus" })).closest("section")!;
+    expect(within(card).getByRole("list", { name: "Statusverlauf" }).querySelector("[aria-current=step]")).toHaveTextContent("In Arbeit");
+    expect(within(card).getByText("In Arbeit – noch nicht freigegeben")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Als gültig freigeben" })).toBeDisabled();
+    expect(within(card).getByText(/Für „Gültig“ fehlen noch:/).closest("p")).toHaveTextContent("Für „Gültig“ fehlen noch: Vertragspartner.");
+    await user.click(within(card).getByRole("button", { name: "Vertragspartner erfassen" }));
+    expect(onOpenField).toHaveBeenCalledWith("partner_id", "data");
+    // Seltene Wechsel stehen im „⋯“-Menü.
+    await user.click(within(card).getByRole("button", { name: "Weitere Statuswechsel" }));
+    expect(screen.getByRole("menuitem", { name: "Stornieren" })).toBeInTheDocument();
+  });
+
+  it("Vertragsstatus „Gültig“: „Kündigung erfassen“ mit vorbelegten, änderbaren Daten", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(register({ business_status: "gueltig", business_status_label: "Gültig", missing_for_valid: [], allowed_transitions: [{ target: "gekuendigt", label: "Gekündigt" }, { target: "beendet", label: "Beendet" }] }));
+    render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Kündigung erfassen" }));
+    expect(screen.getByLabelText("Gekündigt am")).toHaveValue("2026-10-04");
+    expect(screen.getByLabelText("Gekündigt zum")).not.toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Status ändern" }));
+    await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "gekuendigt", terminated_on: "2026-10-04" })));
+  });
+
+  it("Vertragsstatus: Stufen sind klickbar – „Gültig“ zurück auf „In Arbeit“; Farbe nach Status", async () => {
+    const user = userEvent.setup();
+    api.getContractRegister.mockResolvedValue(register({ business_status: "gueltig", business_status_label: "Gültig", missing_for_valid: [], allowed_transitions: [{ target: "gekuendigt", label: "Gekündigt" }, { target: "beendet", label: "Beendet" }, { target: "in_arbeit", label: "In Arbeit" }] }));
+    const { container } = render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" />);
+    await screen.findByRole("heading", { name: "Vertragsstatus" });
+    expect(container.querySelector(".vs-next")).toHaveClass("vs-tone--gueltig");
+    await user.click(screen.getByRole("button", { name: "Status auf „In Arbeit“ setzen" }));
+    expect(screen.getByText(/Zurück in Bearbeitung/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Status ändern" }));
+    await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "in_arbeit" })));
+  });
+
   it("verlangt bei ungeprüften KI-Werten eine bewusste Freigabe", async () => {
     const user = userEvent.setup();
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
-    await user.click(screen.getByRole("button", { name: "→ Gültig" }));
+    api.getContractRegister.mockResolvedValue(register({ missing_for_valid: [] }));
+    render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" />);
+    await screen.findByRole("heading", { name: "Vertragsstatus" });
+    await user.click(screen.getByRole("button", { name: "Als gültig freigeben" }));
     await user.click(screen.getByLabelText(/Ich gebe den Vertrag trotzdem frei/));
     await user.click(screen.getByRole("button", { name: "Status ändern" }));
     await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "gueltig", acknowledge_unreviewed: true })));
@@ -229,8 +272,8 @@ describe("Vertragsregister – Stammdaten", () => {
   it("hebt eine Stornierung auf und kehrt in den früheren Status zurück", async () => {
     const user = userEvent.setup();
     api.getContractRegister.mockResolvedValue(register({ business_status: "geloescht", business_status_label: "Storniert", allowed_transitions: [{ target: "beendet", label: "Beendet" }] }));
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await user.click(await screen.findByRole("button", { name: "Stornierung aufheben → Beendet" }));
+    render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: "Stornierung aufheben (→ Beendet)" }));
     expect(screen.getByText(/kehrt in den Status vor der Stornierung zurück: „Beendet“/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Status ändern" }));
     await waitFor(() => expect(api.changeContractStatus).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ target: "beendet" })));
@@ -240,12 +283,10 @@ describe("Vertragsregister – Stammdaten", () => {
     const user = userEvent.setup();
     window.localStorage.removeItem("medflux.collapsed-boxes");
     api.getContractRegister.mockResolvedValue(register({ business_status: "geloescht", business_status_label: "Storniert", allowed_transitions: [{ target: "beendet", label: "Beendet" }] }));
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    const button = await screen.findByRole("button", { name: "Stornierung aufheben → Beendet" });
-    const toggle = screen.getByRole("button", { name: "Bearbeitungsstatus einklappen" });
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    // Die Statusknöpfe bleiben im Kopf bedienbar; ein Wechsel klappt den Kasten wieder auf.
+    render(<ContractRegisterPanel view="status" contractId="c-1" orgSlug="test-klinik" />);
+    const button = await screen.findByRole("button", { name: "Stornierung aufheben (→ Beendet)" });
+    const toggle = screen.getByRole("button", { name: "Vertragsstatus einklappen" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
     await user.click(button);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     await waitFor(() => expect(screen.getByLabelText("Beendet am")).toHaveFocus());
@@ -289,7 +330,7 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     expect(within(card).getByText("Restlaufzeit", { selector: "dt" }).nextElementSibling).toHaveTextContent("909 Tage");
     expect(within(card).queryByText(/Erinnerung/)).not.toBeInTheDocument();
     expect(within(card).getByText("Wie berechnet?").closest("details")).toHaveTextContent("Feste Laufzeit: Ende = festes Vertragsende 31.03.2029.");
-    expect(within(card).getByText("KI · bestätigt")).toBeInTheDocument();
+    expect(within(card).getByText("KI · Bestätigt")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -304,35 +345,41 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     expect(within(card).getByText("Vertragsende", { selector: "dt" }).nextElementSibling).toHaveTextContent("31.03.2029");
     const bar = within(card).getByRole("region", { name: "Laufzeit, Fristen & Kündigung speichern" });
     expect(within(bar).getByRole("button", { name: "Speichern" })).toBeInTheDocument();
-    expect(within(card).getByText("KI · bestätigt")).toBeInTheDocument();
+    expect(within(card).getByText("KI · Bestätigt")).toBeInTheDocument();
   });
 
-  it("Erinnern: Chips, hinzufügen und entfernen; gespeichert über erste + weitere Erinnerungen", async () => {
+  it("Erinnern (Termine & Aufgaben → „Ändern“): Chips, hinzufügen und entfernen; gespeichert über erste + weitere Erinnerungen", async () => {
     const user = userEvent.setup();
     const base = fixed();
-    api.getContractRegister.mockResolvedValue({ ...base, fields: { ...base.fields, reminder_lead_months: field("Erinnerung (Monate vor Frist)", null) }, reminders: { default_lead_months: 4, lead_months: null, extra_leads: [{ value: 12, unit: "weeks" }] } });
+    const register = { ...base, fields: { ...base.fields, reminder_lead_months: field("Erinnerung (Monate vor Frist)", null) }, reminders: { default_lead_months: 4, lead_months: null, extra_leads: [{ value: 12, unit: "weeks" as const }] } };
+    api.updateContractRegister.mockResolvedValue(base);
     api.saveReminderLeads.mockResolvedValue(base);
-    render(<ContractRegisterPanel view="deadlines" contractId="c-1" orgSlug="test-klinik" />);
-    const card = await section("Erinnerungen");
-    // Ansicht „Fristen & Aufgaben“: nur Erinnerungen und Wartungstermin, kein Status, keine Vertragsdaten.
-    expect(screen.queryByRole("heading", { name: "Bearbeitungsstatus" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Laufzeit, Fristen & Kündigung" })).not.toBeInTheDocument();
-    const chips = () => within(within(card).getByRole("list", { name: "Erinnerungen" })).getAllByRole("listitem").map((item) => item.textContent);
-    expect(chips()).toEqual(["4 Monate vorher (Standard)", "12 Wochen vorher"]);
+    const onSaved = vi.fn();
+    render(<ContractReminderSettings register={register} contractId="c-1" orgSlug="test-klinik" editable onSaved={onSaved} />);
+    // Eine Zeile: Vorlauf, Empfänger, Standard/Angepasst.
+    const line = screen.getByRole("group", { name: "Erinnerungen" });
+    expect(line).toHaveTextContent("4 Monate vorher, 12 Wochen vorher");
+    expect(line).toHaveTextContent("an Hauptverantwortliche Person");
+    expect(within(line).getByText("Angepasst")).toBeInTheDocument();
 
-    await user.click(within(card).getByRole("button", { name: "Erinnerungen bearbeiten" }));
-    expect(within(card).getByText(/Standard des Vertragstyps: 4 Monate vorher/)).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: "4 Monate vorher (Standard) entfernen" })).not.toBeInTheDocument();
-    await user.click(within(card).getByRole("button", { name: "+ Erinnerung" }));
-    await user.type(within(card).getByLabelText("Anzahl"), "6");
-    await user.selectOptions(within(card).getByLabelText("Einheit"), "months");
-    await user.click(within(card).getByRole("button", { name: "Hinzufügen" }));
+    await user.click(screen.getByRole("button", { name: "Erinnerungen ändern" }));
+    const form = screen.getByRole("group", { name: "Erinnerungen ändern" });
+    const chips = () => within(within(form).getByRole("list", { name: "Erinnerungen" })).getAllByRole("listitem").map((item) => item.textContent);
+    expect(chips().slice(0, 2)).toEqual(["4 Monate vorher (Standard)", "12 Wochen vorher"]);
+    expect(within(form).queryByRole("button", { name: "4 Monate vorher entfernen" })).not.toBeInTheDocument();
+    await user.click(within(form).getByRole("button", { name: "+ Erinnerung" }));
+    await user.type(within(form).getByLabelText("Anzahl"), "6");
+    await user.selectOptions(within(form).getByLabelText("Einheit"), "months");
+    await user.click(within(form).getByRole("button", { name: "Hinzufügen" }));
     expect(chips().slice(0, 2)).toEqual(["12 Wochen vorher", "6 Monate vorher"]);
-    await user.click(within(card).getByRole("button", { name: "12 Wochen vorher entfernen" }));
+    await user.click(within(form).getByRole("button", { name: "12 Wochen vorher entfernen" }));
     expect(chips()[0]).toBe("6 Monate vorher");
-    await user.click(within(within(card).getByRole("region", { name: "Erinnerungen speichern" })).getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { reminder_lead_months: 6 } }));
+    await user.click(within(form).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {
+      reminder_lead_months: 6, reminder_recipient_account_id: null, escalation_recipient_account_id: null, escalation_days_before: null,
+    } }));
     await waitFor(() => expect(api.saveReminderLeads).toHaveBeenCalledWith("test-klinik", "c-1", []));
+    expect(onSaved).toHaveBeenCalled();
   });
 
   it("gekündigt: Zeile mit Daten, keine Eingabefelder dafür; „Status ändern“ führt zum Status", async () => {
@@ -340,14 +387,16 @@ describe("Vertragsregister – Laufzeit, Fristen & Kündigung", () => {
     const base = fixed();
     api.getContractRegister.mockResolvedValue({ ...base, business_status: "gekuendigt", business_status_label: "Gekündigt", allowed_transitions: [{ target: "beendet", label: "Beendet" }],
       fields: { ...base.fields, terminated_on: field("Gekündigt am", "2028-02-12"), terminated_effective: field("Gekündigt zum", "2029-03-31") } });
-    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    const onOpenStatus = vi.fn();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" onOpenStatus={onOpenStatus} />);
     const card = await section("Laufzeit, Fristen & Kündigung");
     const row = within(card).getByText("Gekündigt").closest(".rg-termrow")!;
     expect(row).toHaveTextContent("Gekündigtam 12.02.2028 · zum 31.03.2029");
     expect(screen.queryByText("Gekündigt am")).not.toBeInTheDocument();
     expect(screen.queryByText("Gekündigt zum")).not.toBeInTheDocument();
+    // „Status ändern“ führt zur Karte „Vertragsstatus“ auf der Übersicht.
     await user.click(within(card).getByRole("button", { name: "Status ändern" }));
-    expect(screen.getByRole("button", { name: "→ Beendet" })).toHaveFocus();
+    expect(onOpenStatus).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Laufzeit, Fristen & Kündigung bearbeiten" }));
     expect(screen.queryByLabelText("Gekündigt am")).not.toBeInTheDocument();
   });
@@ -435,7 +484,7 @@ describe("Vertragsregister – Zugriff & Datenschutz", () => {
     const card = await section("Zugriff & Datenschutz");
     expect(within(card).getByText("Sichtbar für: Administratoren, verantwortliche Person, Erinnerungsempfänger")).toBeInTheDocument();
     expect(within(card).getByText("Vera Viewer").closest(".tag-person")).toBeInTheDocument();
-    expect(within(card).getByText("KI · Vorschlag")).toBeInTheDocument();
+    expect(within(card).getByText("KI · Ungeprüft")).toBeInTheDocument();
     expect(within(card).getByText("Dokumenttext: „personenbezogene Daten“")).toBeInTheDocument();
     expect(await within(card).findByText("Kein AVV hinterlegt")).toBeInTheDocument();
     expect(within(card).getByRole("link", { name: "AVV hochladen" })).toHaveAttribute("href", "/contracts/c-1?tab=documents&subtab=attachments&dokumentart=avv");
@@ -483,25 +532,94 @@ describe("Vertragsregister – Zugriff & Datenschutz", () => {
     expect(within(card).getByText(/Der Vertragstyp ist bereits vertraulich/)).toBeInTheDocument();
   });
 });
-describe("Vertragsregister – Bemerkungen", () => {
+describe("Vertragsregister – Notizen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.listContractRemarks.mockResolvedValue({ items: [{ id: "r-1", author_name: "Admin", body: "Angebot angefragt", created_at: "2026-10-01T10:00:00Z" }] });
     api.addContractRemark.mockResolvedValue({ items: [
-      { id: "r-2", author_name: "Admin", body: "Neue Notiz", created_at: "2026-10-04T10:00:00Z" },
+      { id: "r-2", author_name: "Admin", body: "Rückruf vereinbart", created_at: "2026-10-04T10:00:00Z" },
       { id: "r-1", author_name: "Admin", body: "Angebot angefragt", created_at: "2026-10-01T10:00:00Z" },
     ] });
   });
 
   it("listet das Journal und fügt Einträge an", async () => {
     const user = userEvent.setup();
-    render(<ContractRemarksPanel contractId="c-1" orgSlug="test-klinik" />);
+    const { container } = render(<ContractRemarksPanel contractId="c-1" orgSlug="test-klinik" />);
     expect(await screen.findByText("Angebot angefragt")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Neue Bemerkung"), "Neue Notiz");
-    await user.click(screen.getByRole("button", { name: "Bemerkung hinzufügen" }));
-    expect(api.addContractRemark).toHaveBeenCalledWith("test-klinik", "c-1", "Neue Notiz");
-    expect(await screen.findByText("Neue Notiz")).toBeInTheDocument();
-    expect(screen.getByLabelText("Neue Bemerkung")).toHaveValue("");
+    expect(await axe(container)).toHaveNoViolations();
+    expect(screen.getByRole("heading", { level: 3, name: /1\. Oktober 2026/ })).toHaveTextContent("1 Eintrag");
+    await user.click(screen.getByRole("button", { name: "Neue Notiz schreiben …" }));
+    expect(screen.getByRole("textbox", { name: "Neue Notiz" })).toHaveFocus();
+    await user.type(screen.getByRole("textbox", { name: "Neue Notiz" }), "Rückruf vereinbart");
+    await user.click(screen.getByRole("button", { name: "Notiz speichern" }));
+    expect(api.addContractRemark).toHaveBeenCalledWith("test-klinik", "c-1", "Rückruf vereinbart");
+    expect(await screen.findByText("Rückruf vereinbart")).toBeInTheDocument();
+    // Nach dem Speichern schließt sich das Formular wieder.
+    expect(screen.queryByRole("textbox", { name: "Neue Notiz" })).not.toBeInTheDocument();
+    // Suche filtert, Sortierung dreht die Reihenfolge.
+    await user.type(screen.getByRole("searchbox", { name: "Notizen durchsuchen" }), "Rückruf");
+    expect(screen.queryByText("Angebot angefragt")).not.toBeInTheDocument();
+    await user.clear(screen.getByRole("searchbox", { name: "Notizen durchsuchen" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Sortierung" }), "oldest");
+    const days = screen.getAllByRole("heading", { level: 3 }).map((node) => node.textContent);
+    expect(days[0]).toMatch(/1\. Oktober 2026/);
+  });
+
+  it("bearbeitet eine Notiz und zeigt die frühere Fassung im Verlauf", async () => {
+    const user = userEvent.setup();
+    api.listContractRemarks.mockResolvedValue({ items: [{ id: "r-1", author_name: "Admin", body: "Angebot angefragt", created_at: "2026-10-01T10:00:00Z", version: "v1", revisions: [] }] });
+    api.editContractRemark.mockResolvedValue({ items: [{
+      id: "r-1", author_name: "Admin", body: "Angebot liegt vor", created_at: "2026-10-01T10:00:00Z", version: "v2",
+      edited_at: "2026-10-05T09:00:00Z", edited_by_name: "Beate Berg",
+      revisions: [{ body: "Angebot angefragt", author_name: "Admin", written_at: "2026-10-01T10:00:00Z" }],
+    }] });
+    render(<ContractRemarksPanel contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: /bearbeiten$/ }));
+    const form = screen.getByRole("form", { name: "Notiz bearbeiten" });
+    const field = within(form).getByLabelText("Notiz");
+    expect(field).toHaveValue("Angebot angefragt");
+    expect(within(form).getByRole("button", { name: "Änderung speichern" })).toBeDisabled();
+    await user.clear(field);
+    await user.type(field, "Angebot liegt vor");
+    await user.click(within(form).getByRole("button", { name: "Änderung speichern" }));
+    expect(api.editContractRemark).toHaveBeenCalledWith("test-klinik", "c-1", "r-1", "Angebot liegt vor", "v1");
+    expect(await screen.findByText("Angebot liegt vor")).toBeInTheDocument();
+    expect(screen.getByText("Bearbeitet").closest(".rg-note-edited")).toHaveAttribute("title", expect.stringContaining("Bearbeitet von Beate Berg"));
+    const toggle = screen.getByRole("button", { name: "1 frühere Version" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    const history = screen.getByRole("list", { name: "Frühere Fassungen, neueste zuerst" });
+    expect(within(history).getByText("Angebot angefragt")).toBeInTheDocument();
+  });
+
+  it("löscht eine Notiz erst nach Bestätigung", async () => {
+    const user = userEvent.setup();
+    api.listContractRemarks.mockResolvedValue({ items: [{ id: "r-1", author_name: "Admin", body: "Angebot angefragt", created_at: "2026-10-01T10:00:00Z", version: "v1", revisions: [] }] });
+    api.deleteContractRemark.mockResolvedValue({ items: [] });
+    render(<ContractRemarksPanel contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: /^Weitere Aktionen: Notiz vom/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Notiz löschen" }));
+    const confirm = screen.getByRole("group", { name: "Löschen bestätigen" });
+    await user.click(within(confirm).getByRole("button", { name: "Abbrechen" }));
+    expect(api.deleteContractRemark).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /^Weitere Aktionen: Notiz vom/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Notiz löschen" }));
+    await user.click(within(screen.getByRole("group", { name: "Löschen bestätigen" })).getByRole("button", { name: "Notiz löschen" }));
+    expect(api.deleteContractRemark).toHaveBeenCalledWith("test-klinik", "c-1", "r-1", "v1");
+    expect(await screen.findByText("Noch keine Notizen.")).toBeInTheDocument();
+  });
+
+  it("zeigt bei einem Konflikt die Meldung und behält den eigenen Text", async () => {
+    const user = userEvent.setup();
+    api.listContractRemarks.mockResolvedValue({ items: [{ id: "r-1", author_name: "Admin", body: "Angebot angefragt", created_at: "2026-10-01T10:00:00Z", version: "v1", revisions: [] }] });
+    api.editContractRemark.mockRejectedValue(new Error("Die Notiz wurde inzwischen von Beate Berg geändert. Bitte neu laden und erneut bearbeiten."));
+    render(<ContractRemarksPanel contractId="c-1" orgSlug="test-klinik" />);
+    await user.click(await screen.findByRole("button", { name: /bearbeiten$/ }));
+    const field = screen.getByLabelText("Notiz");
+    await user.type(field, " – ergänzt");
+    await user.click(screen.getByRole("button", { name: "Änderung speichern" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/inzwischen von Beate Berg geändert/);
+    expect(screen.getByLabelText("Notiz")).toHaveValue("Angebot angefragt – ergänzt");
   });
 });
 
@@ -515,7 +633,7 @@ describe("Vertragsregister – Formularschutz", () => {
   it("speichert mit Strg+S und markiert ungespeicherte Änderungen", async () => {
     const user = userEvent.setup();
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
-    await screen.findByRole("heading", { name: "Bearbeitungsstatus" });
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     await user.type(screen.getByLabelText("Vertragsgegenstand"), "INT-9");
     expect(within(screen.getByRole("region", { name: "Vertrag & Partner speichern" })).getByText("Ungespeicherte Änderungen")).toBeInTheDocument();

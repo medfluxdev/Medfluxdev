@@ -159,7 +159,7 @@ export default function RegisterPortfolio({ organizationSlug }: { organizationSl
         />
         {report.upcoming.length > 0 ? <details className="viz-table"><summary>Nächste Fristen ({report.upcoming.length})</summary>
           <ul className="hist-details">{report.upcoming.slice(0, 20).map((item) => <li key={`${item.contract_id}-${item.due_date}-${item.title}`}>
-            <span>{formatDate(item.due_date)}</span> <Link href={`/contracts/${item.contract_id}?tab=deadlines`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link> – {item.title}
+            <span>{formatDate(item.due_date)}</span> <Link href={`/contracts/${item.contract_id}`}>{item.register_number ?? "–"} · {item.short_description ?? ""}</Link> – {item.title}
           </li>)}</ul>
         </details> : null}
       </section>
