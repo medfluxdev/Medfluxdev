@@ -124,6 +124,8 @@ export default function EvidenceReviewMode({
   const matches = doc != null && stored != null && sameText(doc, stored);
   const diff = doc != null && stored != null && !matches ? wordDiff(doc, stored) : null;
   const review = current ? reviews.get(current.evidence_id) : undefined;
+  // Wortlaut nachweislich an der markierten Stelle (Backend `text_verified`, genaue Lage).
+  const verified = Boolean(current?.text_verified) && precision === "exact";
 
   const rows = evidenceRows(order, numbers, factByEvidence, statusOf);
   const totals = { confirmed: rows.filter((row) => row.status === "confirmed").length, deviation: rows.filter((row) => row.status === "deviation").length, skipped: rows.filter((row) => row.status === "skipped").length, open: rows.filter((row) => row.status === "open").length };
@@ -414,7 +416,9 @@ export default function EvidenceReviewMode({
                 <span className="erm-box-value">{stored == null ? <span className="erm-muted">Kein gespeicherter Wert</span> : diff ? <Diff tokens={diff.b} /> : stored}</span>
               </div>
             </div>
-            {stored == null
+            {stored == null && verified
+              ? <p className="erm-result erm-result--done">{CHECK_CIRCLE}Wortlaut steht an dieser Stelle im Dokument.</p>
+              : stored == null
               ? <p className="erm-result erm-result--neutral">{CHECK_CIRCLE}{doc == null ? "Kein Wert zum Abgleichen – geprüft wird nur die Fundstelle." : "Nichts gespeichert – bestätigt wird die Fundstelle im Dokument."}</p>
               : matches
                 ? <p className="erm-result erm-result--done">{CHECK_CIRCLE}Dokument und MedFlux stimmen überein.</p>
@@ -423,6 +427,11 @@ export default function EvidenceReviewMode({
               <span>KI-Sicherheit</span>
               <span className="erm-meter" aria-hidden="true"><i className={confidence >= 0.9 ? "is-high" : confidence >= 0.7 ? "is-mid" : "is-low"} style={{ width: `${Math.round(confidence * 100)}%` }} /></span>
               <span className="erm-meter-value">{percent(confidence)}</span>
+            </div> : verified ? <div className="erm-confidence">
+              {/* Keine KI-Sicherheit (feste Regel/Wortlaut): belegt ist die Fundstelle, keine Prozentzahl erfinden. */}
+              <span>Fundstelle</span>
+              <span className="erm-meter" aria-hidden="true"><i className="is-high" style={{ width: "100%" }} /></span>
+              <span className="erm-meter-value">Wörtlich belegt</span>
             </div> : null}
 
             {!canReview ? <p className="erm-readonly">Nur Lesen – bestätigen und Abweichungen klären dürfen Prüfende und das Vertragsmanagement.</p>

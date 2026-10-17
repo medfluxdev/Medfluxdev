@@ -76,7 +76,7 @@ describe("Nachweise prüfen (geführt)", () => {
     expect(within(panel()).getByText("KI-Sicherheit 97 %")).toBeInTheDocument();
     // Reiner Nachweis: kein gespeicherter Wert; Nummer wie in der Liste (Lesereihenfolge: 2).
     expect(within(panel()).getByText("Kein gespeicherter Wert")).toBeInTheDocument();
-    expect(within(panel()).getByText(/Nichts gespeichert – bestätigt wird die Fundstelle/)).toBeInTheDocument();
+    expect(within(panel()).getByText("Wortlaut steht an dieser Stelle im Dokument.")).toBeInTheDocument();
     expect(within(panel()).getByLabelText("Nachweis 2")).toBeInTheDocument();
     expect(props.onShow).toHaveBeenCalledWith(EVIDENCE[1]);
     expect(container.querySelectorAll(".erm-seg i")).toHaveLength(3);
