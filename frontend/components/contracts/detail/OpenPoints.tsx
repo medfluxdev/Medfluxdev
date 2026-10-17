@@ -45,7 +45,11 @@ function bySeverity(severity: string): { tone: SignalTone; word: string; rank: n
   return { tone: "info", word: "Hinweis", rank: RANK.info, priority: false };
 }
 
-export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, cancelByUnknown = false, decision = null, decisionStep = null }: {
+/** Abschnitt „Nachweise prüfen“: öffnet im Reiter Dokumente den geführten Modus. */
+export const EVIDENCE_REVIEW_SECTION = "nachweise-pruefen";
+export const EVIDENCE_REVIEW_TARGET: FixTarget = { tab: "documents", subtab: "evidence", section: EVIDENCE_REVIEW_SECTION };
+
+export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, evidenceOpen = 0, cancelByUnknown = false, decision = null, decisionStep = null }: {
   gaps: Gap[];
   tasks: OpenTask[];
   warnings: DetailWarning[];
@@ -56,6 +60,8 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
   slaToCheck?: number;
   /** Offene Angaben der Faktprüfung (Zahl im Punkt „KI-Werte bestätigen“). */
   reviewOpen?: number;
+  /** Nachweise ohne Ergebnis der Nachweisprüfung. */
+  evidenceOpen?: number;
   /** Kündbar-bis lässt sich nicht berechnen (Kopf zeigt „Nicht berechenbar“). */
   cancelByUnknown?: boolean;
   /** Keine Entscheidung zum nächsten Termin erfasst (`pendingDecision`), sonst null. */
@@ -117,6 +123,9 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
     const level = bySeverity(warning.severity);
     points.push({ key: `warning-${warning.warning_type}-${index}`, tone: level.tone, word: level.word, title: warning.title_de, why: [warning.requires_review ? "Bitte prüfen" : null, level.priority ? "Priorität hoch" : null].filter(Boolean).join(" · ") || "Hinweis aus der Berechnung", action: "Ansehen", target: warningTarget(warning.warning_type, false) ?? { tab: "deadlines" }, rank: level.rank });
   });
+  if (evidenceOpen > 0) {
+    points.push({ key: "evidence-review", tone: "ai", word: "KI-Prüfung", title: "Nachweise prüfen", why: `${evidenceOpen} ${evidenceOpen === 1 ? "Nachweis ist" : "Nachweise sind"} noch nicht mit dem Dokument abgeglichen.`, action: "Nachweise prüfen", target: EVIDENCE_REVIEW_TARGET, rank: RANK.ai });
+  }
   if (scopeToCheck > 0) {
     points.push({ key: "scope", tone: "warning", word: "Prüfen", title: "Leistungsumfang ungeklärt", why: `${scopeToCheck} von ${scopeTotal} Leistungen aus dem Dokument ${scopeToCheck === 1 ? "ist" : "sind"} noch nicht bestätigt.`, action: "Leistungen", target: SCOPE_TARGET, rank: RANK.warning });
   }

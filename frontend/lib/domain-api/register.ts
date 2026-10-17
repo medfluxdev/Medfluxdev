@@ -289,3 +289,33 @@ export function updateContractConfidentiality(
 ) {
   return apiPut<ContractRegister>(contractPath(contractId, "confidentiality", organizationSlug), payload);
 }
+
+/** Ergebnis der Nachweisprüfung je Nachweis (der Wert selbst steht in der Faktprüfung). */
+export type EvidenceReviewStatus = "confirmed" | "document" | "medflux" | "manual" | "skipped";
+
+export interface EvidenceReviewItem {
+  evidence_id: string;
+  fact_key: string | null;
+  status: EvidenceReviewStatus;
+  status_label: string;
+  note: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string;
+}
+
+export function listEvidenceReviews(organizationSlug: string, contractId: string) {
+  return apiGet<{ items: EvidenceReviewItem[] }>(contractPath(contractId, "evidence-reviews", organizationSlug));
+}
+
+export function saveEvidenceReview(
+  organizationSlug: string,
+  contractId: string,
+  payload: { evidence_id: string; status: EvidenceReviewStatus; fact_key?: string | null; note?: string | null },
+) {
+  return apiPut<{ items: EvidenceReviewItem[] }>(contractPath(contractId, "evidence-reviews", organizationSlug), payload);
+}
+
+/** Ende einer Prüfrunde: die Zusammenfassung kommt in den Verlauf. */
+export function logEvidenceRound(organizationSlug: string, contractId: string, counts: Partial<Record<EvidenceReviewStatus, number>>) {
+  return apiPost<{ summary: string }>(contractPath(contractId, "evidence-reviews/round", organizationSlug), counts);
+}

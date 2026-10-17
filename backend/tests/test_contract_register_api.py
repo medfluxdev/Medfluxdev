@@ -525,3 +525,41 @@ def test_contract_list_shows_register_fields_and_filters_business_status(monkeyp
     assert [item["contract_id"] for item in found] == [created["contract_id"]]
     assert listing.get("/api/contracts", params={**query, "business_status": "gueltig"}).json()["items"] == []
     assert listing.get("/api/contracts", params={**query, "business_status": "bogus"}).status_code == 422
+
+
+def test_evidence_reviews_store_result_per_evidence_and_log_the_round(monkeypatch):
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    manager = _client(monkeypatch, _actor(ids, "manager", "contract_manager"))
+    contract_id = manager.post("/api/contracts", params=query, json={"values": {"short_description": "Nachweise"}}).json()["contract_id"]
+    base = f"/api/contracts/{contract_id}/evidence-reviews"
+    assert manager.get(base, params=query).json() == {"items": []}
+
+    first = manager.put(base, params=query, json={"evidence_id": "recovered:identity.customer", "status": "skipped", "fact_key": "identity.customer"})
+    assert first.status_code == 200, first.text
+    # Ein neues Ergebnis ersetzt das alte (eine Zeile je Nachweis).
+    items = manager.put(base, params=query, json={
+        "evidence_id": "recovered:identity.customer", "status": "medflux", "fact_key": "identity.customer", "note": " Adresse veraltet ",
+    }).json()["items"]
+    assert [(i["evidence_id"], i["status"], i["status_label"], i["note"], i["reviewed_by_name"]) for i in items] == [
+        ("recovered:identity.customer", "medflux", "Abweichend · geklärt", "Adresse veraltet", "Manager"),
+    ]
+    assert manager.put(base, params=query, json={"evidence_id": "e2", "status": "egal"}).status_code == 422
+
+    round_ = manager.post(f"{base}/round", params=query, json={"confirmed": 30, "document": 2, "medflux": 1, "skipped": 1})
+    assert round_.json()["summary"] == "34 geprüft: 30 bestätigt · 3 abweichend (übernommen 2, geklärt 1) · 1 übersprungen"
+    assert manager.post(f"{base}/round", params=query, json={}).status_code == 422
+
+    viewer = _client(monkeypatch, _actor(ids, "viewer", "viewer"))
+    assert viewer.get(base, params=query).status_code == 200
+    assert viewer.put(base, params=query, json={"evidence_id": "e3", "status": "confirmed"}).status_code == 403
+    assert viewer.post(f"{base}/round", params=query, json={"confirmed": 1}).status_code == 403
+
+    session = create_session()
+    try:
+        logged = session.scalars(select(ActivityLog).where(
+            ActivityLog.object_id == UUID(contract_id), ActivityLog.event_name == "contract.evidence_reviewed",
+        )).all()
+        assert [row.context_data["summary"] for row in logged] == [round_.json()["summary"]]
+    finally:
+        session.close()

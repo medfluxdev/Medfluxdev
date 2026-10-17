@@ -31,6 +31,9 @@ export interface EvidenceRef {
    *  der Original-Seite (`pdf_points`); `normalized` nur fuer Alt-/Testdaten. */
   bbox_space: "pdf_points" | "normalized";
   supports_exact_navigation: boolean;
+  /** Lage aus dem Text belegt (Backend): exact = Wortlaut steht in der Box, approx = ungefähr, page = nur Seite. */
+  location?: "exact" | "approx" | "page" | "none";
+  text_verified?: boolean;
 }
 
 export interface DetailField {
@@ -449,6 +452,9 @@ export interface FactReviewStateDto {
   is_evidence_item?: boolean;
   /** Keine KI-Sicherheit: von festen Regeln wörtlich im Text gefunden. */
   found_by_rule?: boolean;
+  /** Vertragsdaten-Feld der Angabe und dort gespeicherter Wert (deutsch); null = kein Feld/kein Wert. */
+  register_field?: string | null;
+  stored_value?: string | null;
 }
 
 /** Vertragsebene: Prüfstatus + Abschluss-Metadaten + Vollständigkeit. */

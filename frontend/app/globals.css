@@ -110,13 +110,6 @@ a:focus-visible {
   font-size: var(--text-body);
 }
 
-
-
-
-
-
-
-
 /* Fristen-Verteilung */
 
 /* Finanzen */
@@ -217,14 +210,6 @@ a:focus-visible {
   font-weight: 400;
   font-size: var(--text-caption);
 }
-
-
-
-
-
-
-
-
 
 .cost {
   white-space: nowrap;
@@ -455,74 +440,6 @@ a:focus-visible {
   margin-right: 0.4rem;
 }
 
-/* Quellenangaben / Evidence */
-.evidence-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-.evidence-item {
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background: var(--surface);
-  padding: 0.5rem 0.65rem;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-.evidence-item.active {
-  border-color: var(--color-accent);
-  background: var(--color-bg);
-}
-.evidence-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  align-items: center;
-}
-.evidence-field {
-  font-weight: 600;
-  text-transform: capitalize;
-}
-.evidence-pill {
-  font-size: var(--text-caption);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 0.05rem 0.5rem;
-  white-space: nowrap;
-}
-.evidence-pill.ok {
-  color: var(--color-success);
-  border-color: var(--color-success);
-}
-.evidence-meta {
-  font-size: var(--text-small);
-  color: var(--text-muted);
-}
-.evidence-snippet {
-  font-size: var(--text-small);
-  font-style: italic;
-  color: var(--text);
-}
-.evidence-note {
-  font-size: var(--text-small);
-  color: var(--color-warning);
-}
-.evidence-review {
-  font-size: var(--text-small);
-  color: var(--color-warning);
-}
-.evidence-empty {
-  color: var(--text-muted);
-}
-
 /* PDF-Viewer (pdfjs, lokal) – eigener, unabhängiger Scrollbereich */
 .pdf-viewer {
   background: var(--surface-2);
@@ -692,45 +609,16 @@ a:focus-visible {
   flex-wrap: wrap;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 .alert .retry {
   margin-left: auto;
   flex: none;
 }
-
-
-
 
 @keyframes medflux-spin {
   to {
     transform: rotate(360deg);
   }
 }
-
 
 /* --- DefinitionList (dt/dd rows) --- */
 .rules {
@@ -760,8 +648,6 @@ a:focus-visible {
   font-weight: var(--fw-semibold);
 }
 
-
-
 .field input,
 .field select,
 .field textarea {
@@ -778,8 +664,6 @@ a:focus-visible {
   outline: var(--focus-width) solid var(--focus-ring);
   outline-offset: 2px;
 }
-
-
 
 /* --- Import --- */
 .import-layout {
@@ -1155,10 +1039,6 @@ a:focus-visible {
   font-weight: 600;
 }
 
-
-
-
-
 /* ── UAT Defect Batch A: Netto/Brutto, Preisfixierung, Override/Audit ── */
 /* Fehlender (nicht belegter/nicht berechenbarer) Gegen-Basis-Wert:
    ehrlich "Needs Review" statt erfundener 19-%-Annahme. */
@@ -1266,8 +1146,6 @@ a:focus-visible {
   color: var(--color-text-muted);
 }
 
-
-
 .detail-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1312,7 +1190,6 @@ a:focus-visible {
   margin: 8px auto 0;
   max-width: 520px;
 }
-
 
 /* --- Tags / Badges --- */
 
@@ -1441,10 +1318,7 @@ a:focus-visible {
   background: var(--surface-2);
   color: var(--text);
 }
-.evidence-item.active {
-  border-color: var(--color-accent);
-  background: var(--accent-soft);
-}
+
 .form-ok {
   color: var(--success);
 }
@@ -1635,8 +1509,6 @@ body {
   font-weight: 800;
   letter-spacing: -0.045em;
 }
-
-
 
 .panel h2,
 .panel-head h2,

@@ -438,7 +438,6 @@ a.kpi:hover .kpi-more, a.kpi:focus-visible .kpi-more { text-decoration: underlin
 /* Farbe nur mit Bedeutung: info/success toenen das Symbol, warning/danger auch den Wert */
 .kpi--empty .kpi-value { color: var(--color-text-subtle); }
 
-
 /* ---------- Zeitleiste ---------- */
 .timeline { margin: 0; padding: 0; list-style: none; }
 .timeline > li { position: relative; padding: 0 0 var(--space-4) var(--space-6); border-left: 2px solid var(--color-border); margin-left: var(--space-2); }
@@ -845,7 +844,7 @@ body { background: var(--color-bg); }
 .fr-status-icon--ai { color: var(--color-ai); }
 .fr-status-icon--neutral { color: var(--color-icon); }
 .fr-confirm .signal-icon { vertical-align: -3px; }
-.evidence-dimensions { display: block; margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--text-caption); }
+
 .hist-list time, .hist-table time { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hist-technical { margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--text-small); }
 .hist-technical summary { cursor: pointer; }
@@ -865,7 +864,6 @@ body { background: var(--color-bg); }
 .ai-review-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .ai-review-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .ai-review-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-
 
 /* Kasten mit Aktionen und Einklappen in der rechten oberen Ecke (CollapsibleSection) */
 .collapsible > .collapsible-head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
@@ -925,7 +923,6 @@ body { background: var(--color-bg); }
 .signal--sm .signal-icon { width: 13px; height: 13px; }
 .value-origin { display: inline-flex; align-items: center; gap: 4px; color: var(--color-text-subtle); font-size: var(--text-caption); font-weight: var(--weight-medium); white-space: nowrap; }
 .value-origin svg { width: 13px; height: 13px; fill: none; stroke: currentcolor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-
 
 /* Laufzeitleiste im Kopf der Vertragsakte */
 .term-bar { grid-column: 1 / -1; display: grid; gap: var(--space-2); padding-top: var(--space-3); }

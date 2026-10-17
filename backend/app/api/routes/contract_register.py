@@ -20,6 +20,7 @@ from app.database.scope_queries import scoped_contract_ids
 from app.database.session import create_session
 from app.deadlines.system import sync_system_deadlines
 from app.register import catalogs, from_document
+from app.register.evidence_reviews import list_evidence_reviews, log_evidence_round, set_evidence_review
 from app.register.service import (
     RegisterActor,
     RegisterError,
@@ -74,6 +75,21 @@ class ConfidentialityUpdate(BaseModel):
 
 class RemarkCreate(BaseModel):
     body: str = Field(max_length=10000)
+
+
+class EvidenceReviewUpdate(BaseModel):
+    evidence_id: str = Field(min_length=1, max_length=255)
+    status: str = Field(max_length=16)
+    fact_key: Optional[str] = Field(default=None, max_length=120)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class EvidenceRound(BaseModel):
+    confirmed: int = Field(default=0, ge=0, le=10000)
+    document: int = Field(default=0, ge=0, le=10000)
+    medflux: int = Field(default=0, ge=0, le=10000)
+    manual: int = Field(default=0, ge=0, le=10000)
+    skipped: int = Field(default=0, ge=0, le=10000)
 
 
 class RemarkEdit(BaseModel):
@@ -407,6 +423,58 @@ def post_remark(contract_id: UUID, payload: RemarkCreate, request: Request, orga
             raise _http(exc)
         session.commit()
         return {"items": list_remarks(session, contract.id)}
+    finally:
+        session.close()
+
+
+@router.get("/{contract_id}/evidence-reviews")
+def get_evidence_reviews(contract_id: UUID, request: Request, organization_slug: str):
+    """Ergebnis der Nachweisprüfung je Nachweis (bestätigt, abweichend …, übersprungen)."""
+    actor = _register_actor(request, organization_slug)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        return {"items": list_evidence_reviews(session, contract.id)}
+    finally:
+        session.close()
+
+
+@router.put("/{contract_id}/evidence-reviews")
+def put_evidence_review(contract_id: UUID, payload: EvidenceReviewUpdate, request: Request, organization_slug: str):
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "contract.review")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        try:
+            set_evidence_review(
+                session, contract=contract, actor=actor, evidence_id=payload.evidence_id,
+                status=payload.status, fact_key=payload.fact_key, note=payload.note,
+            )
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
+        return {"items": list_evidence_reviews(session, contract.id)}
+    finally:
+        session.close()
+
+
+@router.post("/{contract_id}/evidence-reviews/round")
+def post_evidence_round(contract_id: UUID, payload: EvidenceRound, request: Request, organization_slug: str):
+    """Ende einer Prüfrunde: Zusammenfassung in den Verlauf."""
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "contract.review")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        try:
+            summary = log_evidence_round(session, contract=contract, actor=actor, counts=payload.model_dump())
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
+        return {"summary": summary}
     finally:
         session.close()
 

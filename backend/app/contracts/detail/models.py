@@ -93,6 +93,10 @@ class EvidenceRef(BaseModel):
     geometry_normalized: bool = False
     bbox_space: Literal["pdf_points", "normalized"] = "pdf_points"
     supports_exact_navigation: bool = False
+    # Lage aus dem Text belegt: exact = Wortlaut steht in der Box, approx = nur ungefaehr,
+    # page = nur die Seite, none = ohne Seite (evidence_geometry.verify_evidence_locations).
+    location: Literal["exact", "approx", "page", "none"] = "none"
+    text_verified: bool = False
 
 
 class DetailField(BaseModel):
@@ -518,6 +522,9 @@ class FactReviewStateDto(BaseModel):
     is_evidence_item: bool = False
     # Ohne KI-Sicherheit: alle Belege von festen Regeln woertlich im Text gefunden (kein Modellvorschlag).
     found_by_rule: bool = False
+    # Vertragsdaten-Feld der Angabe und dessen gespeicherter Wert (deutsch); None = kein Feld/kein Wert.
+    register_field: Optional[str] = None
+    stored_value: Optional[str] = None
 
 
 class ContractReviewDto(BaseModel):

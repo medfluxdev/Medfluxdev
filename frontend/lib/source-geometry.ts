@@ -9,7 +9,7 @@ export interface SourceRect {
 
 /**
  * A4-Seitenpunkte (595.28 x 841.89) als Rückfall für die Ehrlichkeits-Klassi-
- * fizierung, wo keine echten gerenderten Seitenmaße vorliegen (EvidencePane).
+ * fizierung, wo keine echten gerenderten Seitenmaße vorliegen (lib/evidence.ts).
  * Bedarf: ein Beleg, dessen Region fast die ganze Seite ausfüllt, darf nicht
  * als exakte Position suggeriert werden.
  */

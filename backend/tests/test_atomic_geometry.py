@@ -69,7 +69,7 @@ def _word(pid: str, text: str, off: int, lo: float, top: float, hi: float, botto
 
 class TestModel:
     def test_schema_version_is_130(self):
-        assert CANONICAL_SCHEMA_VERSION == "1.3.0"
+        assert CANONICAL_SCHEMA_VERSION == "1.4.0"
 
     def test_atomic_unit_json_roundtrip(self):
         u = AtomicUnit(

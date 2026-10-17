@@ -24,6 +24,7 @@ const TOOL_ICON = {
   expand: toolIcon(<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />),
   collapse: toolIcon(<path d="m11 17-5-5 5-5M18 17l-5-5 5-5" />),
   chevron: toolIcon(<path d="m6 9 6 6 6-6" />),
+  fit: toolIcon(<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />),
 };
 
 interface Props {
@@ -39,6 +40,8 @@ interface Props {
   /** Nummerierte Marken der Nachweise auf der Seite (gleiche Nummern wie die Liste); Klick wählt den Nachweis. */
   markers?: PageMarker[];
   onMarker?: (id: string) => void;
+  /** „review“: schlanke Leiste (Seite, Zoom, Ganze Seite) und Rahmen statt Marken – für „Nachweise prüfen“. */
+  variant?: "full" | "review";
 }
 
 export interface PageMarker {
@@ -49,6 +52,8 @@ export interface PageMarker {
   bbox: EvidenceBbox;
   bbox_space: "pdf_points" | "normalized";
   active: boolean;
+  /** Lage nicht im Text belegt: Rahmen gestrichelt in Warnfarbe. */
+  approx?: boolean;
 }
 
 type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -63,7 +68,8 @@ function sourceErrorMessage(status: number | null, aborted: boolean): string {
   return "Quelle konnte nicht geladen werden.";
 }
 
-export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget, onPageChange, pagesOpen = true, markers = [], onMarker }: Props) {
+export default function PdfViewer({ contractId, orgSlug, documentVersionId, active, navTarget, onPageChange, pagesOpen = true, markers = [], onMarker, variant = "full" }: Props) {
+  const review = variant === "review";
   const [status, setStatus] = useState<LoadStatus>("idle");
   const [errorText, setErrorText] = useState("Quelle konnte nicht geladen werden.");
   const [pageNumber, setPageNumber] = useState(1);
@@ -88,7 +94,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   const rootRef = useRef<HTMLElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   // Seitenleiste mit Vorschaubildern, Suche im Text, Vollbild.
-  const [showPages, setShowPages] = useState(pagesOpen);
+  const [showPages, setShowPages] = useState(pagesOpen && variant !== "review");
   const [thumbCount, setThumbCount] = useState(THUMB_STEP);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -350,7 +356,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     canvas.height = dims?.height ?? 0;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    if (!navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber) return;
+    if (review || !navTarget || !dims || navTarget.document_version_id !== documentVersionId || navTarget.page !== pageNumber) return;
     const refinedKey = `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}`;
     const useRefined = refined !== null && refined.key === refinedKey && refined.status === "exact" && refined.bbox !== null;
     const bbox = useRefined ? refined.bbox! : (navTarget.supports_exact_navigation ? navTarget.bbox : null);
@@ -378,7 +384,16 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     ctx.strokeStyle = "#d97706";
     ctx.lineWidth = 2;
     ctx.strokeRect(rect.x + 1, rect.y + 1, Math.max(0, rect.width - 2), Math.max(0, rect.height - 2));
-  }, [navTarget, dims, documentVersionId, pageNumber, zoom, refined, orgSlug]);
+  }, [navTarget, dims, documentVersionId, pageNumber, zoom, refined, orgSlug, review]);
+
+  // Prüfmodus: den aktuellen Rahmen in den sichtbaren Bereich holen (beim Wechsel des Nachweises oder der Größe).
+  const currentMarker = review ? markers.find((marker) => marker.active && marker.page === pageNumber)?.id ?? null : null;
+  useEffect(() => {
+    if (!currentMarker || !pageBox) return;
+    const frame = stageRef.current?.querySelector<HTMLElement>(".pdf-frame.is-current");
+    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    frame?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [currentMarker, pageBox]);
 
   if (!active || !documentVersionId) {
     return <div className="pdf-viewer pdf-idle" role="region" aria-label="Quellansicht"><p className="pdf-placeholder">Wählen Sie oben ein Quelldokument aus, um die Quelle zu öffnen.</p></div>;
@@ -386,8 +401,17 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
 
   const hitNow = searchHits && searchHits.length ? searchHits[hitIndex] : null;
   return (
-    <section className="pdf-viewer" aria-label="Quellansicht (PDF)" ref={rootRef}>
-      <div className="pdf-controls" role="toolbar" aria-label="PDF-Ansicht steuern">
+    <section className={`pdf-viewer${review ? " pdf-viewer--review" : ""}`} aria-label="Quellansicht (PDF)" ref={rootRef}>
+      {review ? <div className="pdf-controls pdf-controls--slim" role="toolbar" aria-label="PDF-Ansicht steuern">
+        <span className="pdf-slim-page" aria-live="polite">Seite <strong>{pageNumber}</strong> von {pageCount || "–"}</span>
+        <span className="pdf-slim-space" />
+        <span className="pdf-tool-group">
+          <button type="button" className="pdf-icon-btn" aria-label="Zoom verkleinern" disabled={!canRender} onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}>{TOOL_ICON.minus}</button>
+          <button type="button" className="zoom-value" aria-label="Zoom zurücksetzen" disabled={!canRender} onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" className="pdf-icon-btn" aria-label="Zoom vergrößern" disabled={!canRender} onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}>{TOOL_ICON.plus}</button>
+        </span>
+        <button type="button" className="btn btn-sm pdf-slim-fit" disabled={!canRender} onClick={() => void fit("page")}>{TOOL_ICON.fit}Ganze Seite</button>
+      </div> : <div className="pdf-controls" role="toolbar" aria-label="PDF-Ansicht steuern">
         <button type="button" className="pdf-tool" aria-pressed={showPages} onClick={() => setShowPages((open) => !open)}>{TOOL_ICON.pages}Seiten</button>
         <form className="pdf-search" role="search" onSubmit={(event) => { event.preventDefault(); void search(); }}>
           {TOOL_ICON.search}
@@ -421,7 +445,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
           </select>
         </label>
         <button type="button" className="pdf-tool pdf-fullscreen" onClick={toggleFullscreen}>{TOOL_ICON.expand}{fullscreen ? "Vollbild beenden" : "Vollbild"}</button>
-      </div>
+      </div>}
       {status === "loading" && <p className="pdf-status" role="status">Quelle wird geladen…</p>}
       {status === "error" && (
         <div className="pdf-status pdf-error" role="alert">
@@ -445,11 +469,16 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
           {pageBox ? markers.filter((marker) => marker.page === pageNumber).map((marker) => {
             const rect = resolveEvidenceRect(marker.bbox, marker.bbox_space, BASE_SCALE * zoom, pageBox);
             if (!rect) return null;
+            // Prüfmodus: der aktuelle Nachweis mit Rahmen und Nummer, die übrigen der Seite nur gestrichelt (ohne Nummer).
+            if (review) return <div key={marker.id} className={`pdf-frame${marker.active ? " is-current" : ""}${marker.approx ? " is-approx" : ""}`}
+              style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }} aria-hidden="true">
+              {marker.active ? <span className="pdf-frame-number">{marker.number}</span> : null}
+            </div>;
             return <button key={marker.id} type="button" className={`pdf-marker${marker.active ? " is-active" : ""}`} style={{ left: Math.max(0, rect.x - 12), top: Math.max(0, rect.y - 12) }}
               aria-label={`Nachweis ${marker.number}: ${marker.label}`} aria-pressed={marker.active} onClick={() => onMarker?.(marker.id)}>{marker.number}</button>;
           }) : null}</div></div>
       </div>}
-      {navTarget && navTarget.document_version_id === documentVersionId && pageNumber === navTarget.page && navTarget.page != null && (
+      {!review && navTarget && navTarget.document_version_id === documentVersionId && pageNumber === navTarget.page && navTarget.page != null && (
         <p className="pdf-nav-info" aria-live="polite">
           {refined?.key === `${orgSlug}|${navTarget.document_version_id}|${navTarget.page}|${navTarget.label}` && refined.status === "exact" && refined.bbox
             ? `Quelle im Original lokalisiert: ${navTarget.label}`

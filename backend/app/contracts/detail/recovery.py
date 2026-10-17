@@ -175,23 +175,74 @@ def load_canonical_pages(
         pages = data.get("pages") if isinstance(data, dict) else None
         if not isinstance(pages, list):
             return []
+        flip = legacy_bottom_up(data)
         out = []
         for pg in pages:
             if not isinstance(pg, dict) or not pg.get("page_number"):
                 continue
+            elements = [e for e in (pg.get("elements") or []) if isinstance(e, dict)]
+            tables = [t for t in (pg.get("tables") or []) if isinstance(t, dict)]
+            height = _float(pg.get("height_pt"))
+            if flip and height:
+                _flip_regions(elements, height)
+                _flip_regions(tables, height)
             out.append(
                 {
                     "page": int(pg["page_number"]),
                     "text": str(pg.get("text") or ""),
-                    "elements": [
-                        e for e in (pg.get("elements") or []) if isinstance(e, dict)
-                    ],
-                    "tables": [t for t in (pg.get("tables") or []) if isinstance(t, dict)],
+                    "elements": elements,
+                    "tables": tables,
+                    "width_pt": _float(pg.get("width_pt")),
+                    "height_pt": height,
+                    # Gespeicherte Nachweis-Boxen dieses Artefakts liegen noch unten-links.
+                    "legacy_bottom_up": bool(flip and height),
                 }
             )
         return out
     except Exception:
         return []
+
+
+def legacy_bottom_up(data: dict) -> bool:
+    """Docling-Artefakte vor Schema 1.4.0 tragen Regionen mit Ursprung unten links
+    (der BOTTOMLEFT-Vergleich griff beim Enum nicht). PyMuPDF-Artefakte waren immer oben links."""
+    provenance = data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
+    if str(provenance.get("provider") or "") != "docling":
+        return False
+    version = str(provenance.get("canonical_schema_version") or "0")
+    try:
+        parts = tuple(int(p) for p in version.split("."))
+    except ValueError:
+        return False
+    return parts < (1, 4, 0)
+
+
+def _float(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _flip_regions(node, height: float) -> None:
+    """Spiegelt jede Region ({page, x0, y0, x1, y1}) an der Seitenhoehe – rekursiv, in place."""
+    if isinstance(node, list):
+        for item in node:
+            _flip_regions(item, height)
+        return
+    if not isinstance(node, dict):
+        return
+    if {"x0", "y0", "x1", "y1"} <= node.keys():
+        try:
+            y0, y1 = float(node["y0"]), float(node["y1"])
+        except (TypeError, ValueError):
+            return
+        node["y0"], node["y1"] = max(0.0, height - y1), max(0.0, height - y0)
+        return
+    for value in node.values():
+        if isinstance(value, (dict, list)):
+            _flip_regions(value, height)
 
 
 # =========================================================================

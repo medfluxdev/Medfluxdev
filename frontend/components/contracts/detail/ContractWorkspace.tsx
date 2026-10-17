@@ -18,10 +18,10 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format";
 import { removeWarningsRepresentedByTasks } from "@/lib/action-dedup";
 import { archiveContract, getContractDeletionCapabilities, requestContractDeletion, reviewContractFact } from "@/lib/domain-api/contracts";
-import { updateContractRegister } from "@/lib/domain-api/register";
+import { listEvidenceReviews, updateContractRegister, type EvidenceReviewItem } from "@/lib/domain-api/register";
 import { getOrganizationStructure } from "@/lib/domain-api/organizations";
 import { PdfViewer } from "./lazy";
-import EvidencePane from "./EvidencePane";
+import EvidenceTable from "./EvidenceTable";
 import FactReviewPanel from "./FactReviewPanel";
 import OverridePanel from "./OverridePanel";
 import { hasCalculationBasis } from "./CalculationBasisPanel";
@@ -57,12 +57,11 @@ import { AiReviewContext, type AiOriginTarget } from "@/components/ui/AiOrigin";
 import { findReviewFact } from "@/lib/review-facts";
 import ContractTermBar from "./ContractTermBar";
 import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
-import OpenPoints, { buildOpenPoints } from "./OpenPoints";
+import OpenPoints, { EVIDENCE_REVIEW_SECTION, buildOpenPoints } from "./OpenPoints";
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
-import EvidenceDetail from "./EvidenceDetail";
 import EvidenceReviewMode from "./EvidenceReviewMode";
-import { evidenceNumbers, factsByEvidence, orderEvidence, titleOf } from "./EvidencePane";
+import { evidenceNumbers, evidenceRows, evidenceStatus, factsByEvidence, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
 import ResponsibilityChips, { ChipRow } from "./ContractHeaderChips";
@@ -312,6 +311,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   // ?abschnitt=…: zum Abschnitt scrollen, sobald er gerendert ist (Reiter laden teils nach).
   useEffect(() => {
     if (!linkedSection) return;
+    // „Nachweise prüfen“ (Offene Punkte): geführten Modus öffnen statt zu scrollen.
+    if (linkedSection === EVIDENCE_REVIEW_SECTION) { setReviewMode((mode) => mode ?? { startId: null }); return; }
     const anchor = sectionAnchor(linkedSection);
     let tries = 0;
     let timer = 0;
@@ -407,26 +408,32 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const manyDocuments = data.documents.length > DOCUMENT_LIST_THRESHOLD;
   // „Dokument“ und „Nachweise“ sind ein Arbeitsplatz (Seitenleiste wechselt, das Original bleibt).
   const inDocumentWorkspace = documentTab === "document" || documentTab === "evidence";
-  // Nachweise: gewählter Eintrag, sichtbare Reihenfolge (Filter) für „Vorheriger/Nächster“.
-  const [visibleEvidence, setVisibleEvidence] = useState<string[]>([]);
   const evidenceFacts = useMemo(() => factsByEvidence(data.fact_review_states ?? []), [data.fact_review_states]);
   const documentIds = useMemo(() => data.documents.map((doc) => doc.document_version_id), [data.documents]);
   const orderedEvidence = useMemo(() => orderEvidence(data.evidence, documentIds), [data.evidence, documentIds]);
   const evidenceNumber = useMemo(() => evidenceNumbers(orderedEvidence), [orderedEvidence]);
   // „Nachweise prüfen“: geführter Modus, ein Nachweis nach dem anderen (startet beim gewählten oder ersten offenen).
   const [reviewMode, setReviewMode] = useState<{ startId: string | null } | null>(null);
-  const openEvidenceCount = orderedEvidence.filter((ref) => { const fact = evidenceFacts.get(ref.evidence_id); return fact ? !["confirmed", "corrected", "auto_accepted"].includes(fact.state) : false; }).length;
+  // Ergebnis der Nachweisprüfung je Nachweis (bestätigt, abweichend, übersprungen).
+  const [evidenceReviews, setEvidenceReviews] = useState<Map<string, EvidenceReviewItem>>(() => new Map());
+  const reloadEvidenceReviews = useCallback(() => {
+    listEvidenceReviews(orgSlug, data.contract_id)
+      .then((result) => setEvidenceReviews(new Map(result.items.map((item) => [item.evidence_id, item]))))
+      .catch(() => undefined);
+  }, [orgSlug, data.contract_id]);
+  useEffect(reloadEvidenceReviews, [reloadEvidenceReviews]);
+  const evidenceTableRows = useMemo(() => evidenceRows(orderedEvidence, evidenceNumber, evidenceFacts,
+    (ref) => evidenceStatus(ref, evidenceFacts.get(ref.evidence_id), evidenceReviews.get(ref.evidence_id))),
+  [orderedEvidence, evidenceNumber, evidenceFacts, evidenceReviews]);
+  const openEvidenceCount = evidenceTableRows.filter((row) => row.status === "open").length;
   // Marken auf der Seite: nur Nachweise mit Lage auf dem geöffneten Dokument, gleiche Nummern wie die Liste.
   const pageMarkers = useMemo(() => data.evidence
     .filter((ref) => ref.document_version_id === documentVersionId && ref.page != null && ref.bbox)
-    .map((ref) => ({ id: ref.evidence_id, number: evidenceNumber.get(ref.evidence_id) ?? 0, label: titleOf(ref, evidenceFacts), page: ref.page!, bbox: ref.bbox!, bbox_space: ref.bbox_space, active: ref.evidence_id === activeEvidenceId })),
+    .map((ref) => ({ id: ref.evidence_id, number: evidenceNumber.get(ref.evidence_id) ?? 0, label: titleOf(ref, evidenceFacts), page: ref.page!, bbox: ref.bbox!, bbox_space: ref.bbox_space, active: ref.evidence_id === activeEvidenceId, approx: precisionOf(ref) !== "exact" })),
   [data.evidence, documentVersionId, evidenceNumber, evidenceFacts, activeEvidenceId]);
-  const activeEvidence = activeEvidenceId ? data.evidence.find((ref) => ref.evidence_id === activeEvidenceId) ?? null : null;
-  const evidencePosition = activeEvidenceId ? visibleEvidence.indexOf(activeEvidenceId) : -1;
-  function stepEvidence(step: number) {
-    const id = visibleEvidence[evidencePosition + step];
-    const ref = id ? data.evidence.find((item) => item.evidence_id === id) : null;
-    if (ref) openEvidence(ref, "evidence");
+  function startEvidenceReview(startId: string | null = null) {
+    if (!inDocumentWorkspace) setRoute("documents", "evidence");
+    setReviewMode({ startId });
   }
   function selectDocument(doc: { document_version_id: string }) {
     setDocumentVersionId(doc.document_version_id);
@@ -665,6 +672,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     scopeTotal: scopeRows.filter((row) => row.state.tone !== "none").length,
     slaToCheck: showSla ? slaRows.filter((row) => factOpen(row.fact)).length : 0,
     reviewOpen: data.contract_review?.unresolved_count ?? 0,
+    evidenceOpen: openEvidenceCount,
     cancelByUnknown: !headerCancelBy && !fixedTerm,
     decision: pendingDecision(decisionBrief),
     decisionStep: decisionBrief?.decision?.next_step ? {
@@ -870,6 +878,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "active" : ""} aria-current={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "page" : undefined} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
             <div className="dw-status" aria-label="Stand der Dokumente">
               <span className="dw-status-counts">{data.documents.length} {data.documents.length === 1 ? "Datei" : "Dateien"} · {data.evidence.length} Nachweise</span>
+              {data.evidence.length && !reviewMode ? <button type="button" className={`btn btn-sm dw-review${openEvidenceCount ? " btn-primary" : ""}`} onClick={() => startEvidenceReview()}>
+                {REVIEW_ICON}Nachweise prüfen{openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}
+              </button> : null}
               {data.contract_review.relevant_count > 0 ? <span className="dw-progress">
                 <span className="dw-progress-bar" role="progressbar" aria-label="Geprüfte Angaben" aria-valuemin={0} aria-valuemax={data.contract_review.relevant_count} aria-valuenow={data.contract_review.reviewed_count}><span style={{ width: `${(data.contract_review.reviewed_count / data.contract_review.relevant_count) * 100}%` }} /></span>
                 <span>{data.contract_review.reviewed_count} von {data.contract_review.relevant_count} geprüft</span>
@@ -895,15 +906,18 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           {inDocumentWorkspace && reviewMode ? <EvidenceReviewMode
             contractId={data.contract_id}
             orgSlug={orgSlug}
+            contractTitle={data.contract_title}
             evidence={orderedEvidence}
             numbers={evidenceNumber}
             factByEvidence={evidenceFacts}
+            reviews={evidenceReviews}
             startId={reviewMode.startId}
             canReview={canReviewFacts}
             onShow={(ref) => openEvidence(ref, "evidence")}
-            onExit={() => setReviewMode(null)}
-            onReload={reload}
-            viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} pagesOpen={false} markers={pageMarkers} />}
+            onExit={() => { setReviewMode(null); reloadEvidenceReviews(); }}
+            onReload={() => { reload(); reloadEvidenceReviews(); }}
+            onSearchAgain={(field) => { setReviewMode(null); router.replace(documentSearchHref(data.contract_id, field), { scroll: false }); }}
+            viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
           /> : null}
           {inDocumentWorkspace && !reviewMode && <div className="dw">
             <aside className="dw-side" aria-label="Dateien und Nachweise">
@@ -911,24 +925,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 <button type="button" aria-pressed={documentTab === "document"} onClick={() => setRoute("documents", "document")}>Dateien<span className="dw-count" aria-hidden="true">{data.documents.length}</span></button>
                 <button type="button" aria-pressed={documentTab === "evidence"} onClick={() => setRoute("documents", "evidence")}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>
               </div>
-              {documentTab === "evidence" && data.evidence.length ? <button type="button" className={`btn dw-review${openEvidenceCount ? " btn-primary" : ""}`} onClick={() => setReviewMode({ startId: activeEvidenceId })}>
-                {REVIEW_ICON}Nachweise prüfen{openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}
-              </button> : null}
               {documentTab === "evidence"
-                ? <div className="dw-panel"><EvidencePane evidence={data.evidence} facts={data.fact_review_states} activeEvidenceId={activeEvidenceId} onNavigate={(ref) => openEvidence(ref, "evidence")} onVisibleChange={setVisibleEvidence} showFile={data.documents.length > 1} documentIds={documentIds} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
+                ? <div className="dw-panel">{data.evidence.length
+                  ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={(ref) => startEvidenceReview(ref.evidence_id)} />
+                  : <p className="cw-muted dw-empty">Keine Nachweise vorhanden.</p>}<CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
                 : data.documents.length === 0 ? <p className="cw-muted dw-empty">Keine Dokumente vorhanden.</p>
                   : <DocumentList documents={data.documents} selectedId={documentVersionId} mainId={mainDocumentId} onSelect={selectDocument} compact={!manyDocuments} />}
             </aside>
             <div className="dw-main">
-              {documentTab === "evidence" ? (activeEvidence
-                ? <EvidenceDetail refItem={activeEvidence} number={evidenceNumber.get(activeEvidence.evidence_id) ?? null} factByEvidence={evidenceFacts} position={evidencePosition >= 0 ? evidencePosition + 1 : null} total={visibleEvidence.length}
-                  onPrev={evidencePosition > 0 ? () => stepEvidence(-1) : null}
-                  onNext={evidencePosition >= 0 && evidencePosition < visibleEvidence.length - 1 ? () => stepEvidence(1) : null}
-                  onOpenReview={(factKey) => { setReviewFocus((current) => ({ key: factKey, n: (current?.n ?? 0) + 1 })); setRoute("documents", "review"); }} />
-                : <p className="ev-hint">Einen Nachweis links wählen – die Stelle wird hier im Original gezeigt.</p>) : null}
               <div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} pagesOpen={false}
                 markers={documentTab === "evidence" ? pageMarkers : []}
-                onMarker={(id) => { const ref = data.evidence.find((item) => item.evidence_id === id); if (ref) openEvidence(ref, "evidence"); }} /></div>
+                onMarker={(id) => startEvidenceReview(id)} /></div>
               <div className="cw-doc-foot">
                 <span>{DOC_INFO_ICON}{canEditData ? "Eine Stelle im Text markieren, um daraus eine Angabe zu übernehmen." : "Nachweise zeigen, wo jede Angabe im Dokument steht."}</span>
                 {canEditData && documentVersionId ? <button type="button" className="btn btn-sm" disabled={captureOpen} onClick={openCapture}>Angabe übernehmen</button> : null}

@@ -31,7 +31,8 @@ from pydantic import BaseModel, Field
 from app.documents.geometry import PdfRect
 
 # Version des kanonischen Modells (Manifest/Reproduzierbarkeit).
-CANONICAL_SCHEMA_VERSION = "1.3.0"
+# 1.4.0: Docling-Regionen wirklich oben links (vorher blieb BOTTOMLEFT ungespiegelt).
+CANONICAL_SCHEMA_VERSION = "1.4.0"
 
 
 class GeometryPrecision(str, Enum):

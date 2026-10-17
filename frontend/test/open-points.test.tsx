@@ -99,4 +99,12 @@ describe("Offene Punkte – nächster Umsetzungsschritt", () => {
     const [late] = buildOpenPoints({ ...base, decisionStep: { ...stepInput, today: "2026-09-01", target: { action: "change_decision" } } });
     expect([late.word, late.action, late.target]).toEqual(["Kritisch", "Umsetzung ansehen", { tab: "deadlines", section: "decision" }]);
   });
+
+  it("offene Nachweise: ein Punkt „Nachweise prüfen“, der die geführte Prüfung öffnet", () => {
+    const base = { gaps: [], tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 0 };
+    expect(buildOpenPoints({ ...base, evidenceOpen: 0 })).toEqual([]);
+    const [point] = buildOpenPoints({ ...base, evidenceOpen: 3 });
+    expect([point.word, point.title, point.why, point.action]).toEqual(["KI-Prüfung", "Nachweise prüfen", "3 Nachweise sind noch nicht mit dem Dokument abgeglichen.", "Nachweise prüfen"]);
+    expect(point.target).toEqual({ tab: "documents", subtab: "evidence", section: "nachweise-pruefen" });
+  });
 });

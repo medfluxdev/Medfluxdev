@@ -368,53 +368,47 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await waitFor(() => expect(document.querySelector(".page-indicator")).toHaveTextContent("Seite 3 / 3"));
   });
 
-  it("Dateien und Nachweise teilen sich das Original; der Unterreiter „Nachweise“ ist eine Leiste im Arbeitsplatz", async () => {
+  it("Dateien und Nachweise teilen sich das Original; „Nachweise“ ist eine kompakte Tabelle ohne Zitate", async () => {
     await renderWithData(detailFixture());
     await openDocuments();
     expect(screen.queryByRole("button", { name: "Nachweise", pressed: true })).not.toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).queryByRole("button", { name: "Nachweise" })).not.toBeInTheDocument();
+    // Einstieg in die geführte Prüfung steht immer im Kopf des Reiters.
+    expect(screen.getByRole("button", { name: /Nachweise prüfen · 2 offen/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Nachweise" }));
     expect(screen.getByRole("button", { name: "Nachweise" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument();
-    expect(screen.getByRole("searchbox", { name: "Nachweise durchsuchen" })).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "Nachweise dieses Vertrags" });
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["#", "Feld", "Seite", "Status"]);
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(within(table).getAllByText("Noch nicht geprüft")).toHaveLength(2);
+    expect(within(table).queryByText(/Laufzeit beginnt am/)).not.toBeInTheDocument();
+    expect(screen.getByText("2 Nachweise", { exact: false })).toBeInTheDocument();
   });
 
-  it("zeigt Nachweise mit ehrlicher Navigations-Präzision", async () => {
+  it("ein Nachweis aus der Tabelle öffnet die geführte Prüfung an seiner Stelle im Original", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    expect(screen.getByText("Genau")).toBeInTheDocument();
-    expect(screen.getByText("Ohne Seite")).toBeInTheDocument();
-    expect(screen.getAllByText(/KI 98 %/).length).toBeGreaterThan(0);
-    expect(screen.getByText("2 Nachweise")).toBeInTheDocument();
-    expect(screen.getByText("Einen Nachweis links wählen – die Stelle wird hier im Original gezeigt.")).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
+    const panel = await screen.findByRole("region", { name: "Aktueller Nachweis" });
+    expect(within(panel).getByRole("heading", { name: /start date/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nachweise prüfen" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("von 3", { exact: false })).toHaveTextContent("Seite 2 von 3"));
+    // Aktueller Nachweis: Rahmen mit derselben Nummer wie in der Tabelle.
+    await waitFor(() => expect(document.querySelector(".pdf-frame.is-current")).toHaveTextContent("1"));
   });
 
-  it("markiert eine ausgewählte Quelle und öffnet das Original im PDF-Viewer", async () => {
+  it("Nachweis ohne Seitenangabe erfindet keinen Rahmen; zurück zum Vertrag beendet die Prüfung", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    const sourceBtn = screen.getByRole("button", { name: /start date/i });
-    await userEvent.click(sourceBtn);
-    expect(sourceBtn).toHaveAttribute("aria-pressed", "true");
-    await waitFor(() => expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument());
-    await waitFor(() => expect(document.querySelector(".page-indicator")).toHaveTextContent("Seite 2 / 3"));
-    // Gleiche Nummer auf der Seite wie in der Liste; die gewählte Marke ist hervorgehoben.
-    const marker = await screen.findByRole("button", { name: /^Nachweis 1: /, pressed: true });
-    expect(marker).toHaveTextContent("1");
-    expect(screen.getByText(/^Nachweis 1 · Seite 2/)).toBeInTheDocument();
-  });
-
-  it("Quelle ohne Seitenangabe erfindet keine Hervorhebung", async () => {
-    await renderWithData(detailFixture());
-    await openDocuments("Nachweise");
-    const sourceBtn = screen.getByRole("button", { name: /annual cost/i });
-    await userEvent.click(sourceBtn);
-    expect(screen.getAllByText(/Keine Seitenangabe/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/hervorgehoben/)).not.toBeInTheDocument();
-    // Detailkarte: blättern zum anderen Nachweis.
-    const detail = screen.getByRole("region", { name: /annual cost/i });
-    expect(within(detail).getByText("2 von 2")).toBeInTheDocument();
-    await userEvent.click(within(detail).getByRole("button", { name: "Vorheriger Nachweis" }));
-    expect(screen.getByRole("region", { name: /start date/i })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /annual cost/i }));
+    const panel = await screen.findByRole("region", { name: "Aktueller Nachweis" });
+    expect(within(panel).getByRole("heading", { name: /annual cost/i })).toBeInTheDocument();
+    expect(within(panel).getByText("Ohne Seite", { selector: ".signal-label" })).toBeInTheDocument();
+    expect(document.querySelector(".pdf-frame.is-current")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Zurück zum Vertrag" }));
+    expect(screen.queryByRole("region", { name: "Aktueller Nachweis" })).not.toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).toBeInTheDocument();
   });
 
   it("hat im Dokument-Workspace keine automatisierten WCAG-A11y-Verstöße", async () => {
@@ -425,11 +419,11 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(results).toHaveNoViolations();
   });
 
-  it("behält beim Wechsel zwischen Quelle und Vertrags-Tabs den Workspace-Kontext", async () => {
+  it("behält beim Wechsel zwischen Prüfung und Vertrags-Tabs den Workspace-Kontext", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    await userEvent.click(screen.getByRole("button", { name: /start date/i }));
-    await waitFor(() => expect(document.querySelector(".page-indicator")).toHaveTextContent("Seite 2 / 3"));
+    await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
+    await screen.findByRole("region", { name: "Aktueller Nachweis" });
     await openTab("Übersicht");
     expect(screen.getByRole("heading", { name: "MRT Wartungsvertrag" })).toBeInTheDocument();
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();

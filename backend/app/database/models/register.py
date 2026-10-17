@@ -181,6 +181,41 @@ class ContractRemarkRevision(OrgOwnedMixin, Base):
     )
 
 
+EVIDENCE_REVIEW_STATUSES = ("confirmed", "document", "medflux", "manual", "skipped")
+
+
+class ContractEvidenceReview(OrgOwnedMixin, Base):
+    """Ergebnis der Nachweisprüfung je Nachweis (aktueller Stand; die Runde steht im Verlauf).
+
+    confirmed = Dokument und MedFlux stimmen überein; document = abweichend, Wert aus dem Dokument
+    übernommen; medflux = abweichend, geklärt (MedFlux gilt); manual = beides falsch, Wert von Hand;
+    skipped = übersprungen. Der Wert selbst wird über die Faktprüfung gespeichert, nicht hier.
+    """
+
+    __tablename__ = "contract_evidence_review"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract.id", ondelete="CASCADE"), nullable=False
+    )
+    evidence_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    fact_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_by_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({', '.join(repr(v) for v in EVIDENCE_REVIEW_STATUSES)})", name="status"
+        ),
+        UniqueConstraint("contract_id", "evidence_id", name="uq_contract_evidence_review_contract_evidence"),
+    )
+
+
 class ContractPartner(OrgOwnedMixin, Base):
     """Vertragspartner-Stammdaten (Lieferant, Dienstleister, Kooperationspartner)."""
 

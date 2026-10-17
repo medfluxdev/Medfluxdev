@@ -28,6 +28,7 @@ from app.contracts.calculation.models import (
     MoneyFieldResult,
     TaxBasis,
 )
+from app.contracts.detail.evidence_geometry import flip_stored_box, verify_evidence_locations
 from app.contracts.detail.models import EvidenceBbox
 from app.contracts.detail.recovery import (
     fix_text,
@@ -301,7 +302,37 @@ def register_facts(contract, as_of: date) -> dict:
             "availability_percent": str(contract.sla_availability_percent) if contract.sla_availability_percent is not None else None,
             "penalty_terms": contract.penalty_terms,
         },
+        # Gespeicherter Wert je Prüf-Angabe mit Vertragsdaten-Feld (Nachweisprüfung: „In MedFlux gespeichert“).
+        "stored": _stored_register_values(contract),
     }
+
+
+_UNIT_DE = {
+    "days": ("Tag", "Tage"), "weeks": ("Woche", "Wochen"),
+    "months": ("Monat", "Monate"), "years": ("Jahr", "Jahre"),
+}
+_NOTICE_TO_DE = {
+    "contract_end": "zum Vertragsende", "month_end": "zum Monatsende", "quarter_end": "zum Quartalsende",
+    "half_year_end": "zum Halbjahresende", "year_end": "zum Jahresende", "anytime": "jederzeit",
+}
+
+
+def _stored_register_values(contract) -> dict[str, str]:
+    from app.reextract.facts import REVIEW_TO_REGISTER
+
+    out: dict[str, str] = {}
+    for fact_key, base in REVIEW_TO_REGISTER.items():
+        value = getattr(contract, base, None) if base in ("term_start_date", "term_fixed_end_date", "notice_to") else None
+        if base in ("term_start_date", "term_fixed_end_date"):
+            text = value.strftime("%d.%m.%Y") if value else None
+        elif base == "notice_to":
+            text = _NOTICE_TO_DE.get(value) if value else None
+        else:
+            amount, unit = getattr(contract, f"{base}_value", None), getattr(contract, f"{base}_unit", None)
+            text = f"{amount} {_UNIT_DE[unit][0 if amount == 1 else 1]}" if amount is not None and unit in _UNIT_DE else None
+        if text:
+            out[fact_key] = text
+    return out
 
 
 def build_contract_detail(
@@ -503,13 +534,13 @@ def build_contract_detail(
         "warnings": [_warning_item(w) for w in warnings],
         "work_items": [_work_item_item(w) for w in work_items],
         "documents": docs,
-        "evidence": _dedupe_evidence(
+        "evidence": verify_evidence_locations(_dedupe_evidence(
             _settle_canonical_evidence(
                 [
-                    _evidence_ref(
+                    flip_stored_box(_evidence_ref(
                         e, version_to_file, evidence_version_id,
                         resolved_page=evidence_page.get(e.id),
-                    )
+                    ), pages)
                     for e in evidences
                 ]
                 + _recovered_evidence_refs(
@@ -521,7 +552,7 @@ def build_contract_detail(
                 )
                 + scope_evidence_refs
             )
-        ),
+        ), pages, ext.document_version_id if ext else None),
         "overrides": [
             {
                 "key": key,

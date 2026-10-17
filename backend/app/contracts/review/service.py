@@ -458,7 +458,10 @@ def build_fact_review_states(
     session, *, organization_id, contract_id, data: dict
 ) -> list[dict]:
     """Je materialen Fakt: Präsenz, Zustand, Original-/effektiver Wert, Prüfer."""
+    from app.reextract.facts import REVIEW_TO_REGISTER
+
     report = material_report(data)
+    stored = (data.get("register_facts") or {}).get("stored") or {}
     latest = _latest_fact_reviews(session, contract_id)
     auto_mode = auto_accept_allowed(session, organization_id, contract_id)
 
@@ -582,6 +585,9 @@ def build_fact_review_states(
                 # Sicherheit der KI zu ihrem Vorschlag (bester Beleg, 0..1); None = keine Angabe.
                 "ai_confidence": ai_confidence,
                 "is_evidence_item": fact_key in evidence_groups,
+                # Wert in den Vertragsdaten (nur Angaben mit eigenem Feld); None = dort nichts gespeichert.
+                "register_field": REVIEW_TO_REGISTER.get(fact_key),
+                "stored_value": stored.get(fact_key),
                 "found_by_rule": ai_confidence is None
                 and bool(evidence_list)
                 and all(ev.get("extraction_method") == "programmatic" for ev in evidence_list),

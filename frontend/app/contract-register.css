@@ -294,7 +294,6 @@
 .source-capture-form{display: grid;gap: var(--space-3);max-width: 40rem}
 .source-capture-form textarea{width: 100%}
 
-
 /* ---------- Laufzeit, Fristen & Kündigung · Aufbewahrung & Löschung · Zugriff & Datenschutz ---------- */
 /* Kündigung: neutrale Tatsache mit Fahne; geändert wird sie über den Bearbeitungsstatus. */
 .rg-termrow{display: flex;flex-wrap: wrap;align-items: center;gap: 10px 14px;margin-bottom: var(--space-3);padding: 12px 14px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-accent);font-size: var(--text-ui)}
@@ -555,7 +554,6 @@
 .dec-history-chevron svg{width: 16px;height: 16px}
 .dec-history ul{margin-top: 6px}
 @media (max-width: 1100px){.dec-top{grid-template-columns: 1fr}}
-
 
 /* Fristen & Aufgaben: Zeitachse „Termine & Aufgaben“ – feste Spalten:
    Punkt · Datum · Typ · Was zu tun ist · Person · Aktionen. */
@@ -972,49 +970,6 @@ a.fin-basis-sub { color: var(--color-link); }
 .doclist-text small{color: var(--color-text-muted);font-size: var(--text-caption)}
 .doclist-empty{margin: 0;color: var(--color-text-muted);font-size: var(--text-small)}
 
-/* Reiter „Nachweise“: Liste links (Suche, Bereich, Lage, nach Bereich gruppiert), Original rechts in gleicher Höhe. */
-.ev-hint{margin: 0;padding: 8px 16px;border-bottom: 1px solid var(--color-border-subtle);background: var(--color-info-bg);color: var(--color-text);font-size: var(--text-small)}
-.evidence-browser{display: flex;flex-direction: column;min-height: 0;flex: 1}
-.evidence-tools{display: grid;gap: 8px;padding: 12px;border-bottom: 1px solid var(--color-border)}
-.evidence-search{display: flex;align-items: center;gap: 8px;min-height: 36px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);color: var(--color-text-muted)}
-.evidence-search:focus-within{outline: 2px solid var(--color-focus, var(--color-accent));outline-offset: 1px}
-.evidence-search input{flex: 1;min-width: 0;border: 0;background: none;font: inherit;font-size: var(--text-small);color: var(--color-text);outline: none}
-.evidence-tool-icon{width: 16px;height: 16px;flex: none;fill: none;stroke: currentcolor;stroke-width: 2;stroke-linecap: round}
-.evidence-filters{display: grid;grid-template-columns: repeat(3,minmax(0,1fr));gap: 6px}
-.evidence-filters select{width: 100%;min-height: 34px;padding: 0 8px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);font: inherit;font-size: var(--text-small)}
-.evidence-count{margin: 0;color: var(--color-text-muted);font-size: var(--text-caption)}
-.evidence-scroll{flex: 1;min-height: 0;overflow-y: auto;padding: 4px 12px 12px}
-.evidence-group h3{position: sticky;top: 0;z-index: var(--z-raised);display: flex;align-items: center;justify-content: space-between;margin: 0;padding: 10px 2px 6px;background: var(--color-surface);color: var(--color-text-muted);font-size: var(--text-caption);font-weight: var(--weight-semibold);text-transform: uppercase;letter-spacing: 0.04em}
-.evidence-group h3 span{font-weight: var(--weight-regular)}
-.dw-panel .evidence-list{display: grid;gap: 6px;margin: 0;padding: 0;list-style: none}
-.dw-panel .evidence-item{display: grid;gap: 6px;width: 100%;padding: 10px 12px;border: 1px solid var(--color-border-subtle);border-left: 3px solid transparent;border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;text-align: left;cursor: pointer}
-.dw-panel .evidence-item:hover{border-color: var(--color-border);background: var(--color-surface-subtle)}
-.dw-panel .evidence-item.active{border-color: var(--color-accent);border-left-color: var(--color-accent);background: var(--color-surface-accent)}
-.dw-panel .evidence-item:focus-visible{outline: 2px solid var(--color-focus, var(--color-accent));outline-offset: 2px}
-.dw-panel .evidence-head{display: flex;align-items: flex-start;justify-content: space-between;gap: 8px}
-.dw-panel .evidence-field{font-weight: var(--weight-semibold);text-transform: none}
-.dw-panel .evidence-snippet{display: -webkit-box;-webkit-line-clamp: 3;-webkit-box-orient: vertical;overflow: hidden;color: var(--color-text);font-size: var(--text-small);font-style: italic}
-.dw-panel .evidence-meta{display: flex;flex-wrap: wrap;align-items: center;gap: 4px 12px;color: var(--color-text-muted);font-size: var(--text-caption)}
-
-/* Gewählter Nachweis über dem Original. */
-.evd{display: grid;gap: 8px;padding: 14px 16px;border-bottom: 1px solid var(--color-border);background: var(--color-surface-subtle)}
-.evd-head{display: flex;flex-wrap: wrap;align-items: flex-start;justify-content: space-between;gap: 8px 16px}
-.evd-title{display: grid;gap: 2px}
-.evd-area{color: var(--color-text-muted);font-size: var(--text-caption);font-weight: var(--weight-semibold);text-transform: uppercase;letter-spacing: 0.04em}
-.evd h3{margin: 0;font-size: var(--text-body)}
-.evd-nav{display: inline-flex;align-items: center;gap: 4px}
-.evd-pos{min-width: 64px;color: var(--color-text-muted);font-size: var(--text-small);text-align: center;font-variant-numeric: tabular-nums}
-.evd-icon{width: 16px;height: 16px;flex: none;fill: none;stroke: currentcolor;stroke-width: 2;stroke-linecap: round;stroke-linejoin: round}
-.evd-quote{margin: 0;padding: 8px 12px;border-left: 3px solid var(--color-accent);background: var(--color-surface);font-style: italic}
-.evd-quote--none{font-style: normal;color: var(--color-text-muted)}
-.evd-facts{display: flex;flex-wrap: wrap;align-items: center;gap: 6px 10px;margin: 0;font-size: var(--text-small)}
-.evd-hint{color: var(--color-text-muted)}
-.evd-foot{display: flex;flex-wrap: wrap;align-items: center;justify-content: space-between;gap: 8px 16px}
-.evd-state{display: inline-flex;flex-wrap: wrap;align-items: center;gap: 6px 12px;color: var(--color-text-muted);font-size: var(--text-small)}
-.evd-state strong{color: var(--color-text)}
-.evd-actions{display: inline-flex;flex-wrap: wrap;gap: 8px}
-.evd-actions .btn{display: inline-flex;align-items: center;gap: 6px}
-
 /* Dokumente-Arbeitsplatz: links Dateien oder Nachweise (umschaltbar), rechts immer dasselbe Original. */
 .dw-status{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 16px;margin: 0 0 8px;font-size: var(--text-small)}
 .dw-status-counts{color: var(--color-text-muted)}
@@ -1030,62 +985,161 @@ a.fin-basis-sub { color: var(--color-link); }
 .dw-count{min-width: 22px;padding: 0 6px;border-radius: 999px;background: var(--color-surface-subtle);color: var(--color-text-muted);font-size: var(--text-caption)}
 .dw-switch button[aria-pressed="true"] .dw-count{background: var(--color-surface-accent);color: var(--color-accent)}
 .dw-panel{display: flex;flex-direction: column;flex: 1;min-height: 0}
-.dw-panel > :not(.evidence-browser){margin: 0 12px 12px}
+
 .dw-side > .doclist{flex: 1;border-right: 0;max-height: none}
 .dw-empty{margin: 12px}
 .dw-main{display: grid;align-content: start;min-width: 0}
 .dw-main .cw-pdf-shell{min-height: 0;border: 0;border-radius: 0;padding: 0}
 .dw-main .pdf-viewer{padding: 0;border: 0;border-radius: 0;background: var(--color-surface)}
 .dw-main .pdf-nav-info{margin: 0;border-radius: 0}
-.evidence-file{max-width: 16ch;overflow: hidden;text-overflow: ellipsis;white-space: nowrap}
+
 @media (max-width: 960px){.dw{grid-template-columns: minmax(0,1fr)}.dw-side{max-height: 440px;border-right: 0;border-bottom: 1px solid var(--color-border)}}
 
-/* Nummern der Nachweise (Lesereihenfolge): in der Liste, in der Detailkarte und als Marke auf der Seite. */
-.evidence-number{display: inline-grid;flex: none;place-items: center;min-width: 24px;height: 24px;padding: 0 6px;border-radius: 999px;background: var(--color-accent);color: var(--color-surface);font-size: var(--text-caption);font-weight: var(--weight-bold);font-style: normal;font-variant-numeric: tabular-nums}
-.dw-panel .evidence-head{justify-content: flex-start}
-.dw-panel .evidence-head .signal{margin-left: auto}
-.evd h3{display: flex;align-items: center;gap: 8px}
 .pdf-marker{position: absolute;z-index: var(--z-raised);display: grid;place-items: center;min-width: 24px;height: 24px;padding: 0 5px;border: 2px solid var(--color-surface);border-radius: 999px;background: var(--color-accent);color: var(--color-surface);font: inherit;font-size: var(--text-caption);font-weight: var(--weight-bold);box-shadow: var(--shadow-md);cursor: pointer}
 .pdf-marker:hover{transform: scale(1.1)}
 .pdf-marker.is-active{background: var(--color-warning);outline: 3px solid var(--color-warning-border)}
 .pdf-marker:focus-visible{outline: 3px solid var(--color-focus, var(--color-accent));outline-offset: 2px}
-@media (forced-colors: active){.pdf-marker,.evidence-number{forced-color-adjust: none;background: Highlight;color: HighlightText}}
+@media (forced-colors: active){.pdf-marker{forced-color-adjust: none;background: Highlight;color: HighlightText}}
 
-/* „Nachweise prüfen“: geführter Modus – Original links, Karte rechts, Schritte unten. */
-.dw-review{display: inline-flex;align-items: center;justify-content: center;gap: 8px;margin: 10px 12px 0}
-.dw-review-icon{width: 14px;height: 14px;fill: currentcolor}
-.erm{display: grid;grid-template-rows: auto 1fr auto;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface-subtle);overflow: hidden}
-.erm-bar{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 16px;padding: 10px 16px;border-bottom: 1px solid var(--color-border);background: var(--color-surface)}
-.erm-bar h2{margin: 0;font-size: var(--text-title-s)}
-.erm-file{padding-left: 16px;border-left: 1px solid var(--color-border);color: var(--color-text-muted);font-size: var(--text-small)}
-.erm-all{display: inline-flex;align-items: center;gap: 8px;margin-left: auto}
-.erm-icon{width: 18px;height: 18px;flex: none;fill: none;stroke: currentcolor;stroke-width: 2;stroke-linecap: round;stroke-linejoin: round}
-.erm-body{display: grid;grid-template-columns: minmax(0,1fr) minmax(320px,400px);gap: 20px;align-items: start;padding: 16px}
-.erm-viewer{min-width: 0;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface);overflow: hidden}
+/* Dokumente: Knopf „Nachweise prüfen“ und kompakte Nachweis-Tabelle (# · Feld · Seite · Status). */
+.dw-review{display: inline-flex;align-items: center;gap: 6px}
+.dw-review-icon{width: 12px;height: 12px;fill: currentcolor}
+.evt{display: grid;gap: 10px;min-height: 0;padding: 12px;overflow: auto}
+.evt-tools{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 12px}
+.evt-filter{display: inline-flex;flex-wrap: wrap;gap: 4px;padding: 3px;border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
+.evt-filter button{display: inline-flex;align-items: center;gap: 6px;min-height: 30px;padding: 0 10px;border: 0;border-radius: 6px;background: none;color: var(--color-text-muted);font: inherit;font-size: var(--text-small);cursor: pointer}
+.evt-filter button[aria-pressed="true"]{background: var(--color-surface);color: var(--color-text);box-shadow: 0 0 0 1px var(--color-border)}
+.evt-filter button:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 1px}
+.evt-count{min-width: 20px;padding: 0 5px;border-radius: 999px;background: var(--color-surface);color: var(--color-text-muted);font-size: var(--text-caption);text-align: center}
+.evt-search{flex: 1;min-width: 180px;min-height: 34px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
+.evt-table{width: 100%;border-collapse: collapse;font-size: var(--text-small)}
+.evt-table th{padding: 6px 8px;border-bottom: 1px solid var(--color-border);color: var(--color-text-muted);font-weight: var(--weight-semibold);text-align: left;white-space: nowrap}
+.evt-table td{padding: 6px 8px;border-bottom: 1px solid var(--color-border-subtle);vertical-align: middle}
+.evt-table tr.is-current td{background: var(--color-surface-accent)}
+.evt-num{width: 36px;color: var(--color-text-muted);font-variant-numeric: tabular-nums;text-align: right}
+.evt-muted{color: var(--color-text-muted);white-space: nowrap}
+.evt-link{padding: 0;border: 0;background: none;color: var(--color-link, var(--color-accent));font: inherit;text-align: left;cursor: pointer}
+.evt-link:hover{text-decoration: underline}
+.evt-link:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 2px;border-radius: 2px}
+.evt-empty{margin: 0;color: var(--color-text-muted);font-size: var(--text-small)}
+.dw-panel .evt{flex: 1}
+
+/* „Nachweise prüfen“: Leiste (56px) · Original links · Prüfung rechts (420px). Unter 1100px steht die Prüfung unter dem Original. */
+.erm{display: grid;grid-template-rows: auto 1fr;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-bg);overflow: hidden}
+.erm-bar{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 14px;min-height: 56px;padding: 8px 16px;border-bottom: 1px solid var(--color-border);background: var(--color-surface)}
+.erm-bar h2{margin: 0;font-size: var(--text-body);font-weight: var(--weight-semibold);white-space: nowrap}
+.erm-icon{width: 18px;height: 18px;flex: none;fill: none;stroke: currentcolor;stroke-width: 1.8;stroke-linecap: round;stroke-linejoin: round}
+.erm-icon-btn{display: inline-grid;place-items: center;width: 34px;min-height: 34px;padding: 0}
+.erm-file{display: inline-flex;align-items: center;gap: 6px;min-width: 0;color: var(--color-text-muted);font-size: var(--text-small);overflow: hidden;text-overflow: ellipsis;white-space: nowrap}
+.erm-file .erm-icon{width: 15px;height: 15px}
+.erm-progress{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 10px;margin-left: auto;color: var(--color-text-muted);font-size: var(--text-small);white-space: nowrap}
+.erm-seg{display: flex;gap: 1px;width: 160px;height: 8px;overflow: hidden;border: 1px solid var(--color-border-subtle);border-radius: 4px;background: var(--color-surface-subtle)}
+.erm-seg i{flex: 1;height: 100%}
+.erm-seg .is-confirmed{background: var(--color-success)}
+.erm-seg .is-deviation{background: var(--color-warning)}
+.erm-seg .is-skipped{background: var(--color-border-strong)}
+.erm-seg .is-current{background: var(--color-accent)}
+.erm-all{display: inline-flex;align-items: center;gap: 6px}
+.erm-body{display: grid;grid-template-columns: minmax(0,1fr) 420px;gap: 16px;align-items: start;padding: 16px}
+.erm-viewer{position: relative;min-width: 0;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface);overflow: hidden}
 .erm-viewer .pdf-viewer{padding: 0;border: 0;border-radius: 0}
-.erm-card{position: sticky;top: 16px;display: grid;gap: 10px;padding: 20px;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface);box-shadow: var(--shadow-md)}
-.erm-card-top{display: flex;align-items: center;justify-content: space-between;gap: 8px}
-.erm-pos{font-weight: var(--weight-semibold);font-variant-numeric: tabular-nums}
-.erm-title{display: flex;align-items: center;gap: 10px;margin: 0;font-size: var(--text-title-m)}
+.erm-viewer .pdf-stage{max-height: calc(100vh - 220px);min-height: 420px;overflow: auto}
+.erm-next-card{position: absolute;right: 16px;bottom: 14px;z-index: var(--z-raised);margin: 0;padding: 6px 10px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text-muted);font-size: var(--text-caption);box-shadow: var(--shadow-sm)}
+
+.erm-panel{position: sticky;top: 16px;display: grid;grid-template-rows: auto 1fr auto;min-height: 0;border: 1px solid var(--color-border);border-radius: var(--radius-md);background: var(--color-surface)}
+.erm-head{display: grid;gap: 8px;padding: 14px 18px;border-bottom: 1px solid var(--color-border-subtle)}
+.erm-head-top{display: flex;flex-wrap: wrap;align-items: center;gap: 8px;color: var(--color-text-muted);font-size: var(--text-caption)}
+.erm-space{flex: 1}
+.erm-pos{font-variant-numeric: tabular-nums}
+.erm-section{display: inline-flex;align-items: center;gap: 5px;min-height: 22px;padding: 0 8px 0 6px;border: 1px solid;border-radius: 6px;font-size: var(--text-caption);font-weight: var(--weight-semibold);white-space: nowrap}
+.erm-section-icon{width: 13px;height: 13px;fill: none;stroke: currentcolor;stroke-width: 2;stroke-linecap: round;stroke-linejoin: round}
+.erm-title{display: flex;align-items: center;gap: 10px;margin: 0;font-size: var(--text-title-m);font-weight: var(--weight-semibold)}
 .erm-title:focus{outline: none}
-.erm-title:focus-visible{outline: 2px solid var(--color-focus, var(--color-accent));outline-offset: 4px}
-.erm-where{margin: -4px 0 0;color: var(--color-text-muted);font-size: var(--text-small)}
-.erm-label{margin: 4px 0 0;color: var(--color-text-muted);font-size: var(--text-small)}
-.erm-value{padding: 12px 14px;border-radius: var(--radius-sm);background: var(--color-surface-subtle);font-size: var(--text-body);white-space: pre-wrap}
-.erm-snippet{margin: 0;color: var(--color-text-muted);font-size: var(--text-small);font-style: italic}
-.erm-edit-link{display: inline-flex;align-items: center;gap: 6px;justify-self: start}
-.erm-primary{display: inline-flex;align-items: center;justify-content: center;gap: 8px;min-height: 44px;font-size: var(--text-body)}
-.erm-deviation{justify-self: center;padding-top: 10px;border-top: 1px solid var(--color-border-subtle);width: 100%;text-align: center}
+.erm-title:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 4px;border-radius: 4px}
+.erm-tile{display: grid;flex: none;place-items: center;width: 32px;height: 32px;border: 1px solid;border-radius: 8px}
+.erm-tile-icon{width: 16px;height: 16px;fill: none;stroke: currentcolor;stroke-width: 1.8;stroke-linecap: round;stroke-linejoin: round}
+.erm-tone--partner{border-color: var(--color-tag-partner-border);background: var(--color-tag-partner-bg);color: var(--color-tag-partner)}
+.erm-tone--accent{border-color: var(--color-info-border);background: var(--color-surface-accent);color: var(--color-accent)}
+.erm-tone--cost{border-color: var(--color-tag-cost-border);background: var(--color-tag-cost-bg);color: var(--color-tag-cost)}
+.erm-tone--type{border-color: var(--color-tag-type-border);background: var(--color-tag-type-bg);color: var(--color-tag-type)}
+.erm-tone--device{border-color: var(--color-tag-device-border);background: var(--color-tag-device-bg);color: var(--color-tag-device)}
+.erm-tone--neutral{border-color: var(--color-neutral-border);background: var(--color-neutral-bg);color: var(--color-neutral)}
+.erm-where{display: flex;flex-wrap: wrap;align-items: center;gap: 6px 12px;margin: 0;color: var(--color-text-muted);font-size: var(--text-caption)}
+.erm-where > span{display: inline-flex;align-items: center;gap: 4px}
+.erm-where .erm-icon{width: 13px;height: 13px}
+.erm-num{display: inline-grid;place-items: center;min-width: 20px;height: 20px;padding: 0 4px;border-radius: 999px;background: var(--color-focus);color: var(--color-accent-contrast);font-size: var(--text-caption);font-weight: var(--weight-bold)}
+
+.erm-main{display: grid;align-content: start;gap: 14px;padding: 16px 18px}
+.erm-compare{display: grid;gap: 8px}
+.erm-box{display: grid;gap: 4px;padding: 10px 12px;border: 1px solid var(--color-border);border-radius: var(--radius-sm)}
+.erm-box--doc{border-color: var(--color-focus)}
+.erm-box--sys{background: var(--color-surface-subtle)}
+.erm-box-label{display: flex;align-items: center;justify-content: space-between;gap: 6px;color: var(--color-text-muted);font-size: var(--text-caption)}
+
+.erm-box-label .erm-icon{width: 13px;height: 13px;margin-right: 4px;vertical-align: -2px}
+.erm-box-value{font-size: var(--text-body);line-height: 1.45;white-space: pre-line;overflow-wrap: anywhere}
+.erm-edit{display: inline-flex;align-items: center;gap: 4px;min-height: 26px}
+.erm-edit .erm-icon{width: 13px;height: 13px}
+.erm-muted{color: var(--color-text-muted)}
+.erm-diff{padding: 0 2px;border-radius: 3px;background: var(--color-warning-bg);color: inherit;box-shadow: inset 0 -2px 0 var(--color-warning-border)}
+.erm-result{display: flex;align-items: center;gap: 8px;margin: 0;padding: 8px 12px;border: 1px solid;border-radius: var(--radius-sm);font-size: var(--text-small)}
+.erm-result .erm-icon{width: 16px;height: 16px}
+.erm-result--done{border-color: var(--color-success-border);background: var(--color-success-bg);color: var(--color-success)}
+.erm-result--warning{border-color: var(--color-warning-border);background: var(--color-warning-bg);color: var(--color-warning)}
+.erm-result--neutral{border-color: var(--color-neutral-border);background: var(--color-neutral-bg);color: var(--color-neutral)}
+.erm-confidence{display: flex;align-items: center;gap: 8px;color: var(--color-text-muted);font-size: var(--text-caption)}
+.erm-meter{flex: 1;height: 6px;overflow: hidden;border: 1px solid var(--color-border-subtle);border-radius: 3px;background: var(--color-surface-subtle)}
+.erm-meter i{display: block;height: 100%}
+.erm-meter .is-high{background: var(--color-success)}
+.erm-meter .is-mid{background: var(--color-info)}
+.erm-meter .is-low{background: var(--color-warning)}
+.erm-meter-value{font-variant-numeric: tabular-nums}
+
+.erm-actions{display: grid;gap: 8px}
+.erm-row2{display: grid;grid-template-columns: 1fr 1fr;gap: 8px}
+.erm-actions .btn, .erm-row2 .btn{display: inline-flex;align-items: center;justify-content: center;gap: 6px}
+.erm-confirm{min-height: 44px;font-weight: var(--weight-semibold)}
+.erm-kbd{margin-left: 6px;padding: 0 5px;border: 1px solid currentcolor;border-radius: 4px;font-family: var(--font-mono);font-size: var(--text-caption);line-height: 1.4;opacity: 0.75}
+.erm-hint{margin: 0;color: var(--color-text-subtle);font-size: var(--text-caption);text-align: center}
 .erm-readonly{margin: 0;color: var(--color-text-muted);font-size: var(--text-small)}
-.erm-edit{display: grid;gap: 10px}
-.erm-edit label{display: grid;gap: 4px;font-size: var(--text-small);font-weight: var(--weight-semibold)}
-.erm-edit textarea,.erm-edit input{width: 100%;padding: 8px 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);font: inherit;font-weight: var(--weight-regular)}
-.erm-edit-actions{display: flex;justify-content: flex-end;gap: 8px}
-.erm-done{display: grid;gap: 10px}
-.erm-done h3{margin: 0;font-size: var(--text-title-m)}
+
+.erm-deviate{display: grid;gap: 10px;padding: 12px;border: 1px solid var(--color-warning-border);border-radius: var(--radius-md);background: var(--color-surface)}
+.erm-deviate h4{display: flex;align-items: center;gap: 8px;margin: 0;font-size: var(--text-small)}
+.erm-deviate h4 .erm-icon{width: 16px;height: 16px;color: var(--color-warning)}
+.erm-options{display: grid;gap: 6px;margin: 0;padding: 0;border: 0}
+.erm-option{display: grid;grid-template-columns: 20px 1fr;align-items: start;gap: 8px;padding: 8px 10px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);font-size: var(--text-small);cursor: pointer}
+.erm-option.is-on{border-color: var(--color-accent);background: var(--color-surface-accent)}
+.erm-option input{margin: 3px 0 0;accent-color: var(--color-accent)}
+.erm-option small{display: block;color: var(--color-text-muted);font-size: var(--text-caption)}
+.erm-option:has(input:disabled){opacity: 0.55;cursor: not-allowed}
+.erm-option:focus-within{outline: 2px solid var(--color-focus);outline-offset: 1px}
+.erm-manual{display: grid;gap: 8px}
+.erm-field{display: grid;gap: 4px;font-size: var(--text-caption);font-weight: var(--weight-semibold);color: var(--color-text-muted)}
+.erm-field input{min-height: 36px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small);font-weight: var(--weight-regular)}
+.erm-picker{display: grid;gap: 6px}
+.erm-picker-text{max-height: 180px;padding: 8px 10px;overflow: auto;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle);font-size: var(--text-caption);white-space: pre-wrap}
+.erm-picker-text:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 1px}
+
+.erm-done{display: grid;align-content: start;gap: 10px;padding: 18px}
+.erm-done h3{margin: 0;font-size: var(--text-title-s)}
+.erm-done h3:focus{outline: none}
 .erm-done p{margin: 0;color: var(--color-text-muted)}
 .erm-done-actions{display: flex;flex-wrap: wrap;gap: 8px}
-.erm-steps{display: flex;align-items: center;justify-content: center;gap: 16px;padding: 10px 16px;border-top: 1px solid var(--color-border);background: var(--color-surface)}
-.erm-steps .btn{display: inline-flex;align-items: center;gap: 8px}
-.erm-steps-pos{min-width: 160px;text-align: center;font-weight: var(--weight-semibold);font-variant-numeric: tabular-nums}
-@media (max-width: 960px){.erm-body{grid-template-columns: minmax(0,1fr)}.erm-card{position: static}}
+.erm-foot{display: flex;align-items: center;gap: 8px;padding: 10px 18px;border-top: 1px solid var(--color-border-subtle);color: var(--color-text-muted);font-size: var(--text-caption)}
+.erm-foot .btn{display: inline-flex;align-items: center;gap: 4px}
+.erm-foot .erm-icon{width: 15px;height: 15px}
+.erm-foot-next{flex: 1;min-width: 0;overflow: hidden;text-align: center;text-overflow: ellipsis;white-space: nowrap}
+@media (max-width: 1100px){.erm-body{grid-template-columns: minmax(0,1fr)}.erm-panel{position: static}.erm-viewer .pdf-stage{max-height: 60vh}}
+@media (max-width: 640px){.erm-progress{margin-left: 0}.erm-seg{width: 100px}.erm-body{padding: 8px}}
+
+/* Original im Prüfmodus: schlanke Leiste; aktueller Nachweis mit Rahmen und Nummer, die übrigen der Seite gestrichelt. */
+.pdf-viewer .pdf-controls--slim{gap: 8px;padding: 6px 12px;border-bottom: 1px solid var(--color-border-subtle);color: var(--color-text-muted);font-size: var(--text-small)}
+.pdf-slim-page strong{color: var(--color-text)}
+.pdf-slim-space{flex: 1}
+.pdf-viewer .pdf-controls--slim .pdf-slim-fit{min-height: 28px}
+.pdf-frame{position: absolute;z-index: var(--z-raised);border: 1px dashed var(--color-border-strong);border-radius: 4px;pointer-events: none}
+.pdf-frame.is-current{border: 2px solid var(--color-focus)}
+.pdf-frame.is-current.is-approx{border: 2px dashed var(--color-warning)}
+.pdf-frame-number{position: absolute;top: -13px;left: -13px;display: grid;place-items: center;min-width: 24px;height: 24px;padding: 0 4px;border-radius: 999px;background: var(--color-focus);color: var(--color-accent-contrast);font-size: var(--text-caption);font-weight: var(--weight-bold)}
+.pdf-frame.is-approx .pdf-frame-number{background: var(--color-warning)}
+@media (forced-colors: active){.pdf-frame.is-current{border-color: Highlight}.pdf-frame-number{forced-color-adjust: none;background: Highlight;color: HighlightText}.erm-seg i{forced-color-adjust: none}}

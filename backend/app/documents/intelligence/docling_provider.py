@@ -598,13 +598,20 @@ def _read_original_page_sizes(path: Path) -> dict[int, dict]:
     return out
 
 
+def _origin_name(bb) -> str:
+    """Name des Koordinatenursprungs. Docling liefert ein Enum (`CoordOrigin.BOTTOMLEFT`),
+    dessen `str()` den Klassennamen traegt – darum `.value` statt `str()`."""
+    origin = getattr(bb, "coord_origin", "") or ""
+    return str(getattr(origin, "value", origin)).upper()
+
+
 def _coord_boxes(prov, height_pt: float) -> tuple:
     """Liest das BoundingBox (l,t,r,b) und normalisiert in PDF-Punkte
     (Ursprung oben links, y nach unten)."""
     bb = getattr(prov, "bbox", None)
     if bb is None:
         return None
-    origin = str(getattr(bb, "coord_origin", "") or "").upper()
+    origin = _origin_name(bb)
     l = float(getattr(bb, "l", 0) or 0)
     r = float(getattr(bb, "r", 0) or 0)
     if origin == "BOTTOMLEFT":
@@ -653,7 +660,7 @@ def _map_cell(raw_cell, page_no: int, height_pt: float) -> Optional[Cell]:
     bb = getattr(raw_cell, "bbox", None)
     region = None
     if bb is not None:
-        origin = str(getattr(bb, "coord_origin", "") or "").upper()
+        origin = _origin_name(bb)
         l = float(getattr(bb, "l", 0) or 0)
         r = float(getattr(bb, "r", 0) or 0)
         if origin == "BOTTOMLEFT":
