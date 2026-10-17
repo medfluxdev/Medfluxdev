@@ -143,6 +143,7 @@ def test_allowed_targets_by_role():
     assert allowed_targets("in_arbeit", "contract_manager") == ["gueltig"]
     assert allowed_targets("in_arbeit", "admin") == ["gueltig", "geloescht"]
     assert allowed_targets("beendet", "contract_manager") == ["gueltig"]
+    assert allowed_targets("gueltig", "contract_manager") == ["gekuendigt", "beendet", "in_arbeit"]
     assert allowed_targets("gueltig", "viewer") == []
     assert allowed_targets("gueltig", "reviewer") == []
     assert allowed_targets("geloescht", "admin") == ["in_arbeit"]

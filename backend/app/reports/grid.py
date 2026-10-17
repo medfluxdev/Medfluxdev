@@ -300,9 +300,9 @@ def build_rows(
 
     rows: list[GridRow] = []
     for contract in contracts:
-        terms = compute_terms(term_inputs(contract), as_of)
-        end = terms.actual_end or terms.possible_end
         contract_type = types.get(contract.contract_type_id) if contract.contract_type_id else None
+        terms = compute_terms(term_inputs(contract, tuple(getattr(contract_type, "reminder_leads", None) or ())), as_of)
+        end = terms.actual_end or terms.possible_end
         years_kept = contract.retention_years_after_end
         if years_kept is None and contract_type is not None:
             years_kept = contract_type.retention_years

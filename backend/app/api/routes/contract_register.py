@@ -25,12 +25,14 @@ from app.register.service import (
     RegisterError,
     accept_ai_proposal,
     add_remark,
+    edit_remark,
     capture_from_document,
     build_register,
     contract_hospitals,
     create_manual_contract,
     ensure_synced,
     list_remarks,
+    delete_remark,
     log_activity,
     load_extracted,
     set_confidentiality,
@@ -72,6 +74,12 @@ class ConfidentialityUpdate(BaseModel):
 
 class RemarkCreate(BaseModel):
     body: str = Field(max_length=10000)
+
+
+class RemarkEdit(BaseModel):
+    body: str = Field(max_length=10000)
+    # Stand beim Öffnen (Feld `version` der Liste); abweichend = 409, damit keine Änderung verloren geht.
+    expected_version: Optional[str] = None
 
 
 def _register_actor(request: Request, organization_slug: str) -> RegisterActor:
@@ -343,6 +351,43 @@ def get_remarks(contract_id: UUID, request: Request, organization_slug: str):
     session = create_session()
     try:
         contract = _contract(session, actor, contract_id)
+        return {"items": list_remarks(session, contract.id)}
+    finally:
+        session.close()
+
+
+@router.patch("/{contract_id}/remarks/{remark_id}")
+def patch_remark(contract_id: UUID, remark_id: UUID, payload: RemarkEdit, request: Request, organization_slug: str):
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "remark.add")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        try:
+            edit_remark(session, contract=contract, actor=actor, remark_id=remark_id, body=payload.body, expected_version=payload.expected_version)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
+        return {"items": list_remarks(session, contract.id)}
+    finally:
+        session.close()
+
+
+@router.delete("/{contract_id}/remarks/{remark_id}")
+def remove_remark(contract_id: UUID, remark_id: UUID, request: Request, organization_slug: str, expected_version: Optional[str] = None):
+    """Notiz löschen (weich, mit Protokoll); gleiches Recht wie Schreiben und Bearbeiten."""
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor, "remark.add")
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        try:
+            delete_remark(session, contract=contract, actor=actor, remark_id=remark_id, expected_version=expected_version)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
+        session.commit()
         return {"items": list_remarks(session, contract.id)}
     finally:
         session.close()

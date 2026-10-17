@@ -6,7 +6,7 @@ accepted extraction truth or deterministic contract status.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
@@ -30,6 +30,8 @@ from app.database.services import get_organization
 from app.database.session import create_session
 from app.deadlines.service import DeadlineError, change_deadline_status, create_manual_deadline, update_deadline
 from app.register.service import RegisterActor
+from app.reports.decision_steps import STEP_KEYS, decision_steps
+from app.reports.renewal import step_facts
 
 router = APIRouter(prefix="/api/lifecycle", tags=["lifecycle"])
 MANAGE_ROLES = {"admin", "contract_manager"}
@@ -61,6 +63,10 @@ class ContractDecisionUpdate(BaseModel):
     # Erinnerung anlegen bzw. die verknuepfte offene Erinnerung aendern; remove_reminder bricht sie ab.
     reminder: DecisionReminder | None = None
     remove_reminder: bool = False
+
+
+class DecisionStepUpdate(BaseModel):
+    done: bool
 
 
 class EquipmentLifecycleUpdate(BaseModel):
@@ -126,6 +132,14 @@ def _log(session, actor, scope, contract_id, event_name: str, context: dict) -> 
         object_id=contract_id,
         context_data=context,
     ))
+
+
+def _current_end(contract) -> date | None:
+    from app.register.service import term_inputs
+    from app.register.terms import compute_terms
+
+    terms = compute_terms(term_inputs(contract), today_local())
+    return terms.actual_end or terms.possible_end
 
 
 def _require_decision(session, org_id: UUID, contract_id: UUID, decision_id: UUID) -> ContractLifecycleDecision:
@@ -204,8 +218,9 @@ def _reminder_payload(deadline: ContractDeadline | None) -> dict | None:
     return {"id": str(deadline.id), "title": deadline.title, "due_date": deadline.due_date, "status": deadline.status}
 
 
-def _decision_payload(row: ContractLifecycleDecision, reminder: ContractDeadline | None = None) -> dict:
+def _decision_payload(row: ContractLifecycleDecision, reminder: ContractDeadline | None = None, steps: list[dict] | None = None) -> dict:
     return {
+        "steps": steps,
         "id": str(row.id),
         "contract_id": str(row.contract_id),
         "decision": row.decision,
@@ -217,6 +232,13 @@ def _decision_payload(row: ContractLifecycleDecision, reminder: ContractDeadline
         "updated_at": row.updated_at,
         "reminder": _reminder_payload(reminder),
     }
+
+
+def _steps(session, contract, row: ContractLifecycleDecision, reminder: ContractDeadline | None, as_of: date) -> list[dict] | None:
+    """Umsetzungsschritte nur für offene Entscheidungen (geplant / in Bearbeitung)."""
+    if row.status not in ("planned", "in_progress"):
+        return None
+    return decision_steps(step_facts(session, contract, row, reminder, as_of))
 
 
 @router.get("/contracts/{contract_id}")
@@ -236,7 +258,12 @@ def contract_lifecycle(request: Request, organization_slug: str, contract_id: UU
             deadline.id: deadline
             for deadline in session.scalars(select(ContractDeadline).where(ContractDeadline.id.in_(reminder_ids)))
         } if reminder_ids else {}
-        return {"items": [_decision_payload(row, reminders.get(row.reminder_deadline_id)) for row in rows]}
+        contract = session.get(Contract, contract_id)
+        today = today_local()
+        return {"items": [
+            _decision_payload(row, reminders.get(row.reminder_deadline_id), _steps(session, contract, row, reminders.get(row.reminder_deadline_id), today))
+            for row in rows
+        ]}
     finally:
         session.close()
 
@@ -262,6 +289,8 @@ def create_contract_decision(request: Request, organization_slug: str, contract_
             note=body.note,
             actor_account_id=getattr(actor, "account_id", None),
             actor_display_name=display_name,
+            baseline_end=_current_end(contract),
+            steps_done={},
         )
         session.add(row)
         reminder = None
@@ -277,7 +306,38 @@ def create_contract_decision(request: Request, organization_slug: str, contract_
              {"decision": decision, "status": status, "effective_date": body.effective_date.isoformat() if body.effective_date else None,
               "reminder_deadline_id": str(reminder.id) if reminder is not None else None})
         session.commit()
-        return _decision_payload(row, reminder)
+        return _decision_payload(row, reminder, _steps(session, contract, row, reminder, today_local()))
+    finally:
+        session.close()
+
+
+@router.post("/contracts/{contract_id}/{decision_id}/steps/{step_key}")
+def update_decision_step(request: Request, organization_slug: str, contract_id: UUID, decision_id: UUID, step_key: str, body: DecisionStepUpdate):
+    """Einen Umsetzungsschritt abhaken bzw. zurücknehmen; der erste Haken setzt „in Bearbeitung“."""
+    actor = _actor_or_forbid(request)
+    session = create_session()
+    try:
+        org = _org(session, organization_slug, request)
+        contract, scope = _require_contract(session, org.id, contract_id)
+        row = _require_decision(session, org.id, contract_id, decision_id)
+        if row.status not in ("planned", "in_progress"):
+            raise HTTPException(status_code=409, detail="Die Entscheidung ist bereits abgeschlossen oder storniert.")
+        if step_key not in STEP_KEYS.get(row.decision, set()):
+            raise HTTPException(status_code=404, detail="Schritt nicht gefunden.")
+        done = dict(row.steps_done or {})
+        name = getattr(actor, "display_name", None) or "local-development"
+        if body.done:
+            done[step_key] = {"by": name, "at": datetime.now(timezone.utc).isoformat()}
+        else:
+            done.pop(step_key, None)
+        row.steps_done = done
+        if body.done and row.status == "planned":
+            row.status = "in_progress"
+        _log(session, actor, scope, contract_id, "contract.lifecycle_step_done" if body.done else "contract.lifecycle_step_undone",
+             {"decision_id": str(row.id), "decision": row.decision, "step": step_key})
+        reminder = _linked_reminder(session, row)
+        session.commit()
+        return _decision_payload(row, reminder, _steps(session, contract, row, reminder, today_local()))
     finally:
         session.close()
 
@@ -335,7 +395,7 @@ def update_contract_decision(request: Request, organization_slug: str, contract_
             session.rollback()
             raise _deadline_http(exc)
         session.commit()
-        return _decision_payload(row, reminder)
+        return _decision_payload(row, reminder, _steps(session, contract, row, reminder, today_local()))
     finally:
         session.close()
 

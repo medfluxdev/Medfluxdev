@@ -241,7 +241,7 @@ def entry_inputs(rows: list[ContractFinanceEntry]) -> list[EntryInput]:
         EntryInput(
             direction=row.direction, amount=row.amount, amount_basis=row.amount_basis, vat_rate=row.vat_rate,
             interval=row.interval, valid_from=row.valid_from, valid_to=row.valid_to, currency=row.currency,
-            apply_price_adjustment=row.apply_price_adjustment, ref=str(row.id),
+            ref=str(row.id),
         )
         for row in rows
     ]
@@ -252,7 +252,10 @@ def finance_summary(session: Session, contract: Contract, as_of: date) -> list[d
     if not rows:
         return []
     adjustment, notes = price_adjustment(contract, as_of)
-    summaries = summarize(entry_inputs(rows), as_of=as_of, contract_end=contract_end(contract, as_of), adjustment=adjustment)
+    summaries = summarize(
+        entry_inputs(rows), as_of=as_of, contract_end=contract_end(contract, as_of), adjustment=adjustment,
+        contract_start=contract.term_start_date, with_years=True,
+    )
     adjustment_items = [{"text": text, "target": {"tab": "register", "field": "price_adjustment_next_date"}} for text in notes]
     out = []
     for summary in summaries:

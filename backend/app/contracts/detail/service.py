@@ -295,6 +295,12 @@ def register_facts(contract, as_of: date) -> dict:
             {"amount": str(contract.maintained_annual_cost), "currency": contract.maintained_annual_currency or "EUR"}
             if contract.maintained_annual_cost is not None else None
         ),
+        # Leistungen & SLA (von Hand gepflegt): fuer Sichtbarkeit des Reiters und die Kachel in der Übersicht.
+        "service": {
+            "scope_text": contract.service_scope_text,
+            "availability_percent": str(contract.sla_availability_percent) if contract.sla_availability_percent is not None else None,
+            "penalty_terms": contract.penalty_terms,
+        },
     }
 
 

@@ -16,6 +16,7 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.register.reminders import normalize_leads
 from app.register.sections import normalize as normalize_sections, sections_for_type
 from app.database.models.contract import Contract
 from app.database.models.register import (
@@ -336,6 +337,7 @@ def type_payload(row: CatalogContractType) -> dict[str, Any]:
         "is_confidential": row.is_confidential, "is_active": row.is_active, "sort_order": row.sort_order,
         "retention_years": row.retention_years,
         "sections": sections_for_type(row), "sections_default": row.sections is None,
+        "reminder_leads": row.reminder_leads, "escalation_days_before": row.escalation_days_before,
     }
 
 
@@ -448,6 +450,25 @@ def upsert_type(session: Session, organization_id: uuid.UUID, values: dict[str, 
             row.sections = normalize_sections(values["sections"])
         except ValueError:
             raise CatalogError(422, "Abschnitte: unbekannter Abschnitt.")
+    if "reminder_leads" in values:
+        # Leer = Standard der Organisation; sonst z. B. [{"value": 3, "unit": "months"}, {"value": 1, "unit": "months"}].
+        try:
+            leads = normalize_leads(values["reminder_leads"])
+        except ValueError as exc:
+            raise CatalogError(422, f"Erinnerungen: {exc}")
+        row.reminder_leads = leads or None
+    if "escalation_days_before" in values:
+        value = values["escalation_days_before"]
+        if value in (None, ""):
+            row.escalation_days_before = None
+        else:
+            try:
+                days = int(value)
+            except (TypeError, ValueError):
+                raise CatalogError(422, "Eskalation: ganze Zahl erwartet.")
+            if not 0 <= days <= 365:
+                raise CatalogError(422, "Eskalation: 0 bis 365 Tage vor dem Termin.")
+            row.escalation_days_before = days
     session.flush()
     return row
 

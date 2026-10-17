@@ -9,6 +9,9 @@ Aus den berechneten Fristen eines Vertrags entstehen Termine im Postfach:
   nachschuessig = Periodenende),
 - `maintenance_due`: naechste Wartung (gepflegtes Datum, Folgetermine im Intervall).
 
+Titel nennen die Handlung bzw. den Termin, nie eine Person (die steht in der Zuständigkeit).
+Bestehende offene Systemtermine erhalten neue Titel beim naechsten Abgleich.
+
 Ist eine Frist erledigt, entsteht automatisch die naechste, sobald sich die
 berechnete Frist weiterbewegt (z. B. naechste Verlaengerungsperiode).
 Erledigte Termine mit gleichem Faelligkeitsdatum werden nie neu angelegt.
@@ -17,7 +20,7 @@ Erledigte Termine mit gleichem Faelligkeitsdatum werden nie neu angelegt.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Iterable, Optional
@@ -29,8 +32,8 @@ from app.contracts.calculation.calendar_ import month_add
 from app.database.models import Contract
 from app.database.models.deadlines import ContractDeadline
 from app.database.models.finance import ContractFinanceEntry
-from app.register.service import log_system_activity, retention_info, term_inputs
-from app.register.reminders import DEFAULT_REMINDER_LEAD_MONTHS as DEFAULT_LEAD_MONTHS, extra_reminders
+from app.register.service import log_system_activity, retention_info, term_inputs, type_reminder_defaults
+from app.register.reminders import effective_leads, schedule
 from app.register.terms import TermResult, compute_terms
 
 ACTIVE_STATUSES = frozenset({"in_arbeit", "gueltig"})
@@ -58,16 +61,30 @@ class SystemDeadlineSpec:
     escalation_account_id: Optional[uuid.UUID]
     # Weitere Erinnerungstage (nur Kündigungsfrist/Vertragsende), ISO-Daten aufsteigend.
     extra_remind_on: Optional[list] = None
+    # Eskalationsregel: ab diesem Tag (nicht erledigt) an die Eskalationsperson; None = erst bei Überfälligkeit.
+    escalate_on: Optional[date] = None
 
 
-def _extra(due: date, contract: Contract) -> Optional[list]:
-    extra = extra_reminders(due, contract.reminder_extra_leads or [], _remind_on(due, contract.reminder_lead_months))
-    return [day.isoformat() for day in extra] or None
+@dataclass(frozen=True)
+class ReminderPolicy:
+    """Wirksame Erinnerungseinstellung eines Vertrags (Vertrag, sonst Standard des Vertragstyps)."""
+    leads: tuple
+    escalation_days: Optional[int] = None
 
 
-def _remind_on(due: date, lead_months: Optional[int]) -> date:
-    lead = DEFAULT_LEAD_MONTHS if lead_months is None else lead_months
-    return min(due, month_add(due, -lead))
+def contract_policy(contract: Contract, type_leads=None, type_escalation_days: Optional[int] = None) -> ReminderPolicy:
+    leads = effective_leads(contract.reminder_lead_months, contract.reminder_extra_leads, type_leads)
+    days = contract.escalation_days_before if contract.escalation_days_before is not None else type_escalation_days
+    return ReminderPolicy(tuple(leads), days)
+
+
+def _remind(due: date, leads) -> tuple[date, Optional[list]]:
+    first, extra = schedule(due, leads)
+    return first, [day.isoformat() for day in extra] or None
+
+
+def _remind_on(due: date, lead_months: int) -> date:
+    return min(due, month_add(due, -lead_months))
 
 
 @dataclass(frozen=True)
@@ -161,9 +178,11 @@ def plan_system_deadlines(
     payments: Iterable[PaymentSchedule] = (),
     as_of: Optional[date] = None,
     done: Optional[dict[str, frozenset[date]]] = None,
+    policy: Optional[ReminderPolicy] = None,
 ) -> list[SystemDeadlineSpec]:
     if contract.lifecycle_state != "active" or contract.is_archived:
         return []
+    policy = policy or contract_policy(contract)
     assignee = contract.reminder_recipient_account_id or contract.responsible_account_id
     escalation = contract.escalation_recipient_account_id
     specs: list[SystemDeadlineSpec] = []
@@ -172,11 +191,11 @@ def plan_system_deadlines(
             specs.append(SystemDeadlineSpec(
                 system_key="cancel_by",
                 kind="kuendigungsfrist",
-                title="Kündigungsfrist",
+                title="Kündigung prüfen",
                 due_date=terms.cancel_by,
-                remind_on=_remind_on(terms.cancel_by, contract.reminder_lead_months),
-                extra_remind_on=_extra(terms.cancel_by, contract),
-                todo_text=contract.reminder_todo or "Verlängerung prüfen oder Vertrag fristgerecht kündigen.",
+                remind_on=_remind(terms.cancel_by, policy.leads)[0],
+                extra_remind_on=_remind(terms.cancel_by, policy.leads)[1],
+                todo_text="Verlängerung prüfen oder Vertrag fristgerecht kündigen.",
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
             ))
@@ -184,11 +203,11 @@ def plan_system_deadlines(
             specs.append(SystemDeadlineSpec(
                 system_key="contract_end",
                 kind="vertragsende",
-                title="Vertragsende (feste Laufzeit)",
+                title="Vertragsende",
                 due_date=terms.possible_end,
-                remind_on=_remind_on(terms.possible_end, contract.reminder_lead_months),
-                extra_remind_on=_extra(terms.possible_end, contract),
-                todo_text=contract.reminder_todo or "Folgevertrag oder Verlängerung klären.",
+                remind_on=_remind(terms.possible_end, policy.leads)[0],
+                extra_remind_on=_remind(terms.possible_end, policy.leads)[1],
+                todo_text="Folgevertrag oder Verlängerung klären.",
                 assignee_account_id=assignee,
                 escalation_account_id=escalation,
             ))
@@ -245,7 +264,7 @@ def plan_system_deadlines(
         specs.append(SystemDeadlineSpec(
             system_key="retention_review",
             kind="loeschpruefung",
-            title="Löschprüfung (Aufbewahrungsfrist abgelaufen)",
+            title="Löschprüfung",
             due_date=deletion_from,
             remind_on=deletion_from,
             todo_text="Prüfen, ob Vertrag und Dokumente gelöscht werden können; Löschung über den Löschablauf beantragen.",
@@ -263,7 +282,17 @@ def plan_system_deadlines(
             assignee_account_id=assignee,
             escalation_account_id=escalation,
         ))
+    if escalation is not None and policy.escalation_days is not None:
+        specs = [replace(spec, escalate_on=spec.due_date - timedelta(days=policy.escalation_days)) for spec in specs]
     return specs
+
+
+def apply_overrides(spec: SystemDeadlineSpec, overrides: Optional[dict]) -> SystemDeadlineSpec:
+    """Am Termin angepasste Erinnerungen (overrides.reminder_leads) ersetzen die des Vertrags."""
+    if not overrides or "reminder_leads" not in overrides:
+        return spec
+    first, extra = _remind(spec.due_date, overrides["reminder_leads"])
+    return replace(spec, remind_on=first, extra_remind_on=extra)
 
 
 SYSTEM_NAME = "System (Fristenabgleich)"
@@ -275,7 +304,8 @@ def _plain(value):
 
 def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> dict[str, int]:
     """Gleicht die offenen Systemtermine mit den aktuellen Fristen ab (idempotent)."""
-    terms = compute_terms(term_inputs(contract), as_of)
+    type_leads, type_escalation = type_reminder_defaults(session, contract)
+    terms = compute_terms(term_inputs(contract, type_leads), as_of)
     deletion_from = retention_info(session, contract, terms)["deletion_from"]
     rows = session.scalars(
         select(ContractDeadline).where(
@@ -295,6 +325,7 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
         for spec in plan_system_deadlines(
             contract, terms, date.fromisoformat(deletion_from) if deletion_from else None,
             payments=payment_schedules(entries), as_of=as_of, done=done,
+            policy=contract_policy(contract, type_leads, type_escalation),
         )
     }
     counts = {"created": 0, "updated": 0, "cancelled": 0}
@@ -322,6 +353,7 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
                 due_date=spec.due_date,
                 remind_on=spec.remind_on,
                 extra_remind_on=spec.extra_remind_on,
+                escalate_on=spec.escalate_on,
                 todo_text=spec.todo_text,
                 assignee_account_id=spec.assignee_account_id,
                 escalation_account_id=spec.escalation_account_id,
@@ -338,7 +370,11 @@ def sync_system_deadlines(session: Session, contract: Contract, as_of: date) -> 
             # erledigt wird; erst danach entsteht die naechste Periode.
             continue
         diffs = {}
-        for attr in ("kind", "title", "due_date", "remind_on", "extra_remind_on", "todo_text", "assignee_account_id", "escalation_account_id"):
+        custom = row.overrides or {}
+        spec = apply_overrides(spec, custom)
+        for attr in ("kind", "title", "due_date", "remind_on", "extra_remind_on", "escalate_on", "todo_text", "assignee_account_id", "escalation_account_id"):
+            if attr in custom:
+                continue
             value = getattr(spec, attr)
             if getattr(row, attr) != value:
                 diffs[attr] = {"before": _plain(getattr(row, attr)), "after": _plain(value)}

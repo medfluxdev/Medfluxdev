@@ -87,6 +87,8 @@ class TermInputs:
     reminder_lead_months: Optional[int] = None
     # Weitere Erinnerungen (register/reminders.normalize_leads).
     reminder_extra: tuple = ()
+    # Standard des Vertragstyps fuer die erste Erinnerung (leer = Standard der Organisation).
+    reminder_default_leads: tuple = ()
     terminated_effective: Optional[date] = None
     ended_on: Optional[date] = None
 
@@ -161,10 +163,13 @@ def _following_period_end(previous_end: date, length: Period) -> date:
 
 def _reminders(anchor: Optional[date], inputs: "TermInputs") -> dict:
     """Erste Erinnerung (ohne Angabe der Standard) und weitere Erinnerungen vor dem Stichtag."""
-    from app.register.reminders import extra_reminders, first_reminder
+    from app.register.reminders import effective_leads, schedule
 
-    first = first_reminder(anchor, inputs.reminder_lead_months)
-    return {"reminder_date": first, "reminder_dates": ([first] if first else []) + extra_reminders(anchor, list(inputs.reminder_extra), first)}
+    if anchor is None:
+        return {"reminder_date": None, "reminder_dates": []}
+    leads = effective_leads(inputs.reminder_lead_months, list(inputs.reminder_extra), list(inputs.reminder_default_leads))
+    first, extra = schedule(anchor, leads)
+    return {"reminder_date": first, "reminder_dates": [first, *extra]}
 
 
 def _calendar_end(

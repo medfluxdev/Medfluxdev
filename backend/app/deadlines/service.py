@@ -13,12 +13,17 @@ from app.database.models import Account, AccountMembership, ActivityLog, Contrac
 from app.database.models.deadlines import AccountDeputy, ContractDeadline, Notification
 from app.database.models.register import ContractFieldProvenance
 from app.deadlines.notify import active_deputy, deputized_account_ids, notify
-from app.deadlines.system import TERM_BASIS_FIELDS
+from app.deadlines.system import TERM_BASIS_FIELDS, sync_system_deadlines
+from app.register.reminders import normalize_leads, schedule
 from app.register.service import RegisterActor, log_activity
 
 EDITABLE_MANUAL = ("kind", "title", "due_date", "remind_on", "assignee_account_id", "escalation_account_id",
-                   "todo_text", "note", "send_email", "send_ics")
-EDITABLE_SYSTEM = ("note", "send_email", "send_ics")
+                   "todo_text", "note", "send_email", "send_ics", "reminder_leads")
+# Systemtermine: das Datum kommt aus den Vertragsdaten. Was zu tun ist, wer erinnert wird und wann,
+# lässt sich je Termin anpassen („Erinnerung anpassen“); leer = wieder der Vertrag.
+EDITABLE_SYSTEM = ("todo_text", "assignee_account_id", "reminder_leads", "note", "send_email", "send_ics")
+# Am Systemtermin gesetzte Werte, die der Fristenabgleich stehen lässt (contract_deadline.overrides).
+SYSTEM_OVERRIDABLE = ("todo_text", "assignee_account_id")
 
 
 class DeadlineError(ValueError):
@@ -86,7 +91,13 @@ def _clean(session: Session, organization_id: uuid.UUID, values: dict[str, Any],
         elif key in ("assignee_account_id", "escalation_account_id"):
             out[key] = _member(session, organization_id, value, "Zuständig" if key == "assignee_account_id" else "Eskalation an")
         elif key == "todo_text":
-            out[key] = _text(value, "ToDo", 500)
+            out[key] = _text(value, "Was zu tun ist", 500)
+        elif key == "reminder_leads":
+            # Erinnerungen je Termin: Liste (auch leer = nur am Termin selbst) oder None = wieder der Vertrag.
+            try:
+                out[key] = None if value is None else normalize_leads(value)
+            except ValueError as exc:
+                raise DeadlineError(422, str(exc)) from exc
         elif key == "note":
             out[key] = _text(value, "Bemerkung", 5000)
         elif key in ("send_email", "send_ics"):
@@ -117,6 +128,12 @@ def deadline_payloads(session: Session, rows: list[ContractDeadline], as_of: dat
     names = _names(session, {
         value for row in rows for value in (row.assignee_account_id, row.escalation_account_id) if value
     })
+    # Eskalation nur zeigen, wenn sie wirklich ausgeloest wurde (Benachrichtigung verschickt).
+    escalated = dict(session.execute(
+        select(Notification.deadline_id, func.min(Notification.created_at))
+        .where(Notification.deadline_id.in_([row.id for row in rows]), Notification.kind == "deadline_escalation")
+        .group_by(Notification.deadline_id)
+    ).all()) if rows else {}
     unconfirmed = {
         contract_id for contract_id in {row.contract_id for row in rows if row.source == "system"}
         if basis_unconfirmed(session, contract_id)
@@ -137,12 +154,14 @@ def deadline_payloads(session: Session, rows: list[ContractDeadline], as_of: dat
             "title": row.title,
             "due_date": row.due_date.isoformat(),
             "remind_on": row.remind_on.isoformat(),
+            "extra_remind_on": list(row.extra_remind_on or []),
             "days_until_due": (row.due_date - as_of).days,
             "overdue": row.status == "open" and row.due_date < as_of,
             "assignee_account_id": str(row.assignee_account_id) if row.assignee_account_id else None,
             "assignee_name": names.get(row.assignee_account_id),
             "escalation_account_id": str(row.escalation_account_id) if row.escalation_account_id else None,
             "escalation_name": names.get(row.escalation_account_id),
+            "escalated_at": escalated[row.id].isoformat() if row.id in escalated else None,
             "todo_text": row.todo_text,
             "note": row.note,
             "status": row.status,
@@ -151,6 +170,9 @@ def deadline_payloads(session: Session, rows: list[ContractDeadline], as_of: dat
             "done_by_name": row.done_by_name,
             "done_at": row.done_at.isoformat() if row.done_at else None,
             "basis_unconfirmed": row.contract_id in unconfirmed and row.source == "system",
+            "custom_fields": sorted((row.overrides or {}).keys()),
+            "reminder_leads": (row.overrides or {}).get("reminder_leads"),
+            "escalate_on": row.escalate_on.isoformat() if row.escalate_on else None,
             "editable_fields": list(EDITABLE_SYSTEM if row.source == "system" else EDITABLE_MANUAL),
         })
     return out
@@ -205,11 +227,37 @@ def update_deadline(
     if remind > due:
         raise DeadlineError(422, "„Erinnern am“ liegt nach dem Fälligkeitsdatum.")
     diffs = {}
+    custom_reminders = (row.overrides or {}).get("reminder_leads")
+    if "reminder_leads" in clean:
+        leads = clean.pop("reminder_leads")
+        others = {k: v for k, v in (row.overrides or {}).items() if k != "reminder_leads"}
+        row.overrides = ({**others, "reminder_leads": leads} if leads is not None else others) or None
+        if leads != custom_reminders:
+            diffs["reminder_leads"] = {"before": custom_reminders, "after": leads}
+        custom_reminders = leads
+    elif "remind_on" in clean and custom_reminders is not None:
+        # Eigenes „Erinnern am“ ersetzt angepasste Erinnerungen.
+        row.overrides = {k: v for k, v in (row.overrides or {}).items() if k != "reminder_leads"} or None
+        clean["extra_remind_on"] = None
+        custom_reminders = None
+    if row.source == "manual" and custom_reminders is not None:
+        first, extra = schedule(due, custom_reminders)
+        clean["remind_on"], clean["extra_remind_on"] = first, [day.isoformat() for day in extra] or None
+    elif row.source == "manual" and "reminder_leads" in diffs:
+        clean["extra_remind_on"] = None
     for key, value in clean.items():
+        if row.source == "system" and key in SYSTEM_OVERRIDABLE:
+            # Gesetzt = gehört dem Termin; geleert = wieder der Standardtext (Abgleich unten).
+            custom = {k: v for k, v in (row.overrides or {}).items() if k != key}
+            if value is not None:
+                custom[key] = value
+            row.overrides = custom or None
         before = getattr(row, key)
         if before != value:
             diffs[key] = {"before": str(before) if before is not None else None, "after": str(value) if value is not None else None}
             setattr(row, key, value)
+    if row.source == "system" and diffs:
+        sync_system_deadlines(session, contract, as_of)
     if "assignee_account_id" in diffs and row.assignee_account_id and row.assignee_account_id != actor.account_id:
         notify(session, deadline=row, contract=contract, kind="deadline_assigned",
                recipient_ids=[row.assignee_account_id], as_of=as_of, counts={})

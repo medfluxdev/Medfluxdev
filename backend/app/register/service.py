@@ -40,6 +40,7 @@ from app.database.models.register import (
     ContractHospital,
     ContractPartner,
     ContractRemark,
+    ContractRemarkRevision,
     NumberAllocation,
     NumberRange,
 )
@@ -413,7 +414,20 @@ def ensure_synced(session: Session, contract: Contract) -> bool:
 # --------------------------------------------------------------------------- read model
 
 
-def term_inputs(contract: Contract) -> TermInputs:
+def type_reminder_defaults(session: Session, contract: Contract) -> tuple[tuple, Optional[int]]:
+    """Erinnerungs-Standard des Vertragstyps: (Erinnerungen, Eskalation Tage vorher); leer = Organisation."""
+    if contract.contract_type_id is None:
+        return (), None
+    row = session.execute(
+        select(CatalogContractType.reminder_leads, CatalogContractType.escalation_days_before)
+        .where(CatalogContractType.id == contract.contract_type_id)
+    ).first()
+    if row is None:
+        return (), None
+    return tuple(row.reminder_leads or ()), row.escalation_days_before
+
+
+def term_inputs(contract: Contract, default_leads: tuple = ()) -> TermInputs:
     return TermInputs(
         term_model=contract.term_model,
         start_date=contract.term_start_date,
@@ -425,6 +439,7 @@ def term_inputs(contract: Contract) -> TermInputs:
         renewal_period=period(contract.renewal_period_value, contract.renewal_period_unit),
         reminder_lead_months=contract.reminder_lead_months,
         reminder_extra=tuple(contract.reminder_extra_leads or ()),
+        reminder_default_leads=tuple(default_leads or ()),
         terminated_effective=contract.terminated_effective,
         ended_on=contract.ended_on,
     )
@@ -565,7 +580,8 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
     missing_for_valid = [key for key in REQUIRED_FOR_VALID if values.get(key) in (None, "")]
     if contract.partner_id is None and not contract.supplier:
         missing_for_valid.append("partner_id")
-    terms = compute_terms(term_inputs(contract), as_of)
+    type_leads, type_escalation = type_reminder_defaults(session, contract)
+    terms = compute_terms(term_inputs(contract, type_leads), as_of)
     return {
         "contract_id": str(contract.id),
         "register_number": contract.register_number,
@@ -584,7 +600,11 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
         "fields": fields,
         "terms": terms.as_dict(),
         "reminders": {
-            "default_lead_months": DEFAULT_REMINDER_LEAD_MONTHS,
+            # Standard: Vertragstyp, sonst Organisation (erste Erinnerung in Monaten für die Anzeige).
+            "default_lead_months": next((lead["value"] for lead in type_leads if lead["unit"] == "months"), DEFAULT_REMINDER_LEAD_MONTHS),
+            "default_leads": list(type_leads) or [{"value": DEFAULT_REMINDER_LEAD_MONTHS, "unit": "months"}],
+            "default_escalation_days": type_escalation,
+            "default_source": "contract_type" if type_leads or type_escalation is not None else "organization",
             "lead_months": contract.reminder_lead_months,
             "extra_leads": list(contract.reminder_extra_leads or []),
         },
@@ -931,18 +951,107 @@ def add_remark(session: Session, *, contract: Contract, actor: RegisterActor, bo
     return remark
 
 
+def _remark_version(remark: ContractRemark) -> str:
+    """Stand einer Notiz fuer die Konfliktpruefung: letzte Bearbeitung, sonst Anlage."""
+    stamp = remark.edited_at or remark.created_at
+    return stamp.isoformat() if stamp else ""
+
+
+def edit_remark(
+    session: Session, *, contract: Contract, actor: RegisterActor, remark_id: uuid.UUID, body: str,
+    expected_version: Optional[str] = None,
+) -> ContractRemark:
+    """Notiz aendern (eigene oder fremde); die bisherige Fassung bleibt im Verlauf."""
+    text = (body or "").strip()
+    if not text:
+        raise RegisterError(422, "Die Notiz ist leer.")
+    if len(text) > 10000:
+        raise RegisterError(422, "Die Notiz ist zu lang (max. 10.000 Zeichen).")
+    remark = _locked_remark(session, contract, remark_id)
+    if expected_version is not None and expected_version != _remark_version(remark):
+        who = remark.edited_by_name or remark.author_name or "jemand anderes"
+        raise RegisterError(409, f"Die Notiz wurde inzwischen von {who} geändert. Bitte neu laden und erneut bearbeiten.")
+    if text == remark.body:
+        return remark
+    now = datetime.now(timezone.utc)
+    session.add(ContractRemarkRevision(
+        organization_id=remark.organization_id,
+        remark_id=remark.id,
+        body=remark.body,
+        account_id=remark.edited_by_account_id if remark.edited_at else remark.account_id,
+        author_name=remark.edited_by_name if remark.edited_at else remark.author_name,
+        written_at=remark.edited_at or remark.created_at,
+    ))
+    remark.body = text
+    remark.edited_at = now
+    remark.edited_by_account_id = actor.account_id
+    remark.edited_by_name = actor.display_name
+    session.flush()
+    log_activity(session, actor, contract.id, "contract.remark_edited", {
+        "remark_id": str(remark.id), "own": remark.account_id is not None and remark.account_id == actor.account_id,
+    })
+    return remark
+
+
+def _locked_remark(session: Session, contract: Contract, remark_id: uuid.UUID) -> ContractRemark:
+    """Sichtbare Notiz dieses Vertrags, fuer die Aenderung gesperrt; geloeschte gelten als nicht vorhanden."""
+    remark = session.execute(
+        select(ContractRemark).where(
+            ContractRemark.id == remark_id, ContractRemark.contract_id == contract.id, ContractRemark.deleted_at.is_(None),
+        ).with_for_update()
+    ).scalar_one_or_none()
+    if remark is None:
+        raise RegisterError(404, "Notiz nicht gefunden.")
+    return remark
+
+
+def delete_remark(
+    session: Session, *, contract: Contract, actor: RegisterActor, remark_id: uuid.UUID, expected_version: Optional[str] = None,
+) -> ContractRemark:
+    """Notiz weich loeschen: aus der Liste entfernt, Text und Fassungen bleiben mit „wer/wann“ erhalten."""
+    remark = _locked_remark(session, contract, remark_id)
+    if expected_version is not None and expected_version != _remark_version(remark):
+        who = remark.edited_by_name or remark.author_name or "jemand anderes"
+        raise RegisterError(409, f"Die Notiz wurde inzwischen von {who} geändert. Bitte neu laden und prüfen, ob sie gelöscht werden soll.")
+    remark.deleted_at = datetime.now(timezone.utc)
+    remark.deleted_by_account_id = actor.account_id
+    remark.deleted_by_name = actor.display_name
+    session.flush()
+    log_activity(session, actor, contract.id, "contract.remark_deleted", {
+        "remark_id": str(remark.id), "own": remark.account_id is not None and remark.account_id == actor.account_id,
+    })
+    return remark
+
+
 def list_remarks(session: Session, contract_id: uuid.UUID) -> list[dict]:
     rows = session.scalars(
         select(ContractRemark)
-        .where(ContractRemark.contract_id == contract_id)
+        .where(ContractRemark.contract_id == contract_id, ContractRemark.deleted_at.is_(None))
         .order_by(ContractRemark.created_at.desc(), ContractRemark.id.desc())
     ).all()
+    revisions: dict[uuid.UUID, list[dict]] = {}
+    if rows:
+        for rev in session.scalars(
+            select(ContractRemarkRevision)
+            .where(ContractRemarkRevision.remark_id.in_([row.id for row in rows]))
+            .order_by(ContractRemarkRevision.written_at.desc(), ContractRemarkRevision.id.desc())
+        ).all():
+            revisions.setdefault(rev.remark_id, []).append({
+                "body": rev.body,
+                "author_name": rev.author_name,
+                "written_at": rev.written_at.isoformat() if rev.written_at else None,
+            })
     return [
         {
             "id": str(row.id),
             "author_name": row.author_name,
             "body": row.body,
             "created_at": row.created_at.isoformat() if row.created_at else None,
+            "edited_at": row.edited_at.isoformat() if row.edited_at else None,
+            "edited_by_name": row.edited_by_name,
+            "version": _remark_version(row),
+            # Fruehere Fassungen, neueste zuerst.
+            "revisions": revisions.get(row.id, []),
         }
         for row in rows
     ]

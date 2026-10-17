@@ -88,7 +88,7 @@ def _log(session, actor, event_name: str, object_type: str, object_id, context: 
     )
 
 
-_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "sections", "area", "keywords", "field_key")
+_SNAPSHOT_FIELDS = ("code", "label", "description", "is_active", "is_confidential", "sort_order", "retention_years", "sections", "reminder_leads", "escalation_days_before", "area", "keywords", "field_key")
 
 
 def _snapshot(row) -> dict:
@@ -432,6 +432,17 @@ def patch_contract_type(type_id: UUID, payload: CatalogEntry, request: Request, 
         except CatalogError as exc:
             session.rollback()
             raise _http(exc)
+        if {"reminder_leads", "escalation_days_before"} & set(payload.values):
+            # Neuer Erinnerungs-Standard: offene Systemtermine der Verträge dieses Typs sofort abgleichen.
+            from app.core.clock import today_local
+            from app.deadlines.system import sync_system_deadlines
+
+            today = today_local()
+            for contract in session.scalars(select(Contract).where(
+                Contract.organization_id == actor.organization_id, Contract.contract_type_id == row.id,
+                Contract.lifecycle_state == "active",
+            )).all():
+                sync_system_deadlines(session, contract, today)
         _log(session, actor, "catalog.contract_type_updated", "catalog_contract_type", row.id, {"fields": _diff(before, _snapshot(row))})
         session.commit()
         return catalogs.type_payload(row)

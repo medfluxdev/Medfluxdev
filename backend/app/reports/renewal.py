@@ -25,6 +25,7 @@ from app.finance.calc import month_index, monthly_values
 from app.finance.service import _entries, entry_inputs, price_adjustment
 from app.register.service import review_pending, term_inputs
 from app.register.terms import TERM_MODEL_LABELS, compute_terms
+from app.reports.decision_steps import StepFacts, decision_steps, next_step
 from app.reports.grid import GridRow
 
 RUNNING = ("in_arbeit", "gueltig")
@@ -73,6 +74,47 @@ def _latest_decision(session: Session, contract_id: uuid.UUID) -> Optional[Contr
         .where(ContractLifecycleDecision.contract_id == contract_id, ContractLifecycleDecision.status.in_(OPEN_DECISION_STATUS))
         .order_by(ContractLifecycleDecision.created_at.desc())
     ).first()
+
+
+def _progress(session: Session, contract: Contract, decision: ContractLifecycleDecision, as_of: date) -> dict:
+    reminder = session.get(ContractDeadline, decision.reminder_deadline_id) if decision.reminder_deadline_id else None
+    steps = decision_steps(step_facts(session, contract, decision, reminder, as_of))
+    return {"next_step": next_step(steps), "steps_done": sum(1 for step in steps if step["done"]), "steps_total": len(steps)}
+
+
+def step_facts(session: Session, contract: Contract, decision: ContractLifecycleDecision, reminder: Optional[ContractDeadline], as_of: date) -> StepFacts:
+    """Fakten für die Umsetzungsschritte einer Entscheidung (aus gepflegten Daten, nichts geraten)."""
+    terms = compute_terms(term_inputs(contract), as_of)
+    baseline = decision.baseline_end or decision.effective_date
+    since = decision.created_at
+    entries = [row for row in _entries(session, contract.id) if row.direction == "expense"]
+    changed_rows = [row for row in entries if since is not None and (row.updated_at or row.created_at) and (row.updated_at or row.created_at) > since]
+    changed = bool(changed_rows)
+    # Neuer Zeitraum bepreist: ein nach der Entscheidung angelegter oder geänderter laufender Eintrag reicht über
+    # das bisherige Ende hinaus. Einträge von vor der Entscheidung (z. B. eine alte Preisstaffel) zählen nicht –
+    # sonst wäre der Schritt sofort „erledigt“, ohne dass jemand etwas getan hat.
+    priced = baseline is not None and any(
+        row.interval != "once" and (row.valid_to is None or row.valid_to > baseline) for row in changed_rows
+    )
+    documents = tuple(session.scalars(
+        select(ContractDocument.attachment_type).where(ContractDocument.contract_id == contract.id, ContractDocument.created_at > since)
+    ).all()) if since is not None else ()
+    partner = session.scalar(select(ContractPartner.short_name).where(ContractPartner.id == contract.partner_id)) if contract.partner_id else None
+    return StepFacts(
+        decision=decision.decision,
+        decided_on=since.date() if since else as_of,
+        baseline_end=baseline,
+        term_model=contract.term_model,
+        business_status=contract.business_status,
+        cancel_by=terms.cancel_by,
+        current_end=terms.actual_end or terms.possible_end,
+        partner=partner,
+        priced_after_baseline=priced,
+        entries_changed_since=changed,
+        documents_since=documents,
+        reminder_due=reminder.due_date if reminder is not None and reminder.status == "open" else None,
+        manual=dict(decision.steps_done or {}),
+    )
 
 
 def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Optional[set[uuid.UUID]] = None) -> dict:
@@ -226,6 +268,8 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
             "id": str(decision.id), "decision": decision.decision, "label": DECISION_LABELS.get(decision.decision, decision.decision),
             "status": decision.status, "note": decision.note, "by": decision.actor_display_name,
             "at": decision.created_at.isoformat() if decision.created_at else None,
+            # Umsetzung: erster offener Schritt und Fortschritt (nur offene Entscheidungen).
+            **(_progress(session, contract, decision, as_of) if decision.status in ("planned", "in_progress") else {"next_step": None, "steps_done": None, "steps_total": None}),
         } if decision else None,
         "hints": hints,
         "explanation": terms.explanation,

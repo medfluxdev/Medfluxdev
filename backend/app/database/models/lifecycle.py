@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -41,6 +41,10 @@ class ContractLifecycleDecision(OrgOwnedMixin, Base):
     reminder_deadline_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("contract_deadline.id", ondelete="SET NULL"), nullable=True
     )
+    # Umsetzung: Vertragsende zum Zeitpunkt der Entscheidung (Vergleich „neue Laufzeit eingetragen“)
+    # und von Personen abgehakte Schritte (key -> {"by", "at"}); siehe app/reports/decision_steps.py.
+    baseline_end: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    steps_done: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

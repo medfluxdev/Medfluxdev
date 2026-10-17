@@ -19,7 +19,7 @@ def _contract(**overrides):
     values = dict(
         lifecycle_state="active", is_archived=False, business_status="gueltig", term_model="terminable",
         reminder_recipient_account_id=None, responsible_account_id=uuid4(), escalation_recipient_account_id=uuid4(),
-        reminder_lead_months=None, reminder_extra_leads=None, reminder_todo=None, price_adjustment_kind=None, price_adjustment_next_date=None,
+        reminder_lead_months=None, reminder_extra_leads=None, reminder_todo=None, escalation_days_before=None, price_adjustment_kind=None, price_adjustment_next_date=None,
     )
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -46,7 +46,8 @@ def test_reminder_recipient_and_lead_override():
     )
     assert spec.assignee_account_id == recipient
     assert spec.remind_on == spec.due_date
-    assert spec.todo_text == "Angebot einholen"
+    # Was zu tun ist, gehört seit 2026-10-15 zum Termin (overrides), nicht mehr zum Vertrag.
+    assert spec.todo_text == "Verlängerung prüfen oder Vertrag fristgerecht kündigen."
 
 
 def test_fixed_term_creates_contract_end_deadline():
@@ -153,9 +154,9 @@ def test_price_adjustment_creates_review_deadline():
 def test_extra_reminders_after_the_first_each_listed_once():
     contract = _contract(reminder_lead_months=3, reminder_extra_leads=[{"value": 2, "unit": "weeks"}, {"value": 1, "unit": "months"}, {"value": 6, "unit": "months"}])
     [spec] = plan_system_deadlines(contract, TERMS)
-    assert spec.remind_on == date(2027, 3, 30)
-    # 6 Monate liegt vor der ersten Erinnerung und entfällt; Rest aufsteigend.
-    assert spec.extra_remind_on == ["2027-05-30", "2027-06-16"]
+    # Jede Erinnerung zählt; die früheste (6 Monate) ist die erste, der Rest aufsteigend.
+    assert spec.remind_on == date(2026, 12, 30)
+    assert spec.extra_remind_on == ["2027-03-30", "2027-05-30", "2027-06-16"]
 
 
 def test_reminder_leads_validation_and_labels():

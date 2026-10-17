@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Iterable, Optional
 
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -89,7 +89,8 @@ def _message(kind: str, deadline: ContractDeadline, contract: Contract, as_of: d
     elif kind == "deadline_overdue":
         title = f"Überfällig: {deadline.title} seit {_de(deadline.due_date)}"
     elif kind == "deadline_escalation":
-        title = f"Eskalation: {deadline.title} seit {_de(deadline.due_date)} offen"
+        title = (f"Eskalation: {deadline.title} seit {_de(deadline.due_date)} offen" if deadline.due_date < as_of
+                 else f"Eskalation: {deadline.title} am {_de(deadline.due_date)} noch nicht erledigt")
     else:
         title = f"Neuer Termin: {deadline.title} am {_de(deadline.due_date)}"
     lines = [label, f"{deadline.title}: fällig am {_de(deadline.due_date)}"]
@@ -208,7 +209,7 @@ def process_deadlines(
         .join(Contract, Contract.id == ContractDeadline.contract_id)
         .where(
             ContractDeadline.status == "open",
-            ContractDeadline.remind_on <= as_of,
+            or_(ContractDeadline.remind_on <= as_of, ContractDeadline.escalate_on <= as_of),
             Contract.lifecycle_state == "active",
         )
     )
@@ -234,9 +235,11 @@ def process_deadlines(
         else:
             notify(session, deadline=deadline, contract=contract, kind="deadline_overdue",
                    recipient_ids=recipients, as_of=as_of, counts=counts)
-            if deadline.escalation_account_id and deadline.escalation_account_id != assignee:
-                notify(session, deadline=deadline, contract=contract, kind="deadline_escalation",
-                       recipient_ids=[deadline.escalation_account_id], as_of=as_of, counts=counts)
+        # Eskalationsregel: X Tage vor dem Termin (escalate_on), sonst bei Überfälligkeit; je Fälligkeit einmal.
+        escalate = deadline.due_date < as_of or (deadline.escalate_on is not None and deadline.escalate_on <= as_of)
+        if escalate and deadline.escalation_account_id and deadline.escalation_account_id != assignee:
+            notify(session, deadline=deadline, contract=contract, kind="deadline_escalation",
+                   recipient_ids=[deadline.escalation_account_id], as_of=as_of, counts=counts)
 
 
 def send_outbox(

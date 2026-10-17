@@ -40,7 +40,7 @@ PERMISSIONS: tuple[tuple[str, str, str, frozenset[str]], ...] = (
     ("document.attach", "Dokumente hinzufügen", "Dokumente", _EDITORS),
     ("finance.edit", "Finanzdaten pflegen", "Finanzen", _EDITORS),
     ("deadline.edit", "Termine pflegen", "Termine", _EDITORS),
-    ("remark.add", "Bemerkungen schreiben", "Verträge", _EDITORS),
+    ("remark.add", "Notizen schreiben, bearbeiten und löschen", "Verträge", _EDITORS),
     ("partner.edit", "Vertragspartner pflegen", "Stammdaten", _EDITORS),
     ("device_type.edit", "Gerätearten pflegen", "Stammdaten", _EDITORS),
     ("catalog.admin", "Kataloge und Nummernkreis", "Administration", _ADMIN),

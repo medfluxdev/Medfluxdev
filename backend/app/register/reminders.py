@@ -77,3 +77,24 @@ def extra_reminders(anchor: Optional[date], leads: Any, first: Optional[date]) -
         return []
     dates = {lead_date(anchor, lead) for lead in normalize_leads(leads or [])}
     return sorted(day for day in dates if day <= anchor and (first is None or day > first))
+
+
+def effective_leads(lead_months: Optional[int], extra: Any, default_leads: Any = None) -> list[dict[str, Any]]:
+    """Wirksame Erinnerungen vor Kündigungstermin/Vertragsende.
+
+    Erste Erinnerung: eigene Monate am Vertrag, sonst der Standard (Vertragstyp, sonst
+    DEFAULT_REMINDER_LEAD_MONTHS); dazu die weiteren Erinnerungen des Vertrags.
+    """
+    if lead_months is not None:
+        base = [{"value": lead_months, "unit": "months"}]
+    else:
+        base = list(default_leads or []) or [{"value": DEFAULT_REMINDER_LEAD_MONTHS, "unit": "months"}]
+    return base + normalize_leads(extra or [])
+
+
+def schedule(anchor: date, leads: Any) -> tuple[date, list[date]]:
+    """Erster Erinnerungstag und weitere (aufsteigend); ohne Erinnerungen = am Stichtag selbst."""
+    days = sorted({min(anchor, lead_date(anchor, lead)) for lead in leads or []})
+    if not days:
+        return anchor, []
+    return days[0], [day for day in days[1:] if day < anchor]

@@ -61,6 +61,7 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("reminder_lead_months", "int", "Erinnerung (Monate vor Frist)", "reminder"),
     FieldSpec("reminder_recipient_account_id", "uuid", "Erinnerung an", "reminder", reference="account"),
     FieldSpec("escalation_recipient_account_id", "uuid", "Eskalation an", "reminder", reference="account"),
+    FieldSpec("escalation_days_before", "int", "Eskalation (Tage vor dem Termin)", "reminder"),
     FieldSpec("reminder_todo", "text", "ToDo", "reminder", max_length=500),
     FieldSpec("terminated_on", "date", "Gekündigt am", "termination"),
     FieldSpec("terminated_effective", "date", "Gekündigt zum", "termination"),
@@ -72,6 +73,9 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("price_adjustment_interval_months", "int", "Anpassung alle (Monate)", "finance"),
     FieldSpec("maintenance_next_date", "date", "Nächste Wartung", "maintenance"),
     FieldSpec("maintenance_interval_months", "int", "Wartung alle (Monate)", "maintenance"),
+    FieldSpec("service_scope_text", "text", "Leistungsumfang", "service", max_length=20000),
+    FieldSpec("sla_availability_percent", "decimal", "Verfügbarkeit (%)", "service"),
+    FieldSpec("penalty_terms", "text", "Vertragsstrafen / Pönalen", "service", max_length=20000),
 )
 
 FIELDS: dict[str, FieldSpec] = {spec.key: spec for spec in FIELD_SPECS}
@@ -79,8 +83,13 @@ FIELDS: dict[str, FieldSpec] = {spec.key: spec for spec in FIELD_SPECS}
 # Pflichtangaben fuer den Statuswechsel nach "Gueltig".
 REQUIRED_FOR_VALID: tuple[str, ...] = ("short_description", "term_model", "term_start_date")
 
+_DECIMAL_LIMITS = {
+    "sla_availability_percent": (Decimal("0"), Decimal("100")),
+}
+
 _INT_LIMITS = {
     "reminder_lead_months": (0, 60),
+    "escalation_days_before": (0, 365),
     "retention_years_after_end": (0, 100),
     "price_adjustment_interval_months": (1, 120),
     "maintenance_interval_months": (1, 120),
@@ -130,8 +139,9 @@ def coerce_value(key: str, raw: Any) -> Any:
             value = Decimal(str(raw).strip().replace(",", "."))
         except InvalidOperation:
             raise FieldValidationError(key, f"{spec.label_de}: Zahl erwartet.")
-        if not value.is_finite() or not Decimal("-50") <= value <= Decimal("100"):
-            raise FieldValidationError(key, f"{spec.label_de}: Wert zwischen -50 und 100 erwartet.")
+        low, high = _DECIMAL_LIMITS.get(key, (Decimal("-50"), Decimal("100")))
+        if not value.is_finite() or not low <= value <= high:
+            raise FieldValidationError(key, f"{spec.label_de}: Wert zwischen {low} und {high} erwartet.")
         return value.quantize(Decimal("0.001"))
     if spec.kind == "enum":
         value = str(raw).strip()

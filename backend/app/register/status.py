@@ -27,7 +27,8 @@ STATUS_LABELS = {
 
 TRANSITIONS: dict[str, tuple[str, ...]] = {
     "in_arbeit": ("gueltig", "geloescht"),
-    "gueltig": ("gekuendigt", "beendet"),
+    # Zurueck auf „In Arbeit“: Vertrag wieder bearbeiten (Ueberwachung ruht, bis er erneut „Gültig“ ist).
+    "gueltig": ("gekuendigt", "beendet", "in_arbeit"),
     "gekuendigt": ("beendet", "gueltig"),
     "beendet": ("geloescht", "gueltig"),
     # Stornierung aufheben: nur zurueck in den Status vor der Stornierung (`restore_to`).

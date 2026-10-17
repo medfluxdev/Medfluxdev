@@ -127,7 +127,8 @@ class NumberAllocation(OrgOwnedMixin, Base):
 
 
 class ContractRemark(OrgOwnedMixin, Base):
-    """Bemerkungs-Journal je Vertrag (append-only, keine Bearbeitung/Loeschung)."""
+    """Notizen je Vertrag. Bearbeitbar; jede fruehere Fassung bleibt in `contract_remark_revision`. Loeschen ist weich:
+    die Notiz verschwindet aus der Liste, bleibt aber mit Fassungen und „wer/wann gelöscht“ erhalten."""
 
     __tablename__ = "contract_remark"
 
@@ -140,10 +141,43 @@ class ContractRemark(OrgOwnedMixin, Base):
     )
     author_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Letzte Bearbeitung (NULL = nie bearbeitet).
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_by_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    edited_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Weich geloescht (NULL = sichtbar).
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    deleted_by_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
         CheckConstraint("length(btrim(body)) > 0", name="body_not_blank"),
         Index("ix_contract_remark_contract_created", "contract_id", "created_at"),
+    )
+
+
+class ContractRemarkRevision(OrgOwnedMixin, Base):
+    """Fruehere Fassung einer Notiz: Text, wer ihn geschrieben hat und wann; `created_at` = wann er ersetzt wurde."""
+
+    __tablename__ = "contract_remark_revision"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    remark_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract_remark.id", ondelete="CASCADE"), nullable=False
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    author_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    written_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_contract_remark_revision_remark_written", "remark_id", "written_at"),
     )
 
 
@@ -197,6 +231,9 @@ class CatalogContractType(OrgOwnedMixin, Base):
     retention_years: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Typspezifische Abschnitte der Vertragsakte (register/sections.py); NULL = Standard nach Code.
     sections: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    # Erinnerungs-Standard fuer Vertraege dieses Typs ohne eigene Einstellung; NULL = Standard der Organisation.
+    reminder_leads: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    escalation_days_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 

@@ -16,7 +16,7 @@ from app.core.scope_context import ScopeContext
 from app.database.models import Account, AccountMembership, ActivityLog, Contract
 from app.database.models.organization import Organization
 from app.database.models.organization_structure import ContractDepartment, Department, Hospital
-from app.database.models.register import NumberAllocation
+from app.database.models.register import ContractRemark, NumberAllocation
 from app.database.session import create_session
 from app.models.contract import Contract as ExtractedContract
 from app.register.service import allocate_contract_number, sync_from_extraction
@@ -162,7 +162,7 @@ def test_status_workflow_and_remarks(monkeypatch):
     valid = client.post(f"{base}/status", params=query, json={"target": "gueltig"})
     assert valid.status_code == 200, valid.text
     assert valid.json()["business_status"] == "gueltig"
-    assert [item["target"] for item in valid.json()["allowed_transitions"]] == ["gekuendigt", "beendet"]
+    assert [item["target"] for item in valid.json()["allowed_transitions"]] == ["gekuendigt", "beendet", "in_arbeit"]
 
     assert client.post(f"{base}/status", params=query, json={"target": "gekuendigt"}).status_code == 422
     terminated = client.post(
@@ -197,6 +197,83 @@ def test_status_workflow_and_remarks(monkeypatch):
     remarks = client.post(f"{base}/remarks", params=query, json={"body": "Zweite Bemerkung"}).json()["items"]
     assert [item["body"] for item in remarks] == ["Zweite Bemerkung", "Erste Bemerkung"]
     assert remarks[0]["author_name"] == "Manager"
+
+
+def test_remarks_are_editable_with_history(monkeypatch):
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    manager = _client(monkeypatch, _actor(ids, "manager", "contract_manager"))
+    contract_id = manager.post("/api/contracts", params=query, json={"values": {"short_description": "Notizen"}}).json()["contract_id"]
+    base = f"/api/contracts/{contract_id}/remarks"
+    note = manager.post(base, params=query, json={"body": "Angebot angefragt"}).json()["items"][0]
+    assert note["edited_at"] is None and note["revisions"] == []
+
+    # Eigene Notiz bearbeiten: die alte Fassung bleibt im Verlauf.
+    first = manager.patch(f"{base}/{note['id']}", params=query, json={"body": "Angebot angefragt, Antwort bis 31.10.", "expected_version": note["version"]})
+    assert first.status_code == 200, first.text
+    edited = first.json()["items"][0]
+    assert edited["body"] == "Angebot angefragt, Antwort bis 31.10."
+    assert edited["edited_by_name"] == "Manager"
+    assert [(rev["body"], rev["author_name"]) for rev in edited["revisions"]] == [("Angebot angefragt", "Manager")]
+
+    # Eine andere Person darf ändern; ein veralteter Stand wird abgelehnt.
+    admin = _client(monkeypatch, _actor(ids, "admin", "admin"))
+    stale = admin.patch(f"{base}/{note['id']}", params=query, json={"body": "Überholt", "expected_version": note["version"]})
+    assert stale.status_code == 409
+    second = admin.patch(f"{base}/{note['id']}", params=query, json={"body": "Angebot liegt vor", "expected_version": edited["version"]}).json()["items"][0]
+    assert second["edited_by_name"] == "Admin"
+    assert second["author_name"] == "Manager"
+    assert [(rev["body"], rev["author_name"]) for rev in second["revisions"]] == [
+        ("Angebot angefragt, Antwort bis 31.10.", "Manager"),
+        ("Angebot angefragt", "Manager"),
+    ]
+    assert admin.patch(f"{base}/{note['id']}", params=query, json={"body": "  "}).status_code == 422
+
+    # Lesende Rolle darf nicht bearbeiten; fremde Notiz-ID → 404.
+    viewer = _client(monkeypatch, _actor(ids, "viewer", "viewer"))
+    assert viewer.patch(f"{base}/{note['id']}", params=query, json={"body": "x"}).status_code == 403
+    admin = _client(monkeypatch, _actor(ids, "admin", "admin"))
+    assert admin.patch(f"{base}/{uuid4()}", params=query, json={"body": "x"}).status_code == 404
+
+    session = create_session()
+    try:
+        actions = session.scalars(select(ActivityLog.event_name).where(ActivityLog.object_id == UUID(contract_id))).all()
+    finally:
+        session.close()
+    assert actions.count("contract.remark_edited") == 2
+
+
+def test_remarks_can_be_deleted_softly_with_audit(monkeypatch):
+    slug, ids = _seed()
+    query = {"organization_slug": slug}
+    manager = _client(monkeypatch, _actor(ids, "manager", "contract_manager"))
+    contract_id = manager.post("/api/contracts", params=query, json={"values": {"short_description": "Notizen"}}).json()["contract_id"]
+    base = f"/api/contracts/{contract_id}/remarks"
+    keep = manager.post(base, params=query, json={"body": "Bleibt"}).json()["items"][0]
+    gone = manager.post(base, params=query, json={"body": "Wird gelöscht"}).json()["items"][0]
+
+    viewer = _client(monkeypatch, _actor(ids, "viewer", "viewer"))
+    assert viewer.delete(f"{base}/{gone['id']}", params=query).status_code == 403
+    manager = _client(monkeypatch, _actor(ids, "manager", "contract_manager"))
+    # Veralteter Stand: erst neu laden.
+    manager.patch(f"{base}/{gone['id']}", params=query, json={"body": "Wird gelöscht – geändert"})
+    assert manager.delete(f"{base}/{gone['id']}", params={**query, "expected_version": gone["version"]}).status_code == 409
+
+    deleted = manager.delete(f"{base}/{gone['id']}", params=query)
+    assert deleted.status_code == 200, deleted.text
+    assert [item["id"] for item in deleted.json()["items"]] == [keep["id"]]
+    assert manager.delete(f"{base}/{gone['id']}", params=query).status_code == 404
+    assert manager.patch(f"{base}/{gone['id']}", params=query, json={"body": "x"}).status_code == 404
+
+    session = create_session()
+    try:
+        row = session.get(ContractRemark, UUID(gone["id"]))
+        assert row is not None and row.deleted_at is not None and row.deleted_by_name == "Manager"
+        assert row.body == "Wird gelöscht – geändert"
+        actions = session.scalars(select(ActivityLog.event_name).where(ActivityLog.object_id == UUID(contract_id))).all()
+    finally:
+        session.close()
+    assert actions.count("contract.remark_deleted") == 1
 
 
 def test_ai_values_never_overwrite_human_values(monkeypatch):

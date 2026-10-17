@@ -104,14 +104,29 @@ def test_percent_price_adjustment_projects_future_months():
     assert summary.projected_adjustment is True
 
 
-def test_entries_opting_out_of_adjustment_and_index_note():
+def test_index_adjustment_is_only_a_note():
     adjustment = PriceAdjustment(kind="index", next_date=date(2027, 1, 1))
     [summary] = summarize(
-        [entry(amount=D("1000"), vat_rate=D("0"), apply_price_adjustment=False)],
+        [entry(amount=D("1000"), vat_rate=D("0"))],
         as_of=date(2026, 10, 4), contract_end=date(2027, 12, 31), adjustment=adjustment,
     )
     assert summary.as_dict()["expense"]["remaining_to_end"]["net"] == "14000.00"
     assert any("Index" in note for note in summary.notes)
+
+
+def test_percent_adjustment_applies_to_price_schedule_entries_too():
+    # Preisstaffel (je Vertragsjahr ein Eintrag) + 10 % jaehrlich ab 01.01.2027: alle Summen enthalten die Erhoehung.
+    adjustment = PriceAdjustment(kind="percent", percent=D("10"), next_date=date(2027, 1, 1), interval_months=12)
+    staffel = [
+        entry(amount=D("12000"), vat_rate=D("0"), interval="annual", valid_from=date(2026, 1, 1), valid_to=date(2026, 12, 31)),
+        entry(amount=D("12000"), vat_rate=D("0"), interval="annual", valid_from=date(2027, 1, 1), valid_to=date(2027, 12, 31)),
+    ]
+    [summary] = summarize(staffel, as_of=date(2026, 6, 30), contract_end=date(2027, 12, 31), adjustment=adjustment, with_years=True)
+    data = summary.as_dict()
+    assert data["expense"]["total_term"]["net"] == "25200.00"  # 12000 + 13200
+    assert data["total_without_adjustment"]["net"] == "24000.00"
+    assert [year["amount"]["net"] for year in data["contract_years"]] == ["12000.00", "13200.00"]
+    assert summary.projected_adjustment is True
 
 
 def test_currencies_are_never_mixed():
@@ -123,3 +138,54 @@ def test_allocation_rounding_remainder_goes_to_largest_share():
     parts = allocate(D("100.00"), [("a", D("33.33")), ("b", D("33.33")), ("c", D("33.34"))])
     assert sum(value for _, value in parts) == D("100.00")
     assert dict(parts)["c"] == D("33.34")
+
+
+def test_period_mismatch_only_when_last_recurring_end_differs_from_contract_end():
+    staffel = [
+        entry(interval="annual", amount=D("8000"), valid_from=date(2027, 5, 5), valid_to=date(2028, 5, 4)),
+        entry(interval="annual", amount=D("8000"), valid_from=date(2028, 5, 5), valid_to=date(2029, 5, 4)),
+    ]
+    [after] = summarize(staffel, as_of=date(2026, 10, 17), contract_end=date(2029, 3, 31))
+    assert after.as_dict()["period_mismatch"] == {"last_entry_end": "2029-05-04", "contract_end": "2029-03-31", "kind": "after_end"}
+    [before] = summarize(staffel, as_of=date(2026, 10, 17), contract_end=date(2029, 12, 31))
+    assert before.period_mismatch["kind"] == "before_end"
+    # Gleiches Ende, offene Eintraege, Einmalbetraege oder unbekanntes Vertragsende: kein Hinweis.
+    assert summarize(staffel, as_of=date(2026, 10, 17), contract_end=date(2029, 5, 4))[0].period_mismatch is None
+    assert summarize([entry()], as_of=date(2026, 10, 17), contract_end=date(2027, 12, 31))[0].period_mismatch is None
+    assert summarize(staffel, as_of=date(2026, 10, 17), contract_end=None)[0].period_mismatch is None
+    once = [entry(interval="once", valid_from=date(2026, 3, 1), valid_to=date(2026, 3, 1))]
+    assert summarize(once, as_of=date(2026, 10, 17), contract_end=date(2027, 12, 31))[0].period_mismatch is None
+
+
+def test_contract_years_with_and_without_percent_adjustment():
+    # 8000 EUR/Jahr ab 01.01.2026, 1,5 % jaehrlich ab 01.01.2027, Ende 31.12.2028.
+    adjustment = PriceAdjustment(kind="percent", percent=D("1.5"), next_date=date(2027, 1, 1), interval_months=12)
+    [summary] = summarize(
+        [entry(amount=D("8000"), vat_rate=D("0"), interval="annual")],
+        as_of=date(2026, 6, 30), contract_end=date(2028, 12, 31), adjustment=adjustment,
+        contract_start=date(2026, 1, 1), with_years=True,
+    )
+    data = summary.as_dict()
+    years = data["contract_years"]
+    assert [year["index"] for year in years] == [1, 2, 3]
+    assert [year["amount"]["net"] for year in years] == ["8000.00", "8120.00", "8241.80"]
+    assert all(year["without_adjustment"]["net"] == "8000.00" for year in years)
+    assert [year["factor"] for year in years] == ["1.000000", "1.015000", "1.030225"]
+    assert years[0]["start"] == "2026-01-01" and years[-1]["end"] == "2028-12-31" and not years[-1]["partial"]
+    assert data["total_without_adjustment"]["net"] == "24000.00"
+    assert data["expense"]["total_term"]["net"] == "24361.80"
+
+
+def test_contract_years_partial_last_year_and_only_with_known_end():
+    [summary] = summarize(
+        [entry(amount=D("1200"), vat_rate=D("0"), interval="annual", valid_from=date(2025, 5, 5))],
+        as_of=date(2026, 10, 17), contract_end=date(2027, 3, 31), with_years=True,
+    )
+    years = summary.as_dict()["contract_years"]
+    assert [(year["start"], year["end"], year["months"]) for year in years] == [
+        ("2025-05-05", "2026-05-04", 12), ("2026-05-05", "2027-03-31", 11)]
+    assert years[-1]["partial"] is True and years[-1]["amount"]["net"] == "1100.00"
+    [unknown] = summarize([entry()], as_of=date(2026, 10, 17), contract_end=None, with_years=True)
+    assert unknown.as_dict()["contract_years"] == [] and unknown.as_dict()["total_without_adjustment"] is None
+    [default] = summarize([entry()], as_of=date(2026, 10, 17), contract_end=date(2027, 12, 31))
+    assert default.as_dict()["contract_years"] == []

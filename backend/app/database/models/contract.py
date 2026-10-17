@@ -208,7 +208,10 @@ class Contract(OrgOwnedMixin, Base):
     escalation_recipient_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )
+    # Frueher ToDo je Vertrag; seit 2026-10-15 gehoert "Was zu tun ist" zum Termin (contract_deadline.overrides). Nur noch gelesen.
     reminder_todo: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Eskalationsregel: X Tage vor dem Termin, wenn nicht erledigt (NULL = Standard des Vertragstyps bzw. erst bei Ueberfaelligkeit).
+    escalation_days_before: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     terminated_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     terminated_effective: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -226,6 +229,10 @@ class Contract(OrgOwnedMixin, Base):
     # Wartungstermine (Systemtermin "maintenance_due", Folgetermine im Intervall).
     maintenance_interval_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     maintenance_next_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Leistungen & SLA (von Hand gepflegt; die KI-Angaben zu Leistungsumfang/SLA bleiben in der Extraktion).
+    service_scope_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sla_availability_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(6, 3), nullable=True)
+    penalty_terms: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     intake_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Zwischenspeicher der gepflegten Jahreskosten (netto) fuer Sortierung/Filter
     # der Vertragsliste; Quelle bleibt die Finanz-Engine.

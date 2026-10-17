@@ -59,6 +59,8 @@ class ContractDeadline(OrgOwnedMixin, Base):
     remind_on: Mapped[date] = mapped_column(Date, nullable=False)
     # Weitere Erinnerungstage (ISO-Daten, aufsteigend), je einmal gesendet.
     extra_remind_on: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    # Eskalationsregel: ab diesem Tag an die Eskalationsperson, falls nicht erledigt (NULL = erst bei Ueberfaelligkeit).
+    escalate_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     assignee_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )
@@ -66,6 +68,8 @@ class ContractDeadline(OrgOwnedMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
     )
     todo_text: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # Von einer Person am Termin gesetzte Werte (z. B. {"todo_text": …}); der Fristenabgleich ueberschreibt sie nie.
+    overrides: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
     send_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")

@@ -121,6 +121,7 @@ LOOKUPS: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("vertragsende", "Vertragsende", None),
         ("preisanpassung", "Preisanpassung", None),
         ("wartung", "Wartung / Prüftermin", None),
+        ("erinnerung", "Erinnerung (ohne eigenen Termin)", None),
     ),
     "todo_template": (
         ("verlaengerung_pruefen", "Verlängerung prüfen", "Vertrag mit fester Laufzeit oder automatischer Verlängerung: Verlängerung prüfen."),

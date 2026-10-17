@@ -6,9 +6,9 @@
 - Monatswert: monatlich = Betrag, quartalsweise = Betrag/3, halbjaehrlich =
   Betrag/6, jaehrlich = Betrag/12; einmalig = voller Betrag im ersten Monat.
 - Netto/Brutto werden aus Erfassungsbasis und Steuersatz abgeleitet.
-- Prozentuale Preisanpassung erhoeht wiederkehrende Betraege ab jedem
-  Anpassungsdatum; Index-Anpassungen sind nicht vorhersagbar und werden nur
-  als Hinweis ausgewiesen.
+- Prozentuale Preisanpassung erhoeht alle wiederkehrenden Betraege (auch
+  Preisstaffeln) ab jedem Anpassungsdatum; Index-Anpassungen sind nicht
+  vorhersagbar und werden nur als Hinweis ausgewiesen.
 - Ohne bekanntes Vertragsende sind „bis Vertragsende" und „Gesamtlaufzeit"
   nicht berechenbar (None) – es wird nichts geraten.
 """
@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
@@ -36,7 +36,6 @@ class EntryInput:
     valid_from: date
     valid_to: Optional[date] = None
     currency: str = "EUR"
-    apply_price_adjustment: bool = True
     ref: Optional[str] = None
 
 
@@ -118,9 +117,73 @@ def monthly_values(
     end = month_index(entry.valid_to) if entry.valid_to else last_month
     out: dict[int, tuple[Decimal, Decimal]] = {}
     for index in range(max(start, first_month), min(end, last_month) + 1):
-        factor = adjustment_factor(adjustment, _month_start(index)) if entry.apply_price_adjustment else Decimal("1")
+        factor = adjustment_factor(adjustment, _month_start(index))
         out[index] = (net / divisor * factor, gross / divisor * factor)
     return out
+
+
+@dataclass
+class ContractYear:
+    """Ausgaben eines Vertragsjahrs (ab Vertragsbeginn je 12 Monate), mit und ohne Preisanpassung."""
+
+    index: int
+    start: date
+    end: date
+    months: int
+    with_adjustment: Bucket
+    without_adjustment: Bucket
+    # Faktor der prozentualen Preisanpassung zu Beginn des Jahres (1 = keine Erhoehung).
+    factor: Decimal
+
+    def as_dict(self) -> dict:
+        return {
+            "index": self.index,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+            "months": self.months,
+            "partial": self.months < 12,
+            "amount": self.with_adjustment.as_dict(),
+            "without_adjustment": self.without_adjustment.as_dict(),
+            "factor": str(self.factor.quantize(Decimal("0.000001"), ROUND_HALF_UP)),
+        }
+
+
+MAX_CONTRACT_YEARS = 60
+
+
+def contract_years(
+    entries: list[EntryInput],
+    *,
+    start: date,
+    end: date,
+    adjustment: PriceAdjustment,
+) -> list[ContractYear]:
+    """Ausgaben je Vertragsjahr von `start` bis `end` (letztes Jahr ggf. angebrochen); nur bei bekanntem Ende."""
+    first, last = month_index(start), month_index(end)
+    if last < first:
+        return []
+    years: list[ContractYear] = []
+    for number in range(1, MAX_CONTRACT_YEARS + 1):
+        year_first = first + 12 * (number - 1)
+        if year_first > last:
+            break
+        year_last = min(year_first + 11, last)
+        with_adj, without_adj = Bucket(), Bucket()
+        for entry in entries:
+            if entry.direction != "expense":
+                continue
+            for _index, (net, gross) in monthly_values(entry, year_first, year_last, adjustment).items():
+                with_adj.add(net, gross)
+            for _index, (net, gross) in monthly_values(entry, year_first, year_last, PriceAdjustment()).items():
+                without_adj.add(net, gross)
+        year_start = month_add(start, 12 * (number - 1))
+        year_end = min(month_add(start, 12 * number) - timedelta(days=1), end)
+        years.append(ContractYear(
+            index=number, start=year_start, end=year_end, months=year_last - year_first + 1,
+            with_adjustment=with_adj, without_adjustment=without_adj,
+            factor=adjustment_factor(adjustment, _month_start(year_first)),
+        ))
+    return years
 
 
 # Laufzeitangaben in „Vertragsdaten“ (Ziel für „Kein Vertragsende bekannt“).
@@ -137,6 +200,11 @@ class FinanceSummary:
     notes: list[str]
     # Ziel je Hinweis (gleiche Reihenfolge wie `notes`): wo die fehlende Angabe gepflegt wird, sonst None.
     note_targets: list[Optional[dict]] = field(default_factory=list)
+    # Letzter laufender Ausgaben-Eintrag endet nicht am Vertragsende (Luecke oder Kosten danach), sonst None.
+    period_mismatch: Optional[dict] = None
+    # Ausgaben je Vertragsjahr (nur mit bekanntem Beginn und Ende) und Gesamtlaufzeit ohne Preisanpassung.
+    years: list[ContractYear] = field(default_factory=list)
+    total_without_adjustment: Optional[Bucket] = None
 
     def as_dict(self) -> dict:
         return {
@@ -150,6 +218,9 @@ class FinanceSummary:
                 {"text": text, "target": self.note_targets[index] if index < len(self.note_targets) else None}
                 for index, text in enumerate(self.notes)
             ],
+            "period_mismatch": self.period_mismatch,
+            "contract_years": [year.as_dict() for year in self.years],
+            "total_without_adjustment": self.total_without_adjustment.as_dict() if self.total_without_adjustment is not None else None,
         }
 
 
@@ -159,8 +230,14 @@ def summarize(
     as_of: date,
     contract_end: Optional[date],
     adjustment: PriceAdjustment = PriceAdjustment(),
+    contract_start: Optional[date] = None,
+    with_years: bool = False,
 ) -> list[FinanceSummary]:
-    """Eine Zusammenfassung je Waehrung (keine Umrechnung)."""
+    """Eine Zusammenfassung je Waehrung (keine Umrechnung).
+
+    `with_years`: zusaetzlich Ausgaben je Vertragsjahr (ab `contract_start`, sonst ab dem ersten
+    Ausgaben-Eintrag) und die Gesamtlaufzeit ohne Preisanpassung – nur bei bekanntem Vertragsende.
+    """
     by_currency: dict[str, list[EntryInput]] = {}
     for entry in entries:
         by_currency.setdefault(entry.currency or "EUR", []).append(entry)
@@ -200,7 +277,7 @@ def summarize(
                     target.to_date.add(net, gross)
                 else:
                     target.remaining_to_end.add(net, gross)
-                    if entry.apply_price_adjustment and adjustment_factor(adjustment, _month_start(index)) != 1:
+                    if entry.interval != "once" and adjustment_factor(adjustment, _month_start(index)) != 1:
                         projected = True
                 target.total_term.add(net, gross)
             current = monthly_values(entry, as_of_month, as_of_month, adjustment).get(as_of_month)
@@ -213,7 +290,20 @@ def summarize(
         if projected:
             notes.append("Künftige Beträge enthalten die vereinbarte prozentuale Preisanpassung (Projektion).")
             targets.append(None)
+        years: list[ContractYear] = []
+        without: Optional[Bucket] = None
+        expenses = [e for e in group if e.direction == "expense"]
+        if with_years and contract_end is not None and expenses:
+            start = contract_start or min(e.valid_from for e in expenses)
+            years = contract_years(group, start=start, end=contract_end, adjustment=adjustment)
+            without = Bucket()
+            for entry in expenses:
+                for _index, (net, gross) in monthly_values(entry, month_index(entry.valid_from), end_month, PriceAdjustment()).items():
+                    without.add(net, gross)
         results.append(FinanceSummary(
+            years=years,
+            total_without_adjustment=without,
+            period_mismatch=period_mismatch(group, contract_end),
             currency=currency,
             expense=summaries["expense"],
             income=summaries["income"],
@@ -223,6 +313,24 @@ def summarize(
             note_targets=targets,
         ))
     return results
+
+
+def period_mismatch(entries: list[EntryInput], contract_end: Optional[date]) -> Optional[dict]:
+    """Vergleicht das Ende der laufenden Ausgaben mit dem Vertragsende (nur wenn beide bekannt sind).
+
+    Offene Eintraege (ohne Ende) laufen bis zum Vertragsende und loesen nichts aus; Einmalbetraege zaehlen nicht.
+    """
+    recurring = [e for e in entries if e.direction == "expense" and e.interval != "once"]
+    if contract_end is None or not recurring or any(e.valid_to is None for e in recurring):
+        return None
+    last_end = max(e.valid_to for e in recurring if e.valid_to is not None)
+    if last_end == contract_end:
+        return None
+    return {
+        "last_entry_end": last_end.isoformat(),
+        "contract_end": contract_end.isoformat(),
+        "kind": "after_end" if last_end > contract_end else "before_end",
+    }
 
 
 def allocate(amount: Decimal, shares: list[tuple[str, Decimal]]) -> list[tuple[str, Decimal]]:
