@@ -95,7 +95,7 @@ Jede Meldung, dass etwas fehlt, unbekannt ist oder geprüft werden muss, führt 
 - `?feld=<key>` öffnet „Vertragsdaten“ in der Bearbeitung und setzt den Cursor ins Feld (`#rg-<key>`); `?abschnitt=<id>` scrollt zum Abschnitt (`sectionAnchor`). Neue Abschnitte mit Sprungziel bekommen eine Überschrift mit stabiler `id` und einen Eintrag in `SECTION_ANCHORS`.
 - Hinweise aus dem Backend tragen ihr Ziel als `target` (`{tab, field?, section?, subtab?}`), gelesen mit `asFixTarget`; der Text bleibt unverändert. Unbekannte Ziele werden ignoriert, nie geraten.
 - Aufgaben und Warnungen: `workItemTarget` / `warningTarget` (Backend: `app/work_queue/targets.py` – beide Zuordnungen gleich halten).
-- Gefilterte Listen öffnen Verträge dort, wo die gefilterte Lücke behoben wird (`listRowTarget`).
+- Ein Vertrag öffnet immer in der Übersicht (Name/Nummer in Listen, Suche, Strg+K, Mein Tag, Protokoll: `contractHref(id)` ohne Reiter). Nur ausdrückliche Aktionen („Kosten erfassen“, „Prüfen“, „Laufzeit ergänzen“ …) führen direkt zur Stelle.
 - Was einer Vertragsakte fehlt, steht in „Was fehlt noch?“ und in Strg+K („Dieser Vertrag“, `lib/page-commands.ts`).
 - Kann eine fehlende Angabe im Vertragsdokument stehen, gibt es neben „Erfassen“ auch „Im Dokument suchen“ (`documentSearchHref(id, feld)`; alle fehlenden: `MISSING_SEARCH`). Die KI übernimmt dabei nie selbst: Ergebnisse gehen immer durch den Vergleich (`components/contracts/detail/Reextraction.tsx`). Ohne KI: „Angabe aus dem Text übernehmen“ (`SourceCapture.tsx`); ein so übernommener Wert zeigt „S. n“ zur Fundstelle.
 - Gibt es keinen Ort zum Beheben (z. B. SLA-Hinweis), bleibt die Meldung Text – dann keinen Link vortäuschen.
