@@ -161,35 +161,63 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     return { ...render(<FieldReviewOverview data={data} orgSlug="test-klinik" canReview={canReview} {...handlers} />), ...handlers };
   }
 
-  it("Zähler zählen Angaben pro Stufe, nicht Nachweise; Weitere Informationen und Berechnetes zählen nicht", async () => {
+  it("zeigt Angaben als Karten mit Wert und Stand; Zähler zählen Angaben, nicht Nachweise, Berechnetes und Weitere Informationen", async () => {
     const user = userEvent.setup();
-    const model = review([start, end, price, sla, email, calc], { findings: [finding(), finding({ finding_key: "evidence.y", label: "Skonto", evidence_ids: ["e10"] })], findings_open: 2 });
+    const model = review([start, decided(end), price, sla, email, calc], { findings: [finding(), finding({ finding_key: "evidence.y", label: "Skonto", evidence_ids: ["e10"] })], findings_open: 2 });
     const { onStartGuided, container } = overview(model);
-    expect(document.querySelector(".frv-stage--essential")).toHaveTextContent("0 von 3 entschieden");
-    expect(screen.getByRole("progressbar", { name: "Wesentliche Angaben: 0 von 3 entschieden" })).toBeInTheDocument();
-    expect(document.querySelector(".frv-stage--important")).toHaveTextContent("0 von 1 entschieden");
-    expect(screen.getByText("3 wesentliche Entscheidungen offen")).toBeInTheDocument();
-    // Berechnetes steht getrennt.
+    expect(screen.getByText("1 von 3 wesentlichen entschieden")).toBeInTheDocument();
+    const terms = screen.getByRole("region", { name: "Laufzeit & Kündigung" });
+    expect(terms).toHaveTextContent("1 von 2 entschieden");
+    expect(within(terms).getByRole("button", { name: /Vertragsende/ })).toHaveTextContent("31.03.2029");
+    expect(within(terms).getByRole("img", { name: "Entschieden" })).toBeInTheDocument();
+    expect(within(terms).getByRole("img", { name: "Zu entscheiden" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Service & Leistungen" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Weitere wichtige Angaben/ }));
+    expect(screen.getByRole("region", { name: "Service & Leistungen" })).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Berechnete Werte" })).getByText("Wartet auf Angaben")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: "Wesentliche Angaben prüfen · 3" }));
+    await user.click(screen.getByRole("button", { name: "Wesentliches prüfen · 2" }));
     expect(onStartGuided).toHaveBeenCalledWith("essential");
   });
 
-  it("ohne wesentliche offene Entscheidung: „Wesentliche Prüfung abgeschlossen“, weitere Stufen bleiben freiwillig", () => {
+  it("Karte bestätigt nur eindeutige, genau belegte Angaben – und nennt vorher, wie viele", async () => {
+    const user = userEvent.setup();
+    const vat = field({ ...price, fact_key: "costs.vat_rate", label: "MwSt.-Satz", current: "19 %", version: "v1" });
+    const disputed = field({ ...price, fact_key: "costs.currency", label: "Währung", status: "conflict", candidates: [price.candidates[0], candidate({ key: "chf", display: "CHF", is_current: false })] });
+    api.decideField.mockResolvedValue({ contract_id: "c-1", field_review: review([decided(price), decided(vat), disputed]) });
+    const { onReload } = overview(review([price, vat, disputed]));
+    const card = screen.getByRole("region", { name: "Preise & Zahlung" });
+    expect(within(card).getByText("Widerspruch")).toBeInTheDocument();
+    await user.click(within(card).getByRole("button", { name: "2 Angaben bestätigen" }));
+    expect(api.decideField).toHaveBeenCalledTimes(2);
+    expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "costs.vat_rate", decision: "keep" }));
+    expect(api.decideField).not.toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "costs.currency" }));
+    expect(onReload).toHaveBeenCalled();
+  });
+
+  it("ohne wesentliche offene Entscheidung: „Wesentliche Prüfung abgeschlossen“, Karte „Abgeschlossen“, nichts Behauptetes", () => {
     overview(review([decided(start), decided(end), sla]));
-    expect(screen.getAllByText("Wesentliche Prüfung abgeschlossen").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Weitere wichtige Angaben prüfen · 1" })).toBeInTheDocument();
+    expect(screen.getByText("Wesentliche Prüfung abgeschlossen")).toBeInTheDocument();
+    expect(screen.getAllByText("Abgeschlossen").length).toBeGreaterThan(0);
     expect(screen.queryByText(/alle .*geprüft/i)).not.toBeInTheDocument();
   });
 
-  it("fehlende und umstrittene Angaben werden benannt, Zurückgestelltes bleibt sichtbar", () => {
+  it("Suche und „Nur offene“ engen die Karten ein", async () => {
+    const user = userEvent.setup();
+    overview(review([start, decided(end), price]));
+    await user.click(screen.getByRole("button", { name: /^Nur offene/ }));
+    expect(screen.queryByRole("button", { name: /Vertragsende/ })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("searchbox", { name: "Angabe oder Wert suchen" }), "Kosten");
+    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Vertragsbeginn/ })).not.toBeInTheDocument();
+  });
+
+  it("fehlende und zurückgestellte Angaben werden benannt", () => {
     const missing = field({ fact_key: "termination.renewal_period", label: "Verlängerungszeitraum", status: "missing", status_label: "Nicht gefunden", present: false, current: null, candidates: [], evidence: [], source_state: null });
     const later = field({ ...price, status: "deferred", status_label: "Zurückgestellt" });
     overview(review([start, missing, later]));
-    const stage = document.querySelector(".frv-stage--essential")!;
-    expect(stage).toHaveTextContent("1 nicht gefunden");
-    expect(stage).toHaveTextContent("1 zurückgestellt");
+    expect(screen.getByRole("button", { name: /Verlängerungszeitraum/ })).toHaveTextContent("Nicht gefunden");
+    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/ })).toHaveTextContent("Zurückgestellt");
   });
 
   it("Weitere Informationen: mit Quelle gezeigt, zuordnen, als Notiz sichern, ausblenden – kein Zähler, keine Pflicht", async () => {
@@ -201,9 +229,8 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(within(section).getByText(/Sie müssen nichts davon bestätigen; es fließt in keine Berechnung ein und zählt nicht zur Prüfung/)).toBeInTheDocument();
     expect(within(section).getByText("„3 % Skonto bei Zahlung in 10 Tagen“")).toBeInTheDocument();
     expect(within(section).getByText("KI-Fund, nicht bestätigt")).toBeInTheDocument();
-    // Möglicherweise folgenreich: ruhig vorgemerkt, kein Alarm.
     expect(within(section).getByText("Zur Einschätzung")).toBeInTheDocument();
-    expect(document.querySelector(".frv-stage--essential")).toHaveTextContent("1 von 2 entschieden");
+    expect(screen.getByText("1 von 2 wesentlichen entschieden")).toBeInTheDocument();
 
     const link = within(section).getByRole("button", { name: "Als Kandidat zuordnen" });
     expect(link).toBeDisabled();
@@ -215,18 +242,22 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     await user.click(within(section).getByRole("button", { name: "Ausblenden" }));
     expect(api.decideFinding).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "dismiss" }));
     expect(onReload).toHaveBeenCalledTimes(3);
-
     await user.click(within(section).getByText("1 bearbeitete Information"));
     await user.click(within(section).getByRole("button", { name: "Wiederherstellen" }));
     expect(api.decideFinding).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ finding_key: "evidence.done", decision: "restore" }));
   });
 
-  it("öffnet ein Feld in derselben Entscheidungsansicht wie die geführte Prüfung (Schublade)", async () => {
+  it("eine Angabe anklicken öffnet rechts dieselbe Entscheidungsansicht wie die geführte Prüfung", async () => {
     const user = userEvent.setup();
-    overview(review([start]));
-    await user.click(screen.getByRole("button", { name: "Vertragsbeginn" }));
-    const drawer = screen.getByRole("dialog", { name: "Vertragsbeginn" });
-    expect(within(drawer).getByRole("button", { name: "Bestätigen" })).toBeInTheDocument();
-    expect(within(drawer).getByRole("button", { name: "Geführt weiter prüfen" })).toBeInTheDocument();
+    const { onStartGuided } = overview(review([start, end]));
+    expect(screen.getByText("Details zur Angabe", { selector: "strong" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Vertragsbeginn/ }));
+    const panel = screen.getByRole("group", { name: "Details zur Angabe" });
+    expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Bestätigen" })).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Nächste offene" }));
+    expect(within(screen.getByRole("group", { name: "Details zur Angabe" })).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("group", { name: "Details zur Angabe" })).getByRole("button", { name: "Geführt weiter" }));
+    expect(onStartGuided).toHaveBeenCalledWith("essential", "dates.end_date");
   });
 });

@@ -106,13 +106,13 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
     expect(await screen.findByRole("region", { name: "Prüfung" })).toBe(panel);
 
     // Karte (Schublade) und geführte Prüfung nutzen dieselbe Entscheidung: hier „Bestätigen“ in der Schublade.
-    await user.click(within(panel).getByRole("button", { name: "Jährliche Kosten" }));
+    await user.click(within(panel).getByRole("button", { name: /Jährliche Kosten/ }));
     apiPostMock.mockResolvedValue(fixture("Geprüft (Aktualisiert)", "confirmed"));
-    await user.click(within(await screen.findByRole("dialog", { name: "Jährliche Kosten" })).getByRole("button", { name: "Bestätigen" }));
+    await user.click(within(await screen.findByRole("group", { name: "Details zur Angabe" })).getByRole("button", { name: "Bestätigen" }));
 
     await waitFor(() => expect(contractLoads).toBe(2));
     expect(screen.queryByText("Vertrag wird geladen…")).not.toBeInTheDocument();
-    expect(await within(panel).findByText("Wesentliche Prüfung abgeschlossen")).toBeInTheDocument();
+    expect(await within(panel).findByText(/Wesentliche Prüfung abgeschlossen/)).toBeInTheDocument();
     expect(container.querySelector("#field-review-panel")).toBe(panel);
   });
 });
