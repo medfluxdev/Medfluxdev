@@ -73,6 +73,7 @@ function fixture(statusLabel: string, state: "unreviewed" | "confirmed"): Contra
 const contractDetailPath = "/api/contracts/11111111-1111-1111-1111-111111111111?organization_slug=test-klinik";
 
 beforeEach(() => {
+  window.localStorage.setItem("medflux.review.view", "list");
   vi.clearAllMocks();
   apiGetMock.mockReset();
   apiPostMock.mockReset();

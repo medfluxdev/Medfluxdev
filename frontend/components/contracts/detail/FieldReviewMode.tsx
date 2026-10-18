@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import ActionMenu from "@/components/ui/ActionMenu";
 import Drawer from "@/components/ui/Drawer";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
@@ -8,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, EvidenceRef, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
 import { decideField } from "@/lib/domain-api/contracts";
+import { startReextraction } from "@/lib/domain-api/reextraction";
 import { sectionByKey } from "@/lib/evidence";
 import {
   STATUS_TONE, TIER_HINT, TIER_NAME, TIER_ORDER, fieldByKey, fieldsOf, groupConfirmable, nextDecision, nextOpenTier, pluralize, refOf, stageOf,
@@ -30,7 +32,7 @@ const FILE = icon(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0
  * aus dem Dokument sind kein Teil dieses Ablaufs.
  */
 export default function FieldReviewMode({
-  contractId, orgSlug, contractTitle, data, review, startKey, startTier, canReview, viewer, onShow, onShowPage, onExit, onReload, onOpenAnalysis, onOpenFindings,
+  contractId, orgSlug, contractTitle, data, review, startKey, startTier, canReview, viewer, onShow, onShowPage, onExit, onReload, onOpenAnalysis, onOpenFindings, canRecognize = false, onRecognizeStarted,
 }: {
   contractId: string;
   orgSlug: string;
@@ -49,6 +51,9 @@ export default function FieldReviewMode({
   onOpenAnalysis?: () => void;
   /** Weitere Informationen aus dem Dokument ansehen (nicht erforderlich). */
   onOpenFindings?: () => void;
+  /** „Beleg neu erkennen“ erlaubt (Recht `contract.reanalyze`, kein Lauf aktiv). */
+  canRecognize?: boolean;
+  onRecognizeStarted?: () => void;
 }) {
   const toast = useToast();
   // Lokaler Stand: die Antwort jeder Entscheidung gilt sofort; der Arbeitsplatz lädt parallel neu.
@@ -104,6 +109,40 @@ export default function FieldReviewMode({
     else { setDone(true); setAnnounce("Gespeichert · Stufe abgeschlossen"); }
   }
 
+  /** Zitat des Hauptnachweises in die Zwischenablage. */
+  async function copyQuote() {
+    const entry = current?.evidence.find((item) => item.primary) ?? current?.evidence[0];
+    if (!entry?.snippet) return;
+    try {
+      await navigator.clipboard.writeText(entry.snippet);
+      toast("Zitat kopiert.", "success");
+    } catch {
+      toast("Das Zitat konnte nicht kopiert werden.", "error");
+    }
+  }
+
+  /** „Beleg neu erkennen“: die KI liest die Seite erneut – gezielt für dieses Feld, sonst die ganze Seite; Ergebnis als Vorschlag. */
+  async function recognizeAgain() {
+    if (!current) return;
+    const entry = current.evidence.find((item) => item.primary) ?? current.evidence[0];
+    const pageHint = entry?.page != null ? [entry.page] : [];
+    const keys = Array.from(new Set([current.fact_key, current.fact_key.split(".").slice(0, 2).join(".")]));
+    const attempts = [...keys.map((key) => ({ mode: "supplement" as const, fields: [key], page_hint: pageHint })), { mode: "full" as const, page_hint: pageHint }];
+    for (const attempt of attempts) {
+      try {
+        await startReextraction(orgSlug, contractId, attempt);
+        toast(`Erkennung gestartet${entry?.page != null ? ` (Seite ${entry.page})` : ""}. Das Ergebnis erscheint als Vorschlag unter „KI-Analyse“.`, "success");
+        onRecognizeStarted?.();
+        return;
+      } catch (err) {
+        if (!(err instanceof ApiError && err.status === 422)) {
+          toast(err instanceof ApiError && err.message ? err.message : "Die Erkennung konnte nicht gestartet werden.", "error");
+          return;
+        }
+      }
+    }
+  }
+
   function switchTier(next: FieldTier) {
     setTier(next);
     const first = nextDecision(live, next, null);
@@ -149,6 +188,10 @@ export default function FieldReviewMode({
         })}
       </div>
       <button type="button" className="btn erm-all" onClick={() => setDrawer(true)}>{LIST}Alle Angaben</button>
+      <ActionMenu items={[
+        { label: "Zitat kopieren", onSelect: () => void copyQuote(), disabled: !current?.evidence.some((item) => item.snippet) },
+        { label: "Beleg neu erkennen", onSelect: () => void recognizeAgain(), disabled: !canRecognize || !current },
+      ]} />
     </header>
 
     <div className="erm-body">
@@ -167,11 +210,10 @@ export default function FieldReviewMode({
                 {section ? <SectionChip section={section} /> : null}
                 <span className="erm-pos">{index + 1} / {stageFields.length}</span>
               </div>
-              <p className="erm-where"><span>{TIER_HINT[tier]}</span></p>
             </div>
             <div className="erm-main">
               <FieldDecision key={`${current.fact_key}|${current.version ?? ""}|${current.status}`} contractId={contractId} orgSlug={orgSlug} field={current} review={live} canReview={canReview}
-                headingRef={headingRef} onChanged={changed} onShowEvidence={showEvidence} onShowPage={onShowPage} onOpenAnalysis={onOpenAnalysis} />
+                headingRef={headingRef} shortcuts onChanged={changed} onShowEvidence={showEvidence} onShowPage={onShowPage} onOpenAnalysis={onOpenAnalysis} />
               {canReview ? <GroupConfirm key={current.fact_key} contractId={contractId} orgSlug={orgSlug} review={live} current={current}
                 onDone={(detail) => { onReload(); if (detail?.field_review) setLive(detail.field_review); }} /> : null}
             </div>

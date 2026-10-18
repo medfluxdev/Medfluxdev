@@ -6,7 +6,7 @@ import FieldDecision from "@/components/contracts/detail/FieldDecision";
 import { ApiError } from "@/lib/api";
 import { candidate, conflicting, evidence, field, review, twoAgreeing } from "./fixtures/field-review";
 
-const api = vi.hoisted(() => ({ decideField: vi.fn(), setFieldEvidence: vi.fn() }));
+const api = vi.hoisted(() => ({ decideField: vi.fn(), setFieldEvidence: vi.fn(), reviewContractFact: vi.fn() }));
 vi.mock("@/lib/domain-api/contracts", () => api);
 const toast = vi.hoisted(() => vi.fn());
 vi.mock("@/components/ui/Toast", () => ({ useToast: () => toast }));
@@ -184,5 +184,79 @@ describe("Entscheidung zu einem Feld", () => {
     expect(screen.getByRole("button", { name: "Entschieden" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Zurückstellen" })).not.toBeInTheDocument();
     expect(screen.getByText(/Zuletzt entschieden von A\. Prüfer/)).toBeInTheDocument();
+  });
+
+  it("Vergleichskästen: Dokument ↔ gespeichert, Abweichung wird markiert und lässt drei Wege zu", async () => {
+    const user = userEvent.setup();
+    const item = twoAgreeing();
+    item.fact_state = "confirmed";
+    item.stored_value = "30.06.2029";
+    item.document_value = "31.03.2029";
+    item.status = "changed";
+    setup(item);
+    expect(screen.getByText("Im Dokument (erkannt)")).toBeInTheDocument();
+    expect(screen.getByText("In MedFlux gespeichert")).toBeInTheDocument();
+    expect(screen.getByText("Weicht ab – Unterschiede sind markiert.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Abweichung" }));
+    const form = screen.getByRole("form", { name: /Abweichung/ });
+    expect(within(form).getAllByRole("radio")).toHaveLength(3);
+    await user.click(within(form).getByRole("button", { name: "Übernehmen" }));
+    expect(api.decideField).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "manual", value: "31.03.2029", note: "Wert aus dem Dokument übernommen." }));
+    await user.click(screen.getByRole("button", { name: "Abweichung" }));
+    await user.click(screen.getByRole("radio", { name: /MedFlux hat recht/ }));
+    await user.click(screen.getByRole("button", { name: "Übernehmen" }));
+    expect(api.decideField).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "keep" }));
+  });
+
+  it("stimmen Dokument und gespeicherter Wert überein, sagt es der Kasten; Abweichung führt dann zur Eingabe von Hand", async () => {
+    const user = userEvent.setup();
+    const item = twoAgreeing();
+    item.fact_state = "confirmed";
+    item.stored_value = "31.03.2029";
+    setup(item);
+    expect(screen.getByText("Dokument und MedFlux stimmen überein.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Abweichung" }));
+    expect(screen.queryByRole("radio", { name: /Dokument hat recht/ })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Richtiger Wert"), "x");
+    expect(screen.getByRole("button", { name: "Text im Dokument markieren und übernehmen" })).toBeInTheDocument();
+  });
+
+  it("Tasten der geführten Prüfung: Enter bestätigt, A öffnet die Abweichung, S stellt zurück", async () => {
+    const user = userEvent.setup();
+    setup(twoAgreeing(), { shortcuts: true });
+    await user.keyboard("{Enter}");
+    expect(api.decideField).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "keep" }));
+    await user.keyboard("s");
+    expect(api.decideField).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "defer" }));
+    await user.keyboard("a");
+    expect(screen.getByRole("form", { name: /Abweichung|Von Hand/ })).toBeInTheDocument();
+  });
+
+  it("Erneut öffnen: eine bestätigte Angabe wird wieder zur Entscheidung gestellt (Verlauf bleibt)", async () => {
+    const user = userEvent.setup();
+    api.reviewContractFact.mockResolvedValue(DETAIL);
+    const done = twoAgreeing();
+    done.status = "decided";
+    done.decision_needed = false;
+    done.fact_state = "confirmed";
+    done.reviewed_at = "2026-10-18T10:00:00+00:00";
+    const { onChanged } = setup(done);
+    await user.click(screen.getByRole("button", { name: "Erneut öffnen" }));
+    expect(api.reviewContractFact).toHaveBeenCalledWith("c-1", "test-klinik", { fact_key: "dates.end_date", action: "reopened", expected_reviewed_at: "2026-10-18T10:00:00+00:00" });
+    expect(onChanged).toHaveBeenCalledWith(DETAIL, { decided: false });
+  });
+
+  it("Korrigieren braucht eine Begründung, wenn bereits ein Wert da ist", async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole("button", { name: "Abweichung" }));
+    await user.clear(screen.getByLabelText("Richtiger Wert"));
+    await user.type(screen.getByLabelText("Richtiger Wert"), "30.06.2029");
+    const submit = screen.getByRole("button", { name: "Übernehmen" });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByLabelText("Begründung der Korrektur"), "Nachtrag 2");
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    expect(api.decideField).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "manual", value: "30.06.2029", note: "Nachtrag 2" }));
   });
 });

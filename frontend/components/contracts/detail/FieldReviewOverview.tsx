@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
 import { decideField } from "@/lib/domain-api/contracts";
 import { sectionByKey } from "@/lib/evidence";
-import { TIER_HINT, TIER_NAME, TIER_ORDER, decisionFields, nextOpenTier, pluralize, reviewHeadline, shownValue, stageOf } from "@/lib/field-review";
+import { TIER_HINT, TIER_NAME, TIER_ORDER, TIER_SHORT, decisionFields, nextOpenTier, pluralize, reviewHeadline, shownValue, stageOf } from "@/lib/field-review";
 import FieldDecision from "./FieldDecision";
 import FindingsSection from "./FindingsSection";
+import ReviewCompletion from "./ReviewCompletion";
 import { SECTION_ICON, icon } from "./ReviewParts";
 
 /** Karten wie die Reiter der Vertragsakte (Reihenfolge fest). */
@@ -21,6 +22,12 @@ const CARDS: { key: string; title: string }[] = [
   { key: "device", title: "Geräte" },
 ];
 type TierFilter = FieldTier | "all";
+type View = "single" | "list";
+const VIEW_KEY = "medflux.review.view";
+
+function storedView(): View {
+  try { return window.localStorage.getItem(VIEW_KEY) === "list" ? "list" : "single"; } catch { return "single"; }
+}
 
 const CHECK = icon(<><circle cx="12" cy="12" r="10" /><path d="m7.5 12.5 3 3 6-7" /></>, "frv-mark frv-mark--done");
 const CIRCLE = icon(<circle cx="12" cy="12" r="9" />, "frv-mark frv-mark--open");
@@ -76,6 +83,14 @@ export default function FieldReviewOverview({
   const [selected, setSelected] = useState<string | null>(null);
   const [seenFocus, setSeenFocus] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Einzelprüfung (Liste der Angaben + Entscheidung) oder Alle Angaben (Karten); die Wahl bleibt erhalten.
+  const [view, setView] = useState<View>("single");
+  useEffect(() => { setView(storedView()); }, []);
+  const navRef = useRef<HTMLElement | null>(null);
+  function chooseView(next: View) {
+    setView(next);
+    try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* ohne Speicher: gilt für diese Sitzung */ }
+  }
   if (focusKey && focusKey.n !== seenFocus) {
     setSeenFocus(focusKey.n);
     setSelected(focusKey.key);
@@ -90,6 +105,8 @@ export default function FieldReviewOverview({
       && (!onlyOpen || field.decision_needed || field.fact_key === selected)
       && (!needle || `${field.label} ${field.current ?? ""}`.toLocaleLowerCase("de-DE").includes(needle)));
   }, [review, tier, onlyOpen, query, selected]);
+
+  const effectiveKey = selected && visible.some((field) => field.fact_key === selected) ? selected : (visible.find((field) => field.decision_needed) ?? visible[0])?.fact_key ?? null;
 
   if (!review) return <section className="detail-card frv" aria-label="Prüfung"><h2>Prüfung</h2><p className="fd-muted">Für diesen Vertrag liegt noch keine Prüfung vor.</p></section>;
 
@@ -142,9 +159,10 @@ export default function FieldReviewOverview({
           : <p className="fd-muted">Keine wesentlichen Angaben gefunden.</p>}
       </div>
       {firstOpen ? <button type="button" className="btn btn-primary frv-go" onClick={() => onStartGuided(firstOpen)}>
-        {firstOpen === "essential" ? "Wesentliches prüfen" : `${TIER_NAME[firstOpen]} prüfen`} · {stageOf(review, firstOpen)?.open}
+        {firstOpen === "essential" ? "Im Dokument prüfen" : `${TIER_NAME[firstOpen]} im Dokument prüfen`} · {stageOf(review, firstOpen)?.open}
       </button> : null}
     </header>
+    {data.contract_review ? <ReviewCompletion contractId={data.contract_id} orgSlug={orgSlug} review={data.contract_review} canReview={canReview} onReload={onReload} /> : null}
 
     <div className="frv-tools">
       <label className="frv-search"><span className="visually-hidden">Angabe oder Wert suchen</span>{SEARCH}
@@ -160,6 +178,10 @@ export default function FieldReviewOverview({
         })}
         <button type="button" className="btn btn-sm" aria-pressed={tier === "all"} onClick={() => setTier("all")}>Alle</button>
       </div>
+      <div className="frv-view" role="group" aria-label="Ansicht">
+        <button type="button" className="btn btn-sm" aria-pressed={view === "single"} onClick={() => chooseView("single")}>Einzelprüfung</button>
+        <button type="button" className="btn btn-sm" aria-pressed={view === "list"} onClick={() => chooseView("list")}>Alle Angaben</button>
+      </div>
       <button type="button" className="btn btn-sm" aria-pressed={onlyOpen} onClick={() => setOnlyOpen(!onlyOpen)}>Nur offene ({openInTier})</button>
     </div>
     {tier !== "all" ? <p className="fd-muted frv-hint">{TIER_HINT[tier]}</p> : null}
@@ -169,7 +191,50 @@ export default function FieldReviewOverview({
       <button type="button" className="btn" disabled={busy !== null} onClick={() => void confirm("all", easyAll)}>{busy === "all" ? "Wird gespeichert…" : `Diese ${easyAll.length} bestätigen`}</button>
     </div> : null}
 
-    <div className="frv-cards">
+    {view === "single" ? <div className="frv-single">
+      <nav ref={navRef} className="frv-nav" aria-label="Angaben" onKeyDown={(event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        const index = visible.findIndex((field) => field.fact_key === effectiveKey);
+        const next = visible[index + (event.key === "ArrowDown" ? 1 : -1)];
+        if (!next) return;
+        event.preventDefault();
+        setSelected(next.fact_key);
+        window.setTimeout(() => navRef.current?.querySelector<HTMLElement>("button[aria-current=true]")?.focus(), 0);
+      }}>
+        <p className="fd-muted frv-nav-note">{visible.length} Angaben – mehrere Belege zum selben Wert stehen bei einer Angabe.</p>
+        <ol>
+          {visible.map((field, index) => <li key={field.fact_key}>
+            <button type="button" className={`frv-nav-item${field.fact_key === effectiveKey ? " is-active" : ""}`} aria-current={field.fact_key === effectiveKey ? "true" : undefined} onClick={() => setSelected(field.fact_key)}>
+              <span className="frv-nav-num">{index + 1}</span>
+              <span className="frv-nav-text">
+                <span className="frv-nav-label">{field.label}</span>
+                <span className="frv-nav-meta">{TIER_SHORT[field.tier]}{field.ai_confidence != null ? ` · KI ${Math.round(field.ai_confidence * 100)} %` : ""}</span>
+              </span>
+              <span role="img" aria-label={field.status_label}>{mark(field)}</span>
+            </button>
+          </li>)}
+        </ol>
+      </nav>
+      <div className="frv-detail" role="region" aria-label="Aktuelle Angabe">
+        {(() => {
+          const field = visible.find((item) => item.fact_key === effectiveKey);
+          if (!field) return <p className="fd-muted frv-empty">{onlyOpen ? "Nichts offen in dieser Auswahl." : "Keine Angaben in dieser Auswahl."}</p>;
+          const index = visible.indexOf(field);
+          return <>
+            <FieldDecision key={`${field.fact_key}|${field.version ?? ""}|${field.status}`} contractId={data.contract_id} orgSlug={orgSlug} field={field} review={review} canReview={canReview}
+              onChanged={afterDecision} onShowEvidence={onShowEvidence} onShowPage={onShowPage} onOpenAnalysis={onOpenAnalysis} />
+            <nav className="erm-foot frv-pager" aria-label="Angaben blättern">
+              <button type="button" className="btn btn-sm" disabled={index <= 0} onClick={() => setSelected(visible[index - 1].fact_key)}>← Vorherige Angabe</button>
+              <span className="erm-foot-next">{index + 1} / {visible.length}</span>
+              <button type="button" className="btn btn-sm" disabled={index >= visible.length - 1} onClick={() => setSelected(visible[index + 1].fact_key)}>Nächste Angabe →</button>
+            </nav>
+            <p className="frv-expand-foot"><button type="button" className="rg-link" onClick={() => onStartGuided(field.tier, field.fact_key)}>Im Dokument weiter prüfen →</button></p>
+          </>;
+        })()}
+      </div>
+    </div> : null}
+
+    {view === "list" ? <div className="frv-cards">
       {CARDS.map((card) => {
         const fields = visible.filter((field) => field.card === card.key);
         if (!fields.length) return null;
@@ -210,7 +275,7 @@ export default function FieldReviewOverview({
         </section>;
       })}
       {visible.length === 0 ? <p className="fd-muted frv-empty">{onlyOpen ? "Nichts offen in dieser Auswahl." : "Keine Angaben in dieser Auswahl."}</p> : null}
-    </div>
+    </div> : null}
 
     {calculated.length ? <section className="frv-extra" aria-label="Berechnete Werte">
       <h3>Berechnete Werte</h3>

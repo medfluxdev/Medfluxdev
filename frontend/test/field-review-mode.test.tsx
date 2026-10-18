@@ -155,9 +155,10 @@ describe("Geführte Prüfung nach Feldern", () => {
 });
 
 describe("Prüfung: Überblick und Weitere Informationen", () => {
-  function overview(model: FieldReviewDto, canReview = true) {
+  function overview(model: FieldReviewDto, canReview = true, view: "list" | "single" = "list", contractReview: Record<string, unknown> | null = null) {
+    window.localStorage.setItem("medflux.review.view", view);
     const handlers = { onReload: vi.fn(), onStartGuided: vi.fn(), onShowEvidence: vi.fn(), onShowPage: vi.fn() };
-    const data = { contract_id: "c-1", field_review: model } as unknown as ContractDetailResponse;
+    const data = { contract_id: "c-1", field_review: model, contract_review: contractReview } as unknown as ContractDetailResponse;
     return { ...render(<FieldReviewOverview data={data} orgSlug="test-klinik" canReview={canReview} {...handlers} />), ...handlers };
   }
 
@@ -177,7 +178,7 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(screen.getByRole("region", { name: "Service & Leistungen" })).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Berechnete Werte" })).getByText("Wartet auf Angaben")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: "Wesentliches prüfen · 2" }));
+    await user.click(screen.getByRole("button", { name: "Im Dokument prüfen · 2" }));
     expect(onStartGuided).toHaveBeenCalledWith("essential");
   });
 
@@ -265,5 +266,68 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false })).toBeInTheDocument();
     await user.click(within(screen.getByRole("button", { name: /Vertragsende/, expanded: true }).closest("li")!).getByRole("button", { name: "Im Dokument weiter prüfen →" }));
     expect(onStartGuided).toHaveBeenCalledWith("essential", "dates.end_date");
+  });
+
+  const crDefaults = { status: "in_review", status_label_de: "In manueller Prüfung", reviewer_display_name: null, completion_note: null, relevant_count: 5, reviewed_count: 2, unresolved_count: 3, critical_count: 2, critical_reviewed_count: 1, critical_unreviewed_count: 1 };
+
+  it("Einzelprüfung: nummerierte Liste links mit Stand, Entscheidung rechts, Pfeiltasten und Blättern", async () => {
+    const user = userEvent.setup();
+    overview(review([start, end, price]), true, "single");
+    const nav = screen.getByRole("navigation", { name: "Angaben" });
+    const items = within(nav).getAllByRole("button");
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent("1");
+    expect(items[0]).toHaveTextContent("Vertragsbeginn");
+    expect(items[0]).toHaveAttribute("aria-current", "true"); // erste offene Angabe
+    const detail = screen.getByRole("region", { name: "Aktuelle Angabe" });
+    expect(within(detail).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
+    expect(within(detail).getByText("1 / 3")).toBeInTheDocument();
+    items[0].focus();
+    await user.keyboard("{ArrowDown}");
+    expect(within(screen.getByRole("region", { name: "Aktuelle Angabe" })).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Nächste Angabe →" }));
+    expect(within(screen.getByRole("region", { name: "Aktuelle Angabe" })).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nächste Angabe →" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "← Vorherige Angabe" }));
+    // Die Ansicht merkt sich die Wahl.
+    await user.click(screen.getByRole("button", { name: "Alle Angaben" }));
+    expect(window.localStorage.getItem("medflux.review.view")).toBe("list");
+    expect(screen.getByRole("region", { name: "Laufzeit & Kündigung" })).toBeInTheDocument();
+  });
+
+  it("Vertragsreview: Stand, Prüfer, Abschluss nur mit Bestätigung und Notiz; wesentliche Lücken sperren", async () => {
+    const user = userEvent.setup();
+    const post = vi.hoisted(() => vi.fn());
+    void post;
+    overview(review([start, end]), true, "single", { ...crDefaults, critical_unreviewed_count: 1 });
+    expect(screen.getByText(/2 von 5 Angaben entschieden · 3 offen/)).toBeInTheDocument();
+    expect(screen.getByText(/Prüfung durch/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Abschluss gesperrt: 1 wesentliche Angabe muss zuerst einzeln entschieden werden.");
+    // Gesperrt: kein Abschluss möglich, also auch keine Notiz-Eingabe.
+    expect(screen.queryByRole("button", { name: "Review abschließen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Review erneut öffnen" })).not.toBeInTheDocument();
+  });
+
+  it("Vertragsreview ohne Sperre: Notiz und ausdrückliche Annahme nötig, abgeschlossen lässt sich erneut öffnen", async () => {
+    const user = userEvent.setup();
+    overview(review([start]), true, "single", { ...crDefaults, critical_unreviewed_count: 0 });
+    const finish = screen.getByRole("button", { name: "Review abschließen" });
+    expect(finish).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /Verbleibende nicht-wesentliche/ }));
+    expect(finish).toBeDisabled(); // Notiz fehlt
+    await user.type(screen.getByRole("textbox", { name: "Abschluss-Notiz" }), "Rest bewusst akzeptiert");
+    expect(finish).toBeEnabled();
+  });
+
+  it("abgeschlossene Vertragsreview: Status sichtbar, „Review erneut öffnen“ vorhanden", () => {
+    overview(review([decided(start)]), true, "single", { ...crDefaults, status: "reviewed", status_label_de: "Wesentliches geprüft", reviewer_display_name: "A. Prüfer", completion_note: "ok", unresolved_count: 0, critical_unreviewed_count: 0 });
+    expect(screen.getAllByText("Wesentliches geprüft").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Abgeschlossen von A\. Prüfer – ok/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review erneut öffnen" })).toBeInTheDocument();
+  });
+
+  it("nur Lesen: keine Review-Aktionen", () => {
+    overview(review([start]), false, "single", crDefaults);
+    expect(screen.queryByRole("button", { name: "Review abschließen" })).not.toBeInTheDocument();
   });
 });

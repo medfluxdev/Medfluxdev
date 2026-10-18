@@ -1431,6 +1431,32 @@ li.is-open .frv-chevron{transform: rotate(180deg)}
 .frv-calc{display: grid;gap: var(--space-2);margin: 0;padding: 0;list-style: none}
 .frv-calc li{display: flex;flex-wrap: wrap;align-items: center;gap: var(--space-3)}
 @media (max-width: 720px){.frv-row-main{grid-template-columns: 1fr auto;row-gap: 2px}.frv-row-value{grid-column: 1}.frv-row-page{display: none}.frv-row-state{grid-column: 2;grid-row: 1}.frv-chevron{display: none}}
+.frv-review{display: flex;flex-wrap: wrap;align-items: flex-start;justify-content: space-between;gap: var(--space-4);padding: var(--space-3) var(--space-4);border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface)}
+.frv-review-state{display: grid;gap: var(--space-1)}
+.frv-review-state h3{margin: 0;font-size: var(--text-body);font-weight: 600}
+.frv-review-state p{margin: 0}
+.frv-review-actions{display: grid;gap: var(--space-2);min-width: 260px;max-width: 420px;flex: 1}
+.frv-ack{display: flex;gap: var(--space-2);align-items: flex-start;font-size: var(--text-small)}
+.frv-note{min-height: 38px;padding: 0 var(--space-3);border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit}
+.frv-view{display: inline-flex;gap: 0}
+.frv-view .btn:first-child{border-radius: var(--radius-sm) 0 0 var(--radius-sm)}
+.frv-view .btn:last-child{border-radius: 0 var(--radius-sm) var(--radius-sm) 0;margin-left: -1px}
+.frv-tools .frv-view .btn[aria-pressed="true"]{position: relative}
+.frv-single{display: grid;grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);gap: var(--space-4);align-items: start}
+@media (max-width: 900px){.frv-single{grid-template-columns: minmax(0, 1fr)}}
+.frv-nav{position: sticky;top: var(--space-4);display: grid;gap: var(--space-2);max-height: calc(100vh - 2 * var(--space-4));overflow: auto;padding: var(--space-3);border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface)}
+.frv-nav-note{margin: 0;font-size: var(--text-caption)}
+.frv-nav ol{display: grid;margin: 0;padding: 0;list-style: none}
+.frv-nav-item{display: flex;align-items: center;gap: var(--space-2);width: 100%;padding: var(--space-2);border: 0;border-left: 3px solid transparent;border-radius: 0;background: none;color: var(--color-text);font: inherit;text-align: left;cursor: pointer}
+.frv-nav-item:hover{background: var(--color-surface-subtle)}
+.frv-nav-item:focus-visible{outline: 2px solid var(--color-focus);outline-offset: -2px}
+.frv-nav-item.is-active{border-left-color: var(--color-accent);background: var(--color-surface-accent)}
+.frv-nav-num{min-width: 22px;color: var(--color-text-muted);font-size: var(--text-small);font-variant-numeric: tabular-nums}
+.frv-nav-text{display: grid;flex: 1;min-width: 0}
+.frv-nav-label{font-size: var(--text-small);font-weight: 600;overflow-wrap: anywhere}
+.frv-nav-meta{color: var(--color-text-muted);font-size: var(--text-caption)}
+.frv-detail{display: grid;gap: var(--space-3);min-width: 0;padding: var(--space-4);border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface)}
+.frv-pager{display: flex;align-items: center;justify-content: space-between;gap: var(--space-2);padding-top: var(--space-3);border-top: 1px solid var(--color-border)}
 .frv-findings{grid-column: 1 / -1}
 .frv-card{display: grid;align-content: start;gap: var(--space-2);padding: var(--space-3);border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface)}
 .frv-card-head{display: flex;align-items: center;gap: var(--space-2)}
@@ -1477,3 +1503,6 @@ li.is-open .frv-chevron{transform: rotate(180deg)}
 .frv-finding-done ul{display: grid;gap: var(--space-1);margin: var(--space-2) 0 0;padding: 0;list-style: none}
 .frv-finding-done li{display: flex;flex-wrap: wrap;align-items: center;justify-content: space-between;gap: var(--space-2)}
 @media (forced-colors: active){.erm-seg .is-open{forced-color-adjust: none;background: Highlight}.frv-bar i{forced-color-adjust: none;background: Highlight}}
+
+.fd-cand--bare{border-color: var(--color-border);box-shadow: none}
+.fd-support--lead{margin: 0}

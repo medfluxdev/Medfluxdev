@@ -993,6 +993,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onReload={reloadAfterDecision}
             onOpenAnalysis={() => { setReviewMode(null); openTarget(REEXTRACTION_TARGET); }}
             onOpenFindings={() => { setReviewMode(null); setRoute("documents", "review"); }}
+            canRecognize={Boolean(reextraction.state?.can_start) && !reextractionBusy}
+            onRecognizeStarted={reextraction.reload}
             viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
           /> : null}
           {inDocumentWorkspace && !reviewMode && !proposalMode && <div className="dw">

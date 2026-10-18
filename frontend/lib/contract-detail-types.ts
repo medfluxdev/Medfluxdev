@@ -475,6 +475,8 @@ export interface FieldEvidenceDto {
   snippet: string | null;
   location: "exact" | "approx" | "page" | "none";
   text_verified: boolean;
+  /** Anteil des Wortlauts, der auf der Seite steht (0..1); null = nicht prüfbar. */
+  text_match?: number | null;
   confidence: number | null;
   extraction_method: string | null;
   document_version_id: string | null;
