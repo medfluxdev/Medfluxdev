@@ -869,8 +869,9 @@ body { background: var(--color-bg); }
 .collapsible > .collapsible-head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
 .collapsible-head > .collapsible-title, .collapsible-head > .collapsible-corner { align-self: center; }
 .collapsible-title { min-width: 0; }
-.collapsible-title h2 { font-size: var(--text-title-s); font-weight: var(--weight-semibold); line-height: 1.3; }
-.collapsible-title p { margin: 2px 0 0; font-size: var(--text-small); }
+/* Kartenkopf (Standard = Karten der Vertragsdaten); höhere Spezifität, damit Seitenstile ihn nicht vergrößern. */
+.collapsible .collapsible-title h2 { margin: 0; font-size: var(--text-title-s); font-weight: var(--weight-semibold); line-height: 1.3; }
+.collapsible .collapsible-title p { margin: 2px 0 0; font-size: var(--text-small); }
 .collapsible-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); margin-top: 2px; font-size: var(--text-small); color: var(--color-text-muted); }
 .collapsible-summary b { color: var(--color-text); font-weight: var(--weight-semibold); }
 .collapsible-summary .summary-part { display: inline-flex; align-items: center; gap: var(--space-3); }
@@ -1013,6 +1014,9 @@ body { background: var(--color-bg); }
 /* Einklappen links vor der Überschrift, 40 × 40 wie CollapsibleSection (Position aus lib/box-collapse.ts) */
 [data-box] > :first-child { padding-left: calc(40px + var(--space-3)); }
 [data-box][data-box-icon] > :first-child { padding-left: calc(80px + 2 * var(--space-3)); min-height: 40px; }
+/* Kopf aller übrigen Kästen wie die Karten der Vertragsdaten: Titel 18px halbfett, Beschreibung 14px (Farben bleiben). */
+[data-box] > :first-child > :is(h1, h2, h3, h4), [data-box] > :first-child > div > :is(h1, h2, h3, h4) { margin: 0; font-size: var(--text-title-s); font-weight: var(--weight-semibold); line-height: 1.3; }
+[data-box] > :first-child > :is(h1, h2, h3, h4) + p, [data-box] > :first-child > div > :is(h1, h2, h3, h4) + p { margin: 2px 0 0; font-size: var(--text-small); }
 .box-icon { position: absolute; top: var(--box-toggle-top, var(--space-3)); left: calc(var(--box-pad-left, var(--space-3)) + 40px + var(--space-3)); }
 @media print { .box-icon { display: none; } }
 .box-toggle { position: absolute; top: var(--box-toggle-top, var(--space-3)); left: var(--box-pad-left, var(--space-3)); display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; cursor: pointer; }
