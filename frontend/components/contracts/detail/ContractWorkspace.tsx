@@ -62,7 +62,8 @@ import OpenPoints, { EVIDENCE_REVIEW_SECTION, PROPOSAL_REVIEW_SECTION, buildOpen
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
 import EvidenceReviewMode from "./EvidenceReviewMode";
-import { NO_FILTER, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
+import { EvidenceFilterBar, NO_FILTER, filterLabel, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
+import Popover from "@/components/ui/Popover";
 import { evidenceNumbers, evidenceRows, evidenceStatus, factsByEvidence, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
@@ -427,6 +428,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const [reviewMode, setReviewMode] = useState<{ startId: string | null } | null>(null);
   // Ein Filter für die Nachweise-Liste und die geführte Prüfung („Nachweise prüfen“ geht nur die Auswahl durch).
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>(NO_FILTER);
+  // Klick auf „Nachweise“ (von „Dateien“ aus): Liste zeigen und gleich den Filter aufklappen.
+  const [filterOnOpen, setFilterOnOpen] = useState(false);
+  useEffect(() => { if (documentTab !== "evidence") setFilterOnOpen(false); }, [documentTab]);
   // „Vorschläge prüfen“: offene Vorschläge der letzten Analyse einzeln (gleicher Arbeitsplatz).
   const [proposalMode, setProposalMode] = useState<{ startKey: string | null } | null>(null);
   // Ergebnis der Nachweisprüfung je Nachweis (bestätigt, abweichend, übersprungen).
@@ -978,12 +982,34 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             <aside className="dw-side" aria-label="Dateien und Nachweise">
               <div className="dw-switch" role="group" aria-label="Seitenleiste">
                 <button type="button" aria-pressed={documentTab === "document"} onClick={() => setRoute("documents", "document")}>Dateien<span className="dw-count" aria-hidden="true">{data.documents.length}</span></button>
-                <button type="button" aria-pressed={documentTab === "evidence"} onClick={() => setRoute("documents", "evidence")}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>
+                {documentTab === "evidence"
+                  ? <Popover
+                    label={<>Nachweise<span className="dw-count" aria-hidden="true">{filteredEvidence ?? data.evidence.length}</span></>}
+                    triggerLabel={filteredEvidence != null ? `Nachweise filtern (${filteredEvidence} von ${data.evidence.length})` : "Nachweise filtern"}
+                    panelLabel="Nachweise filtern"
+                    triggerClassName="dw-switch-trigger"
+                    className="dw-switch-popover"
+                    active={filteredEvidence != null}
+                    defaultOpen={filterOnOpen}
+                    wide
+                  >
+                    {(close) => <div className="dw-filter">
+                      <EvidenceFilterBar rows={evidenceTableRows} filter={evidenceFilter} onFilter={setEvidenceFilter} />
+                      <div className="dw-filter-actions">
+                        <button type="button" className="btn btn-sm" disabled={filteredEvidence == null} onClick={() => setEvidenceFilter(NO_FILTER)}>Zurücksetzen</button>
+                        <button type="button" className="btn btn-sm btn-primary" onClick={close}>{filteredEvidence != null ? `${filteredEvidence} anzeigen` : "Fertig"}</button>
+                      </div>
+                    </div>}
+                  </Popover>
+                  : <button type="button" aria-pressed={false} onClick={() => { setFilterOnOpen(true); setRoute("documents", "evidence"); }}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>}
               </div>
               {documentTab === "evidence"
-                ? <div className="dw-panel">{data.evidence.length
+                ? <div className="dw-panel">{filteredEvidence != null ? <p className="dw-filter-line" role="status">
+                  <span>{`Nur ${filterLabel(evidenceFilter, evidenceTableRows)} · ${filteredEvidence}`}</span>
+                  <button type="button" onClick={() => setEvidenceFilter(NO_FILTER)} aria-label="Filter aufheben">×</button>
+                </p> : null}{data.evidence.length
                   ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={(ref) => startEvidenceReview(ref.evidence_id)}
-                    filters filter={evidenceFilter} onFilter={setEvidenceFilter} />
+                    filter={evidenceFilter} onFilter={setEvidenceFilter} />
                   : <p className="cw-muted dw-empty">Keine Nachweise vorhanden.</p>}<CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
                 : data.documents.length === 0 ? <p className="cw-muted dw-empty">Keine Dokumente vorhanden.</p>
                   : <DocumentList documents={data.documents} selectedId={documentVersionId} mainId={mainDocumentId} onSelect={selectDocument} compact={!manyDocuments} />}

@@ -1059,7 +1059,15 @@ a.fin-basis-sub { color: var(--color-link); }
 .dw-side{display: flex;flex-direction: column;min-height: 0;max-height: 86vh;border-right: 1px solid var(--color-border);background: var(--color-surface)}
 .dw-switch{display: grid;grid-template-columns: 1fr 1fr;gap: 4px;margin: 12px 12px 0;padding: 4px;border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
 .dw-switch button{display: inline-flex;align-items: center;justify-content: center;gap: 8px;min-height: 34px;border: 0;border-radius: 6px;background: none;color: var(--color-text-muted);font: inherit;font-size: var(--text-small);font-weight: var(--weight-semibold);cursor: pointer}
-.dw-switch button[aria-pressed="true"]{background: var(--color-surface);color: var(--color-text);box-shadow: 0 0 0 1px var(--color-border)}
+.dw-switch button[aria-pressed="true"], .dw-switch .dw-switch-trigger{background: var(--color-surface);color: var(--color-text);box-shadow: 0 0 0 1px var(--color-border)}
+.dw-switch-popover{display: grid}
+.dw-switch .dw-switch-trigger{width: 100%}
+.dw-switch .popover-trigger--active{box-shadow: 0 0 0 1px var(--color-accent);color: var(--color-accent)}
+.dw-filter{display: grid;gap: 10px;min-width: min(420px, 80vw)}
+.dw-filter-actions{display: flex;justify-content: flex-end;gap: 8px}
+.dw-filter-line{display: flex;align-items: center;justify-content: space-between;gap: 8px;margin: 8px 12px 0;padding: 4px 4px 4px 12px;border: 1px solid var(--color-accent);border-radius: 999px;background: var(--color-surface-accent);color: var(--color-accent);font-size: var(--text-small);font-weight: 600}
+.dw-filter-line button{min-width: 28px;min-height: 28px;border: 0;border-radius: 999px;background: none;color: inherit;font: inherit;cursor: pointer}
+.dw-filter-line button:hover{background: var(--color-surface)}
 .dw-switch button:focus-visible{outline: 2px solid var(--color-focus, var(--color-accent));outline-offset: 1px}
 .dw-count{min-width: 22px;padding: 0 6px;border-radius: 999px;background: var(--color-surface-subtle);color: var(--color-text-muted);font-size: var(--text-caption)}
 .dw-switch button[aria-pressed="true"] .dw-count{background: var(--color-surface-accent);color: var(--color-accent)}
@@ -1092,11 +1100,8 @@ a.fin-basis-sub { color: var(--color-link); }
 .evt-filter button:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 1px}
 .evt-count{min-width: 20px;padding: 0 5px;border-radius: 999px;background: var(--color-surface);color: var(--color-text-muted);font-size: var(--text-caption);text-align: center}
 .evt-search{flex: 1;min-width: 180px;min-height: 34px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
-.evt-table{width: 100%;border-collapse: collapse;table-layout: fixed;font-size: var(--text-small)}
+.evt-table{width: 100%;border-collapse: collapse;font-size: var(--text-small)}
 .evt-table th, .evt-table td{hyphens: manual;overflow-wrap: break-word}
-.evt-col-num{width: 2.5rem}
-.evt-col-page{width: 3.5rem}
-.evt-col-status{width: 10.5rem}
 .evt-sub{display: block;margin-top: 2px;color: var(--color-text-muted);font-size: var(--text-caption)}
 .evt-table td .signal{white-space: nowrap}
 .evt-row{display: flex;flex-wrap: wrap;gap: 8px;width: 100%}

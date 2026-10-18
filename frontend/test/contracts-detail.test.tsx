@@ -379,7 +379,17 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     // Einstieg in die geführte Prüfung steht immer im Kopf des Reiters.
     expect(screen.getByRole("button", { name: /Nachweise prüfen · 2 offen/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Nachweise" }));
-    expect(screen.getByRole("button", { name: "Nachweise" })).toHaveAttribute("aria-pressed", "true");
+    // Klick auf „Nachweise“: Liste und gleich der Filter (Prüfstand, Abschnitt, Suche) im Aufklapper.
+    const trigger = screen.getByRole("button", { name: "Nachweise filtern" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("group", { name: "Nach Prüfstand filtern" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Offen/ }));
+    expect(screen.getByText(/^Nur Offen · 2$/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "2 anzeigen" }));
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAccessibleName("Nachweise filtern (2 von 2)");
+    await userEvent.click(screen.getByRole("button", { name: "Filter aufheben" }));
+    expect(screen.getByRole("button", { name: "Nachweise filtern" })).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "Nachweise dieses Vertrags" });
     expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["#", "Feld", "Seite", "Status"]);

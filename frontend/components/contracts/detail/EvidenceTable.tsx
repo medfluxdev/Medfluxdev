@@ -41,25 +41,8 @@ export function filterLabel(filter: EvidenceFilter, rows: EvidenceRow[]): string
   return [status, section, query].filter(Boolean).join(" · ");
 }
 
-/**
- * Nachweise als kompakte Tabelle (# · Feld [mit Abschnitt darunter] · Seite · Status), ohne Zitate. Im Reiter Dokumente und
- * in „Alle Nachweise“ der Prüfung; ein Klick wählt den Nachweis. Mit `filter`/`onFilter` steuert die Auswahl
- * von außen (die geführte Prüfung geht dann nur diese Nachweise durch).
- */
-export default function EvidenceTable({ rows, currentId = null, onPick, withSection = false, filters = false, caption, filter: given, onFilter }: {
-  rows: EvidenceRow[];
-  currentId?: string | null;
-  onPick: (ref: EvidenceRef) => void;
-  withSection?: boolean;
-  /** Prüfstand-, Abschnitt-Filter und Suche (in „Alle Nachweise“). */
-  filters?: boolean;
-  caption: string;
-  filter?: EvidenceFilter;
-  onFilter?: (filter: EvidenceFilter) => void;
-}) {
-  const [own, setOwn] = useState<EvidenceFilter>(NO_FILTER);
-  const filter = given ?? own;
-  const setFilter = (next: EvidenceFilter) => (onFilter ? onFilter(next) : setOwn(next));
+/** Filter-Bedienung (Prüfstand mit Zählern, Abschnitt, Suche): in „Alle Nachweise“ und im Aufklapper „Nachweise“. */
+export function EvidenceFilterBar({ rows, filter, onFilter }: { rows: EvidenceRow[]; filter: EvidenceFilter; onFilter: (filter: EvidenceFilter) => void }) {
   const counts = useMemo(() => {
     const scoped = rows.filter((row) => matchesFilter(row, { ...filter, status: "" }));
     const out: Record<string, number> = { "": scoped.length };
@@ -71,29 +54,50 @@ export default function EvidenceTable({ rows, currentId = null, onPick, withSect
     for (const row of rows) if (!seen.has(row.section.key)) seen.set(row.section.key, row.section.label);
     return [...seen.entries()];
   }, [rows]);
+  return <div className="evt-tools">
+    <div className="evt-filter" role="group" aria-label="Nach Prüfstand filtern">
+      {FILTERS.map((option) => <button key={option.value || "all"} type="button" aria-pressed={filter.status === option.value} onClick={() => onFilter({ ...filter, status: option.value })}>
+        {option.label}<span className="evt-count" aria-hidden="true">{counts[option.value] ?? 0}</span>
+      </button>)}
+    </div>
+    <div className="evt-row">
+      <label className="evt-section">
+        <span className="visually-hidden">Abschnitt</span>
+        <select value={filter.section} onChange={(event) => onFilter({ ...filter, section: event.target.value })} aria-label="Nach Abschnitt filtern">
+          <option value="">Alle Abschnitte</option>
+          {sections.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </select>
+      </label>
+      <input type="search" className="evt-search" aria-label="Nachweise durchsuchen" placeholder="Feld oder Wortlaut suchen" value={filter.query} onChange={(event) => onFilter({ ...filter, query: event.target.value })} />
+    </div>
+  </div>;
+}
+
+/**
+ * Nachweise als kompakte Tabelle (# · Feld [mit Abschnitt darunter] · Seite · Status), ohne Zitate. Im Reiter Dokumente
+ * und in „Alle Nachweise“ der Prüfung; ein Klick wählt den Nachweis. Mit `filter`/`onFilter` steuert die Auswahl
+ * von außen (die geführte Prüfung geht dann nur diese Nachweise durch); `filters` zeigt die Bedienung über der Tabelle.
+ */
+export default function EvidenceTable({ rows, currentId = null, onPick, withSection = false, filters = false, caption, filter: given, onFilter }: {
+  rows: EvidenceRow[];
+  currentId?: string | null;
+  onPick: (ref: EvidenceRef) => void;
+  withSection?: boolean;
+  /** Prüfstand-, Abschnitt-Filter und Suche über der Tabelle (in „Alle Nachweise“). */
+  filters?: boolean;
+  caption: string;
+  filter?: EvidenceFilter;
+  onFilter?: (filter: EvidenceFilter) => void;
+}) {
+  const [own, setOwn] = useState<EvidenceFilter>(NO_FILTER);
+  const filter = given ?? own;
+  const setFilter = (next: EvidenceFilter) => (onFilter ? onFilter(next) : setOwn(next));
   const visible = rows.filter((row) => matchesFilter(row, filter));
 
   return <div className="evt">
-    {filters ? <div className="evt-tools">
-      <div className="evt-filter" role="group" aria-label="Nach Prüfstand filtern">
-        {FILTERS.map((option) => <button key={option.value || "all"} type="button" aria-pressed={filter.status === option.value} onClick={() => setFilter({ ...filter, status: option.value })}>
-          {option.label}<span className="evt-count" aria-hidden="true">{counts[option.value] ?? 0}</span>
-        </button>)}
-      </div>
-      <div className="evt-row">
-        <label className="evt-section">
-          <span className="visually-hidden">Abschnitt</span>
-          <select value={filter.section} onChange={(event) => setFilter({ ...filter, section: event.target.value })} aria-label="Nach Abschnitt filtern">
-            <option value="">Alle Abschnitte</option>
-            {sections.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-          </select>
-        </label>
-        <input type="search" className="evt-search" aria-label="Nachweise durchsuchen" placeholder="Feld oder Wortlaut suchen" value={filter.query} onChange={(event) => setFilter({ ...filter, query: event.target.value })} />
-      </div>
-    </div> : null}
+    {filters ? <EvidenceFilterBar rows={rows} filter={filter} onFilter={setFilter} /> : null}
     <table className="evt-table">
       <caption className="visually-hidden">{caption}</caption>
-      <colgroup><col className="evt-col-num" /><col /><col className="evt-col-page" /><col className="evt-col-status" /></colgroup>
       <thead><tr>
         <th scope="col" className="evt-num">#</th>
         <th scope="col">{withSection ? "Feld · Abschnitt" : "Feld"}</th>
