@@ -45,7 +45,7 @@ import ContractFinancePanel from "./ContractFinancePanel";
 import { BUSINESS_STATUS_LABEL, BUSINESS_STATUS_TONE, type BusinessStatus } from "@/lib/domain-api/register";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { servicesVisible as servicesVisibleFor } from "@/lib/contract-services";
-import { CONFLICT_TARGET, FIELD_PARAM, FINANCE_ENTRIES_TARGET, FINANCE_SUGGESTIONS_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
+import { CONFLICT_TARGET, FIELD_PARAM, FINANCE_ENTRIES_TARGET, FINANCE_SUGGESTIONS_TARGET, REEXTRACTION_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
 import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, openProposals, useReextraction } from "./Reextraction";
@@ -100,7 +100,7 @@ interface Props {
 type TabKey = "overview" | "register" | "services" | "deadlines" | "finance" | "documents" | "relations" | "notes" | "history";
 // Fruehere Reiter (Links aus E-Mails, Lesezeichen) zeigen auf den neuen Ort.
 const TAB_ALIASES: Record<string, TabKey> = { term: "deadlines", leistungen: "services", equipment: "relations", remarks: "notes", notizen: "notes" };
-type DocumentTab = "document" | "attachments" | "evidence" | "review" | "history";
+type DocumentTab = "document" | "attachments" | "evidence" | "review" | "analysis" | "history";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
 // Schlüssel bleiben (Links, Lesezeichen); die Beschriftung folgt dem Plan (U11).
@@ -117,11 +117,14 @@ const TABS: { key: TabKey; label: string }[] = [
 ];
 
 const REVIEW_ICON = <svg className="dw-review-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" /></svg>;
+const REANALYSE_ICON = <svg className="dw-reanalyse-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M12 8l2 4-2 4-2-4z" /></svg>;
 const DOC_INFO_ICON = <svg className="cw-doc-foot-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18zM12 11v6M12 7.5v.5" /></svg>;
 
 const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
   { key: "document", label: "Dokument" },
   { key: "review", label: "Prüfung" },
+  // Erneut aus dem Dokument erfassen: Auswahl, Lauf, Ergebnis und Verlauf an einem festen Ort.
+  { key: "analysis", label: "KI-Analyse" },
   { key: "attachments", label: "Anlagen" },
   { key: "history", label: "Korrekturen" },
 ];
@@ -280,6 +283,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const onPdfPage = useCallback((page: number) => setPdfPage(page), []);
   // „Fehlende Angaben im Dokument suchen“: nur mit Recht, ohne laufende Auswertung und wenn etwas fehlt.
   const reextractionBusy = reextraction.state?.run?.status === "queued" || reextraction.state?.run?.status === "running";
+  // Stand der KI-Analyse für Unterreiter und Knopf: offene Vorschläge einer fertigen Analyse bzw. „läuft“.
+  const analysisOpen = reextraction.state?.run?.status === "ready" && !reextraction.state.run.stale ? openProposals(reextraction.state.rows).length : 0;
+  const analysisBadge = reextractionBusy ? "läuft" : analysisOpen ? String(analysisOpen) : null;
   const searchMissingHref = reextraction.state?.can_start && !reextractionBusy && (reextraction.state?.missing.length ?? 0) > 0
     ? documentSearchHref(data.contract_id, MISSING_SEARCH)
     : null;
@@ -790,7 +796,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           ]} />
         </div>
       </header>
-      <ReextractionBanner state={reextraction.state} onOpen={() => openTarget({ tab: "documents", subtab: "document", section: "reextraction" })} />
+      <ReextractionBanner state={reextraction.state} onOpen={() => openTarget(REEXTRACTION_TARGET)} />
       <Dialog
         open={deleteDialogOpen}
         title="Vertragslöschung beantragen?"
@@ -897,9 +903,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
         {activeTab === "documents" && <>
           {/* Kopf: Unterreiter links; rechts Stand der Prüfung mit dem nächsten Schritt. */}
           <div className="cw-doc-head">
-            <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "active" : ""} aria-current={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "page" : undefined} onClick={() => setRoute("documents", tab.key)}>{tab.label}</button>)}</nav>
+            <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "active" : ""} aria-current={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "page" : undefined} onClick={() => setRoute("documents", tab.key)}>{tab.label}{tab.key === "analysis" && analysisBadge ? <span className="dw-count">{analysisBadge}</span> : null}</button>)}</nav>
             <div className="dw-status" aria-label="Stand der Dokumente">
               <span className="dw-status-counts">{data.documents.length} {data.documents.length === 1 ? "Datei" : "Dateien"} · {data.evidence.length} Nachweise</span>
+              {documentTab !== "analysis" && (reextraction.state?.can_start || analysisBadge) ? <button type="button" className="btn btn-sm dw-reanalyse" onClick={() => openTarget(REEXTRACTION_TARGET)}>
+                {REANALYSE_ICON}{reextractionBusy ? "KI-Analyse läuft" : analysisOpen ? `${analysisOpen} ${analysisOpen === 1 ? "Vorschlag" : "Vorschläge"} prüfen` : "Erneut erfassen"}
+              </button> : null}
               {data.evidence.length && !reviewMode ? <button type="button" className={`btn btn-sm dw-review${openEvidenceCount ? " btn-primary" : ""}`} onClick={() => startEvidenceReview()}>
                 {REVIEW_ICON}Nachweise prüfen{openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}
               </button> : null}
@@ -912,13 +921,14 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 : data.contract_review.relevant_count > 0 ? <Signal tone="done" size="sm">Alles geprüft</Signal> : null}
             </div>
           </div>
-          {inDocumentWorkspace && !proposalMode && !reviewMode && <ReextractionPanel
+          {documentTab === "analysis" && <ReextractionPanel
+            loadError={reextraction.error}
             contractId={data.contract_id}
             orgSlug={orgSlug}
             state={reextraction.state}
             reload={reextraction.reload}
             onApplied={() => { reload(); reextraction.reload(); }}
-            onShowPage={showDocumentPage}
+            onShowPage={(page) => { setRoute("documents", "document"); showDocumentPage(page); }}
             onEditManually={(key) => (key ? openTarget({ tab: "register", field: key }) : setRoute("register"))}
             onMarkInDocument={canEditData && mainDocumentId ? openCapture : undefined}
             onReviewProposals={startProposalReview}
@@ -933,7 +943,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             startKey={proposalMode.startKey}
             canDecide={Boolean(reextraction.state.can_start)}
             onShow={showProposalEvidence}
-            onExit={() => { setProposalMode(null); reextraction.reload(); }}
+            onExit={() => { setProposalMode(null); reextraction.reload(); openTarget(REEXTRACTION_TARGET); }}
             onChanged={() => { reload(); reextraction.reload(); }}
             onEditManually={(key) => { setProposalMode(null); if (key) openTarget({ tab: "register", field: key }); else setRoute("register"); }}
             viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} variant="review" />}

@@ -222,7 +222,7 @@ describe("Im Dokument suchen (erneute Erfassung)", () => {
     // Nicht suchbar (keine Angabe im Dokument dafür) oder schon gefüllt: kein Knopf.
     expect(screen.queryByRole("button", { name: "Vertragspartner im Dokument suchen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kurzbeschreibung im Dokument suchen" })).not.toBeInTheDocument();
-    expect(documentSearchHref("c-1", "notice_period_value")).toBe("/contracts/c-1?tab=documents&subtab=document&abschnitt=reextraction&suchen=notice_period");
+    expect(documentSearchHref("c-1", "notice_period_value")).toBe("/contracts/c-1?tab=documents&subtab=analysis&abschnitt=reextraction&suchen=notice_period");
   });
 
   it("ein aus dem Dokument übernommener Wert zeigt seine Fundstelle", async () => {

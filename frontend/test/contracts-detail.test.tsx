@@ -373,6 +373,9 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await openDocuments();
     expect(screen.queryByRole("button", { name: "Nachweise", pressed: true })).not.toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).queryByRole("button", { name: "Nachweise" })).not.toBeInTheDocument();
+    // Erneut erfassen hat einen festen Ort: Unterreiter „KI-Analyse“ (nicht mehr über dem Original).
+    expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).getByRole("button", { name: "KI-Analyse" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Erneut aus dem Dokument erfassen" })).not.toBeInTheDocument();
     // Einstieg in die geführte Prüfung steht immer im Kopf des Reiters.
     expect(screen.getByRole("button", { name: /Nachweise prüfen · 2 offen/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Nachweise" }));

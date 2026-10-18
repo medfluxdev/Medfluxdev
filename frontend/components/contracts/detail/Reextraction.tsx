@@ -131,8 +131,12 @@ export function withDefaults(state: ReextractionState): ReextractionState {
 /** Stand der erneuten Erfassung; fragt nach, solange ein Lauf wartet oder läuft. */
 export function useReextraction(contractId: string, orgSlug: string) {
   const [state, setState] = useState<ReextractionState | null>(null);
+  // Fehler beim Laden (z. B. Datenbank noch nicht aktualisiert): sichtbar machen statt die Karte zu verstecken.
+  const [error, setError] = useState<string | null>(null);
   const reload = useCallback(() => {
-    getReextraction(orgSlug, contractId).then((value) => setState(value ? withDefaults(value) : null)).catch(() => setState(null));
+    getReextraction(orgSlug, contractId)
+      .then((value) => { setState(value ? withDefaults(value) : null); setError(null); })
+      .catch((err) => { setState(null); setError(message(err, "Die KI-Analyse ist gerade nicht erreichbar.")); });
   }, [contractId, orgSlug]);
   useEffect(reload, [reload]);
   const active = state?.run?.status === "queued" || state?.run?.status === "running";
@@ -141,7 +145,7 @@ export function useReextraction(contractId: string, orgSlug: string) {
     const timer = window.setInterval(reload, POLL_MS);
     return () => window.clearInterval(timer);
   }, [active, reload]);
-  return { state, reload };
+  return { state, reload, error };
 }
 
 /** Hinweis im Kopf der Vertragsakte: läuft gerade / Ergebnis liegt vor. */
@@ -179,10 +183,12 @@ interface PanelProps {
   onReviewProposals?: (startKey: string | null) => void;
   /** Nach „Bestätigungen zurücksetzen“: alle Nachweise einzeln prüfen. */
   onReviewEvidence?: () => void;
+  /** Ladefehler des Stands (wird angezeigt statt die Karte zu verstecken). */
+  loadError?: string | null;
 }
 
 /** Karte „Erneut aus dem Dokument erfassen“ (Dokumente → Dokument): Auswahl → läuft → Ergebnis. */
-export default function ReextractionPanel({ contractId, orgSlug, state: given, reload, onApplied, onShowPage, onEditManually, onMarkInDocument, onReviewProposals, onReviewEvidence }: PanelProps) {
+export default function ReextractionPanel({ contractId, orgSlug, state: given, reload, onApplied, onShowPage, onEditManually, onMarkInDocument, onReviewProposals, onReviewEvidence, loadError = null }: PanelProps) {
   const state = useMemo(() => (given ? withDefaults(given) : null), [given]);
   const toast = useToast();
   const router = useRouter();
@@ -212,7 +218,17 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
     router.replace(`${pathname ?? ""}?${params.toString()}`, { scroll: false });
   }, [searchFor, state, pathname, router, searchParams]);
 
-  if (!state || (!state.can_start && !run && state.history.length === 0)) return null;
+  // Eigener Unterreiter „KI-Analyse“: nie leer, immer mit Grund.
+  if (!state) {
+    return <section className="cw-section ra-unavailable" aria-labelledby="ra-unavailable-heading">
+      <h2 id="ra-unavailable-heading">Erneut aus dem Dokument erfassen</h2>
+      {loadError
+        ? <InlineAlert tone="warning" role="alert" action={<Button size="sm" onClick={reload}>Erneut laden</Button>}>
+          {`Die KI-Analyse ist gerade nicht verfügbar (${loadError}). Ist MedFlux auf dem neuesten Stand (Datenbank aktualisiert)?`}
+        </InlineAlert>
+        : <p className="cw-muted" role="status">Wird geladen…</p>}
+    </section>;
+  }
 
   async function act(work: () => Promise<unknown>, done?: string) {
     setBusy(true);
@@ -258,13 +274,13 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
     tone="ai"
     icon={TILE}
     actions={headerActions}
-    defaultCollapsed
-    forceOpen={active || ready || preset !== null}
+    forceOpen
     className="ra"
   >
     <div className="ra-body">
       {error ? <InlineAlert tone="critical" role="alert">{error}</InlineAlert> : null}
-      {!state.can_start && state.blocked_reason && !run ? <p className="cw-muted">{state.blocked_reason}</p> : null}
+      {!state.can_start && !run ? <p className="cw-muted">{state.blocked_reason
+        ?? "Eine neue Analyse starten dürfen das Vertragsmanagement und die Administration. Ergebnisse und Verlauf sehen Sie hier."}</p> : null}
 
       {active && run ? <RunningBox run={run} durationMinutes={state.duration_minutes} busy={busy}
         onCancel={() => act(() => cancelReextraction(orgSlug, contractId, run.id), "Die Analyse wird abgebrochen.")} /> : null}

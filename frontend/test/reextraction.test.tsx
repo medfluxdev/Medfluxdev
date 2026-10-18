@@ -78,8 +78,9 @@ function panel(value: ReextractionState, extra: Partial<Parameters<typeof Reextr
   return { ...utils, reload };
 }
 
-async function expand(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: /aufklappen$/ }));
+// Im eigenen Unterreiter ist die Karte immer offen.
+async function expand(_user: ReturnType<typeof userEvent.setup>) {
+  expect(screen.queryByRole("button", { name: /aufklappen$/ })).not.toBeInTheDocument();
 }
 
 beforeEach(() => {
@@ -93,9 +94,19 @@ beforeEach(() => {
 });
 
 describe("Erneut aus dem Dokument erfassen – Auswahl", () => {
-  it("bleibt ohne Recht, ohne Lauf und ohne Verlauf unsichtbar", () => {
-    const { container } = panel(state({ can_start: false, history: [] }));
-    expect(container).toBeEmptyDOMElement();
+  it("ohne Recht: erklärt, wer starten darf (nie leer)", () => {
+    panel(state({ can_start: false, history: [] }));
+    expect(screen.getByText(/Eine neue Analyse starten dürfen das Vertragsmanagement und die Administration/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyse starten" })).not.toBeInTheDocument();
+  });
+
+  it("Server nicht erreichbar: Hinweis mit „Erneut laden“ statt leerer Fläche", async () => {
+    const user = userEvent.setup();
+    const reload = vi.fn();
+    render(<ReextractionPanel contractId="c-1" orgSlug="test-klinik" state={null} reload={reload} onApplied={vi.fn()} loadError="Interner Fehler" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/Die KI-Analyse ist gerade nicht verfügbar \(Interner Fehler\)/);
+    await user.click(screen.getByRole("button", { name: "Erneut laden" }));
+    expect(reload).toHaveBeenCalled();
   });
 
   it("zeigt drei Modi mit Umfang; Ergänzen ist voreingestellt und startet mit Optionen", async () => {

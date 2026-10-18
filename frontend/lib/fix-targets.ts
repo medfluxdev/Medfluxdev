@@ -4,7 +4,7 @@ import type { GridFilter } from "@/lib/domain-api/registerGrid";
 // Alle Links in eine Vertragsakte oder in die gefilterte Vertragsliste entstehen hier.
 
 export type ContractTab = "overview" | "register" | "services" | "deadlines" | "finance" | "documents" | "relations" | "history";
-export type DocumentSubtab = "document" | "evidence" | "review" | "attachments" | "history";
+export type DocumentSubtab = "document" | "evidence" | "review" | "analysis" | "attachments" | "history";
 
 export interface FixTarget {
   tab: ContractTab;
@@ -55,8 +55,11 @@ export const SEARCH_PARAM = "suchen";
 export const MISSING_SEARCH = "fehlende";
 
 /** „Im Dokument suchen“: Dokumente → Dokument, Dialog mit diesem Feld vorausgewählt. */
+/** Unterreiter „KI-Analyse“ (Dokumente): erneut aus dem Dokument erfassen, Ergebnis, Verlauf. */
+export const REEXTRACTION_TARGET: FixTarget = { tab: "documents", subtab: "analysis", section: "reextraction" };
+
 export function documentSearchHref(contractId: string, fieldKey: string): string {
-  return `${contractHref(contractId, { tab: "documents", subtab: "document", section: "reextraction" })}&${SEARCH_PARAM}=${encodeURIComponent(baseFieldKey(fieldKey))}`;
+  return `${contractHref(contractId, REEXTRACTION_TARGET)}&${SEARCH_PARAM}=${encodeURIComponent(baseFieldKey(fieldKey))}`;
 }
 
 /** Vertragsliste mit Filtern (und optional Reiter), gleiche Adressform wie die Liste selbst. */

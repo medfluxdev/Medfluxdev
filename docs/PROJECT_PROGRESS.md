@@ -5988,3 +5988,9 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 - **Problem:** Kästen außerhalb von `CollapsibleSection` (z. B. Übersicht: KI-Zusammenfassung, Vertragsanalyse, Offene Punkte; Kachel und Einklappen kommen dort aus `lib/box-collapse.ts`) hatten Titel 20px und Beschreibung 16px, die Karten der Vertragsdaten 18px / 14px.
 - **Fix (`app/styles/components.css`):** Kopf jedes so ergänzten Kastens (`[data-box]`) wie `CollapsibleSection`: Titel `--text-title-s` halbfett, Zeilenhöhe 1,3; Beschreibung `--text-small`, 2px Abstand. Kachel 40px / Symbol 20px waren bereits gleich. Die Regel der Karten selbst ist spezifischer gemacht, damit Seitenstile (`.cw-section-head h2`) sie nicht vergrößern. Farben unverändert.
 - **Tests:** `npm run verify` grün (504 Tests, Build). Im Browser nicht geprüft; die visuellen Referenzen der Browsertests (`e2e/visual.spec.ts-snapshots`) zeigen noch die alten Größen.
+
+### Nachtrag 2026-10-18 – „KI-Analyse“ als eigener Unterreiter unter Dokumente
+
+- **Problem:** Die Karte „Erneut aus dem Dokument erfassen“ lag eingeklappt über der Dateiliste und war leicht zu übersehen; konnte der Stand nicht geladen werden (z. B. Datenbank noch nicht migriert), verschwand sie ganz.
+- **Neu:** Unterreiter **Dokumente → KI-Analyse** (`?subtab=analysis`, `REEXTRACTION_TARGET`) mit der Karte immer offen in voller Breite; Zähler am Unterreiter („läuft“ / offene Vorschläge). In der Leiste neben „Nachweise prüfen“ der Knopf „Erneut erfassen“ (bzw. „N Vorschläge prüfen“ / „KI-Analyse läuft“). Alle Einstiege (Kopfhinweis, Offene Punkte, „Im Dokument suchen“, Strg+K) führen dorthin. Nie leer: ohne Recht erklärt die Karte, wer starten darf; ein Ladefehler zeigt einen Hinweis mit „Erneut laden“. „Quelle“ und „Vorschläge prüfen“ wechseln zum Original.
+- **Tests:** `reextraction.test.tsx` (ohne Recht, Ladefehler), `contracts-detail.test.tsx` (Unterreiter), `direct-jump.test.tsx` (Link). `npm run verify` siehe Commit.

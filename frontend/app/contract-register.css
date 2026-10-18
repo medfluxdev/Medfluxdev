@@ -1080,7 +1080,8 @@ a.fin-basis-sub { color: var(--color-link); }
 @media (forced-colors: active){.pdf-marker{forced-color-adjust: none;background: Highlight;color: HighlightText}}
 
 /* Dokumente: Knopf „Nachweise prüfen“ und kompakte Nachweis-Tabelle (# · Feld · Seite · Status). */
-.dw-review{display: inline-flex;align-items: center;gap: 6px}
+.dw-review, .dw-reanalyse{display: inline-flex;align-items: center;gap: 6px}
+.dw-reanalyse-icon{width: 14px;height: 14px;fill: none;stroke: currentcolor;stroke-width: 2;stroke-linecap: round;stroke-linejoin: round}
 .dw-review-icon{width: 12px;height: 12px;fill: currentcolor}
 .evt{display: grid;gap: 10px;min-height: 0;padding: 12px;overflow: auto}
 .evt-tools{display: flex;flex-wrap: wrap;align-items: center;gap: 8px 12px}

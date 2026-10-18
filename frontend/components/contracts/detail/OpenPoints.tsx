@@ -5,7 +5,7 @@ import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
 import Signal, { type SignalTone } from "@/components/ui/Signal";
 import type { DetailWarning } from "@/lib/contract-detail-types";
-import { SCOPE_TARGET, SLA_TARGET, asFixTarget, contractHref, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
+import { REEXTRACTION_TARGET, SCOPE_TARGET, SLA_TARGET, asFixTarget, contractHref, warningTarget, workItemTarget, type FixTarget } from "@/lib/fix-targets";
 import { formatDate } from "@/lib/format";
 import type { Gap } from "./ContractGaps";
 
@@ -131,7 +131,7 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
     points.push({ key: "analysis", tone: "ai", word: "KI-Prüfung", title: `Analyse #${analysis.number} fertig`, why: `${analysis.open} ${analysis.open === 1 ? "Vorschlag prüfen" : "Vorschläge prüfen"} – die Vertragsdaten ändern sich erst, wenn Sie übernehmen.`, action: "Vorschläge prüfen", target: { tab: "documents", subtab: "document", section: PROPOSAL_REVIEW_SECTION }, rank: RANK.ai });
   }
   if (analysis?.newDocument != null) {
-    points.push({ key: "analysis-new-document", tone: "info", word: "Hinweis", title: "Neues Dokument – Ergänzen starten?", why: `${analysis.newDocument ? `„${analysis.newDocument}“` : "Ein neues Vertragsdokument"} wurde nach der letzten Analyse hinterlegt. „Ergänzen“ sucht nur, was noch fehlt.`, action: "Ergänzen starten", target: { tab: "documents", subtab: "document", section: "reextraction" }, rank: RANK.info });
+    points.push({ key: "analysis-new-document", tone: "info", word: "Hinweis", title: "Neues Dokument – Ergänzen starten?", why: `${analysis.newDocument ? `„${analysis.newDocument}“` : "Ein neues Vertragsdokument"} wurde nach der letzten Analyse hinterlegt. „Ergänzen“ sucht nur, was noch fehlt.`, action: "Ergänzen starten", target: REEXTRACTION_TARGET, rank: RANK.info });
   }
   if (evidenceOpen > 0) {
     points.push({ key: "evidence-review", tone: "ai", word: "KI-Prüfung", title: "Nachweise prüfen", why: `${evidenceOpen} ${evidenceOpen === 1 ? "Nachweis ist" : "Nachweise sind"} noch nicht mit dem Dokument abgeglichen.`, action: "Nachweise prüfen", target: EVIDENCE_REVIEW_TARGET, rank: RANK.ai });
