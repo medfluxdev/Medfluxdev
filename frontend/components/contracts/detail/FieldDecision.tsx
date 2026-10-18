@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, FieldCandidateDto, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto } from "@/lib/contract-detail-types";
 import { decideField, setFieldEvidence, type FieldDecision as Decision } from "@/lib/domain-api/contracts";
-import { SOURCE_TONE, STATUS_TONE, TIER_SHORT, candidateEvidence } from "@/lib/field-review";
+import { SOURCE_TONE, STATUS_TONE, TIER_SHORT, candidateEvidence, shownValue } from "@/lib/field-review";
 import { formatDateTime } from "@/lib/format";
 
 const SOURCE_LABEL: Record<string, string> = { stored: "Gespeichert", document: "Aus dem Dokument", conflict: "Berechnung", analysis: "Neue Analyse", finding: "Weitere Information" };
@@ -19,7 +19,7 @@ const SOURCE_LABEL: Record<string, string> = { stored: "Gespeichert", document: 
  * machen oder (mit Grund) ausschließen, ohne den Wert zu verändern. Alles läuft über die Feldprüfung der API.
  */
 export default function FieldDecision({
-  contractId, orgSlug, field, review, canReview, onChanged, onShowEvidence, onShowPage, onOpenAnalysis, headingRef, level = 3,
+  contractId, orgSlug, field, review, canReview, onChanged, onShowEvidence, onShowPage, onOpenAnalysis, headingRef, level = 3, compact = false,
 }: {
   contractId: string;
   orgSlug: string;
@@ -35,6 +35,8 @@ export default function FieldDecision({
   onOpenAnalysis?: () => void;
   headingRef?: RefObject<HTMLHeadingElement>;
   level?: 2 | 3;
+  /** Unter einer Zeile mit gleichem Titel (Aufklappen in der Übersicht): ohne eigene Überschrift. */
+  compact?: boolean;
 }) {
   const toast = useToast();
   const ids = useId();
@@ -92,7 +94,7 @@ export default function FieldDecision({
 
   return <div className="fd">
     <header className="fd-head">
-      <Heading ref={headingRef} tabIndex={-1} className="fd-title">{field.label}</Heading>
+      {compact ? null : <Heading ref={headingRef} tabIndex={-1} className="fd-title">{field.label}</Heading>}
       <div className="fd-chips">
         <span className={`fd-tier fd-tier--${field.tier}`}>{TIER_SHORT[field.tier]}</span>
         <span className="fd-card">{field.card_label}</span>
@@ -105,7 +107,7 @@ export default function FieldDecision({
     {stale ? <InlineAlert tone="info" role="status">Das Feld wurde inzwischen geändert. Der aktuelle Stand ist geladen – bitte neu entscheiden.</InlineAlert> : null}
 
     {calculated ? <section className="fd-calc" aria-label="Berechneter Wert">
-      <p className="fd-value">{field.current ?? <span className="fd-muted">Noch nicht berechenbar</span>}</p>
+      <p className="fd-value">{shownValue(review, field.fact_key, field.current) ?? <span className="fd-muted">Noch nicht berechenbar</span>}</p>
       <p className="fd-muted">{field.status === "derived" ? "Berechnet aus geprüften Angaben – keine eigene Bestätigung nötig." : "Wird berechnet, sobald die Angaben unten geklärt sind."}</p>
       {field.inputs.length ? <ul className="fd-inputs">{field.inputs.map((input) => <li key={input.fact_key}>
         <span>{input.label}</span><Signal tone={input.decided ? "done" : "ai"} size="sm">{input.decided ? "Geklärt" : "Offen"}</Signal>
@@ -115,13 +117,13 @@ export default function FieldDecision({
       {field.candidates.length > 1
         ? <fieldset className="fd-cands" disabled={!canReview || busy}>
           <legend>Welcher Wert gilt?</legend>
-          {field.candidates.map((candidate) => <CandidateCard key={candidate.key} name={`${ids}-cand`} field={field} candidate={candidate} picked={picked === candidate.key}
+          {field.candidates.map((candidate) => <CandidateCard key={candidate.key} name={`${ids}-cand`} field={field} review={review} candidate={candidate} picked={picked === candidate.key}
             onPick={() => setPicked(candidate.key)} {...{ canReview, busy, onShowEvidence, onShowPage, onOpenAnalysis }}
             onExclude={(entry) => { setMode("exclude"); setExclude({ id: entry.evidence_id, reason: "", note: "" }); }}
             onPrimary={(entry) => void evidenceAction(entry, "primary")} onRestore={(entry) => void evidenceAction(entry, "restore")} />)}
         </fieldset>
         : selected ? <div className="fd-cands">
-          <CandidateCard name={`${ids}-cand`} field={field} candidate={selected} picked single {...{ canReview, busy, onShowEvidence, onShowPage, onOpenAnalysis }}
+          <CandidateCard name={`${ids}-cand`} field={field} review={review} candidate={selected} picked single {...{ canReview, busy, onShowEvidence, onShowPage, onOpenAnalysis }}
             onPick={() => undefined}
             onExclude={(entry) => { setMode("exclude"); setExclude({ id: entry.evidence_id, reason: "", note: "" }); }}
             onPrimary={(entry) => void evidenceAction(entry, "primary")} onRestore={(entry) => void evidenceAction(entry, "restore")} />
@@ -200,10 +202,11 @@ export default function FieldDecision({
 }
 
 function CandidateCard({
-  name, field, candidate, picked, single = false, canReview, busy, onPick, onShowEvidence, onShowPage, onOpenAnalysis, onExclude, onPrimary, onRestore,
+  name, field, review, candidate, picked, single = false, canReview, busy, onPick, onShowEvidence, onShowPage, onOpenAnalysis, onExclude, onPrimary, onRestore,
 }: {
   name: string;
   field: FieldReviewFieldDto;
+  review: FieldReviewDto;
   candidate: FieldCandidateDto;
   picked: boolean;
   single?: boolean;
@@ -218,11 +221,12 @@ function CandidateCard({
   onRestore: (entry: FieldEvidenceDto) => void;
 }) {
   const entries = candidateEvidence(field, candidate);
+  const shown = shownValue(review, field.fact_key, candidate.display) ?? candidate.display;
   const active = entries.filter((entry) => !entry.excluded).length;
   const sources = candidate.sources.map((source) => source.label || SOURCE_LABEL[source.source]).join(" · ");
   const body = <>
     <span className="fd-cand-head">
-      <span className="fd-value">{candidate.display}</span>
+      <span className="fd-value">{shown}</span>
       {candidate.is_current ? <Signal tone="neutral" size="sm">Aktuell</Signal> : null}
     </span>
     <span className="fd-muted">{sources}{candidate.detail ? ` – ${candidate.detail}` : ""}</span>
@@ -232,9 +236,9 @@ function CandidateCard({
   </>;
   return <div className={`fd-cand${picked ? " is-picked" : ""}`}>
     {single
-      ? <div className="fd-cand-main">{body}</div>
+      ? <div className="fd-cand-main"><span className="fd-cand-body">{body}</span></div>
       : <label className="fd-cand-main"><input type="radio" name={name} checked={picked} onChange={onPick} /><span className="fd-cand-body">{body}</span></label>}
-    {entries.length ? <ul className="fd-evidence" aria-label={`Belege zu ${candidate.display}`}>
+    {entries.length ? <ul className="fd-evidence" aria-label={`Belege zu ${shown}`}>
       {entries.map((entry) => <li key={entry.evidence_id} className={entry.excluded ? "is-excluded" : undefined}>
         <div className="fd-ev-head">
           <button type="button" className="fd-ev-page" onClick={() => onShowEvidence?.(entry)} disabled={!entry.document_available && !entry.page}

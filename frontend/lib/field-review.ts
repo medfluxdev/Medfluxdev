@@ -120,3 +120,22 @@ export const STATUS_HINT: Partial<Record<FieldStatus, string>> = {
   missing: "Im Dokument nicht gefunden.",
   absent: "Ausdrücklich als „nicht im Dokument“ festgehalten.",
 };
+
+const NUMBER_DE = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * Anzeige eines Werts für Listen und Entscheidungen: Zahlen deutsch formatiert (Beträge mit der Währung der Akte, nur wenn
+ * sie bekannt ist – nie ein erfundenes „€“), Prozent mit Zeichen; alles andere unverändert.
+ */
+export function shownValue(review: FieldReviewDto | null | undefined, factKey: string, text: string | null | undefined): string | null {
+  if (text == null || text === "") return null;
+  const trimmed = text.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return text;
+  const value = Number(trimmed);
+  if (/vat_rate|tax_rate|percent/.test(factKey)) return `${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 }).format(value)} %`;
+  if (factKey.startsWith("costs.")) {
+    const currency = review?.fields.find((field) => field.fact_key === "costs.currency")?.current;
+    return `${NUMBER_DE.format(value)}${currency ? ` ${currency}` : ""}`;
+  }
+  return text;
+}

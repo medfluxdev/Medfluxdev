@@ -946,7 +946,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 {REANALYSE_ICON}{reextractionBusy ? "KI-Analyse läuft" : analysisOpen ? `${analysisOpen} ${analysisOpen === 1 ? "Vorschlag" : "Vorschläge"} prüfen` : "Erneut erfassen"}
               </button> : null}
               {/* Eine Prüfung: ein Fortschritt (Felder, nicht Nachweise), eine Handlung. */}
-              {!reviewMode ? <ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} onOpenOverview={() => setRoute("documents", "review")} /> : null}
+              {!reviewMode && documentTab !== "review" ? <ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} onOpenOverview={() => setRoute("documents", "review")} /> : null}
             </div>
           </div>
           {documentTab === "analysis" && <ReextractionPanel

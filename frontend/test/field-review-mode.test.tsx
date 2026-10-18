@@ -165,12 +165,13 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     const user = userEvent.setup();
     const model = review([start, decided(end), price, sla, email, calc], { findings: [finding(), finding({ finding_key: "evidence.y", label: "Skonto", evidence_ids: ["e10"] })], findings_open: 2 });
     const { onStartGuided, container } = overview(model);
-    expect(screen.getByText("1 von 3 wesentlichen entschieden")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Wesentliche Angaben: 1 von 3 entschieden" })).toBeInTheDocument();
     const terms = screen.getByRole("region", { name: "Laufzeit & Kündigung" });
     expect(terms).toHaveTextContent("1 von 2 entschieden");
     expect(within(terms).getByRole("button", { name: /Vertragsende/ })).toHaveTextContent("31.03.2029");
     expect(within(terms).getByRole("img", { name: "Entschieden" })).toBeInTheDocument();
     expect(within(terms).getByRole("img", { name: "Zu entscheiden" })).toBeInTheDocument();
+    expect(within(terms).getByText("S. 3")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Service & Leistungen" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^Weitere wichtige Angaben/ }));
     expect(screen.getByRole("region", { name: "Service & Leistungen" })).toBeInTheDocument();
@@ -180,26 +181,30 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(onStartGuided).toHaveBeenCalledWith("essential");
   });
 
-  it("Karte bestätigt nur eindeutige, genau belegte Angaben – und nennt vorher, wie viele", async () => {
+  it("eindeutige Angaben lassen sich einzeln oder gesammelt bestätigen – Widersprüchliche nie", async () => {
     const user = userEvent.setup();
-    const vat = field({ ...price, fact_key: "costs.vat_rate", label: "MwSt.-Satz", current: "19 %", version: "v1" });
+    const vat = field({ ...price, fact_key: "costs.vat_rate", label: "MwSt.-Satz", current: "19", version: "v1" });
     const disputed = field({ ...price, fact_key: "costs.currency", label: "Währung", status: "conflict", candidates: [price.candidates[0], candidate({ key: "chf", display: "CHF", is_current: false })] });
     api.decideField.mockResolvedValue({ contract_id: "c-1", field_review: review([decided(price), decided(vat), disputed]) });
     const { onReload } = overview(review([price, vat, disputed]));
     const card = screen.getByRole("region", { name: "Preise & Zahlung" });
     expect(within(card).getByText("Widerspruch")).toBeInTheDocument();
-    await user.click(within(card).getByRole("button", { name: "2 Angaben bestätigen" }));
+    // Zahlen werden lesbar angezeigt, nie rohe Datenbankwerte.
+    expect(within(card).getByRole("button", { name: /MwSt\.-Satz/, expanded: false })).toHaveTextContent("19 %");
+    expect(within(card).queryByRole("button", { name: "Währung bestätigen" })).not.toBeInTheDocument();
+    expect(screen.getByText(/2 Angaben sind eindeutig/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Diese 2 bestätigen" }));
     expect(api.decideField).toHaveBeenCalledTimes(2);
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "costs.vat_rate", decision: "keep" }));
     expect(api.decideField).not.toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "costs.currency" }));
     expect(onReload).toHaveBeenCalled();
   });
 
-  it("ohne wesentliche offene Entscheidung: „Wesentliche Prüfung abgeschlossen“, Karte „Abgeschlossen“, nichts Behauptetes", () => {
+  it("ohne wesentliche offene Entscheidung: „Wesentliche Prüfung abgeschlossen“, nichts Behauptetes", () => {
     overview(review([decided(start), decided(end), sla]));
     expect(screen.getByText("Wesentliche Prüfung abgeschlossen")).toBeInTheDocument();
-    expect(screen.getAllByText("Abgeschlossen").length).toBeGreaterThan(0);
     expect(screen.queryByText(/alle .*geprüft/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Wesentliches prüfen/ })).not.toBeInTheDocument();
   });
 
   it("Suche und „Nur offene“ engen die Karten ein", async () => {
@@ -208,7 +213,7 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     await user.click(screen.getByRole("button", { name: /^Nur offene/ }));
     expect(screen.queryByRole("button", { name: /Vertragsende/ })).not.toBeInTheDocument();
     await user.type(screen.getByRole("searchbox", { name: "Angabe oder Wert suchen" }), "Kosten");
-    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/, expanded: false })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Vertragsbeginn/ })).not.toBeInTheDocument();
   });
 
@@ -217,7 +222,7 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     const later = field({ ...price, status: "deferred", status_label: "Zurückgestellt" });
     overview(review([start, missing, later]));
     expect(screen.getByRole("button", { name: /Verlängerungszeitraum/ })).toHaveTextContent("Nicht gefunden");
-    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/ })).toHaveTextContent("Zurückgestellt");
+    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/, expanded: false })).toHaveTextContent("Zurückgestellt");
   });
 
   it("Weitere Informationen: mit Quelle gezeigt, zuordnen, als Notiz sichern, ausblenden – kein Zähler, keine Pflicht", async () => {
@@ -230,7 +235,7 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(within(section).getByText("„3 % Skonto bei Zahlung in 10 Tagen“")).toBeInTheDocument();
     expect(within(section).getByText("KI-Fund, nicht bestätigt")).toBeInTheDocument();
     expect(within(section).getByText("Zur Einschätzung")).toBeInTheDocument();
-    expect(screen.getByText("1 von 2 wesentlichen entschieden")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Wesentliche Angaben: 1 von 2 entschieden" })).toBeInTheDocument();
 
     const link = within(section).getByRole("button", { name: "Als Kandidat zuordnen" });
     expect(link).toBeDisabled();
@@ -247,17 +252,18 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(api.decideFinding).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ finding_key: "evidence.done", decision: "restore" }));
   });
 
-  it("eine Angabe anklicken öffnet rechts dieselbe Entscheidungsansicht wie die geführte Prüfung", async () => {
+  it("eine Angabe anklicken klappt dieselbe Entscheidungsansicht wie in der geführten Prüfung direkt darunter auf", async () => {
     const user = userEvent.setup();
     const { onStartGuided } = overview(review([start, end]));
-    expect(screen.getByText("Details zur Angabe", { selector: "strong" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Vertragsbeginn/ }));
-    const panel = screen.getByRole("group", { name: "Details zur Angabe" });
-    expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
-    expect(within(panel).getByRole("button", { name: "Bestätigen" })).toBeInTheDocument();
-    await user.click(within(panel).getByRole("button", { name: "Nächste offene" }));
-    expect(within(screen.getByRole("group", { name: "Details zur Angabe" })).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
-    await user.click(within(screen.getByRole("group", { name: "Details zur Angabe" })).getByRole("button", { name: "Geführt weiter" }));
+    const row = screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false });
+    await user.click(row);
+    expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: true })).toBeInTheDocument();
+    const open = row.closest("li")!;
+    expect(within(open).getByRole("button", { name: "Bestätigen" })).toBeInTheDocument();
+    // Nur eine Zeile ist aufgeklappt.
+    await user.click(screen.getByRole("button", { name: /Vertragsende/, expanded: false }));
+    expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false })).toBeInTheDocument();
+    await user.click(within(screen.getByRole("button", { name: /Vertragsende/, expanded: true }).closest("li")!).getByRole("button", { name: "Im Dokument weiter prüfen →" }));
     expect(onStartGuided).toHaveBeenCalledWith("essential", "dates.end_date");
   });
 });
