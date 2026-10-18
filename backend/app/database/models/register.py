@@ -216,6 +216,44 @@ class ContractEvidenceReview(OrgOwnedMixin, Base):
     )
 
 
+REVIEW_EVENT_KINDS = (
+    "decision", "deferred", "not_in_document", "primary_selected", "evidence_excluded", "evidence_restored",
+    "finding_linked", "finding_note", "finding_dismissed", "finding_restored",
+)
+
+
+class ContractReviewEvent(OrgOwnedMixin, Base):
+    """Protokoll der Feldprüfung (nur anhängen): was zu einem Feld oder Nachweis entschieden wurde.
+
+    Der Wert eines Felds steht in `fact_review`; hier steht alles Übrige und der Weg dorthin: Zurückstellen,
+    „nicht im Dokument“, Hauptnachweis, ausgeschlossene Nachweise (mit Grund), die Wahl unter mehreren Kandidaten
+    (mit den verworfenen Alternativen) und der Umgang mit Weiteren Informationen aus dem Dokument. Der aktuelle Stand
+    ist das jeweils letzte Ereignis je Feld bzw. Nachweis; frühere Ereignisse bleiben erhalten.
+    """
+
+    __tablename__ = "contract_review_event"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    contract_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    fact_key: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    evidence_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    actor_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("account.id", ondelete="SET NULL"), nullable=True
+    )
+    actor_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(f"kind IN ({', '.join(repr(v) for v in REVIEW_EVENT_KINDS)})", name="kind"),
+        Index("ix_contract_review_event_contract_fact", "contract_id", "fact_key", "created_at"),
+        Index("ix_contract_review_event_contract_evidence", "contract_id", "evidence_id", "created_at"),
+    )
+
+
 class ContractPartner(OrgOwnedMixin, Base):
     """Vertragspartner-Stammdaten (Lieferant, Dienstleister, Kooperationspartner)."""
 

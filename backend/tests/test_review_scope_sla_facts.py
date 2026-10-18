@@ -15,7 +15,12 @@ def _data(**kwargs):
 
 def test_sla_values_are_review_facts():
     report = material_report(_data(sla={"response_time": "4 Stunden", "availability_24_7": True}))
-    assert report["sla.response_time"] == {"present": True, "value": "4 Stunden", "critical": True}
+    # SLA-Zeiten sind erst bei Wartung von Geräten wesentlich (Vertragstyp), sonst eine weitere wichtige Angabe.
+    assert report["sla.response_time"] == {"present": True, "value": "4 Stunden", "critical": False}
+    from app.contracts.review.field_spec import tier_for
+    assert tier_for("sla.response_time") == "important"
+    assert tier_for("sla.response_time", {"sla": True, "maintenance": True}) == "essential"
+    assert tier_for("sla.response_time", {"sla": True, "maintenance": False}) == "important"
     assert report["sla.resolution_time"]["present"] is False
     assert report["sla.emergency_availability"]["value"] == "24/7 erreichbar"
     assert report["sla.service_hours"]["critical"] is False
@@ -84,6 +89,7 @@ def test_further_services_and_sla_notes_are_review_facts():
 # --------------------------------------------------------------------------- Verknüpfung Faktprüfung ↔ Hinweise/Status
 
 from app.contracts.review import service as review_service
+from app.contracts.review.events import ReviewEvents
 
 
 def _state(key, state, present=True):
@@ -116,25 +122,29 @@ def test_warning_without_fact_resolves_only_with_completed_review():
     assert run("reviewed", [_state("identity.supplier", "unreviewed")]) is True
 
 
-def test_last_reviewed_fact_completes_the_contract_review(monkeypatch):
+def test_last_essential_fact_completes_the_essential_review(monkeypatch):
+    """Die wesentliche Prüfung schließt ab, sobald alle wesentlichen Angaben entschieden sind – weitere bleiben offen."""
+    from app.contracts.review import field_review
+
     calls = []
     monkeypatch.setattr(review_service, "get_contract_review", lambda session, **kw: type("R", (), {"status": "changed_after_review"})())
     monkeypatch.setattr(review_service, "complete_review", lambda session, **kw: calls.append(kw))
-
-    def states(items):
-        monkeypatch.setattr(review_service, "build_fact_review_states", lambda session, **kw: [
-            {**_state(key, value), "is_critical": key.startswith("identity")} for key, value in items
-        ])
-
-    states([("identity.supplier", "confirmed"), ("costs.annual", "unreviewed")])
+    done = {"value": False}
+    monkeypatch.setattr(field_review, "build_field_review", lambda session, **kw: {"essential_complete": done["value"]})
+    monkeypatch.setattr(review_service, "build_fact_review_states", lambda session, **kw: [
+        {**_state("identity.supplier", "confirmed"), "is_critical": True, "tier": "essential"},
+        {**_state("costs.annual", "unreviewed"), "is_critical": False, "tier": "important"},
+    ])
     assert review_service.complete_if_all_reviewed(None, organization_id=1, contract_id=2, data={}, reviewer_display_name="A") is False
-    states([("identity.supplier", "confirmed"), ("costs.annual", "corrected")])
+    done["value"] = True
+    # Eine weitere (nicht wesentliche) Angabe ist noch offen – die wesentliche Prüfung ist trotzdem abgeschlossen.
     assert review_service.complete_if_all_reviewed(None, organization_id=1, contract_id=2, data={}, reviewer_display_name="A") is True
-    assert calls[0]["note"] == review_service.AUTO_COMPLETE_NOTE
+    assert calls[0]["note"] == review_service.AUTO_COMPLETE_NOTE == "Wesentliche Angaben geprüft."
 
 
 def test_every_evidence_belongs_to_one_review_item_with_confidence(monkeypatch):
     monkeypatch.setattr(review_service, "_latest_fact_reviews", lambda session, contract_id: {})
+    monkeypatch.setattr(review_service, "load_events", lambda session, contract_id: ReviewEvents())
     monkeypatch.setattr(review_service, "auto_accept_allowed", lambda session, organization_id, contract_id: False)
     data = {
         "identity": {"contract_number": "4711"},

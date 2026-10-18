@@ -9,6 +9,8 @@ import type {
   ContractDetailResponse,
   EvidenceRef,
   FactReviewStateDto,
+  FieldEvidenceDto,
+  FieldTier,
   MoneyValue,
   SourceNavigationTarget,
 } from "@/lib/contract-detail-types";
@@ -18,11 +20,14 @@ import {
 import { formatCurrency, formatDate } from "@/lib/format";
 import { removeWarningsRepresentedByTasks } from "@/lib/action-dedup";
 import { archiveContract, getContractDeletionCapabilities, requestContractDeletion, reviewContractFact } from "@/lib/domain-api/contracts";
-import { listEvidenceReviews, updateContractRegister, type EvidenceReviewItem } from "@/lib/domain-api/register";
+import { updateContractRegister } from "@/lib/domain-api/register";
 import { getOrganizationStructure } from "@/lib/domain-api/organizations";
 import { PdfViewer } from "./lazy";
 import EvidenceTable from "./EvidenceTable";
-import FactReviewPanel from "./FactReviewPanel";
+import FieldReviewOverview from "./FieldReviewOverview";
+import FieldReviewMode from "./FieldReviewMode";
+import FieldDecisionDrawer from "./FieldDecisionDrawer";
+import FieldReviewButton, { ReviewControl } from "./FieldReviewButton";
 import OverridePanel from "./OverridePanel";
 import { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
@@ -51,7 +56,6 @@ import { setPageCommands } from "@/lib/page-commands";
 import ReextractionPanel, { ReextractionBanner, fieldSearchMap, openProposals, useReextraction } from "./Reextraction";
 import ProposalReviewMode from "./ProposalReviewMode";
 import SourceCapture from "./SourceCapture";
-import AiReviewButton from "./AiReviewButton";
 import RiskButton from "./RiskButton";
 import ValueOriginBadge from "./ValueOriginBadge";
 import { AiReviewContext, type AiOriginTarget } from "@/components/ui/AiOrigin";
@@ -61,10 +65,11 @@ import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
 import OpenPoints, { EVIDENCE_REVIEW_SECTION, PROPOSAL_REVIEW_SECTION, buildOpenPoints } from "./OpenPoints";
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
-import EvidenceReviewMode from "./EvidenceReviewMode";
 import { EvidenceFilterPanel, NO_FILTER, filterLabel, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
 import Popover from "@/components/ui/Popover";
-import { evidenceNumbers, evidenceRows, evidenceStatus, factsByEvidence, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
+import { evidenceNumbers, evidenceRows, factsByEvidence, fieldEvidenceStatus, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
+import { decisionFields, fieldByKey, fieldsOf } from "@/lib/field-review";
+import { announceRegisterChange } from "@/lib/register-events";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
 import ResponsibilityChips, { ChipRow } from "./ContractHeaderChips";
@@ -261,7 +266,6 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const canEditData = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
   // „Angabe aus dem Text übernehmen“: Stelle auf der angezeigten PDF-Seite markieren.
   const [captureOpen, setCaptureOpen] = useState(false);
-  const [aiOpenCount, setAiOpenCount] = useState(0);
   // Krankenhaus im Kopf nur, wenn die Organisation mehrere hat; unbekannt (lädt/Fehler) = zeigen.
   const [hospitalCount, setHospitalCount] = useState<number | null>(null);
   useEffect(() => {
@@ -297,7 +301,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     orgSlug,
     hasAnnualCost: Boolean(data.register_facts?.annual_cost),
     // Offen = Angaben der Faktprüfung, die noch niemand geprüft hat (gleiche Zahl wie „Ungeprüfte Angaben“).
-    reviewPending: (data.contract_review?.unresolved_count ?? 0) > 0,
+    reviewPending: (data.field_review?.essential_open ?? 0) > 0,
     documentCount: data.documents.length,
     version: data,
   });
@@ -322,7 +326,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   useEffect(() => {
     if (!linkedSection) return;
     // „Nachweise prüfen“ (Offene Punkte): geführten Modus öffnen statt zu scrollen.
-    if (linkedSection === EVIDENCE_REVIEW_SECTION) { setReviewMode((mode) => mode ?? { startId: null }); return; }
+    if (linkedSection === EVIDENCE_REVIEW_SECTION) { setReviewMode((mode) => mode ?? { startKey: null, tier: null }); return; }
     // „Vorschläge prüfen“ (Offene Punkte): geführten Modus der letzten Analyse öffnen.
     if (linkedSection === PROPOSAL_REVIEW_SECTION) { setProposalMode((mode) => mode ?? { startKey: null }); return; }
     const anchor = sectionAnchor(linkedSection);
@@ -425,7 +429,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const orderedEvidence = useMemo(() => orderEvidence(data.evidence, documentIds), [data.evidence, documentIds]);
   const evidenceNumber = useMemo(() => evidenceNumbers(orderedEvidence), [orderedEvidence]);
   // „Nachweise prüfen“: geführter Modus, ein Nachweis nach dem anderen (startet beim gewählten oder ersten offenen).
-  const [reviewMode, setReviewMode] = useState<{ startId: string | null } | null>(null);
+  const [reviewMode, setReviewMode] = useState<{ startKey: string | null; tier: FieldTier | null } | null>(null);
+  // Entscheidung zu einem Feld direkt aus der Karte (Schublade) – gleiche Ansicht wie in der geführten Prüfung.
+  const [fieldDrawer, setFieldDrawer] = useState<string | null>(null);
   // Ein Filter für die Nachweise-Liste und die geführte Prüfung („Nachweise prüfen“ geht nur die Auswahl durch).
   const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>(NO_FILTER);
   // Klick auf „Nachweise“ (von „Dateien“ aus): Liste zeigen und gleich den Filter aufklappen.
@@ -433,18 +439,11 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   useEffect(() => { if (documentTab !== "evidence") setFilterOnOpen(false); }, [documentTab]);
   // „Vorschläge prüfen“: offene Vorschläge der letzten Analyse einzeln (gleicher Arbeitsplatz).
   const [proposalMode, setProposalMode] = useState<{ startKey: string | null } | null>(null);
-  // Ergebnis der Nachweisprüfung je Nachweis (bestätigt, abweichend, übersprungen).
-  const [evidenceReviews, setEvidenceReviews] = useState<Map<string, EvidenceReviewItem>>(() => new Map());
-  const reloadEvidenceReviews = useCallback(() => {
-    listEvidenceReviews(orgSlug, data.contract_id)
-      .then((result) => setEvidenceReviews(new Map(result.items.map((item) => [item.evidence_id, item]))))
-      .catch(() => undefined);
-  }, [orgSlug, data.contract_id]);
-  useEffect(reloadEvidenceReviews, [reloadEvidenceReviews]);
+  // Prüfstand eines Nachweises = Stand seines Felds (ein Feld, eine Entscheidung); ausgeschlossene Nachweise sind kenntlich.
+  const fieldReview = data.field_review ?? null;
   const evidenceTableRows = useMemo(() => evidenceRows(orderedEvidence, evidenceNumber, evidenceFacts,
-    (ref) => evidenceStatus(ref, evidenceFacts.get(ref.evidence_id), evidenceReviews.get(ref.evidence_id))),
-  [orderedEvidence, evidenceNumber, evidenceFacts, evidenceReviews]);
-  const openEvidenceCount = evidenceTableRows.filter((row) => row.status === "open").length;
+    (ref) => fieldEvidenceStatus(ref.evidence_id, fieldReview)),
+  [orderedEvidence, evidenceNumber, evidenceFacts, fieldReview]);
   // Aktiver Filter der Nachweise-Liste: „Nachweise prüfen“ wird „Auswahl prüfen · N“.
   const filteredEvidence = isFiltered(evidenceFilter) ? evidenceTableRows.filter((row) => matchesFilter(row, evidenceFilter)).length : null;
   // Marken auf der Seite: nur Nachweise mit Lage auf dem geöffneten Dokument, gleiche Nummern wie die Liste.
@@ -452,10 +451,33 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     .filter((ref) => ref.document_version_id === documentVersionId && ref.page != null && ref.bbox)
     .map((ref) => ({ id: ref.evidence_id, number: evidenceNumber.get(ref.evidence_id) ?? 0, label: titleOf(ref, evidenceFacts), page: ref.page!, bbox: ref.bbox!, bbox_space: ref.bbox_space, active: ref.evidence_id === activeEvidenceId, approx: precisionOf(ref) !== "exact" })),
   [data.evidence, documentVersionId, evidenceNumber, evidenceFacts, activeEvidenceId]);
-  function startEvidenceReview(startId: string | null = null) {
-    if (!inDocumentWorkspace) setRoute("documents", "evidence");
+  // Eine Entscheidung kann ein Feld der Vertragsdaten ändern: Akte und Vertragsdaten laden neu.
+  function reloadAfterDecision() {
+    reload();
+    announceRegisterChange();
+  }
+  // Geführte Prüfung der Felder (wesentliche zuerst); `key` startet bei einem bestimmten Feld.
+  function startFieldReview(tier: FieldTier | null = null, key: string | null = null) {
+    if (!inDocumentWorkspace) setRoute("documents", "document");
     setProposalMode(null);
-    setReviewMode({ startId });
+    setReviewMode({ startKey: key, tier });
+  }
+  // Klick auf einen Nachweis (Liste, Marke): die Prüfung des Felds, zu dem er gehört – sonst nur im Original zeigen.
+  function reviewEvidence(ref: EvidenceRef) {
+    const field = fieldsOf(fieldReview).find((item) => item.evidence.some((entry) => entry.evidence_id === ref.evidence_id));
+    if (field) startFieldReview(field.tier, field.fact_key);
+    else openEvidence(ref, "evidence");
+  }
+  function showFieldEvidence(entry: FieldEvidenceDto) {
+    const ref = evidenceById(entry.evidence_id);
+    if (ref) openEvidence(ref, "evidence");
+    else if (entry.page != null) showDocumentPage(entry.page);
+  }
+  function showPageQuote(page: number | null, quote: string | null) {
+    if (page == null) return;
+    setRoute("documents", "document");
+    showDocumentPage(page);
+    void quote;
   }
   function startProposalReview(startKey: string | null = null) {
     if (!inDocumentWorkspace) setRoute("documents", "document");
@@ -700,11 +722,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     gaps,
     tasks: openTasks,
     warnings: actionableWarnings,
-    scopeToCheck: showScope ? scopeCounts.unknown : 0,
-    scopeTotal: scopeRows.filter((row) => row.state.tone !== "none").length,
-    slaToCheck: showSla ? slaRows.filter((row) => factOpen(row.fact)).length : 0,
-    reviewOpen: data.contract_review?.unresolved_count ?? 0,
-    evidenceOpen: openEvidenceCount,
+    fieldReview: fieldReview ? {
+      essentialOpen: fieldReview.essential_open,
+      conflicts: fieldReview.stages[0]?.conflicts ?? 0,
+      missing: fieldReview.stages[0]?.missing ?? 0,
+      deferred: fieldReview.stages[0]?.deferred ?? 0,
+    } : null,
     analysis: reextraction.state ? {
       number: reextraction.state.run?.status === "ready" && !reextraction.state.run.stale ? reextraction.state.run.number : null,
       open: reextraction.state.run?.status === "ready" && !reextraction.state.run.stale ? openProposals(reextraction.state.rows).length : 0,
@@ -725,12 +748,14 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   });
   // Reiter zeigen, wo Arbeit wartet (Symbol mit Namen für Screenreader).
   const deadlineCritical = (openPoints ?? []).some((point) => point.tone === "critical" && (point.target?.tab === "deadlines" || point.target?.tab === "register"));
+  // Vertragsdaten: Entscheidungen zu Feldern, die dort stehen (Vertragsdaten und Fristen).
+  const aiOpenCount = decisionFields(fieldReview).filter((item) => item.card === "partner" || item.card === "term").length;
   const tabItems = TABS.filter((tab) => tab.key !== "services" || servicesVisible).map((tab) => ({
     ...tab,
     badge: tab.key === "deadlines" && deadlineCritical
       ? <span className="tab-signal tab-signal--critical" role="img" aria-label="Kritischer offener Punkt"><SignalIcon tone="critical" /></span>
       : tab.key === "register" && aiOpenCount > 0
-        ? <span className="tab-signal tab-signal--ai" role="img" aria-label={`${aiOpenCount} KI-Werte nicht bestätigt`}><SignalIcon tone="ai" /></span>
+        ? <span className="tab-signal tab-signal--ai" role="img" aria-label={`${aiOpenCount} ${aiOpenCount === 1 ? "Entscheidung" : "Entscheidungen"} offen`}><SignalIcon tone="ai" /></span>
         : tab.key === "documents" && data.documents.length > 0
           ? <span className="tab-count" aria-hidden="true">{data.documents.length}</span>
           : undefined,
@@ -740,6 +765,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   // sonst zur Prüfung insgesamt. Nichts wird geraten außer über Schlüssel bzw. gleiche Bezeichnung.
   function openAiReview({ factKeys, subject, openSource }: AiOriginTarget) {
     const fact = findReviewFact(data, factKeys, subject);
+    // Die Karte öffnet die Entscheidung zum Feld in einer Schublade; dort und in der geführten Prüfung gilt derselbe Stand.
+    if (fact && fieldByKey(fieldReview, fact.fact_key)) { setFieldDrawer(fact.fact_key); return; }
     if (fact) {
       setReviewFocus((current) => ({ key: fact.fact_key, n: (current?.n ?? 0) + 1 }));
       setRoute("documents", "review");
@@ -779,7 +806,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <ResponsibilityChips assignment={data.assignment} canEdit={canEditData} hospitalCount={hospitalCount} onOpen={() => openTarget({ tab: "register", section: "ownership" })} />
           <div className="object-header-meta object-header-signals">
             {openPoints?.length ? <Link className="open-points-link" href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><Signal tone={openPoints[0].tone === "critical" ? "critical" : "warning"}>Offene Punkte · {openPoints.length}</Signal></Link> : null}
-            <AiReviewButton contractId={data.contract_id} orgSlug={orgSlug} reviewPending={(data.contract_review?.unresolved_count ?? 0) > 0} canEdit={canEditData} version={data} onCount={setAiOpenCount} />
+            <FieldReviewButton review={fieldReview} onOpenField={(field) => setFieldDrawer(field.fact_key)} onStartGuided={(tier) => startFieldReview(tier)} />
             <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings.filter((warning) => !warning.review_resolved).map((warning) => (warning.conflict ? { ...warning, title_de: warning.conflict.title_de } : warning))} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>
@@ -918,16 +945,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
               {documentTab !== "analysis" && (reextraction.state?.can_start || analysisBadge) ? <button type="button" className="btn btn-sm dw-reanalyse" onClick={() => openTarget(REEXTRACTION_TARGET)}>
                 {REANALYSE_ICON}{reextractionBusy ? "KI-Analyse läuft" : analysisOpen ? `${analysisOpen} ${analysisOpen === 1 ? "Vorschlag" : "Vorschläge"} prüfen` : "Erneut erfassen"}
               </button> : null}
-              {data.evidence.length && !reviewMode ? <button type="button" className={`btn btn-sm dw-review${openEvidenceCount ? " btn-primary" : ""}`} onClick={() => startEvidenceReview()}>
-                {REVIEW_ICON}{filteredEvidence != null ? `Auswahl prüfen · ${filteredEvidence}` : `Nachweise prüfen${openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}`}
-              </button> : null}
-              {data.contract_review.relevant_count > 0 ? <span className="dw-progress">
-                <span className="dw-progress-bar" role="progressbar" aria-label="Geprüfte Angaben" aria-valuemin={0} aria-valuemax={data.contract_review.relevant_count} aria-valuenow={data.contract_review.reviewed_count}><span style={{ width: `${(data.contract_review.reviewed_count / data.contract_review.relevant_count) * 100}%` }} /></span>
-                <span>{data.contract_review.reviewed_count} von {data.contract_review.relevant_count} geprüft</span>
-              </span> : null}
-              {data.contract_review.unresolved_count > 0
-                ? <button type="button" className="btn btn-sm btn-primary" onClick={() => setRoute("documents", "review")}>{data.contract_review.unresolved_count} {data.contract_review.unresolved_count === 1 ? "Angabe" : "Angaben"} prüfen</button>
-                : data.contract_review.relevant_count > 0 ? <Signal tone="done" size="sm">Alles geprüft</Signal> : null}
+              {/* Eine Prüfung: ein Fortschritt (Felder, nicht Nachweise), eine Handlung. */}
+              {!reviewMode ? <ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} onOpenOverview={() => setRoute("documents", "review")} /> : null}
             </div>
           </div>
           {documentTab === "analysis" && <ReextractionPanel
@@ -941,7 +960,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onEditManually={(key) => (key ? openTarget({ tab: "register", field: key }) : setRoute("register"))}
             onMarkInDocument={canEditData && mainDocumentId ? openCapture : undefined}
             onReviewProposals={startProposalReview}
-            onReviewEvidence={() => startEvidenceReview()}
+            onReviewEvidence={() => startFieldReview()}
           />}
           {inDocumentWorkspace && proposalMode && reextraction.state?.run ? <ProposalReviewMode
             contractId={data.contract_id}
@@ -959,23 +978,21 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           /> : null}
           {inDocumentWorkspace && sourceLinkError ? <p role="alert" className="rg-error">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p> : null}
           {/* Ein Arbeitsplatz: links Dateien oder Nachweise, rechts immer dasselbe Original (bleibt beim Umschalten offen). */}
-          {inDocumentWorkspace && reviewMode && !proposalMode ? <EvidenceReviewMode
+          {inDocumentWorkspace && reviewMode && !proposalMode && fieldReview ? <FieldReviewMode
             contractId={data.contract_id}
             orgSlug={orgSlug}
             contractTitle={data.contract_title}
-            evidence={orderedEvidence}
-            numbers={evidenceNumber}
-            factByEvidence={evidenceFacts}
-            reviews={evidenceReviews}
-            startId={reviewMode.startId}
-            initialFilter={evidenceFilter}
-            onFilterChange={setEvidenceFilter}
+            data={data}
+            review={fieldReview}
+            startKey={reviewMode.startKey}
+            startTier={reviewMode.tier}
             canReview={canReviewFacts}
             onShow={(ref) => openEvidence(ref, "evidence")}
-            onExit={() => { setReviewMode(null); reloadEvidenceReviews(); }}
-            onReload={() => { reload(); reloadEvidenceReviews(); }}
-            canRecognize={Boolean(reextraction.state?.can_start) && !reextractionBusy}
-            onRecognizeStarted={reextraction.reload}
+            onShowPage={showPageQuote}
+            onExit={() => setReviewMode(null)}
+            onReload={reloadAfterDecision}
+            onOpenAnalysis={() => { setReviewMode(null); openTarget(REEXTRACTION_TARGET); }}
+            onOpenFindings={() => { setReviewMode(null); setRoute("documents", "review"); }}
             viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
           /> : null}
           {inDocumentWorkspace && !reviewMode && !proposalMode && <div className="dw">
@@ -1002,7 +1019,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                   <span>{`Nur ${filterLabel(evidenceFilter, evidenceTableRows)} · ${filteredEvidence}`}</span>
                   <button type="button" onClick={() => setEvidenceFilter(NO_FILTER)} aria-label="Filter aufheben">×</button>
                 </p> : null}{data.evidence.length
-                  ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={(ref) => startEvidenceReview(ref.evidence_id)}
+                  ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={reviewEvidence}
                     filter={evidenceFilter} onFilter={setEvidenceFilter} />
                   : <p className="cw-muted dw-empty">Keine Nachweise vorhanden.</p>}<CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
                 : data.documents.length === 0 ? <p className="cw-muted dw-empty">Keine Dokumente vorhanden.</p>
@@ -1011,7 +1028,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             <div className="dw-main">
               <div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} pagesOpen={false}
                 markers={documentTab === "evidence" ? pageMarkers : []}
-                onMarker={(id) => startEvidenceReview(id)} /></div>
+                onMarker={(id) => { const ref = evidenceById(id); if (ref) reviewEvidence(ref); }} /></div>
               <div className="cw-doc-foot">
                 <span>{DOC_INFO_ICON}{canEditData ? "Eine Stelle im Text markieren, um daraus eine Angabe zu übernehmen." : "Nachweise zeigen, wo jede Angabe im Dokument steht."}</span>
                 {canEditData && documentVersionId ? <button type="button" className="btn btn-sm" disabled={captureOpen} onClick={openCapture}>Angabe übernehmen</button> : null}
@@ -1028,11 +1045,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           /> : null}
           {documentTab === "attachments" && <ContractAttachmentsPanel contractId={data.contract_id} orgSlug={orgSlug} onAnalyzed={reload} />}
           {documentTab === "review" && <ReviewQueueNav contractId={data.contract_id} />}
-          {documentTab === "review" && <div className="cw-integrated-panel"><FactReviewPanel data={data} orgSlug={orgSlug} focusFact={reviewFocus} onReload={reload} onNavigate={(ref) => openEvidence(ref, "evidence")} onOpenConflict={() => openTarget(CONFLICT_TARGET)} /><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
+          {documentTab === "review" && <div className="cw-integrated-panel"><FieldReviewOverview data={data} orgSlug={orgSlug} canReview={canReviewFacts} focusKey={reviewFocus} onReload={reloadAfterDecision}
+            onStartGuided={(tier, key) => startFieldReview(tier, key ?? null)} onShowEvidence={showFieldEvidence} onShowPage={showPageQuote} onOpenAnalysis={() => openTarget(REEXTRACTION_TARGET)} />
+            <CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
           {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}
       </div>
     </div>
+      <FieldDecisionDrawer contractId={data.contract_id} orgSlug={orgSlug} review={fieldReview} factKey={fieldDrawer} canReview={canReviewFacts} onClose={() => setFieldDrawer(null)}
+        onReload={reloadAfterDecision} onShowEvidence={showFieldEvidence} onShowPage={showPageQuote} onOpenAnalysis={() => { setFieldDrawer(null); openTarget(REEXTRACTION_TARGET); }}
+        onStartGuided={(key) => startFieldReview(fieldByKey(fieldReview, key)?.tier ?? null, key)} />
     </AiReviewContext.Provider>
   );
 }

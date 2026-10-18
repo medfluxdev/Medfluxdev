@@ -29,6 +29,8 @@ from app.contracts.review.material import (
     fact_label,
     material_report,
 )
+from app.contracts.review.events import load_events
+from app.contracts.review.field_spec import card_of, inputs_of, is_calculated, tier_for
 from app.database.models import Contract, ContractReview, FactReview
 from app.database.models.organization import Organization
 
@@ -39,9 +41,11 @@ REVIEWED_ACTIONS = frozenset({"confirmed", "corrected"})
 # nicht zu pruefendem Beleg gelten als erledigt. Abgeleiteter Lesezustand – es
 # entsteht kein Pruef-Eintrag, kritische Angaben bleiben immer manuell.
 AUTO_ACCEPTED_STATE = "auto_accepted"
-RESOLVED_STATES = REVIEWED_ACTIONS | {AUTO_ACCEPTED_STATE}
+#: Berechneter Wert, dessen Eingaben geklärt sind: eigene Bestätigung ist nicht nötig.
+DERIVED_STATE = "derived"
+RESOLVED_STATES = REVIEWED_ACTIONS | {AUTO_ACCEPTED_STATE, DERIVED_STATE}
 MATERIAL_CHANGE_ACTIONS = frozenset({"corrected", "voided", "reopened"})
-AUTO_COMPLETE_NOTE = "Alle Angaben geprüft."
+AUTO_COMPLETE_NOTE = "Wesentliche Angaben geprüft."
 
 ACTION_LABELS = {
     "confirmed": "Geprüft und bestätigt",
@@ -57,12 +61,13 @@ FACT_STATE_LABELS = {
     "corrected": "Manuell korrigiert",
     "voided": "Manuell verworfen",
     AUTO_ACCEPTED_STATE: "Automatisch übernommen",
+    DERIVED_STATE: "Berechnet",
 }
 
 CONTRACT_REVIEW_STATUS_LABELS = {
     "unreviewed": "Nicht geprüft",
     "in_review": "In manueller Prüfung",
-    "reviewed": "Geprüft",
+    "reviewed": "Wesentliches geprüft",
     "changed_after_review": "Änderung nach Prüfung",
     "manual_review_required": "Manuelle Prüfung erforderlich",
 }
@@ -385,6 +390,7 @@ _FACT_EVIDENCE_ALIASES: dict[str, tuple[str, ...]] = {
         "costs.quarterly_cost",
         "costs.semi_annual_cost",
     ),
+    "costs.currency": ("costs.monthly_cost", "costs.annual_cost", "costs.quarterly_cost", "costs.semi_annual_cost"),
     "costs.monthly_net": ("costs.tax_table.net",),
     "costs.vat_rate": ("costs.tax_table.vat",),
     "costs.vat_amount": ("costs.tax_table.vat",),
@@ -464,6 +470,8 @@ def build_fact_review_states(
     stored = (data.get("register_facts") or {}).get("stored") or {}
     latest = _latest_fact_reviews(session, contract_id)
     auto_mode = auto_accept_allowed(session, organization_id, contract_id)
+    events = load_events(session, contract_id)
+    sections = data.get("sections")
 
     evidence_by_ref: dict[str, list[dict]] = {}
     for ev in data.get("evidence") or []:
@@ -500,6 +508,9 @@ def build_fact_review_states(
         else:
             specific, group_fallback = _link_fact_evidence(fact_key, evidence_by_ref)
         evidence_list = specific or group_fallback
+        # Ausgeschlossene Nachweise bleiben sichtbar und erhalten, tragen aber den Wert nicht mehr.
+        all_evidence = list(evidence_list)
+        evidence_list = [ev for ev in evidence_list if ev.get("evidence_id") not in events.excluded]
         ai_confidence = max(
             (float(ev["confidence"]) for ev in evidence_list if ev.get("confidence") is not None),
             default=None,
@@ -538,6 +549,7 @@ def build_fact_review_states(
             state = AUTO_ACCEPTED_STATE
 
         original_value = row.original_value if row is not None else _effective_write(value=info.get("value"))
+        touched = [t for t in (row.created_at if row is not None else None, events.touched.get(fact_key)) if t is not None]
 
         # Effektiver Wert: bei letzter Korrektur der korrigierte Wert, sonst Original.
         effective_value = original_value
@@ -574,17 +586,27 @@ def build_fact_review_states(
                         "supports_exact_navigation": bool(
                             ev.get("supports_exact_navigation")
                         ),
+                        "excluded": ev.get("evidence_id") in events.excluded,
                     }
-                    for ev in evidence_list
+                    for ev in all_evidence
                 ],
-                "linked_evidence_refs": [ev.get("evidence_id") for ev in evidence_list],
+                "linked_evidence_refs": [ev.get("evidence_id") for ev in all_evidence],
                 "needs_evidence": bool(info.get("present"))
                 and state in ("unreviewed", "needs_review")
                 and not evidence_list,
-                "is_critical": bool(info.get("critical")),
+                # Wesentlich = nach Bedeutung und Vertragstyp (SLA-Zeiten bei Wartung von Geräten), nie berechnet.
+                "is_critical": fact_key not in evidence_groups and not is_calculated(fact_key) and tier_for(fact_key, sections) == "essential",
                 # Sicherheit der KI zu ihrem Vorschlag (bester Beleg, 0..1); None = keine Angabe.
                 "ai_confidence": ai_confidence,
                 "is_evidence_item": fact_key in evidence_groups,
+                # Feldprüfung: Priorität (nach Bedeutung und Vertragstyp), Karte, berechnet?, Wert laut Dokument.
+                "tier": "optional" if fact_key in evidence_groups else tier_for(fact_key, sections),
+                "card": card_of(fact_key),
+                "is_calculated": is_calculated(fact_key),
+                "inputs": list(inputs_of(fact_key)),
+                "document_value": info.get("value"),
+                "primary_evidence_id": events.primary.get(fact_key),
+                "version": max(touched).isoformat() if touched else None,
                 # Wert in den Vertragsdaten (nur Angaben mit eigenem Feld); None = dort nichts gespeichert.
                 "register_field": REVIEW_TO_REGISTER.get(fact_key),
                 "stored_value": stored.get(fact_key),
@@ -593,7 +615,26 @@ def build_fact_review_states(
                 and all(ev.get("extraction_method") == "programmatic" for ev in evidence_list),
             }
         )
+    _settle_calculated(states)
     return states
+
+
+def _settle_calculated(states: list[dict]) -> None:
+    """Berechnete Werte gelten, sobald ihre (vorhandenen) Eingaben geklärt sind – keine eigene Bestätigung.
+
+    Mehrere Durchgänge, weil ein berechneter Wert Eingabe eines anderen sein kann. Hat eine Person den Wert
+    früher selbst geprüft, bleibt diese Prüfung unverändert erhalten.
+    """
+    by_key = {state["fact_key"]: state for state in states}
+    for _ in range(3):
+        for state in states:
+            if not state["is_calculated"] or state["state"] not in ("unreviewed", "needs_review") or not state["present"]:
+                continue
+            inputs = [by_key[key] for key in state["inputs"] if key in by_key and by_key[key]["present"]]
+            if inputs and all(item["state"] in RESOLVED_STATES for item in inputs):
+                state["state"] = DERIVED_STATE
+                state["state_label_de"] = FACT_STATE_LABELS[DERIVED_STATE]
+                state["needs_evidence"] = False
 
 
 def _evidence_value(evidence: list[dict]) -> Optional[str]:
@@ -612,11 +653,19 @@ def _unwrap(payload) -> object:
     return payload
 
 
+def _counts_as_field(state: dict) -> bool:
+    """Zählt als Angabe, die eine Entscheidung braucht: ein gelesenes Feld, kein Nachweis und kein Rechenwert."""
+    return state["present"] and state["state"] != "voided" and not state.get("is_evidence_item") and not state.get("is_calculated")
+
+
 def build_review_summary(states: list[dict]) -> dict:
-    relevant = [s for s in states if s["present"] and s["state"] != "voided"]
+    """Zähler der Prüfung: Felder, nicht Nachweise. Berechnete Werte und Weitere Informationen zählen nicht."""
+    relevant = [s for s in states if _counts_as_field(s)]
     reviewed = [s for s in relevant if s["state"] in RESOLVED_STATES]
     critical = [s for s in relevant if s.get("is_critical")]
     critical_reviewed = [s for s in critical if s["state"] in REVIEWED_ACTIONS]
+    essential = [s for s in relevant if s.get("tier") == "essential"]
+    essential_done = [s for s in essential if s["state"] in RESOLVED_STATES]
     return {
         "relevant_count": len(relevant),
         "reviewed_count": len(reviewed),
@@ -625,6 +674,9 @@ def build_review_summary(states: list[dict]) -> dict:
         "critical_count": len(critical),
         "critical_reviewed_count": len(critical_reviewed),
         "critical_unreviewed_count": len(critical) - len(critical_reviewed),
+        # Wesentliche Angaben (nach Bedeutung und Vertragstyp): deren Abschluss meldet die Oberfläche.
+        "essential_count": len(essential),
+        "essential_reviewed_count": len(essential_done),
     }
 
 
@@ -680,15 +732,18 @@ def build_fact_review_history(session, *, contract_id) -> list[dict]:
 def complete_if_all_reviewed(
     session, *, organization_id, contract_id, data: dict, reviewer_display_name: Optional[str]
 ) -> bool:
-    """Prüfung des Vertrags abschließen, sobald eine Person die letzte offene Angabe geprüft hat.
+    """Wesentliche Prüfung des Vertrags abschließen, sobald die letzte wesentliche Angabe entschieden ist.
 
-    Faktprüfung, Vertragsliste („Zu prüfen“) und Hinweise zählen damit dasselbe. Kritische Angaben
-    zählen nur mit menschlicher Prüfung; ohne relevante Angaben bleibt der Status unverändert.
+    Faktprüfung, Vertragsliste („Zu prüfen“) und Hinweise zählen damit dasselbe. Wesentliche Angaben
+    zählen nur mit menschlicher Prüfung; weitere und optionale Angaben bleiben jederzeit prüfbar, halten den
+    Vertrag aber nicht in „Zu prüfen“. Ohne wesentliche Angaben bleibt der Status unverändert.
     """
-    summary = build_review_summary(
-        build_fact_review_states(session, organization_id=organization_id, contract_id=contract_id, data=data)
-    )
-    if not summary["relevant_count"] or summary["unresolved_count"] or summary["critical_unreviewed_count"]:
+    from app.contracts.review.field_review import build_field_review
+
+    states = build_fact_review_states(session, organization_id=organization_id, contract_id=contract_id, data=data)
+    summary = build_review_summary(states)
+    model = build_field_review(session, contract_id=contract_id, data=data, states=states)
+    if not model["essential_complete"] or summary["critical_unreviewed_count"]:
         return False
     review = get_contract_review(session, organization_id=organization_id, contract_id=contract_id)
     if review is not None and review.status == "reviewed":
@@ -699,8 +754,8 @@ def complete_if_all_reviewed(
         contract_id=contract_id,
         reviewer_display_name=reviewer_display_name,
         note=AUTO_COMPLETE_NOTE,
-        relevant_count=summary["relevant_count"],
-        reviewed_count=summary["reviewed_count"],
+        relevant_count=summary["essential_count"],
+        reviewed_count=summary["essential_reviewed_count"],
     )
     return True
 
@@ -976,4 +1031,7 @@ def review_detail_response(session, *, organization_id, contract_id, data: dict)
     data["fact_reviews"] = build_fact_review_history(session, contract_id=contract_id)
     data["contract_review"] = {**cr_dto, **summary}
     resolve_review_warnings(data, states, cr_dto["status"])
+    from app.contracts.review.field_review import build_field_review
+
+    data["field_review"] = build_field_review(session, contract_id=contract_id, data=data, states=states)
     return data

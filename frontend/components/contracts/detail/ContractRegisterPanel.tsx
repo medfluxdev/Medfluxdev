@@ -7,7 +7,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useAuth } from "@/components/auth/AuthProvider";
 import { loadAllPartners } from "@/components/master-data/definitions/partners";
 import { QuickCreatePartner } from "@/components/master-data/lazy";
-import { REGISTER_CHANGED_EVENT } from "./AiReviewButton";
+import { REGISTER_CHANGED_EVENT } from "@/lib/register-events";
 import ContractRulesSection from "./ContractRulesSection";
 import ContractAccessCard, { type AccessChanges } from "./ContractAccessCard";
 import ContractRetentionCard from "./ContractRetentionCard";
@@ -874,7 +874,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         intro="Für „Gültig“ fehlen noch:"
         items={register.missing_for_valid.map((key) => ({ key, label: labelFor(key), onSelect: () => onOpenField?.(key, viewOf(key)) }))}
       /> : null}
-      {register.has_ai_analysis && register.review_pending && register.business_status === "in_arbeit" ? <p className="vs-review"><Signal tone="ai" size="sm">KI-Prüfung offen</Signal> Vor der Freigabe die Werte aus dem Dokument bestätigen. <Link scroll={false} className="rg-link" href={contractHref(contractId, REVIEW_TARGET)}>KI-Werte prüfen →</Link></p> : null}
+      {register.has_ai_analysis && register.review_pending && register.business_status === "in_arbeit" ? <p className="vs-review"><Signal tone="ai" size="sm">KI-Prüfung offen</Signal> Vor der Freigabe die Werte aus dem Dokument bestätigen. <Link scroll={false} className="rg-link" href={contractHref(contractId, REVIEW_TARGET)}>Angaben prüfen →</Link></p> : null}
 
       {transition ? <form ref={transitionFormRef} className="rg-transition" onSubmit={(event) => { event.preventDefault(); void submitTransition(); }}>
         <strong>{register.business_status === "geloescht" ? "Stornierung aufheben" : `Statuswechsel nach „${BUSINESS_STATUS_LABEL[transition]}“`}</strong>

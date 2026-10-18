@@ -170,3 +170,52 @@ export function contractDocumentUrl(
 ) {
   return contentUrl(contractId, documentVersionId, organizationSlug);
 }
+
+
+export type FieldDecision = "keep" | "accept" | "manual" | "defer" | "not_in_document";
+
+/** Feldprüfung: Kandidat übernehmen, Wert behalten, von Hand eintragen, zurückstellen oder „nicht im Dokument“. */
+export function decideField(
+  contractId: string,
+  organizationSlug: string,
+  payload: {
+    fact_key: string;
+    decision: FieldDecision;
+    candidate_key?: string | null;
+    value?: string | null;
+    note?: string | null;
+    /** Die Wertänderung wurde ausdrücklich gezeigt und bestätigt (nötig, wenn ein anderer Kandidat gilt). */
+    confirm_change?: boolean;
+    /** `version` des Felds beim Laden; weicht der Stand ab, antwortet der Server mit 409. */
+    expected_version?: string | null;
+  },
+) {
+  return apiPost<ContractDetailResponse>(
+    `/api/contracts/${encodeURIComponent(contractId)}/field-review/decide?organization_slug=${encodeURIComponent(organizationSlug)}`,
+    payload,
+  );
+}
+
+/** Hauptnachweis wählen, Nachweis ausschließen (mit Grund) oder wiederherstellen. Der Wert des Felds bleibt unberührt. */
+export function setFieldEvidence(
+  contractId: string,
+  organizationSlug: string,
+  payload: { fact_key: string; evidence_id: string; action: "primary" | "exclude" | "restore"; reason?: string | null; note?: string | null; expected_version?: string | null },
+) {
+  return apiPost<ContractDetailResponse>(
+    `/api/contracts/${encodeURIComponent(contractId)}/field-review/evidence?organization_slug=${encodeURIComponent(organizationSlug)}`,
+    payload,
+  );
+}
+
+/** Weitere Information aus dem Dokument: einem Feld als Kandidat zuordnen, als Notiz sichern, ausblenden oder wiederherstellen. */
+export function decideFinding(
+  contractId: string,
+  organizationSlug: string,
+  payload: { finding_key: string; decision: "link" | "note" | "dismiss" | "restore"; target_fact_key?: string | null; note?: string | null },
+) {
+  return apiPost<ContractDetailResponse>(
+    `/api/contracts/${encodeURIComponent(contractId)}/field-review/finding?organization_slug=${encodeURIComponent(organizationSlug)}`,
+    payload,
+  );
+}

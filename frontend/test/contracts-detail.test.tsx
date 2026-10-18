@@ -4,6 +4,7 @@ import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractDetailPage from "@/app/contracts/[contract-id]/page";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
+import { candidate, evidence as fieldEvidence, field, review as fieldReview } from "./fixtures/field-review";
 
 const apiGetMock = vi.fn();
 vi.mock("@/lib/api", () => ({
@@ -179,6 +180,16 @@ function detailFixture(overrides: Partial<ContractDetailResponse> = {}): Contrac
     import_state: { import_state: "analysis_ok", state_label_de: "Analyse abgeschlossen", document_version_id: "aaaa0000-0000-0000-0000-000000000001", can_retry: false, message: null, analysis_status: "ok", requires_review: false },
     fact_review_states: [],
     fact_reviews: [],
+    // Feldprüfung: zwei wesentliche Felder, je ein Beleg des Vertrags (Vertragsbeginn mit Seite, Kosten ohne Seite).
+    field_review: fieldReview([
+      field({ fact_key: "dates.start_date", label: "Vertragsbeginn", current: "01.01.2024", document_value: "01.01.2024", candidates: [candidate({ key: "2024-01-01", display: "01.01.2024", value: "01.01.2024", evidence_ids: ["e-1"] })],
+        evidence: [fieldEvidence({ evidence_id: "e-1", page: 2, snippet: "Laufzeit beginnt am 01.01.2024.", location: "approx", text_verified: false, source_state: "located", source_state_label: "Seite bekannt, Stelle ungefähr", document_version_id: "aaaa0000-0000-0000-0000-000000000001" })], primary_evidence_id: "e-1", source_state: "located" }),
+      field({ fact_key: "costs.monthly_recurring", label: "Wiederkehrende Kosten (monatlich)", card: "cost", card_label: "Finanzen", current: "42.500 EUR", document_value: "42.500 EUR", candidates: [candidate({ key: "42500", display: "42.500 EUR", value: "42.500 EUR", evidence_ids: ["e-2"] })],
+        evidence: [fieldEvidence({ evidence_id: "e-2", page: null, snippet: "Jährliche Vergütung 42.500 EUR.", location: "none", text_verified: false, source_state: "unresolved", source_state_label: "Fundstelle nicht aufgelöst", document_version_id: "aaaa0000-0000-0000-0000-000000000001" })], primary_evidence_id: "e-2", source_state: "unresolved" }),
+      // Berechneter Wert (Jährliche Kosten im Kopf): kein eigener Bestätigungsauftrag.
+      field({ fact_key: "costs.annual", label: "Jährliche Gesamtkosten", kind: "calculated", status: "waiting", status_label: "Berechnet – Eingaben offen", decision_needed: false, card: "cost", card_label: "Finanzen", tier: "important",
+        current: "42.500 EUR", candidates: [], evidence: [], primary_evidence_id: null, source_state: null, inputs: [{ fact_key: "costs.monthly_recurring", label: "Wiederkehrende Kosten (monatlich)", present: true, decided: false }] }),
+    ]),
     contract_review: { status: "unreviewed", status_label_de: "Nicht geprüft", reviewer_display_name: null, reviewer_identity_type: "manual_unverified", authenticated_actor_id: null, reviewed_at: null, changed_noted_at: null, completion_note: null, relevant_count: 0, reviewed_count: 0, unresolved_count: 0, critical_count: 0, critical_reviewed_count: 0, critical_unreviewed_count: 0 },
     ...overrides,
   };
@@ -294,7 +305,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(options[options.length - 1]).toBe("Deckblatt (PDF)");
     await user.keyboard("{Escape}");
     await user.click(within(header).getByRole("button", { name: "Bearbeiten" }));
-    expect(screen.getByRole("tab", { name: "Vertragsdaten" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /^Vertragsdaten/ })).toHaveAttribute("aria-selected", "true");
     // Jede Angabe führt zu ihrer Karte: Kostenstelle → Organisationszuordnung, Status → Karte „Vertragsstatus“ (Übersicht).
     routerReplace.mockClear();
     await user.click(within(who).getByRole("button", { name: /Kostenstelle: 950000/ }));
@@ -307,12 +318,16 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     const fact = (fact_key: string, label_de: string, value: string) => ({ fact_key, label_de, present: true, state: "unreviewed", state_label_de: "Ungeprüft", original_value: value, effective_value: value, reviewer_display_name: null, reviewer_identity_type: null, reviewed_at: null, evidence_ref: null, has_history: false, evidence_count: 0, linked_evidence: [], linked_evidence_refs: [], needs_evidence: false, is_critical: false });
     await renderWithData(detailFixture({
       register_facts: { contract_start: "2025-05-05", cancel_by: null, contract_end: null, annual_cost: null },
-      fact_review_states: [fact("identity.contract_number", "Vertragsnummer", "CN-9876"), fact("costs.annual", "Jahreskosten", "42.500 EUR")],
+      fact_review_states: [fact("identity.contract_number", "Vertragsnummer", "CN-9876"), fact("costs.annual", "Jährliche Gesamtkosten", "42.500 EUR")],
     } as Partial<ContractDetailResponse>));
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
     await userEvent.click(within(header).getByRole("button", { name: /KI · Ungeprüft.*Prüfung öffnen/ }));
-    expect(await screen.findByRole("heading", { level: 3, name: "Jahreskosten" })).toBeInTheDocument();
-    expect(screen.getByText("Angabe 2 von 2")).toBeInTheDocument();
+    // Die Karte öffnet dieselbe Entscheidungsansicht wie die geführte Prüfung – in einer Schublade, ohne den Ablauf zu starten.
+    const drawer = await screen.findByRole("dialog", { name: "Jährliche Gesamtkosten" });
+    // Berechnete Werte werden nicht einzeln bestätigt: die Schublade zeigt, woraus sie entstehen.
+    expect(within(drawer).queryByRole("button", { name: "Bestätigen" })).not.toBeInTheDocument();
+    expect(within(drawer).getByText("Wiederkehrende Kosten (monatlich)")).toBeInTheDocument();
+    expect(within(drawer).getByText("Offen")).toBeInTheDocument();
   });
 
   it("Kopf: feste Laufzeit braucht kein „Kündbar bis“ – nichts Kritisches dazu", async () => {
@@ -376,8 +391,10 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     // Erneut erfassen hat einen festen Ort: Unterreiter „KI-Analyse“ (nicht mehr über dem Original).
     expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).getByRole("button", { name: "KI-Analyse" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Erneut aus dem Dokument erfassen" })).not.toBeInTheDocument();
-    // Einstieg in die geführte Prüfung steht immer im Kopf des Reiters.
-    expect(screen.getByRole("button", { name: /Nachweise prüfen · 2 offen/ })).toBeInTheDocument();
+    // Eine Prüfung, ein Einstieg: Felder zählen, nicht Nachweise.
+    expect(screen.getByRole("button", { name: "Wesentliches prüfen · 2" })).toBeInTheDocument();
+    expect(screen.getByText("0 von 2 wesentlichen Angaben entschieden")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Nachweise prüfen/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Nachweise" }));
     // Klick auf „Nachweise“: Liste und gleich der Filter (Prüfstand, Abschnitt, Suche) im Aufklapper.
     const trigger = screen.getByRole("button", { name: "Nachweise filtern" });
@@ -400,12 +417,12 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     const table = screen.getByRole("table", { name: "Nachweise dieses Vertrags" });
     expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["#", "Feld", "Seite", "Status"]);
     expect(within(table).getAllByRole("row")).toHaveLength(3);
-    expect(within(table).getAllByText("Noch nicht geprüft")).toHaveLength(2);
+    expect(within(table).getAllByText("Offen")).toHaveLength(2);
     expect(within(table).queryByText(/Laufzeit beginnt am/)).not.toBeInTheDocument();
     expect(screen.getByText("2 Nachweise", { exact: false })).toBeInTheDocument();
   });
 
-  it("derselbe Filter in der Nachweise-Liste: „Auswahl prüfen“ startet die Prüfung nur auf der Auswahl", async () => {
+  it("der Filter der Nachweise-Liste ist nur eine Ansicht – die Prüfung bleibt ein einziger Ablauf", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
     const list = screen.getByRole("group", { name: "Nach Prüfstand filtern" });
@@ -414,18 +431,17 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getByText("1 Treffer")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Filter anwenden" }));
     expect(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getAllByRole("row")).toHaveLength(2);
-    await userEvent.click(screen.getByRole("button", { name: /^Auswahl prüfen · 1/ }));
-    expect(await screen.findByRole("button", { name: "Nur „start date“ · 1" })).toBeInTheDocument();
-    expect(screen.getByText("Nachweis 1 von 1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Auswahl prüfen/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Wesentliches prüfen · 2" })).toBeInTheDocument();
   });
 
   it("ein Nachweis aus der Tabelle öffnet die geführte Prüfung an seiner Stelle im Original", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
     await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
-    const panel = await screen.findByRole("region", { name: "Aktueller Nachweis" });
-    expect(within(panel).getByRole("heading", { name: /start date/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Nachweise prüfen" })).toBeInTheDocument();
+    const panel = await screen.findByRole("region", { name: "Aktuelle Angabe" });
+    expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Wesentliche Angaben prüfen" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("von 3", { exact: false })).toHaveTextContent("Seite 2 von 3"));
     // Aktueller Nachweis: Rahmen mit derselben Nummer wie in der Tabelle.
     await waitFor(() => expect(document.querySelector(".pdf-frame.is-current")).toHaveTextContent("1"));
@@ -435,12 +451,13 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
     await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /annual cost/i }));
-    const panel = await screen.findByRole("region", { name: "Aktueller Nachweis" });
-    expect(within(panel).getByRole("heading", { name: /annual cost/i })).toBeInTheDocument();
-    expect(within(panel).getByText("Ohne Seite", { selector: ".signal-label" })).toBeInTheDocument();
+    const panel = await screen.findByRole("region", { name: "Aktuelle Angabe" });
+    expect(within(panel).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
+    // Ungeklärte Fundstelle wird nicht als belegt ausgegeben.
+    expect(within(panel).getByText("Fundstelle nicht aufgelöst", { selector: ".signal-label" })).toBeInTheDocument();
     expect(document.querySelector(".pdf-frame.is-current")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Zurück zum Vertrag" }));
-    expect(screen.queryByRole("region", { name: "Aktueller Nachweis" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Aktuelle Angabe" })).not.toBeInTheDocument();
     expect(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).toBeInTheDocument();
   });
 
@@ -456,7 +473,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
     await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
-    await screen.findByRole("region", { name: "Aktueller Nachweis" });
+    await screen.findByRole("region", { name: "Aktuelle Angabe" });
     await openTab("Übersicht");
     expect(screen.getByRole("heading", { name: "MRT Wartungsvertrag" })).toBeInTheDocument();
     expect(screen.getByText("Kündigungsfrist nähert sich")).toBeInTheDocument();

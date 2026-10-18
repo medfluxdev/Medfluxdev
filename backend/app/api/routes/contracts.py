@@ -462,61 +462,14 @@ def contract_fact_review(
             )
             if data is None:
                 raise _not_found()
-            system_value = payload.system_value
-            if system_value is None:
-                system_value = (material_report(data).get(payload.fact_key) or {}).get(
-                    "value"
-                )
-            if system_value is None and payload.fact_key.startswith(EVIDENCE_FACT_PREFIX):
-                # Nachweis-Angabe: das Zitat des Belegs ist der Originalwert.
-                system_value = next(
-                    (state["original_value"] for state in build_fact_review_states(
-                        session, organization_id=org.id, contract_id=cid, data=data
-                    ) if state["fact_key"] == payload.fact_key),
-                    None,
-                )
-            # Vertragsdaten-Feld zur Angabe: Korrektur vorab lesen (nicht lesbar -> nichts speichern).
-            from app.register.fields import FieldValidationError
-            from app.register.service import review_register_changes
-
-            try:
-                register_base, register_changes = review_register_changes(
-                    payload.fact_key, payload.action, payload.corrected_value
-                )
-            except FieldValidationError as exc:
-                raise ReviewError(getattr(exc, "detail_de", str(exc))) from exc
-            record_fact_action(
-                session,
-                organization_id=org.id,
-                contract_id=cid,
-                fact_key=payload.fact_key,
-                action=payload.action,
-                reviewer_display_name=reviewer_name(
-                    request, payload.reviewer_display_name
-                ),
-                note=payload.note,
-                system_value=system_value,
-                corrected_value=payload.corrected_value,
-                evidence_ref=payload.evidence_ref,
-                **({"expected_reviewed_at": payload.expected_reviewed_at}
-                   if "expected_reviewed_at" in payload.model_fields_set else {}),
+            _apply_fact_action(
+                request, organization_slug, session, org, cid, data,
+                fact_key=payload.fact_key, action=payload.action, corrected_value=payload.corrected_value,
+                system_value=payload.system_value, reviewer_display_name=payload.reviewer_display_name,
+                note=payload.note, evidence_ref=payload.evidence_ref,
+                expected=({"expected_reviewed_at": payload.expected_reviewed_at}
+                          if "expected_reviewed_at" in payload.model_fields_set else {}),
             )
-            _record_account_activity(
-                session,
-                request,
-                f"fact_review.{payload.action}",
-                cid,
-                {"fact_key": payload.fact_key},
-            )
-            _review_into_register(request, organization_slug, session, cid, register_base, register_changes)
-            if payload.action in ("confirmed", "corrected"):
-                sync_review_links(
-                    session,
-                    organization_id=org.id,
-                    contract_id=cid,
-                    data=data,
-                    reviewer_display_name=reviewer_name(request, payload.reviewer_display_name),
-                )
             session.commit()
         except ReviewConflict as exc:
             session.rollback()
@@ -535,6 +488,73 @@ def contract_fact_review(
         return ContractDetailResponse.model_validate(data)
     finally:
         session.close()
+
+
+def _apply_fact_action(
+    request: Request, organization_slug: str, session, org, cid: UUID, data: dict, *, fact_key: str, action: str,
+    corrected_value=None, system_value=None, reviewer_display_name: str | None = None, note: str | None = None,
+    evidence_ref: str | None = None, expected: dict | None = None,
+) -> None:
+    """Eine Prüf-Aktion zu einer Angabe ausführen: Faktprüfung, Vertragsdaten und Verknüpfungen (ohne Commit).
+
+    Der einzige Weg, auf dem ein Wert geprüft oder korrigiert wird – für die Karte, die Einzelprüfung und die
+    geführte Feldprüfung gleichermaßen.
+    """
+    expected = expected or {}
+    system_value = system_value
+    if system_value is None:
+        system_value = (material_report(data).get(fact_key) or {}).get(
+            "value"
+        )
+    if system_value is None and fact_key.startswith(EVIDENCE_FACT_PREFIX):
+        # Nachweis-Angabe: das Zitat des Belegs ist der Originalwert.
+        system_value = next(
+            (state["original_value"] for state in build_fact_review_states(
+                session, organization_id=org.id, contract_id=cid, data=data
+            ) if state["fact_key"] == fact_key),
+            None,
+        )
+    # Vertragsdaten-Feld zur Angabe: Korrektur vorab lesen (nicht lesbar -> nichts speichern).
+    from app.register.fields import FieldValidationError
+    from app.register.service import review_register_changes
+
+    try:
+        register_base, register_changes = review_register_changes(
+            fact_key, action, corrected_value
+        )
+    except FieldValidationError as exc:
+        raise ReviewError(getattr(exc, "detail_de", str(exc))) from exc
+    record_fact_action(
+        session,
+        organization_id=org.id,
+        contract_id=cid,
+        fact_key=fact_key,
+        action=action,
+        reviewer_display_name=reviewer_name(
+            request, reviewer_display_name
+        ),
+        note=note,
+        system_value=system_value,
+        corrected_value=corrected_value,
+        evidence_ref=evidence_ref,
+        **expected,
+    )
+    _record_account_activity(
+        session,
+        request,
+        f"fact_review.{action}",
+        cid,
+        {"fact_key": fact_key},
+    )
+    _review_into_register(request, organization_slug, session, cid, register_base, register_changes)
+    if action in ("confirmed", "corrected"):
+        sync_review_links(
+            session,
+            organization_id=org.id,
+            contract_id=cid,
+            data=data,
+            reviewer_display_name=reviewer_name(request, reviewer_display_name),
+        )
 
 
 def _review_into_register(request: Request, organization_slug: str, session, contract_id: UUID, base, changes) -> None:

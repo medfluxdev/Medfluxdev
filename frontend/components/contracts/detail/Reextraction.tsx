@@ -32,7 +32,7 @@ import {
   type RollbackEntry,
   type StartReextraction,
 } from "@/lib/domain-api/reextraction";
-import { Diff, SectionChip } from "./EvidenceReviewMode";
+import { Diff, SectionChip } from "./ReviewParts";
 
 const POLL_MS = 4000;
 const SAFE_CONFIDENCE = 0.95;

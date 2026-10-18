@@ -125,12 +125,18 @@ REVIEW_TERM_FACTS = (
     "dates.duration", "termination.cancellation_period", "termination.cancellation_condition", "termination.renewal_period",
 )
 
+# Weitere Angaben, die das Lesemodell fuer die Pruefung als Text liefert (Vertragsgegenstand, -art, Zahlungsrhythmus).
+REVIEW_EXTRA_FACTS = ("identity.contract_title", "identity.contract_type", "payment.billing_interval")
+
 SCOPE_REVIEW_FACTS = tuple(f"scope.{key}" for key, _ in SCOPE_FACTS)
 
 # Uebernommener Fakt -> Pruef-Angaben, die dadurch einen neuen Wert bekommen (auch berechnete).
 REVIEW_FACTS: dict[str, tuple[str, ...]] = {
     "identity.contract_number": ("identity.contract_number",),
     "identity.supplier": ("identity.supplier",),
+    "identity.contract_title": ("identity.contract_title",),
+    "identity.contract_type": ("identity.contract_type",),
+    "payment.billing_interval": ("payment.billing_interval",),
     "dates.start_date": ("dates.start_date", "dates.end_date", "dates.latest_cancellation"),
     "dates.start_condition": ("dates.event_start",),
     "dates.end_date": ("dates.end_date", "dates.latest_cancellation"),
@@ -141,7 +147,7 @@ REVIEW_FACTS: dict[str, tuple[str, ...]] = {
     "termination.cancellation_to_contract_end": ("termination.cancellation_condition", "dates.latest_cancellation"),
     "termination.automatic_renewal": ("termination.auto_renewal", "dates.latest_cancellation"),
     "termination.renewal_period": ("termination.renewal_period",),
-    "costs.monthly_cost": ("costs.monthly_recurring", "costs.monthly_net", "costs.monthly_gross", "costs.annual"),
+    "costs.monthly_cost": ("costs.monthly_recurring", "costs.monthly_net", "costs.monthly_gross", "costs.annual", "costs.currency"),
     "costs.annual_cost": ("costs.annual",),
     "costs.tax_rate_percent": ("costs.vat_rate", "costs.vat_amount", "costs.monthly_gross"),
     "costs.price_indexation": ("costs.price_indexation",),

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
+from app.contracts.review.field_spec import FIELD_SPECS, TIER_ESSENTIAL
+
 # reader(response: dict) -> Optional[str] (JSON-kompatibler Anzeige-/"System"-Wert)
 Reader = Callable[[dict], object]
 
@@ -115,6 +117,16 @@ MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
         lambda r: (r.get("identity") or {}).get("supplier") or r.get("supplier"),
     ),
     (
+        "identity.contract_title",
+        "Vertragsgegenstand / Titel",
+        lambda r: (r.get("extracted_terms") or {}).get("identity.contract_title"),
+    ),
+    (
+        "identity.contract_type",
+        "Vertragsart (laut Dokument)",
+        lambda r: (r.get("extracted_terms") or {}).get("identity.contract_type"),
+    ),
+    (
         "dates.start_date",
         "Vertragsbeginn (Datum)",
         lambda r: (r.get("dates") or {}).get("start_date")
@@ -183,6 +195,17 @@ MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
         "Monatlicher Nettopreis",
         lambda r: ((r.get("costs") or {}).get("tax_breakdown") or {}).get("monthly_net")
         or ((r.get("costs") or {}).get("monthly_recurring") or {}).get("amount"),
+    ),
+    (
+        "costs.currency",
+        "Währung",
+        lambda r: ((r.get("costs") or {}).get("monthly_recurring") or {}).get("currency")
+        or ((r.get("costs") or {}).get("annual_recurring") or {}).get("currency"),
+    ),
+    (
+        "payment.billing_interval",
+        "Zahlungsrhythmus",
+        lambda r: (r.get("extracted_terms") or {}).get("payment.billing_interval"),
     ),
     (
         "costs.vat_rate",
@@ -285,20 +308,11 @@ MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
 
 MATERIAL_FACT_KEYS = {key for key, _, _ in MATERIAL_FACTS}
 
-# Fakten mit Material-Relevanz fuer Verfuegbarkeit/Compliance. Werden in der
-# Pruef-Uebersicht besonders hervorgehoben und in der Vollstaendigkeits-Zaehlung
-# als kritisch ausgewiesen, solange sie ungeprueft sind.
-CRITICAL_FACTS = frozenset({
-    "identity.contract_number",
-    "identity.supplier",
-    "dates.start_date",
-    "dates.end_date",
-    "dates.latest_cancellation",
-    "termination.auto_renewal",
-    "equipment.identity",
-    "sla.response_time",
-    "sla.resolution_time",
-})
+# Wesentliche Angaben (Feldregister `field_spec`): ohne sie ist der Vertrag nicht belastbar erfasst. Sie werden in der
+# Pruef-Uebersicht hervorgehoben und muessen von einer Person entschieden werden; berechnete Werte zaehlen nie dazu.
+CRITICAL_FACTS = frozenset(
+    key for key, spec in FIELD_SPECS.items() if spec.tier == TIER_ESSENTIAL and not spec.calculated
+)
 
 
 def fact_is_critical(fact_key: str) -> bool:

@@ -655,7 +655,7 @@ def _extracted_terms(snapshot) -> dict:
         model = ExtractedContract.model_validate(snapshot)
     except Exception:
         return {}
-    return {path: facts.display(facts.get_fact(model, path)) for path in facts.REVIEW_TERM_FACTS}
+    return {path: facts.display(facts.get_fact(model, path)) for path in facts.REVIEW_TERM_FACTS + facts.REVIEW_EXTRA_FACTS}
 
 
 def _snap(snapshot, *keys):

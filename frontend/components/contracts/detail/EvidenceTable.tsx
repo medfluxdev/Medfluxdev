@@ -8,9 +8,11 @@ import { EVIDENCE_SECTIONS, STATUS_VIEW, matchKey, type EvidenceRow, type Eviden
 const FILTERS: { value: "" | EvidenceStatus; label: string }[] = [
   { value: "", label: "Alle" },
   { value: "open", label: "Offen" },
-  { value: "confirmed", label: "Bestätigt" },
-  { value: "deviation", label: "Abweichend" },
-  { value: "skipped", label: "Übersprungen" },
+  { value: "confirmed", label: "Entschieden" },
+  { value: "deviation", label: "Widerspruch" },
+  { value: "skipped", label: "Zurückgestellt" },
+  { value: "excluded", label: "Ausgeschlossen" },
+  { value: "extra", label: "Weitere Info" },
 ];
 
 /** Auswahl in „Alle Nachweise“: Prüfstand, Abschnitt und Suchtext (leer = alle). */
@@ -85,6 +87,8 @@ const STATUS_ICON: Record<"" | EvidenceStatus, ReactNode> = {
   confirmed: ico(<><circle cx="12" cy="12" r="10" /><path d="m7.5 12.5 3 3 6-7" /></>, "evf-icon evf-icon--confirmed"),
   deviation: ico(<><path d="M12 2.5 22.5 21h-21z" /><path d="M12 9.5v5M12 17.5v.5" /></>, "evf-icon evf-icon--deviation"),
   skipped: ico(<path d="M3 5.5 11 12l-8 6.5zM12 5.5l8 6.5-8 6.5z" />, "evf-icon evf-icon--skipped"),
+  excluded: ico(<><circle cx="12" cy="12" r="9" /><path d="m6 6 12 12" /></>, "evf-icon evf-icon--skipped"),
+  extra: ico(<><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8v.5" /></>, "evf-icon evf-icon--skipped"),
 };
 const FILTER_ICON = ico(<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4" />, "evf-title-icon");
 // Pfeil im Auswahlfeld: zeigt, dass sich hier eine Liste öffnet.

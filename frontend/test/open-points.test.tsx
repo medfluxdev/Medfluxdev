@@ -20,8 +20,7 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
       { work_item_id: "t2", item_type: "review_required", severity: "medium", title_de: "KI-Wert prüfen", why_de: null, requires_review: true },
     ],
     warnings: [warning("high", "Berechnungskonflikt", true), warning("critical", "Frist verstrichen")],
-    scopeToCheck: 3,
-    scopeTotal: 4,
+    fieldReview: { essentialOpen: 3, conflicts: 0, missing: 0, deferred: 0 },
   });
 
   it("ordnet Kritisch → Prüfen (hoch) → KI-Prüfung → Prüfen → Hinweis", () => {
@@ -30,14 +29,15 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
       ["Kritisch", "Frist verstrichen"],
       ["Prüfen", "Berechnungskonflikt"],
       ["KI-Prüfung", "KI-Wert prüfen"],
+      ["KI-Prüfung", "Wesentliche Angaben entscheiden"],
       ["Prüfen", "Vertragspartner"],
-      ["Prüfen", "Leistungsumfang ungeklärt"],
       ["Hinweis", "Kosten nachtragen"],
     ]);
     // Eine Warnung, die eine Prüfung verlangt, folgt ihrem Schweregrad – mit „Priorität hoch“.
     expect(points[2].why).toBe("Bitte prüfen · Priorität hoch");
-    expect(points[5].why).toBe("3 von 4 Leistungen aus dem Dokument sind noch nicht bestätigt.");
-    // Nicht im Vertrag und nicht von der KI gefunden = nichts zu prüfen (kein Punkt „SLA unvollständig“).
+    // Die Prüfung ist ein einziger Punkt – Leistungen, SLA und Belege sind keine eigenen Pflichtpunkte.
+    expect(points.find((point) => point.key === "field-review")?.why).toBe("3 wesentliche Entscheidungen warten.");
+    expect(points.some((point) => /Leistungsumfang|SLA|Nachweise prüfen/.test(point.title))).toBe(false);
   });
 
   it("zeigt Signal + Wort, Zähler und genau einen Primärknopf; Knöpfe führen zur Stelle", async () => {
@@ -49,14 +49,15 @@ describe("Offene Punkte – freigegebene Zuordnung", () => {
     expect(section.querySelectorAll(".btn-primary")).toHaveLength(1);
     await user.click(within(section).getByRole("link", { name: "Vertragsart erfassen" }));
     expect(onOpen).toHaveBeenCalledWith({ tab: "register", field: "term_model" });
-    expect(within(section).getByRole("link", { name: "Leistungen" })).toHaveAttribute("href", "/contracts/c-1?tab=services&abschnitt=leistungsumfang");
+    const review = within(section).getAllByRole("link", { name: "Prüfen" }).find((link) => link.getAttribute("href")?.includes("abschnitt=nachweise-pruefen"));
+    expect(review).toBeDefined();
     expect(await axe(container)).toHaveNoViolations();
   });
 });
 
 describe("Offene Punkte – Kündbar bis nicht berechenbar", () => {
   it("steht als erster kritischer Punkt, außer eine fristrelevante Lücke ist schon genannt", () => {
-    const base = { tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10, cancelByUnknown: true };
+    const base = { tasks: [], warnings: [], cancelByUnknown: true };
     expect(buildOpenPoints({ ...base, gaps: [] }).map((point) => [point.word, point.title, point.action])).toEqual([
       ["Kritisch", "Kündigungstermin nicht berechenbar", "Kündigungsfrist erfassen"],
     ]);
@@ -64,19 +65,22 @@ describe("Offene Punkte – Kündbar bis nicht berechenbar", () => {
     expect(withGap.map((point) => point.title)).toEqual(["Kündigungsfrist fehlt"]);
   });
 
-  it("zählt nur noch nicht bestätigte Werte; alles bestätigt = kein Punkt", () => {
+  it("Feldprüfung: ein Punkt für die wesentlichen Entscheidungen, Widersprüche und Lücken benannt; nichts offen = kein Punkt", () => {
     const base = { gaps: [], tasks: [], warnings: [] };
-    const open = buildOpenPoints({ ...base, scopeToCheck: 1, scopeTotal: 4, slaToCheck: 2 });
-    expect(open.map((point) => point.why)).toEqual([
-      "1 von 4 Leistungen aus dem Dokument ist noch nicht bestätigt.",
-      "2 SLA-Werte aus dem Dokument sind noch nicht bestätigt.",
-    ]);
-    expect(buildOpenPoints({ ...base, scopeToCheck: 0, scopeTotal: 4, slaToCheck: 0 })).toEqual([]);
+    const [point] = buildOpenPoints({ ...base, fieldReview: { essentialOpen: 4, conflicts: 1, missing: 2, deferred: 1 } });
+    expect([point.word, point.title]).toEqual(["Prüfen", "Wesentliche Angaben entscheiden"]);
+    expect(point.why).toBe("4 wesentliche Entscheidungen warten · 1 Widerspruch oder Änderung · 2 nicht im Dokument gefunden · 1 zurückgestellt.");
+    expect(point.target).toEqual({ tab: "documents", subtab: "document", section: "nachweise-pruefen" });
+    expect(buildOpenPoints({ ...base, fieldReview: { essentialOpen: 0, conflicts: 0, missing: 0, deferred: 0 } })).toEqual([]);
+    expect(buildOpenPoints({ ...base, fieldReview: null })).toEqual([]);
+    // Die bisherige „Prüfung der KI-Werte“-Lücke wird nicht doppelt gezeigt.
+    const gap = { key: "review", label: "Wesentliche Angaben prüfen", reason: "x", command: "Wesentliche Angaben prüfen", target: { tab: "documents" } };
+    expect(buildOpenPoints({ ...base, gaps: [gap], fieldReview: { essentialOpen: 1, conflicts: 0, missing: 0, deferred: 0 } })).toHaveLength(1);
   });
 });
 
 describe("Offene Punkte – Entscheidung treffen", () => {
-  const base = { gaps: [], tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 0 };
+  const base = { gaps: [], tasks: [], warnings: [] };
   it("nennt eine fehlende Entscheidung, Dringlichkeit nach der Frist, mit Sprung zur Karte", () => {
     const [soon] = buildOpenPoints({ ...base, decision: { due: "2026-09-30", byCancel: true, urgency: "soon" } });
     expect([soon.word, soon.title, soon.action]).toEqual(["Hinweis", "Entscheidung treffen", "Entscheiden"]);
@@ -90,7 +94,7 @@ describe("Offene Punkte – Entscheidung treffen", () => {
 
 describe("Offene Punkte – nächster Umsetzungsschritt", () => {
   it("nennt den ersten offenen Schritt mit Frist; überfällig = Kritisch", () => {
-    const base = { gaps: [], tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 0 };
+    const base = { gaps: [], tasks: [], warnings: [] };
     const stepInput = { label: "Kündigen", title: "Status auf „Gekündigt“ setzen", detail: "Mit Datum.", due: "2026-08-20", target: { tab: "register", section: "status" }, done: 1, total: 4, today: "2026-08-15" };
     const [point] = buildOpenPoints({ ...base, decisionStep: stepInput });
     expect([point.word, point.title, point.action]).toEqual(["Prüfen", "Kündigen: Status auf „Gekündigt“ setzen", "Status setzen"]);
@@ -100,11 +104,4 @@ describe("Offene Punkte – nächster Umsetzungsschritt", () => {
     expect([late.word, late.action, late.target]).toEqual(["Kritisch", "Umsetzung ansehen", { tab: "deadlines", section: "decision" }]);
   });
 
-  it("offene Nachweise: ein Punkt „Nachweise prüfen“, der die geführte Prüfung öffnet", () => {
-    const base = { gaps: [], tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 0 };
-    expect(buildOpenPoints({ ...base, evidenceOpen: 0 })).toEqual([]);
-    const [point] = buildOpenPoints({ ...base, evidenceOpen: 3 });
-    expect([point.word, point.title, point.why, point.action]).toEqual(["KI-Prüfung", "Nachweise prüfen", "3 Nachweise sind noch nicht mit dem Dokument abgeglichen.", "Nachweise prüfen"]);
-    expect(point.target).toEqual({ tab: "documents", subtab: "evidence", section: "nachweise-pruefen" });
-  });
 });

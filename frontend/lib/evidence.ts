@@ -1,5 +1,5 @@
 import type { SignalTone } from "@/components/ui/Signal";
-import type { EvidenceRef, FactReviewStateDto } from "@/lib/contract-detail-types";
+import type { EvidenceRef, FactReviewStateDto, FieldReviewDto } from "@/lib/contract-detail-types";
 import type { EvidenceReviewItem } from "@/lib/domain-api/register";
 import { formatDate } from "@/lib/format";
 import { evidencePrecision } from "@/lib/source-geometry";
@@ -7,13 +7,6 @@ import { evidencePrecision } from "@/lib/source-geometry";
 /** Nachweise: Lage, Reihenfolge, Abschnitt, Prüfstand und Abgleich Dokument ↔ MedFlux (eine Quelle für Dokumente und „Nachweise prüfen“). */
 
 export type Precision = "exact" | "approx" | "page" | "none";
-export const PRECISION: Record<Precision, { label: string; tone: SignalTone; hint: string }> = {
-  exact: { label: "Genau", tone: "done", hint: "Der Wortlaut steht genau an der markierten Stelle." },
-  approx: { label: "Ungefähre Lage", tone: "warning", hint: "Die Stelle ist nur grob markiert – der Wortlaut wurde in der Box nicht nachgewiesen." },
-  page: { label: "Nur Seite", tone: "neutral", hint: "Die Seite ist bekannt, aber keine Position auf der Seite." },
-  none: { label: "Ohne Seite", tone: "warning", hint: "Keine Seitenangabe – die Quelle lässt sich im Original nicht anzeigen." },
-};
-
 /** Lage: vom Backend belegt (`location`), sonst aus der Geometrie geschätzt – „Genau“ nur mit Textbeleg. */
 export function precisionOf(ref: EvidenceRef): Precision {
   if (ref.location) return ref.location;
@@ -71,16 +64,6 @@ export function titleOf(ref: EvidenceRef, factByEvidence: Map<string, FactReview
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** KI-Sicherheit (0..1) des Nachweises, sonst der Angabe; null = keine Angabe. */
-export function confidenceOf(ref: EvidenceRef, fact: FactReviewStateDto | undefined): number | null {
-  const value = ref.confidence ?? fact?.ai_confidence ?? null;
-  return value != null && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
-}
-
-export function percent(value: number): string {
-  return `${Math.round(value * 100)} %`;
-}
-
 // ---------------------------------------------------------------------------- Abschnitte
 
 export type SectionTone = "partner" | "accent" | "cost" | "type" | "device" | "neutral";
@@ -115,31 +98,38 @@ export function sectionOf(ref: EvidenceRef, fact: FactReviewStateDto | undefined
   return { key: found.key, label: found.label, tone: found.tone };
 }
 
-/** Geführte Reihenfolge: nach Abschnitt, darin in Lesereihenfolge (Seite, oben → unten). */
-export function guidedOrder(ordered: EvidenceRef[], factByEvidence: Map<string, FactReviewStateDto>): EvidenceRef[] {
-  const rank = (ref: EvidenceRef) => EVIDENCE_SECTIONS.findIndex((section) => section.key === sectionOf(ref, factByEvidence.get(ref.evidence_id)).key);
-  return ordered.map((ref, index) => ({ ref, index })).sort((a, b) => rank(a.ref) - rank(b.ref) || a.index - b.index).map((entry) => entry.ref);
-}
-
 // ---------------------------------------------------------------------------- Prüfstand
 
-export type EvidenceStatus = "open" | "confirmed" | "deviation" | "skipped";
+export type EvidenceStatus = "open" | "confirmed" | "deviation" | "skipped" | "excluded" | "extra";
+/** Stand eines Nachweises = Stand seines Felds (ein Feld, eine Entscheidung) – nicht ein eigener Prüfauftrag. */
 export const STATUS_VIEW: Record<EvidenceStatus, { label: string; tone: SignalTone }> = {
-  open: { label: "Noch nicht geprüft", tone: "neutral" },
-  confirmed: { label: "Bestätigt", tone: "done" },
-  deviation: { label: "Abweichend", tone: "warning" },
-  skipped: { label: "Übersprungen", tone: "neutral" },
+  open: { label: "Offen", tone: "neutral" },
+  confirmed: { label: "Entschieden", tone: "done" },
+  deviation: { label: "Widerspruch", tone: "warning" },
+  skipped: { label: "Zurückgestellt", tone: "neutral" },
+  excluded: { label: "Ausgeschlossen", tone: "neutral" },
+  extra: { label: "Weitere Information", tone: "neutral" },
 };
-const HUMAN_DONE = new Set(["confirmed", "corrected"]);
 
-/**
- * Prüfstand eines Nachweises: das Ergebnis der Nachweisprüfung; ohne eines zählt eine frühere Bestätigung der
- * Angabe nur, wenn die Fundstelle genau belegt ist („Nur Seite“/„ungefähr“ bleibt offen, automatische Übernahme auch).
- */
-export function evidenceStatus(ref: EvidenceRef, fact: FactReviewStateDto | undefined, review: EvidenceReviewItem | undefined): EvidenceStatus {
-  if (review) return review.status === "confirmed" ? "confirmed" : review.status === "skipped" ? "skipped" : "deviation";
-  if (fact && HUMAN_DONE.has(fact.state) && precisionOf(ref) === "exact") return "confirmed";
-  return "open";
+const statusCache = new WeakMap<FieldReviewDto, Map<string, EvidenceStatus>>();
+
+function fieldStatusMap(review: FieldReviewDto): Map<string, EvidenceStatus> {
+  const cached = statusCache.get(review);
+  if (cached) return cached;
+  const map = new Map<string, EvidenceStatus>();
+  for (const finding of review.findings) for (const id of finding.evidence_ids) if (id) map.set(id, "extra");
+  for (const field of review.fields) {
+    const own: EvidenceStatus = field.status === "decided" || field.status === "derived" || field.status === "absent" ? "confirmed"
+      : field.status === "conflict" || field.status === "changed" ? "deviation" : field.status === "deferred" ? "skipped" : "open";
+    for (const entry of field.evidence) if (entry.evidence_id) map.set(entry.evidence_id, entry.excluded ? "excluded" : own);
+  }
+  statusCache.set(review, map);
+  return map;
+}
+
+/** Stand eines Nachweises aus der Feldprüfung; ohne Feldprüfung oder ohne Zuordnung bleibt er offen. */
+export function fieldEvidenceStatus(evidenceId: string, review: FieldReviewDto | null | undefined): EvidenceStatus {
+  return review ? fieldStatusMap(review).get(evidenceId) ?? "open" : "open";
 }
 
 // ---------------------------------------------------------------------------- Werte
@@ -163,22 +153,6 @@ export function valueText(factKey: string, value: unknown): string | null {
   }
   const json = JSON.stringify(value);
   return json ? (json.length > 160 ? `${json.slice(0, 160)}…` : json) : null;
-}
-
-/** „Im Dokument (erkannt)“: der erkannte Wert der Angabe; bei reinen Nachweisen der Wortlaut. */
-export function documentValue(ref: EvidenceRef, fact: FactReviewStateDto | undefined): string | null {
-  if (fact && !fact.is_evidence_item) return valueText(fact.fact_key, fact.original_value);
-  return ref.snippet?.trim() || null;
-}
-
-/**
- * „In MedFlux gespeichert“: der Wert in den Vertragsdaten (Angaben mit eigenem Feld), sonst der wirksame Wert der
- * Angabe. Reine Nachweise ohne Angabe haben keinen gespeicherten Wert (null).
- */
-export function storedValue(fact: FactReviewStateDto | undefined): string | null {
-  if (!fact || fact.is_evidence_item) return null;
-  if (fact.register_field) return fact.stored_value ?? null;
-  return valueText(fact.fact_key, fact.effective_value);
 }
 
 /** Vergleichsschlüssel: ohne Leerraum, Satz- und Sonderzeichen, Groß/Klein („Frankfurtam Main“ = „Frankfurt am Main“). */
@@ -239,18 +213,4 @@ export function evidenceRows(
     const fact = factByEvidence.get(ref.evidence_id);
     return { ref, fact, number: numbers.get(ref.evidence_id) ?? index + 1, title: titleOf(ref, factByEvidence), section: sectionOf(ref, fact), status: statusOf(ref) };
   });
-}
-
-/** „34 geprüft: 30 bestätigt · 3 abweichend (übernommen 2, geklärt 1) · 1 übersprungen“ (wie der Eintrag im Verlauf). */
-export function roundSummary(counts: Partial<Record<EvidenceReviewItem["status"], number>>): string {
-  const n = (key: EvidenceReviewItem["status"]) => counts[key] ?? 0;
-  const deviating = n("document") + n("medflux") + n("manual");
-  const parts = [`${n("confirmed")} bestätigt`];
-  if (deviating) {
-    const detail = [[n("document"), `übernommen ${n("document")}`], [n("medflux"), `geklärt ${n("medflux")}`], [n("manual"), `von Hand ${n("manual")}`]]
-      .filter(([value]) => value).map(([, text]) => text);
-    parts.push(`${deviating} abweichend (${detail.join(", ")})`);
-  }
-  if (n("skipped")) parts.push(`${n("skipped")} übersprungen`);
-  return `${n("confirmed") + deviating + n("skipped")} geprüft: ${parts.join(" · ")}`;
 }

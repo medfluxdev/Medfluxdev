@@ -23,6 +23,7 @@ from app.api.routes import (
     dashboard,
     documents,
     equipment,
+    field_review,
     health,
     history,
     intelligence,
@@ -121,6 +122,7 @@ app.include_router(documents.router)
 app.include_router(processing_jobs.router)
 app.include_router(dashboard.router)
 app.include_router(contracts.router)
+app.include_router(field_review.router)
 app.include_router(contract_register.router)
 app.include_router(contract_reextraction.router)
 app.include_router(contract_documents.router)

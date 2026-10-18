@@ -18,7 +18,7 @@ const field = (label: string) => ({ value: null, label });
 function Gaps(props: { hasAnnualCost: boolean; reviewPending: boolean; documentCount: number }) {
   const gaps = useContractGaps({ contractId: "c-1", orgSlug: "test-klinik", ...props });
   if (gaps === null) return null;
-  const points = buildOpenPoints({ gaps, tasks: [], warnings: [], scopeToCheck: 0, scopeTotal: 10 });
+  const points = buildOpenPoints({ gaps, tasks: [], warnings: [], fieldReview: props.reviewPending ? { essentialOpen: 2, conflicts: 0, missing: 0, deferred: 0 } : null });
   return <OpenPoints contractId="c-1" points={points} onOpen={() => undefined} />;
 }
 
@@ -59,7 +59,7 @@ describe("Direkt zur Stelle: Ziele für Aufgaben, Warnungen und API-Antworten", 
     expect(normalizeTarget({ tab: "register", field: "responsible_account_id" })).toEqual({ tab: "register", section: "ownership" });
     expect(contractHref("c-1", { tab: "register", field: "responsible_account_id" })).toBe("/contracts/c-1?tab=register&abschnitt=ownership");
     expect(fixLabel({ tab: "finance", section: "entries" })).toBe("Kosten erfassen");
-    expect(fixLabel({ tab: "documents", subtab: "review" })).toBe("KI-Werte prüfen");
+    expect(fixLabel({ tab: "documents", subtab: "review" })).toBe("Angaben prüfen");
   });
 });
 
@@ -71,7 +71,7 @@ describe("Direkt zur Stelle: Vertragsakte", () => {
     expect(items.map((item) => [item.querySelector(".signal-label")?.textContent, within(item).getByRole("link").textContent, within(item).getByRole("link").getAttribute("href")])).toEqual([
       ["Kritisch", "Vertragsbeginn erfassen", "/contracts/c-1?tab=register&feld=term_start_date"],
       ["Kritisch", "Kündigungsfrist erfassen", "/contracts/c-1?tab=register&feld=notice_period"],
-      ["KI-Prüfung", "Werte prüfen", "/contracts/c-1?tab=documents&subtab=review"],
+      ["KI-Prüfung", "Prüfen", "/contracts/c-1?tab=documents&subtab=document&abschnitt=nachweise-pruefen"],
       ["Prüfen", "Vertragspartner erfassen", "/contracts/c-1?tab=register&feld=partner_id"],
       ["Prüfen", "Kosten erfassen", "/contracts/c-1?tab=finance&abschnitt=entries"],
       ["Prüfen", "Verantwortliche Person festlegen", "/contracts/c-1?tab=register&abschnitt=ownership"],

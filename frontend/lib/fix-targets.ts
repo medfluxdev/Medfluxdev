@@ -134,7 +134,7 @@ export function asFixTarget(value: unknown): FixTarget | null {
 /** Kurze Beschriftung für einen Link „dorthin“, passend zum Ort. */
 export function fixLabel(target: FixTarget): string {
   const normalized = normalizeTarget(target);
-  if (normalized.tab === "documents") return normalized.subtab === "review" ? "KI-Werte prüfen" : normalized.subtab === "attachments" ? "Dokument hinzufügen" : "Dokumente öffnen";
+  if (normalized.tab === "documents") return normalized.subtab === "review" ? "Angaben prüfen" : normalized.subtab === "attachments" ? "Dokument hinzufügen" : "Dokumente öffnen";
   if (normalized.tab === "finance") return "Kosten erfassen";
   if (normalized.section === "ownership") return "Zuständigkeit festlegen";
   if (normalized.section === "term") return "Laufzeit erfassen";

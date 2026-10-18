@@ -344,7 +344,7 @@ class TestFactReviewFlow:
             assert r_ack.status_code == 200, r_ack.text
             j = r_ack.json()
             assert j["contract_review"]["status"] == "reviewed"
-            assert j["contract_review"]["status_label_de"] == "Geprüft"
+            assert j["contract_review"]["status_label_de"] == "Wesentliches geprüft"
             assert j["contract_review"]["reviewed_at"]
         finally:
             d.cleanup()

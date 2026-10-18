@@ -494,6 +494,7 @@ class LinkedEvidenceDto(BaseModel):
     snippet: Optional[str] = None
     requires_review: bool = False
     supports_exact_navigation: bool = False
+    excluded: bool = False
 
 
 class FactReviewStateDto(BaseModel):
@@ -527,6 +528,14 @@ class FactReviewStateDto(BaseModel):
     # Vertragsdaten-Feld der Angabe und dessen gespeicherter Wert (deutsch); None = kein Feld/kein Wert.
     register_field: Optional[str] = None
     stored_value: Optional[str] = None
+    # Feldprüfung: Priorität, Karte, berechnet?, Wert laut Dokument, Hauptnachweis, Stand für gleichzeitige Änderungen.
+    tier: str = "optional"
+    card: str = "partner"
+    is_calculated: bool = False
+    inputs: list[str] = Field(default_factory=list)
+    document_value: object = None
+    primary_evidence_id: Optional[str] = None
+    version: Optional[str] = None
 
 
 class ContractReviewDto(BaseModel):
@@ -548,6 +557,9 @@ class ContractReviewDto(BaseModel):
     critical_count: int = 0
     critical_reviewed_count: int = 0
     critical_unreviewed_count: int = 0
+    # Wesentliche Angaben (nach Bedeutung und Vertragstyp).
+    essential_count: int = 0
+    essential_reviewed_count: int = 0
 
 
 class ContractDetailResponse(BaseModel):
@@ -595,3 +607,5 @@ class ContractDetailResponse(BaseModel):
     fact_review_states: list[FactReviewStateDto] = Field(default_factory=list)
     fact_reviews: list[FactReviewDto] = Field(default_factory=list)
     contract_review: ContractReviewDto = Field(default_factory=ContractReviewDto)
+    # Feldprüfung (contracts/review/field_review.py): Felder mit Kandidaten und Nachweisen, Stufen, Weitere Informationen.
+    field_review: Optional[dict] = None

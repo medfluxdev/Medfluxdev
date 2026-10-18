@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.contracts.review import service as review_service
+from app.contracts.review.events import ReviewEvents
 from app.deadlines.system import PaymentSchedule, next_maintenance, next_payment, payment_schedules
 from app.finance.ai import payment_timing
 
@@ -110,6 +111,7 @@ _REVIEW_DATA = {
 
 def _states(monkeypatch, mode):
     monkeypatch.setattr(review_service, "_latest_fact_reviews", lambda session, contract_id: {})
+    monkeypatch.setattr(review_service, "load_events", lambda session, contract_id: ReviewEvents())
     monkeypatch.setattr(review_service, "auto_accept_allowed", lambda session, organization_id, contract_id: mode == "auto_noncritical")
     states = review_service.build_fact_review_states(None, organization_id=None, contract_id=None, data=_REVIEW_DATA)
     return {state["fact_key"]: state for state in states}
@@ -129,8 +131,9 @@ def test_auto_mode_accepts_only_noncritical_facts_with_clean_evidence(monkeypatc
     assert states["identity.supplier"]["state"] == "unreviewed"
     assert states["costs.vat_rate"]["state"] == "needs_review"
     summary = review_service.build_review_summary(list(states.values()))
-    assert summary["reviewed_count"] == 1
-    assert summary["critical_unreviewed_count"] == 1
+    # „Jährliche Kosten“ ist ein Rechenwert: er zählt nicht als Angabe, die eine Entscheidung braucht.
+    assert summary["relevant_count"] == 2 and summary["reviewed_count"] == 0
+    assert summary["critical_unreviewed_count"] == 2
 
 
 # --------------------------------------------------------------------------- Datenbank: Sync + API

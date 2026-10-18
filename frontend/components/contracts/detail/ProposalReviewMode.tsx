@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import { sameText, wordDiff } from "@/lib/evidence";
 import { applyReextraction, decideReextraction, type Proposal, type ProposalEvidence, type ReextractionRun } from "@/lib/domain-api/reextraction";
-import { Diff, SectionChip } from "./EvidenceReviewMode";
+import { Diff, SectionChip } from "./ReviewParts";
 import { analysisSection } from "./Reextraction";
 
 const icon = (body: ReactNode, className = "erm-icon") => <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">{body}</svg>;

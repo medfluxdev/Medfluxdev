@@ -45,25 +45,21 @@ function bySeverity(severity: string): { tone: SignalTone; word: string; rank: n
   return { tone: "info", word: "Hinweis", rank: RANK.info, priority: false };
 }
 
-/** Abschnitt „Nachweise prüfen“: öffnet im Reiter Dokumente den geführten Modus. */
+/** Abschnitt „Prüfen“: öffnet im Reiter Dokumente die geführte Feldprüfung (Adresse bleibt für alte Links gleich). */
 export const EVIDENCE_REVIEW_SECTION = "nachweise-pruefen";
-export const EVIDENCE_REVIEW_TARGET: FixTarget = { tab: "documents", subtab: "evidence", section: EVIDENCE_REVIEW_SECTION };
+export const EVIDENCE_REVIEW_TARGET: FixTarget = { tab: "documents", subtab: "document", section: EVIDENCE_REVIEW_SECTION };
 /** Abschnitt „Vorschläge prüfen“: geführter Modus für die Vorschläge der letzten Analyse. */
 export const PROPOSAL_REVIEW_SECTION = "vorschlaege-pruefen";
 
-export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, evidenceOpen = 0, cancelByUnknown = false, decision = null, decisionStep = null, analysis = null }: {
+export function buildOpenPoints({ gaps, tasks, warnings, fieldReview = null, cancelByUnknown = false, decision = null, decisionStep = null, analysis = null }: {
   gaps: Gap[];
   tasks: OpenTask[];
   warnings: DetailWarning[];
-  /** Leistungen mit noch nicht bestätigtem KI-Wert und Leistungen mit Wert überhaupt (wie die Faktprüfung). */
-  scopeToCheck: number;
-  scopeTotal: number;
-  /** SLA-Werte aus dem Dokument, die noch niemand bestätigt hat. */
-  slaToCheck?: number;
-  /** Offene Angaben der Faktprüfung (Zahl im Punkt „KI-Werte bestätigen“). */
-  reviewOpen?: number;
-  /** Nachweise ohne Ergebnis der Nachweisprüfung. */
-  evidenceOpen?: number;
+  /**
+   * Stand der Feldprüfung: wesentliche Entscheidungen, die warten. Ein Punkt für alles – Leistungen, SLA und Belege
+   * sind keine eigenen Pflichtpunkte; wer weiter prüfen will, findet die nächste Stufe in der Prüfung.
+   */
+  fieldReview?: { essentialOpen: number; conflicts: number; missing: number; deferred: number } | null;
   /** Kündbar-bis lässt sich nicht berechnen (Kopf zeigt „Nicht berechenbar“). */
   cancelByUnknown?: boolean;
   /** Keine Entscheidung zum nächsten Termin erfasst (`pendingDecision`), sonst null. */
@@ -103,10 +99,7 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
     points.push({ key: "cancel-by", tone: "critical", word: "Kritisch", title: "Kündigungstermin nicht berechenbar", why: "Ohne Kündigungsfrist wird der Kündigungstermin nicht berechnet und nicht überwacht.", action: "Kündigungsfrist erfassen", target: { tab: "register", field: "notice_period_value" }, rank: RANK.critical });
   }
   for (const gap of gaps) {
-    if (gap.key === "review") {
-      points.push({ key: `gap-${gap.key}`, tone: "ai", word: "KI-Prüfung", title: "KI-Werte bestätigen", why: reviewOpen > 0 ? `${reviewOpen} ${reviewOpen === 1 ? "Angabe aus dem Dokument ist" : "Angaben aus dem Dokument sind"} noch nicht bestätigt.` : "Werte aus dem Dokument sind noch nicht bestätigt.", action: "Werte prüfen", target: gap.target, rank: RANK.ai });
-      continue;
-    }
+    if (gap.key === "review") continue; // ersetzt durch den Punkt der Feldprüfung (unten)
     if (gap.blocksDeadline) {
       points.push({ key: `gap-${gap.key}`, tone: "critical", word: "Kritisch", title: `${gap.label} fehlt`, why: "Ohne diese Angabe wird die Kündigungsfrist nicht berechnet und nicht überwacht.", action: gap.command, target: gap.target, rank: RANK.critical });
       continue;
@@ -133,14 +126,15 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
   if (analysis?.newDocument != null) {
     points.push({ key: "analysis-new-document", tone: "info", word: "Hinweis", title: "Neues Dokument – Ergänzen starten?", why: `${analysis.newDocument ? `„${analysis.newDocument}“` : "Ein neues Vertragsdokument"} wurde nach der letzten Analyse hinterlegt. „Ergänzen“ sucht nur, was noch fehlt.`, action: "Ergänzen starten", target: REEXTRACTION_TARGET, rank: RANK.info });
   }
-  if (evidenceOpen > 0) {
-    points.push({ key: "evidence-review", tone: "ai", word: "KI-Prüfung", title: "Nachweise prüfen", why: `${evidenceOpen} ${evidenceOpen === 1 ? "Nachweis ist" : "Nachweise sind"} noch nicht mit dem Dokument abgeglichen.`, action: "Nachweise prüfen", target: EVIDENCE_REVIEW_TARGET, rank: RANK.ai });
-  }
-  if (scopeToCheck > 0) {
-    points.push({ key: "scope", tone: "warning", word: "Prüfen", title: "Leistungsumfang ungeklärt", why: `${scopeToCheck} von ${scopeTotal} Leistungen aus dem Dokument ${scopeToCheck === 1 ? "ist" : "sind"} noch nicht bestätigt.`, action: "Leistungen", target: SCOPE_TARGET, rank: RANK.warning });
-  }
-  if (slaToCheck > 0) {
-    points.push({ key: "sla-check", tone: "warning", word: "Prüfen", title: "SLA-Werte bestätigen", why: `${slaToCheck} ${slaToCheck === 1 ? "SLA-Wert aus dem Dokument ist" : "SLA-Werte aus dem Dokument sind"} noch nicht bestätigt.`, action: "SLA", target: SLA_TARGET, rank: RANK.warning });
+  if (fieldReview && fieldReview.essentialOpen > 0) {
+    const parts = [
+      `${fieldReview.essentialOpen} ${fieldReview.essentialOpen === 1 ? "wesentliche Entscheidung wartet" : "wesentliche Entscheidungen warten"}`,
+      fieldReview.conflicts ? `${fieldReview.conflicts} ${fieldReview.conflicts === 1 ? "Widerspruch oder Änderung" : "Widersprüche oder Änderungen"}` : null,
+      fieldReview.missing ? `${fieldReview.missing} nicht im Dokument gefunden` : null,
+      fieldReview.deferred ? `${fieldReview.deferred} zurückgestellt` : null,
+    ].filter(Boolean);
+    const level = fieldReview.conflicts > 0 || fieldReview.missing > 0 ? { tone: "warning" as const, word: "Prüfen", rank: RANK.warning } : { tone: "ai" as const, word: "KI-Prüfung", rank: RANK.ai };
+    points.push({ key: "field-review", ...level, title: "Wesentliche Angaben entscheiden", why: `${parts.join(" · ")}.`, action: "Prüfen", target: EVIDENCE_REVIEW_TARGET });
   }
   return points.map((point, index) => ({ point, index })).sort((a, b) => a.point.rank - b.point.rank || a.index - b.index).map(({ point }) => point);
 }

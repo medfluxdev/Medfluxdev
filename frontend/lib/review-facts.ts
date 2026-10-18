@@ -9,7 +9,7 @@ const REVIEW_FACT_ALIAS: Record<string, string> = {
   "termination.cancellation_to_contract_end": "termination.cancellation_period",
 };
 
-/** Angaben, die die Prüfung zeigt (wie `FactReviewPanel`); nur dorthin kann ein Sprung führen. */
+/** Angaben, die die Prüfung zeigt (wie die Prüfansicht); nur dorthin kann ein Sprung führen. */
 export function visibleReviewFacts(data: Pick<ContractDetailResponse, "fact_review_states">): FactReviewStateDto[] {
   return (data.fact_review_states ?? []).filter((s) => s.present || s.state !== "unreviewed" || s.has_history);
 }

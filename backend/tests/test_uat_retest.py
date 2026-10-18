@@ -301,7 +301,8 @@ class TestMaterialReaders:
         report = mat.material_report(r)
         assert report["equipment.identity"]["present"] is True
         assert report["equipment.identity"]["value"] == "Impella Controller"
-        assert report["equipment.identity"]["critical"] is True
+        # Gerät: weitere wichtige Angabe (wesentlich nur über den Vertragstyp), nie ein Pflichtpunkt der ersten Stufe.
+        assert report["equipment.identity"]["critical"] is False
 
     def test_serial_value_joined(self):
         r = {"equipment": [
@@ -315,9 +316,13 @@ class TestMaterialReaders:
         assert report["dates.end_date"]["value"] == "2029-03-31"
 
     def test_critical_set_contains_core_facts(self):
-        assert mat.fact_is_critical("identity.contract_number")
+        # Wesentlich = Feldregister (field_spec): Partner, Gegenstand, Laufzeit, Kündigung, Verlängerung, Preis, Steuer.
+        assert mat.fact_is_critical("identity.supplier")
         assert mat.fact_is_critical("termination.auto_renewal")
-        assert not mat.fact_is_critical("costs.vat_rate")
+        assert mat.fact_is_critical("costs.vat_rate")
+        assert not mat.fact_is_critical("identity.contract_number")
+        # Berechnete Werte werden nie einzeln bestätigt.
+        assert not mat.fact_is_critical("dates.latest_cancellation")
 
 
 class TestReviewSummaryCounts:

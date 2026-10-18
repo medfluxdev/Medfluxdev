@@ -457,6 +457,139 @@ export interface FactReviewStateDto {
   /** Vertragsdaten-Feld der Angabe und dort gespeicherter Wert (deutsch); null = kein Feld/kein Wert. */
   register_field?: string | null;
   stored_value?: string | null;
+  tier?: FieldTier;
+  card?: string;
+  is_calculated?: boolean;
+  document_value?: unknown;
+  version?: string | null;
+}
+
+/** Priorität eines Felds: wesentlich · weitere wichtige · optional. */
+export type FieldTier = "essential" | "important" | "optional";
+export type FieldStatus = "decided" | "open" | "conflict" | "changed" | "deferred" | "missing" | "absent" | "derived" | "waiting";
+export type SourceState = "verified" | "located" | "unresolved" | "unavailable";
+
+export interface FieldEvidenceDto {
+  evidence_id: string;
+  page: number | null;
+  snippet: string | null;
+  location: "exact" | "approx" | "page" | "none";
+  text_verified: boolean;
+  confidence: number | null;
+  extraction_method: string | null;
+  document_version_id: string | null;
+  original_filename: string | null;
+  document_available: boolean;
+  source_state: SourceState;
+  source_state_label: string;
+  excluded: boolean;
+  exclusion_reason: string | null;
+  exclusion_reason_label: string | null;
+  exclusion_note: string | null;
+  excluded_by: string | null;
+  primary: boolean;
+}
+
+export interface FieldCandidateDto {
+  key: string;
+  display: string;
+  value: unknown;
+  is_current: boolean;
+  sources: { source: "stored" | "document" | "conflict" | "analysis" | "finding"; label: string }[];
+  evidence_ids: string[];
+  inline_evidence: { page: number | null; quote: string | null }[];
+  support_count: number;
+  proposal_id: string | null;
+  run_number: number | null;
+  detail: string | null;
+  confidence: number | null;
+}
+
+export interface FieldHistoryDto {
+  at: string | null;
+  kind: string;
+  label: string;
+  by: string | null;
+  detail: string | null;
+  from?: unknown;
+  to?: unknown;
+  alternatives?: { display: string; sources: string[] }[] | null;
+}
+
+/** Ein offizielles Feld der Vertragsakte mit Kandidaten und Nachweisen (Backend `field_review`). */
+export interface FieldReviewFieldDto {
+  fact_key: string;
+  label: string;
+  card: string;
+  card_label: string;
+  tier: FieldTier;
+  tier_label: string;
+  why: string;
+  kind: "extracted" | "calculated";
+  status: FieldStatus;
+  status_label: string;
+  reason: string | null;
+  decision_needed: boolean;
+  present: boolean;
+  current: string | null;
+  current_origin: "reviewed" | "document" | null;
+  document_value: string | null;
+  stored_value: string | null;
+  register_field: string | null;
+  candidates: FieldCandidateDto[];
+  evidence: FieldEvidenceDto[];
+  primary_evidence_id: string | null;
+  source_state: SourceState | null;
+  source_state_label: string | null;
+  active_evidence_count: number;
+  inputs: { fact_key: string; label: string; present: boolean; decided: boolean }[];
+  ai_confidence: number | null;
+  found_by_rule: boolean | null;
+  is_critical: boolean;
+  reviewed_at: string | null;
+  reviewer: string | null;
+  version: string | null;
+  fact_state: string;
+  history: FieldHistoryDto[];
+}
+
+export interface FieldFindingDto {
+  finding_key: string;
+  label: string;
+  source_field: string;
+  snippet: string | null;
+  page: number | null;
+  evidence_id: string | null;
+  evidence_ids: string[];
+  decision: "linked" | "note" | "dismissed" | null;
+  target_fact_key: string | null;
+  note: string | null;
+  decided_by: string | null;
+  contact: boolean;
+  consequential: boolean;
+}
+
+export interface FieldStageDto {
+  tier: FieldTier;
+  label: string;
+  total: number;
+  open: number;
+  decided: number;
+  missing: number;
+  conflicts: number;
+  deferred: number;
+}
+
+export interface FieldReviewDto {
+  stages: FieldStageDto[];
+  essential_complete: boolean;
+  essential_open: number;
+  decisions_open: number;
+  fields: FieldReviewFieldDto[];
+  findings: FieldFindingDto[];
+  findings_open: number;
+  findings_consequential: number;
+  exclusion_reasons: { key: string; label: string }[];
 }
 
 /** Vertragsebene: Prüfstatus + Abschluss-Metadaten + Vollständigkeit. */
@@ -535,6 +668,7 @@ export interface ContractDetailResponse {
   fact_review_states: FactReviewStateDto[];
   fact_reviews: FactReviewDto[];
   contract_review: ContractReviewDto;
+  field_review?: FieldReviewDto | null;
 }
 
 // Auswahl eines Quellen-Elements: navigiert den PDF-Viewer plus Overlay.

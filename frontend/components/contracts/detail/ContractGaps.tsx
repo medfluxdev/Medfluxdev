@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getContractRegister, type ContractRegister } from "@/lib/domain-api/register";
 import { getContractRules, type ContractRuleResult } from "@/lib/domain-api/rules";
 import { getContractOwnership } from "@/lib/domain-api/ownership";
-import { FINANCE_ENTRIES_TARGET, REVIEW_TARGET, asFixTarget, registerField, type FixTarget } from "@/lib/fix-targets";
+import { FINANCE_ENTRIES_TARGET, asFixTarget, registerField, type FixTarget } from "@/lib/fix-targets";
+import { EVIDENCE_REVIEW_TARGET } from "./OpenPoints";
 
 export interface Gap {
   key: string;
@@ -76,7 +77,7 @@ export function useContractGaps({ contractId, orgSlug, hasAnnualCost, reviewPend
     const running = register ? !["beendet", "geloescht"].includes(register.business_status) : true;
     if (!hasAnnualCost && running) add({ key: "annual_cost", label: "Jährliche Kosten", reason: "keine Finanzeinträge gepflegt", command: "Kosten erfassen", target: FINANCE_ENTRIES_TARGET });
     if (responsible === null && running) add({ key: "responsible_account_id", label: "Verantwortliche Person", reason: "erhält Erinnerungen und Aufgaben", command: "Verantwortliche Person festlegen", target: { tab: "register", field: "responsible_account_id" } });
-    if (reviewPending) add({ key: "review", label: "Prüfung der KI-Werte", reason: "Werte aus dem Dokument noch nicht bestätigt", command: "KI-Werte prüfen", target: REVIEW_TARGET });
+    if (reviewPending) add({ key: "review", label: "Wesentliche Angaben prüfen", reason: "Entscheidungen zu Werten aus dem Dokument stehen aus", command: "Wesentliche Angaben prüfen", target: EVIDENCE_REVIEW_TARGET });
     if (documentCount === 0) add({ key: "document", label: "Vertragsdokument", reason: "kein Original hinterlegt", command: "Vertragsdokument hinzufügen", target: { tab: "documents", subtab: "attachments" } });
     for (const rule of rules) {
       const target = rule.outcome === "unknown" ? asFixTarget(rule.target) : null;

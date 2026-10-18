@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContractDetailPage from "@/app/contracts/[contract-id]/page";
 import type { ContractDetailResponse } from "@/lib/contract-detail-types";
+import { candidate, evidence, field, review } from "./fixtures/field-review";
 
 const apiGetMock = vi.fn();
 const apiPostMock = vi.fn();
@@ -62,6 +63,9 @@ function fixture(statusLabel: string, state: "unreviewed" | "confirmed"): Contra
     warnings: [], work_items: [], documents: [], evidence: [], overrides: [], audit_log: [],
     import_state: { import_state: "analysis_ok", state_label_de: "Analyse abgeschlossen", document_version_id: "dv-1", can_retry: false, message: null, analysis_status: "ok", requires_review: false },
     fact_review_states: [factState(state)], fact_reviews: [],
+    field_review: review([state === "confirmed"
+      ? field({ fact_key: "annual_costs", label: "Jährliche Kosten", status: "decided", status_label: "Entschieden", decision_needed: false, fact_state: "confirmed", current: "12.000 €", candidates: [candidate({ key: "12000", display: "12.000 €", value: "12.000 €", evidence_ids: [] })], evidence: [], source_state: null })
+      : field({ fact_key: "annual_costs", label: "Jährliche Kosten", current: "12.000 €", candidates: [candidate({ key: "12000", display: "12.000 €", value: "12.000 €", evidence_ids: ["e1"] })], evidence: [evidence()] })]),
     contract_review: { status: state, status_label_de: statusLabel, reviewer_display_name: null, reviewer_identity_type: "manual_unverified", authenticated_actor_id: null, reviewed_at: null, changed_noted_at: null, completion_note: null, relevant_count: 1, reviewed_count: state === "confirmed" ? 1 : 0, unresolved_count: state === "confirmed" ? 0 : 1, critical_count: 0, critical_reviewed_count: 0, critical_unreviewed_count: 0 },
   };
 }
@@ -97,16 +101,18 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
     await user.click(screen.getByRole("tab", { name: "Dokumente" }));
     await user.click(screen.getByRole("button", { name: "Prüfung" }));
 
-    const reviewRegion = await screen.findByRole("region", { name: "Faktprüfung" });
-    const panel = container.querySelector("#fact-review-panel") as HTMLElement;
+    const panel = container.querySelector("#field-review-panel") as HTMLElement;
     expect(panel).not.toBeNull();
-    expect(reviewRegion).toBe(panel);
+    expect(await screen.findByRole("region", { name: "Prüfung" })).toBe(panel);
 
-    await user.click(within(panel).getByRole("button", { name: /Bestätigen/ }));
+    // Karte (Schublade) und geführte Prüfung nutzen dieselbe Entscheidung: hier „Bestätigen“ in der Schublade.
+    await user.click(within(panel).getByRole("button", { name: "Jährliche Kosten" }));
+    apiPostMock.mockResolvedValue(fixture("Geprüft (Aktualisiert)", "confirmed"));
+    await user.click(within(await screen.findByRole("dialog", { name: "Jährliche Kosten" })).getByRole("button", { name: "Bestätigen" }));
 
     await waitFor(() => expect(contractLoads).toBe(2));
     expect(screen.queryByText("Vertrag wird geladen…")).not.toBeInTheDocument();
-    expect(await within(panel).findByText("Geprüft (Aktualisiert)")).toBeInTheDocument();
-    expect(container.querySelector("#fact-review-panel")).toBe(panel);
+    expect(await within(panel).findByText("Wesentliche Prüfung abgeschlossen")).toBeInTheDocument();
+    expect(container.querySelector("#field-review-panel")).toBe(panel);
   });
 });
