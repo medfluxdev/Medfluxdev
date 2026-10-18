@@ -10,6 +10,7 @@ from app.contracts.detail.evidence_geometry import (
     locate,
     match_key,
     same_text,
+    text_match,
     verify_evidence_locations,
 )
 from app.contracts.detail.recovery import _flip_regions, legacy_bottom_up
@@ -77,6 +78,15 @@ def test_verify_marks_exact_only_for_found_text_and_keeps_the_rest_honest():
     ]
     assert out[0]["bbox"] == {"x0": 176.0, "y0": 468.0, "x1": 428.0, "y1": 486.0}
     assert out[0]["supports_exact_navigation"] is True
+    assert [r["text_match"] for r in out] == [1.0, 0.0, 0.0, None, None]
+
+
+def test_text_match_is_full_only_for_the_whole_quote_in_one_place():
+    assert text_match(PAGE, "Krankenhaus Nordwest GmbH") == 1.0
+    # Alle Woerter da, aber nicht zusammenhaengend: nie 100 %.
+    assert text_match(PAGE, "Nordwest Europe Krankenhaus") == 0.99
+    assert text_match(PAGE, "Krankenhaus Suedwest") == 0.5
+    assert text_match(PAGE, "…") is None
 
 
 def test_legacy_docling_artifacts_are_flipped_once():

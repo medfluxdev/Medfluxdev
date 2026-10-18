@@ -102,6 +102,22 @@ def locate(page: dict, quote: Optional[str], near: Optional[dict] = None) -> Opt
     return box, span <= max(len(target) * _MAX_OVERHANG, _MIN_SPAN_CHARS)
 
 
+def text_match(page: dict, quote: Optional[str]) -> Optional[float]:
+    """Anteil der Woerter des Wortlauts, die auf der Seite vorkommen (0..1); None ohne Wortlaut.
+
+    1.0 nur, wenn der Wortlaut zusammenhaengend auf der Seite steht (`locate`); stehen nur
+    alle Woerter verstreut dort, hoechstens 0.99 – nie "voll belegt" ohne echten Treffer.
+    """
+    words = [w for w in (match_key(t) for t in re.findall(r"\w+", quote or "")) if w]
+    if not words:
+        return None
+    if locate(page, quote) is not None:
+        return 1.0
+    page_words = {match_key(t) for text, _region in _segments(page) for t in re.findall(r"\w+", text)}
+    found = sum(1 for word in words if word in page_words)
+    return min(round(found / len(words), 2), 0.99)
+
+
 def flip_stored_box(ref: dict, pages: list[dict]) -> dict:
     """Gespeicherte Nachweis-Box aus einem Alt-Artefakt (unten-links) nach oben-links drehen.
 
@@ -117,7 +133,7 @@ def flip_stored_box(ref: dict, pages: list[dict]) -> dict:
 
 
 def verify_evidence_locations(refs: list[dict], pages: list[dict], document_version_id) -> list[dict]:
-    """Setzt `location` (exact/approx/page/none) und `text_verified` je Nachweis; korrigiert die Box.
+    """Setzt `location` (exact/approx/page/none), `text_verified` und `text_match` je Nachweis; korrigiert die Box.
 
     Nur Nachweise des Dokuments, dessen kanonische Seiten vorliegen; andere behalten ihre
     Box, gelten aber nie als genau (kein Textbeleg).
@@ -126,11 +142,14 @@ def verify_evidence_locations(refs: list[dict], pages: list[dict], document_vers
     version = str(document_version_id) if document_version_id is not None else None
     for ref in refs:
         ref["text_verified"] = False
+        ref["text_match"] = None
         page_no = ref.get("page")
         normalized = bool(ref.get("geometry_normalized"))
         box = ref.get("bbox") if _is_box(ref.get("bbox")) else None
         page = by_page.get(int(page_no)) if page_no is not None and ref.get("document_version_id") == version else None
         found = locate(page, ref.get("snippet"), near=None if normalized else box) if page is not None else None
+        if page is not None:
+            ref["text_match"] = 1.0 if found is not None else text_match(page, ref.get("snippet"))
         if found is not None:
             box, exact = found
             ref["text_verified"] = True

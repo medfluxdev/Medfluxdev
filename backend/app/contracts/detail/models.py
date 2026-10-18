@@ -97,6 +97,8 @@ class EvidenceRef(BaseModel):
     # page = nur die Seite, none = ohne Seite (evidence_geometry.verify_evidence_locations).
     location: Literal["exact", "approx", "page", "none"] = "none"
     text_verified: bool = False
+    # Anteil des Wortlauts, der auf der Seite steht (0..1, 1.0 = zusammenhaengend gefunden); None = nicht pruefbar.
+    text_match: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 
 class DetailField(BaseModel):
