@@ -1093,10 +1093,11 @@ a.fin-basis-sub { color: var(--color-link); }
 .evt-search{flex: 1;min-width: 180px;min-height: 34px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
 .evt-table{width: 100%;border-collapse: collapse;table-layout: fixed;font-size: var(--text-small)}
 .evt-table th, .evt-table td{hyphens: manual;overflow-wrap: break-word}
-.evt-col-num{width: 2.75rem}
-.evt-col-section{width: 9.5rem}
+.evt-col-num{width: 2.5rem}
 .evt-col-page{width: 3.5rem}
-.evt-col-status{width: 11rem}
+.evt-col-status{width: 10.5rem}
+.evt-sub{display: block;margin-top: 2px;color: var(--color-text-muted);font-size: var(--text-caption)}
+.evt-table td .signal{white-space: nowrap}
 .evt-row{display: flex;flex-wrap: wrap;gap: 8px;width: 100%}
 .evt-section select{min-height: 34px;padding: 0 8px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
 .erm-scope{display: inline-flex;align-items: center;overflow: hidden;border: 1px solid var(--color-accent);border-radius: 999px;background: var(--color-surface-accent);color: var(--color-accent);font-size: var(--text-small);font-weight: 600}

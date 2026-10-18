@@ -42,7 +42,7 @@ export function filterLabel(filter: EvidenceFilter, rows: EvidenceRow[]): string
 }
 
 /**
- * Nachweise als kompakte Tabelle (# · Feld · [Abschnitt] · Seite · Status), ohne Zitate. Im Reiter Dokumente und
+ * Nachweise als kompakte Tabelle (# · Feld [mit Abschnitt darunter] · Seite · Status), ohne Zitate. Im Reiter Dokumente und
  * in „Alle Nachweise“ der Prüfung; ein Klick wählt den Nachweis. Mit `filter`/`onFilter` steuert die Auswahl
  * von außen (die geführte Prüfung geht dann nur diese Nachweise durch).
  */
@@ -93,11 +93,10 @@ export default function EvidenceTable({ rows, currentId = null, onPick, withSect
     </div> : null}
     <table className="evt-table">
       <caption className="visually-hidden">{caption}</caption>
-      <colgroup><col className="evt-col-num" /><col />{withSection ? <col className="evt-col-section" /> : null}<col className="evt-col-page" /><col className="evt-col-status" /></colgroup>
+      <colgroup><col className="evt-col-num" /><col /><col className="evt-col-page" /><col className="evt-col-status" /></colgroup>
       <thead><tr>
         <th scope="col" className="evt-num">#</th>
-        <th scope="col">Feld</th>
-        {withSection ? <th scope="col">Abschnitt</th> : null}
+        <th scope="col">{withSection ? "Feld · Abschnitt" : "Feld"}</th>
         <th scope="col">Seite</th>
         <th scope="col">Status</th>
       </tr></thead>
@@ -106,8 +105,9 @@ export default function EvidenceTable({ rows, currentId = null, onPick, withSect
         const current = row.ref.evidence_id === currentId;
         return <tr key={row.ref.evidence_id} className={current ? "is-current" : undefined} aria-current={current ? "true" : undefined}>
           <td className="evt-num">{row.number}</td>
-          <td><button type="button" className="evt-link" onClick={() => onPick(row.ref)}>{row.title}</button></td>
-          {withSection ? <td className="evt-muted">{row.section.label}</td> : null}
+          <td><button type="button" className="evt-link" onClick={() => onPick(row.ref)}>{row.title}</button>
+            {/* Abschnitt als zweite Zeile statt eigener Spalte: im schmalen Seitenfenster bleibt der Name lesbar. */}
+            {withSection ? <span className="evt-sub">{row.section.label}</span> : null}</td>
           <td className="evt-muted">{row.ref.page ?? "–"}</td>
           <td><Signal tone={view.tone} size="sm">{view.label}</Signal></td>
         </tr>;
