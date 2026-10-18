@@ -36,6 +36,7 @@ class FieldSpec:
 
 FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("internal_number", "text", "Interne Nummer", "identity", max_length=120),
+    FieldSpec("contract_title", "text", "Vertragstitel", "identity", max_length=500),
     FieldSpec("short_description", "text", "Kurzbeschreibung", "identity", max_length=500),
     FieldSpec("subject_text", "text", "Vertragsgegenstand", "identity", max_length=20000),
     FieldSpec("is_framework", "bool", "Rahmenvertrag", "identity"),
@@ -81,7 +82,19 @@ FIELD_SPECS: tuple[FieldSpec, ...] = (
 FIELDS: dict[str, FieldSpec] = {spec.key: spec for spec in FIELD_SPECS}
 
 # Pflichtangaben fuer den Statuswechsel nach "Gueltig".
-REQUIRED_FOR_VALID: tuple[str, ...] = ("short_description", "term_model", "term_start_date")
+REQUIRED_FOR_VALID: tuple[str, ...] = ("contract_title", "term_model", "term_start_date")
+# Als Bezeichnung des Vertrags genuegt auch eine Kurzbeschreibung (z. B. von Hand erfasste Vertraege).
+_TITLE_ALTERNATIVE = {"contract_title": "short_description"}
+
+
+def missing_required(values: dict[str, Any]) -> list[str]:
+    """Pflichtangaben fuer „Gueltig“, die fehlen (Titel oder Kurzbeschreibung zaehlt als Bezeichnung)."""
+    out = []
+    for key in REQUIRED_FOR_VALID:
+        alternative = _TITLE_ALTERNATIVE.get(key)
+        if values.get(key) in (None, "") and not (alternative and values.get(alternative) not in (None, "")):
+            out.append(key)
+    return out
 
 _DECIMAL_LIMITS = {
     "sla_availability_percent": (Decimal("0"), Decimal("100")),

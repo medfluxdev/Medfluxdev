@@ -60,7 +60,7 @@ def proposals_from_extraction(contract: ExtractedContract) -> dict[str, Proposal
     identity, dates, termination = contract.identity, contract.dates, contract.termination
 
     if identity.contract_title and identity.contract_title.strip():
-        out["short_description"] = Proposal(identity.contract_title.strip()[:500], "identity.contract_title")
+        out["contract_title"] = Proposal(identity.contract_title.strip()[:500], "identity.contract_title")
 
     start = _date(dates.start_date)
     if start is not None:

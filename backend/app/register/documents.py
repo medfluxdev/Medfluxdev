@@ -61,7 +61,7 @@ def attachment_proposals(extracted: ExtractedContract, attachment_type: str) -> 
         end = getattr(extracted.dates.end_date, "date", None) if extracted.dates.end_date else None
         return {"terminated_effective": Proposal(end, "dates.end_date")} if end else {}
     proposals = proposals_from_extraction(extracted)
-    proposals.pop("short_description", None)
+    proposals.pop("contract_title", None)
     return proposals
 
 
@@ -310,7 +310,7 @@ def relation_payloads(session: Session, contract: Contract, allowed: Optional[se
             "relation_id": str(row.id),
             "contract_id": str(other_id),
             "register_number": other.register_number if other else None,
-            "short_description": (other.short_description or other.supplier) if other else None,
+            "short_description": (other.contract_title or other.short_description or other.supplier) if other else None,
             "business_status": other.business_status if other else None,
             "confirmed": not row.requires_review,
             "rationale": row.rationale,
@@ -373,7 +373,7 @@ def framework_options(session: Session, contract: Contract, allowed: Optional[se
     if allowed is not None:
         stmt = stmt.where(Contract.id.in_(allowed))
     return [
-        {"contract_id": str(row.id), "register_number": row.register_number, "short_description": row.short_description or row.supplier}
+        {"contract_id": str(row.id), "register_number": row.register_number, "short_description": row.contract_title or row.short_description or row.supplier}
         for row in session.scalars(stmt).all()
     ]
 

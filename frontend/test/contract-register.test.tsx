@@ -62,7 +62,8 @@ function register(overrides: Partial<ContractRegister> = {}): ContractRegister {
     review_pending: true,
     ended_on: null,
     fields: {
-      short_description: field("Kurzbeschreibung", "Wartung MRT", { origin: "ai", source_field: "identity.contract_title" }),
+      contract_title: field("Vertragstitel", "Wartung MRT", { origin: "ai", source_field: "identity.contract_title" }),
+      short_description: field("Kurzbeschreibung", null),
       internal_number: field("Interne Nummer", null),
       partner_id: field("Vertragspartner", null),
       contract_type_id: field("Vertragstyp", null),
@@ -170,6 +171,16 @@ describe("Vertragsregister – Stammdaten", () => {
     }
   });
 
+  it("zeigt den Vertragstitel in „Vertrag & Partner“ und führt zur Bearbeitung (getrennt von der Kurzbeschreibung)", async () => {
+    const user = userEvent.setup();
+    render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
+    await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
+    await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
+    const title = await screen.findByLabelText("Vertragstitel");
+    expect(title).toHaveValue("Wartung MRT");
+    expect(screen.getByLabelText("Kurzbeschreibung")).toHaveValue("");
+  });
+
   it("ist barrierefrei in Ansicht und Bearbeitung", async () => {
     const user = userEvent.setup();
     const { container } = render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
@@ -185,7 +196,7 @@ describe("Vertragsregister – Stammdaten", () => {
     await screen.findByRole("heading", { name: "Laufzeit, Fristen & Kündigung" });
 
     await user.click(screen.getByRole("button", { name: "Bestätigen" }));
-    expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {}, confirm: ["short_description"] });
+    expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: {}, confirm: ["contract_title"] });
 
     const suggestions = screen.getByRole("heading", { name: "KI-Vorschläge" }).closest("section")!;
     const buttons = within(suggestions).getAllByRole("button", { name: "Übernehmen" });

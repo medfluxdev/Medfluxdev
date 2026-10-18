@@ -159,7 +159,7 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
     partner_contracts: list[dict] = []
     if contract.partner_id:
         partner_name = session.scalar(select(ContractPartner.short_name).where(ContractPartner.id == contract.partner_id))
-        stmt = select(Contract.id, Contract.register_number, Contract.short_description).where(
+        stmt = select(Contract.id, Contract.register_number, func.coalesce(Contract.contract_title, Contract.short_description)).where(
             Contract.organization_id == contract.organization_id,
             Contract.partner_id == contract.partner_id,
             Contract.id != contract.id,
@@ -242,7 +242,7 @@ def renewal_brief(session: Session, contract: Contract, as_of: date, visible: Op
     return {
         "contract_id": str(contract.id),
         "register_number": contract.register_number,
-        "short_description": contract.short_description or contract.supplier,
+        "short_description": contract.contract_title or contract.short_description or contract.supplier,
         "business_status": contract.business_status,
         "term_model": TERM_MODEL_LABELS.get(contract.term_model) if contract.term_model else None,
         "as_of": as_of.isoformat(),

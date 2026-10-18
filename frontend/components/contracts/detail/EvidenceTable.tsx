@@ -168,7 +168,8 @@ export default function EvidenceTable({ rows, currentId = null, onPick, withSect
   const visible = rows.filter((row) => matchesFilter(row, filter));
 
   return <div className="evt">
-    {filters ? <EvidenceFilterBar rows={rows} filter={filter} onFilter={setFilter} /> : null}
+    {/* Gleicher Filter wie im Aufklapper „Nachweise“; key setzt den Entwurf zurück, wenn die Auswahl von außen wechselt. */}
+    {filters ? <div className="evt-panel"><EvidenceFilterPanel key={`${filter.status}|${filter.section}|${filter.query}`} rows={rows} filter={filter} onApply={setFilter} /></div> : null}
     <table className="evt-table">
       <caption className="visually-hidden">{caption}</caption>
       <thead><tr>

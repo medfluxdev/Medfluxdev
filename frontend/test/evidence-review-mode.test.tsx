@@ -189,6 +189,7 @@ describe("Nachweise prüfen (geführt)", () => {
     expect(within(within(drawer).getByRole("combobox", { name: "Nach Abschnitt filtern" })).getAllByRole("option").map((option) => option.textContent))
       .toEqual(["Alle Abschnitte", "Vertragsdaten", "Fristen & Aufgaben", "Finanzen"]);
     await user.selectOptions(within(drawer).getByRole("combobox", { name: "Nach Abschnitt filtern" }), "Finanzen");
+    await user.click(within(drawer).getByRole("button", { name: "Filter anwenden" }));
     expect(within(drawer).getByText(/Die Prüfung geht nur die gefilterten Nachweise durch \(1\)/)).toBeInTheDocument();
     expect(within(drawer).getAllByRole("row")).toHaveLength(2); // Kopf + 1
     await user.keyboard("{Escape}");
@@ -207,6 +208,7 @@ describe("Nachweise prüfen (geführt)", () => {
     await user.click(screen.getByRole("button", { name: /Alle Nachweise/ }));
     const drawer = screen.getByRole("dialog", { name: "Alle Nachweise" });
     await user.click(within(drawer).getByRole("button", { name: /^Offen/ }));
+    await user.click(within(drawer).getByRole("button", { name: "Filter anwenden" }));
     await user.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Nur Offen · 3" })).toBeInTheDocument();
     await user.click(within(panel()).getByRole("button", { name: /^Bestätigen/ }));
@@ -246,6 +248,7 @@ describe("Nachweise prüfen (geführt)", () => {
     expect(within(table).getByText("Übersprungen")).toBeInTheDocument();
     expect(within(table).getByText("Noch nicht geprüft")).toBeInTheDocument();
     await user.click(within(drawer).getByRole("button", { name: /^Abweichend/ }));
+    await user.click(within(drawer).getByRole("button", { name: "Filter anwenden" }));
     expect(within(table).getAllByRole("row")).toHaveLength(2);
     await user.click(within(table).getByRole("button", { name: "Vertragsbeginn" }));
     expect(screen.queryByRole("dialog", { name: "Alle Nachweise" })).not.toBeInTheDocument();

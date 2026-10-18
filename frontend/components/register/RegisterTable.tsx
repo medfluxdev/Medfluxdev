@@ -69,8 +69,8 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
   return <div className="reg-scroll"><table className="rg-table reg-table">
     <thead><tr>
       {cells.map((cell) => cell.kind === "contract"
-        ? <th key="contract" scope="col" className="reg-contract" aria-sort={ariaSort(["short_description", "register_number"])}>
-          <button type="button" className="reg-sort" onClick={() => onSort("short_description")}>Vertrag{arrow("short_description")}</button>
+        ? <th key="contract" scope="col" className="reg-contract" aria-sort={ariaSort(["display_title", "short_description", "register_number"])}>
+          <button type="button" className="reg-sort" onClick={() => onSort("display_title")}>Vertrag{arrow("display_title")}</button>
           <span className="reg-sort-divider" aria-hidden="true">/</span>
           <button type="button" className="reg-sort reg-sort-sub" onClick={() => onSort("register_number")} aria-label="Nach Nr. sortieren">Nr.{arrow("register_number")}</button>
         </th>
@@ -93,7 +93,8 @@ export default function RegisterTable({ data, spec, shown, columnByKey, archiveM
       });
       previous = row.group;
       const number = row.values.register_number == null ? "" : String(row.values.register_number);
-      const description = row.values.short_description == null ? "" : String(row.values.short_description).trim();
+      const shownTitle = row.values.display_title ?? row.values.contract_title ?? row.values.short_description;
+      const description = shownTitle == null ? "" : String(shownTitle).trim();
       // Der Vertrag öffnet immer in der Übersicht; Offene Punkte führen von dort zur Stelle.
       const href = contractHref(row.contract_id);
       return <Fragment key={row.contract_id}>

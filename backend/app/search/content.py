@@ -224,7 +224,7 @@ def search_contents(
         select(
             ContractTextPage.id, ContractTextPage.contract_id, ContractTextPage.document_version_id,
             ContractTextPage.page_number, ContractTextPage.text,
-            Contract.register_number, Contract.short_description, Contract.supplier,
+            Contract.register_number, Contract.contract_title, Contract.short_description, Contract.supplier,
             func.coalesce(ContractDocument.title, DocumentFile.original_filename).label("document"),
             ContractDocument.is_valid,
         )
@@ -255,7 +255,7 @@ def search_contents(
         entry = hits.setdefault(row.contract_id, {
             "contract_id": str(row.contract_id),
             "register_number": row.register_number,
-            "short_description": row.short_description or row.supplier,
+            "short_description": row.contract_title or row.short_description or row.supplier,
             "score": 0.0,
             "hits": [],
         })

@@ -261,6 +261,22 @@ describe("Vertragsliste: Werkzeugleiste", () => {
     expect(within(table).getByRole("link", { name: "Wartung MRT" })).toBeInTheDocument();
   });
 
+  it("die Spalte „Vertrag“ zeigt den Vertragstitel und sortiert danach; „Vertragstitel“ ist eine eigene wählbare Spalte", async () => {
+    const user = userEvent.setup();
+    api.getGridColumns.mockResolvedValue({ columns: [...COLUMNS, { key: "contract_title", label: "Vertragstitel", type: "text", default: false, groupable: false }] });
+    api.getGrid.mockImplementation(async (_slug: string, spec: Partial<GridSpec>) => ({
+      ...response(spec, 1),
+      items: [{ contract_id: "c-1", values: { business_status: "Gültig", register_number: "000001", short_description: "intern", display_title: "Full-Service-Vertrag Impella" }, group: [] }],
+    }));
+    render(<RegisterGrid organizationSlug="test-klinik" tab="bestand" />);
+    const table = await screen.findByRole("table");
+    expect(within(table).getByRole("link", { name: "Full-Service-Vertrag Impella" })).toBeInTheDocument();
+    await user.click(within(table).getByRole("button", { name: /^Vertrag( [▲▼])?$/ }));
+    await waitFor(() => expect(lastSpec().sort).toEqual({ column: "display_title", dir: "asc" }));
+    await user.click(screen.getByRole("button", { name: "Darstellung" }));
+    expect(screen.getByLabelText("Vertragstitel")).not.toBeChecked();
+  });
+
   it("bietet „Stornierte einbeziehen“ nur mit Recht an und merkt es in der Adresse", async () => {
     const user = userEvent.setup();
     permissions.allowed = new Set(["contract.view_deleted"]);

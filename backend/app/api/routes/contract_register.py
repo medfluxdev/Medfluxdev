@@ -152,7 +152,7 @@ def _register_payload(session, contract: Contract, actor: RegisterActor) -> dict
             extracted = load_extracted(session, contract.accepted_extraction_id)
             ai_type = extracted.identity.contract_type.value if extracted else None
         data["type_suggestion"] = catalogs.type_suggestion(
-            session, actor.organization_id, ai_type, contract.short_description
+            session, actor.organization_id, ai_type, contract.contract_title or contract.short_description
         )
     data["storage_location_label"] = catalogs.lookup_label(
         session, actor.organization_id, "storage_location", contract.storage_location_code

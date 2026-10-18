@@ -20,7 +20,7 @@ def _row(hospital, department, cost, *, status="gueltig", currency="EUR", number
     values.update({
         "business_status": status, "term_start_date": date(2025, 1, 1), "possible_end": None,
         "hospital": hospital, "department": department, "_currency": currency,
-        "register_number": number, "short_description": f"Vertrag {number}", "partner": "Partner",
+        "register_number": number, "short_description": f"Vertrag {number}", "display_title": f"Vertrag {number}", "partner": "Partner",
         "term_status": "Vollständig",
         "cost_current_year": Decimal(cost) if cost is not None else None,
         "annual_cost": Decimal(cost) if cost is not None else None,

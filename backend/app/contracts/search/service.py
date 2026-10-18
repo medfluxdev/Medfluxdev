@@ -804,7 +804,7 @@ def _list_item(session, contract, warnings, calc_run, ext, equipment, partner_na
     row = {
         "contract_id": contract.id,
         "contract_number": contract.contract_number,
-        "contract_title": contract.short_description or title,
+        "contract_title": contract.contract_title or contract.short_description or title,
         "supplier": partner_name or contract.supplier,
         "register_number": contract.register_number,
         "business_status": contract.business_status,

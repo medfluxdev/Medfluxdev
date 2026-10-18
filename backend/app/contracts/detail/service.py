@@ -504,7 +504,7 @@ def build_contract_detail(
             contract.archived_at.isoformat() if contract.archived_at is not None else None
         ),
         "contract_number": contract_number,
-        "contract_title": contract.short_description or contract_title,
+        "contract_title": contract.contract_title or contract.short_description or contract_title,
         "supplier": contract.supplier,
         "register_number": contract.register_number,
         "business_status": contract.business_status,

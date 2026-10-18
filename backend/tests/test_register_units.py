@@ -55,7 +55,8 @@ def test_auto_renewal_mapping_with_evidence_sources():
     assert proposals["notice_period_value"].value == 3
     assert proposals["notice_period_unit"].value == "months"
     assert proposals["renewal_period_unit"].source_field == "termination.renewal_period"
-    assert proposals["short_description"].value == "Servicevertrag CT Scanner"
+    assert proposals["contract_title"].value == "Servicevertrag CT Scanner"
+    assert "short_description" not in proposals
 
 
 def test_terminable_mapping_from_condition_text():
@@ -156,7 +157,7 @@ def test_valid_requires_master_data():
     with pytest.raises(TransitionError) as excinfo:
         _plan(values={"supplier": None})
     assert excinfo.value.status_code == 422
-    assert set(excinfo.value.missing) == {"short_description", "term_model", "term_start_date", "partner_id"}
+    assert set(excinfo.value.missing) == {"contract_title", "term_model", "term_start_date", "partner_id"}
 
 
 def test_valid_requires_review_or_acknowledgement():

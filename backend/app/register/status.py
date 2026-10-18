@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any, Optional
 
 from app.core.clock import today_local
-from app.register.fields import REQUIRED_FOR_VALID, FIELDS
+from app.register.fields import FIELDS, missing_required
 
 STATUS_LABELS = {
     "in_arbeit": "In Arbeit",
@@ -116,7 +116,7 @@ def plan_transition(
     updates: dict[str, Any] = {}
     if target == "gueltig":
         if current == "in_arbeit":
-            missing = [key for key in REQUIRED_FOR_VALID if values.get(key) in (None, "")]
+            missing = missing_required(values)
             if values.get("partner_id") is None and not values.get("supplier"):
                 missing.append("partner_id")
             if missing:

@@ -81,8 +81,9 @@ const SECTIONS: { id: string; title: string; description: string; fields: FieldD
   {
     id: "identity",
     title: "Vertrag & Partner",
-    description: "Kurzbeschreibung, Vertragspartner und Einordnung",
+    description: "Vertragstitel, Vertragspartner und Einordnung",
     fields: [
+      { key: "contract_title", kind: "text" },
       { key: "short_description", kind: "text" },
       // Interne Nummer = automatisch vergebene, eindeutige Vertragsnummer (Nummernkreis), nie von Hand.
       { key: "register_number", kind: "auto_number" },

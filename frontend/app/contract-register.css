@@ -1079,6 +1079,8 @@ a.fin-basis-sub { color: var(--color-link); }
 .dw-switch-popover .popover-panel{max-width: min(780px, calc(100vw - 2 * var(--space-4)));padding: 20px}
 /* Aufklapper „Nachweise filtern“ (Entwurf 18.10.2026) */
 .evf{display: grid;gap: 18px;width: min(740px, calc(100vw - 4 * var(--space-4)))}
+.evt-panel{margin-bottom: var(--space-4);padding-bottom: var(--space-4);border-bottom: 1px solid var(--color-border)}
+.evt-panel .evf{width: 100%}
 .evf-head{display: flex;align-items: center;gap: 12px}
 .evf-title-icon{width: 26px;height: 26px;flex: none;fill: none;stroke: currentcolor;stroke-width: 1.8;stroke-linecap: round}
 .evf-title{flex: 1;margin: 0;font-size: var(--text-title-s);font-weight: var(--weight-semibold)}

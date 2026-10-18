@@ -108,7 +108,7 @@ def _row(number: str, devices: dict, annual, others=()):
         values={
             **{key: None for key in MONEY_KEYS},
             "business_status": "gueltig", "term_start_date": date(2025, 1, 1), "possible_end": date(2028, 12, 31),
-            "register_number": number, "short_description": f"Vertrag {number}", "partner": "Siemens", "hospital": "Nord",
+            "register_number": number, "short_description": f"Vertrag {number}", "display_title": f"Vertrag {number}", "partner": "Siemens", "hospital": "Nord",
             "department": "Medizintechnik", "annual_cost": annual, "cost_current_year": annual, "_currency": "EUR",
             "_device_quantities": {**devices, **{label: None for label in others}},
             "device_types": None,

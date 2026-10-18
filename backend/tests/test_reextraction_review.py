@@ -116,7 +116,7 @@ def test_review_correction_reads_the_value_and_updates_register(tmp_path):
         contract = session.get(Contract, UUID(contract_id), with_for_update=True)
         from app.register.service import _provenance
 
-        assert _provenance(session, contract.id)["short_description"].origin == "ai"
+        assert _provenance(session, contract.id)["contract_title"].origin == "ai"
     finally:
         session.close()
 

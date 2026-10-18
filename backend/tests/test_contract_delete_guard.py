@@ -226,7 +226,7 @@ def test_archived_contract_cannot_enter_deletion_queue(monkeypatch):
 ])
 def test_deletion_queue_pagination_contract(monkeypatch, count, offset, expected_more, expected_next):
     organization = uuid4()
-    rows = [SimpleNamespace(id=uuid4(), contract_number=str(i), register_number=None, short_description=None, supplier=None,
+    rows = [SimpleNamespace(id=uuid4(), contract_number=str(i), register_number=None, contract_title=None, short_description=None, supplier=None,
                             lifecycle_state="deleted", deletion_owner=None, deleted_at=None)
             for i in range(count)]
     query_result = SimpleNamespace(all=lambda: rows)

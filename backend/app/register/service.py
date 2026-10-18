@@ -46,7 +46,7 @@ from app.database.models.register import (
 )
 from app.models.contract import Contract as ExtractedContract
 from app.register.ai_mapping import proposals_from_extraction
-from app.register.fields import FIELD_SPECS, FIELDS, REQUIRED_FOR_VALID, FieldValidationError, coerce_value, to_json, validate_pairs
+from app.register.fields import FIELD_SPECS, FIELDS, FieldValidationError, coerce_value, missing_required, to_json, validate_pairs
 from app.register.status import STATUS_LABELS, TransitionError, allowed_targets, plan_transition
 from app.register.reminders import DEFAULT_REMINDER_LEAD_MONTHS
 from app.register.terms import TermInputs, compute_terms, period
@@ -581,7 +581,7 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
             "updated_by_name": row.updated_by_name if row else None,
             "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
         }
-    missing_for_valid = [key for key in REQUIRED_FOR_VALID if values.get(key) in (None, "")]
+    missing_for_valid = missing_required(values)
     if contract.partner_id is None and not contract.supplier:
         missing_for_valid.append("partner_id")
     type_leads, type_escalation = type_reminder_defaults(session, contract)

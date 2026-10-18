@@ -205,7 +205,7 @@ def suggestions(session: Session, partner: ContractPartner, contracts: Iterable[
             seen[(key, norm)] = Suggestion(
                 field=key, value=value, current=current or None, kind="deviating" if current else "new",
                 contract_id=str(contract.id), register_number=contract.register_number,
-                contract_label=contract.short_description, page=page, quote=quote,
+                contract_label=contract.contract_title or contract.short_description, page=page, quote=quote,
             )
     return sorted(seen.values(), key=lambda item: (FIELD_ORDER.index(item.field), item.value))
 

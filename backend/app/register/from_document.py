@@ -197,6 +197,7 @@ def values_from_quote(key: str, quote: str) -> dict[str, Any]:
 
 # Felder, die aus einer markierten Stelle uebernommen werden koennen (Reihenfolge = Auswahlliste).
 CAPTURE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("contract_title", "Vertragstitel"),
     ("short_description", "Kurzbeschreibung"),
     ("subject_text", "Vertragsgegenstand"),
     ("internal_number", "Interne Nummer"),

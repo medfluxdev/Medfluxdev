@@ -165,6 +165,8 @@ class Contract(OrgOwnedMixin, Base):
     # reine KI-Projektion.
     register_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     internal_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    # Vertragstitel (KI: identity.contract_title, mit Nachweis) – getrennt von der freien Kurzbeschreibung.
+    contract_title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     short_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     subject_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_framework: Mapped[bool] = mapped_column(

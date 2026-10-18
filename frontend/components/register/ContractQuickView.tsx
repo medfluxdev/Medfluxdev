@@ -39,7 +39,7 @@ export default function ContractQuickView({ organizationSlug, contractId, onClos
       {data ? (
         <div className="stack-4">
           <div>
-            <h3>{String(data.fields.short_description?.value ?? "Ohne Kurzbeschreibung")}</h3>
+            <h3>{String(data.fields.contract_title?.value ?? data.fields.short_description?.value ?? "Ohne Titel")}</h3>
             <p className="field-hint">{BUSINESS_STATUS_LABEL[data.business_status]} · {field("partner_id")}</p>
           </div>
           <dl className="quick-facts">

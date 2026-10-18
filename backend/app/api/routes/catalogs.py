@@ -307,7 +307,7 @@ def get_partner(partner_id: UUID, request: Request, organization_slug: str):
     try:
         row = _own(session, ContractPartner, partner_id, actor.organization_id)
         stmt = (
-            select(Contract.id, Contract.register_number, Contract.short_description, Contract.business_status)
+            select(Contract.id, Contract.register_number, func.coalesce(Contract.contract_title, Contract.short_description), Contract.business_status)
             .where(Contract.partner_id == row.id, Contract.organization_id == actor.organization_id)
             .order_by(Contract.register_number)
         )

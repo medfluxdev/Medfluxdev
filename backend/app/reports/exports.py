@@ -223,7 +223,7 @@ def drilldown(rows: list[GridRow], as_of: date, hospital: Optional[str] = None, 
         items = [{
             "contract_id": str(row.contract_id),
             "register_number": row.values["register_number"],
-            "short_description": row.values["short_description"],
+            "short_description": row.values["display_title"],
             "partner": row.values["partner"],
             "currency": row.values.get("_currency") or "EUR",
             "annual_cost": _money(row.values["annual_cost"]),
@@ -304,7 +304,7 @@ def device_type_comparison(rows: list[GridRow], as_of: date, device_type: Option
         items.append({
             "contract_id": str(row.contract_id),
             "register_number": row.values["register_number"],
-            "short_description": row.values["short_description"],
+            "short_description": row.values["display_title"],
             "partner": row.values["partner"],
             "hospital": row.values["hospital"],
             "department": row.values["department"],
@@ -382,7 +382,7 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
                 monthly[due.strftime("%Y-%m")][kind] += 1
                 upcoming.append({
                     "contract_id": str(row.contract_id), "register_number": row.values["register_number"],
-                    "short_description": row.values["short_description"], "due_date": due.isoformat(), "title": title,
+                    "short_description": row.values["display_title"], "due_date": due.isoformat(), "title": title,
                     "kind": kind,
                 })
     upcoming.sort(key=lambda item: item["due_date"])
@@ -565,7 +565,7 @@ def cover_html(session: Session, contract: Contract, row: GridRow, as_of: date, 
         return column.label, _fmt(values[key], column.type)
 
     sections = [
-        ("Vertrag & Partner", ["short_description", "business_status", "partner", "contract_type", "contract_category",
+        ("Vertrag & Partner", ["contract_title", "short_description", "business_status", "partner", "contract_type", "contract_category",
                                "internal_number", "is_framework", "data_protection_relevant", "is_confidential"]),
         ("Laufzeit & Fristen", ["term_model", "term_start_date", "earliest_end", "cancel_by", "possible_end",
                                 "terminated_on", "terminated_effective", "next_deadline"]),

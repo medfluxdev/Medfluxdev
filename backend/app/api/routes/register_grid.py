@@ -430,7 +430,7 @@ def get_renewals(request: Request, organization_slug: str, days: int = 120):
                 {
                     "contract_id": str(row.contract_id),
                     "register_number": row.values["register_number"],
-                    "short_description": row.values["short_description"],
+                    "short_description": row.values["display_title"],
                     "partner": row.values["partner"],
                     "cancel_by": row.values["cancel_by"].isoformat(),
                     "days_left": (row.values["cancel_by"] - as_of).days,
@@ -447,7 +447,7 @@ def get_renewals(request: Request, organization_slug: str, days: int = 120):
                 {
                     "contract_id": str(row.contract_id),
                     "register_number": row.values["register_number"],
-                    "short_description": row.values["short_description"],
+                    "short_description": row.values["display_title"],
                     "reason": "Laufzeitangaben unvollständig",
                 }
                 for row in not_evaluable(rows)

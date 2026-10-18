@@ -106,7 +106,7 @@ LABELS: dict[str, str] = {
 
 # Welche Felder der Vertragsdaten aus einem Fakt abgeleitet werden (register/ai_mapping.py).
 REGISTER_KEYS: dict[str, tuple[str, ...]] = {
-    "identity.contract_title": ("short_description",),
+    "identity.contract_title": ("contract_title",),
     "dates.start_date": ("term_start_date",),
     "dates.end_date": ("term_fixed_end_date", "term_model"),
     "dates.duration": ("initial_term_value", "initial_term_unit", "term_model"),

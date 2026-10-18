@@ -357,7 +357,7 @@ def contract_deletion_queue(request: Request, organization_slug: str, offset: in
         return {
             "items": [
                 {"contract_id": str(row.id), "contract_number": row.contract_number,
-                 "register_number": row.register_number, "short_description": row.short_description or row.supplier,
+                 "register_number": row.register_number, "short_description": row.contract_title or row.short_description or row.supplier,
                  "lifecycle_state": row.lifecycle_state, "by_name": names.get(row.deletion_owner),
                  "deleted_at": row.deleted_at.isoformat() if row.deleted_at else None}
                 for row in rows[:100]

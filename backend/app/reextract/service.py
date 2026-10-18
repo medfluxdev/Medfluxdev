@@ -389,7 +389,7 @@ def _notify(session: Session, run: ContractReextraction) -> None:
     from app.database.models.deadlines import Notification
 
     contract = session.get(Contract, run.contract_id)
-    name = (contract.short_description or contract.register_number or "Vertrag") if contract else "Vertrag"
+    name = (contract.contract_title or contract.short_description or contract.register_number or "Vertrag") if contract else "Vertrag"
     if run.status == "ready":
         found = open_count(run.summary)
         title = (f"Analyse #{run.number} fertig – {found} Vorschl{'ag' if found == 1 else 'äge'} prüfen" if found

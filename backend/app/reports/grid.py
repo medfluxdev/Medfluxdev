@@ -54,6 +54,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("business_status", "Status", "status", default=True, groupable=True),
     Column("register_number", "Nr.", "text", default=True),
     Column("short_description", "Kurzbeschreibung", "text", default=True),
+    Column("contract_title", "Vertragstitel", "text"),
     Column("partner", "Vertragspartner", "enum", default=True, groupable=True),
     Column("contract_type", "Vertragstyp", "enum", default=True, groupable=True),
     Column("contract_category", "Kategorie", "enum", groupable=True),
@@ -137,7 +138,7 @@ class GridSpec:
             filters.append({"column": item["column"], "op": item["op"], "value": item.get("value")})
         sort = raw.get("sort")
         if sort is not None:
-            if not isinstance(sort, dict) or sort.get("column") not in COLUMN_BY_KEY:
+            if not isinstance(sort, dict) or sort.get("column") not in (*COLUMN_BY_KEY, "display_title"):
                 raise GridError("Ungültige Sortierung.")
             sort = {"column": sort["column"], "dir": "desc" if sort.get("dir") == "desc" else "asc"}
         group_by = [key for key in raw.get("group_by") or [] if key in COLUMN_BY_KEY][:MAX_GROUP_LEVELS]
@@ -322,6 +323,9 @@ def build_rows(
         values: dict[str, Any] = {
             "register_number": contract.register_number,
             "short_description": contract.short_description or contract.supplier,
+            "contract_title": contract.contract_title,
+            # Bezeichnung des Vertrags in Listen (kein Column): Titel, sonst Kurzbeschreibung, sonst Lieferant.
+            "display_title": contract.contract_title or contract.short_description or contract.supplier,
             "business_status": contract.business_status,
             "partner": partners.get(contract.partner_id) if contract.partner_id else contract.supplier,
             "contract_type": contract_type.label if contract_type else None,
@@ -565,7 +569,7 @@ def apply_filters(rows: Iterable[GridRow], spec: GridSpec, as_of: date, account_
             continue
         if needle and not any(
             needle in str(row.values[key] or "").casefold()
-            for key in ("register_number", "short_description", "partner", "internal_number", "contract_type")
+            for key in ("register_number", "contract_title", "short_description", "partner", "internal_number", "contract_type")
         ):
             continue
         if all(predicate(row) for predicate in predicates):
@@ -691,10 +695,10 @@ def totals(rows: list[GridRow]) -> dict:
 
 def row_payload(row: GridRow, columns: list[str]) -> dict:
     keys = set(columns) | {"register_number", "business_status"}
-    return {
-        "contract_id": str(row.contract_id),
-        "values": {key: display(COLUMN_BY_KEY[key], row.values[key]) for key in keys},
-    }
+    values = {key: display(COLUMN_BY_KEY[key], row.values[key]) for key in keys}
+    # Die Spalte „Vertrag“ der Liste zeigt den Titel, auch wenn nur Kurzbeschreibung gewaehlt ist.
+    values["display_title"] = row.values["display_title"]
+    return {"contract_id": str(row.contract_id), "values": values}
 
 
 def columns_payload(*, with_deleted: bool = True) -> list[dict]:
