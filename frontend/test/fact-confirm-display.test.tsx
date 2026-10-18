@@ -36,6 +36,10 @@ describe("Faktprüfung – Anzeige Bestätigt vs Korrigiert",()=>{
   expect(p.getByText(/JAMAL/)).toBeInTheDocument();
  });
 
+ it("kein Escape-Text im Prüfkopf",()=>{
+  const { container } = render(<FactReviewPanel data={fixture()} orgSlug={ORG} onReload={()=>{}}/>);
+  expect(container.textContent).not.toContain(String.fromCharCode(92) + "n");
+ });
  it("Historie: Bestätigt zeigt Wertübernahme, Korrigiert zeigt Änderung",async()=>{
   const user=userEvent.setup(); render(<FactReviewPanel data={fixture()} orgSlug={ORG} onReload={()=>{}}/>);
   const p=panel();

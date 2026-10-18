@@ -5944,3 +5944,31 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 - **Tests:** Backend `test_evidence_geometry.py` (Treffer über Abschnitte, Normalisierung, ungefähr/Seite/ohne Seite, Drehung alter Artefakte, Docling-Enum), `test_contract_register_api` (Ergebnis je Nachweis, Runde im Verlauf, Rechte); Frontend `evidence-review-mode.test.tsx` (Abgleich, Wort-Unterschiede, vier Zustände, drei Abweichungs-Wege mit Wirkung auf Wert und Status, Weitergehen, Tasten, Drawer, Fortschritt, Zusammenfassung, sichere bestätigen, axe), `evidence-lib.test.ts`, `contracts-detail` (Dokumente), `open-points`. Backend 1732 grün; Migration hoch/runter/hoch gegen Wegwerf-DB, lokale Entwicklungs-DB (5432) auf `zg7b9c1d2025`. Frontend `npm run verify` grün (488 Tests, Build). Dunkelmodus über Tokens; Breite ≤ 1100 px: Prüfung unter dem Original. Im Browser nicht geprüft.
 - **Nächster Schritt:** im Browser mit echten Verträgen durchgehen (Rahmenlage auf gedrehten Scans, Lesbarkeit der Unterschiede); bestehende Verträge profitieren sofort (Lesezeit), neue Importe speichern die Boxen richtig herum.
 
+
+### Nachtrag 2026-10-18 – „Fundstelle“ mit Prozentangabe
+
+- **Backend:** `evidence_geometry.text_match` misst je Nachweis den Anteil der Wörter des Wortlauts, die auf der Seite stehen (gleiche Normalisierung wie der Abgleich). 100 % nur bei zusammenhängendem Treffer (`locate`); stehen alle Wörter nur verstreut dort, höchstens 99 %. Neues Feld `EvidenceRef.text_match` (0..1, `null` = nicht prüfbar: ohne Seite, anderes Dokument, ohne kanonische Seiten).
+- **Frontend:** `EvidenceReviewMode` zeigt die Leiste „Fundstelle“ mit dem gemessenen Prozentwert („100 % · wörtlich“, sonst z. B. „67 %“, Farbe hoch/mittel/niedrig) – auch neben der KI-Sicherheit, nicht mehr nur ohne sie. Kein erfundener Wert: ohne Messung keine Leiste.
+- **Dateien:** `backend/app/contracts/detail/evidence_geometry.py`, `models.py`, `backend/tests/test_evidence_geometry.py`, `frontend/components/contracts/detail/EvidenceReviewMode.tsx`, `frontend/lib/contract-detail-types.ts`, `frontend/test/evidence-review-mode.test.tsx`.
+- **Tests:** `test_evidence_geometry.py` 8 grün; `evidence-review-mode.test.tsx` 14 grün; tsc, eslint, compileall grün. Volle Suiten und Browser nicht gelaufen.
+
+### Nachtrag 2026-10-18 – Ende der Runde „Nachweise prüfen“ nach Entwurf
+
+- **Neu (`RoundSummary` in `EvidenceReviewMode.tsx`):** Kicker „Dokumentenprüfung“, großes Häkchen + „Prüfung abgeschlossen“ (mit offenen oder übersprungenen Nachweisen: „Runde beendet“, Info-Hinweis „N Prüfpunkte sind noch offen“); Satz „Sie haben N Angaben geprüft und einen neuen Wert in MedFlux gespeichert“; grüne Zeile „Keine offenen Prüfpunkte“; „Ergebnis Ihrer Prüfung“ mit Signal „Gespeichert“ und Zeilen Unverändert bestätigt / Abweichung geklärt / Davon in MedFlux gespeichert (/ Übersprungen); Kasten „Gespeicherte Angabe(n)“ mit Feld und Wert („Dokument hat recht“ und „Beides falsch“ dieser Runde); Knöpfe „Prüfung ansehen“ (Drawer „Alle Nachweise“) und „Vertrag ansehen →“, bei Übersprungenen zusätzlich „Übersprungene prüfen“. Die Blätterleiste (Zurück/Weiter) entfällt am Ende der Runde.
+- **Geändert:** Übersprungene Nachweise zählen am Ende als offen (vorher „Alles geprüft“ trotz übersprungener).
+- **Dateien:** `frontend/components/contracts/detail/EvidenceReviewMode.tsx`, `frontend/app/contract-register.css`, `frontend/test/evidence-review-mode.test.tsx`.
+- **Tests:** `npm run verify` grün (492 Tests, Build). Im Browser nicht geprüft.
+
+### Nachtrag 2026-10-18 – Vergleichstabelle „Erneut erfassen“ lesbar
+
+- **Problem:** Die Spalte „Angabe“ war nur wenige Buchstaben breit (Silbentrennung „Ver-trag-spart-ner“), Bisher/Neu nahmen den Platz, die Fundstelle war schmal.
+- **Fix:** feste Spaltenbreiten (`table-layout: fixed`, `<colgroup>`: Auswahl 2,75 rem, Angabe 22 %, Bisher/Neu gleich, Fundstelle 32 %), keine automatische Silbentrennung in der Tabelle. Unter 720 px bleibt die Kartenansicht.
+- **Dateien:** `frontend/components/contracts/detail/Reextraction.tsx`, `frontend/app/contract-register.css`. Tests: stylelint, eslint, Reextraction-Tests (45) grün. Im Browser nicht geprüft.
+
+### Nachtrag 2026-10-18 – Faktprüfung „Alle Angaben“: Spalten lesbar, kein „\n“ mehr
+
+- **Problem:** Spalte „Angabe“ und „Quelle“ („S/ei/te/1“) buchstabenweise umbrochen; unter „Vertragsreview“ stand der Text `\n` (wörtliches Escape im JSX).
+- **Ursache:** `base.css` setzt für `td, th` `overflow-wrap: anywhere` + `hyphens: auto`; damit dürfen Zellen in automatisch bemessenen Tabellen auf einen Buchstaben schrumpfen.
+- **Fix:** `.fr-table` mit festen Spalten (`table-layout: fixed`, `<colgroup>`: Angabe 20 %, Quelle 7 rem, Status 10 rem, Aktion 8,5 rem, Original/Wirksam teilen den Rest), in der Tabelle keine automatische Silbentrennung, „Seite N“ bricht nicht um. `\n` entfernt, Regressionstest in `fact-confirm-display.test.tsx`.
+- **Dateien:** `frontend/components/contracts/detail/FactReviewPanel.tsx`, `frontend/app/contract-workspace.css`, `frontend/test/fact-confirm-display.test.tsx`. Tests: tsc, eslint, stylelint, FactReview-Tests grün. Im Browser nicht geprüft.
+- **Offen:** Die globale Regel in `base.css` kann andere automatisch bemessene Tabellen genauso stauchen.

@@ -34,6 +34,8 @@ export interface EvidenceRef {
   /** Lage aus dem Text belegt (Backend): exact = Wortlaut steht in der Box, approx = ungefähr, page = nur Seite. */
   location?: "exact" | "approx" | "page" | "none";
   text_verified?: boolean;
+  /** Anteil des Wortlauts auf der Seite (0..1, 1 = zusammenhängend gefunden); null = nicht prüfbar. */
+  text_match?: number | null;
 }
 
 export interface DetailField {

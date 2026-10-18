@@ -101,6 +101,38 @@ describe("Nachweise prüfen (geführt)", () => {
     expect(screen.getByText("1 bestätigt · 0 abweichend")).toBeInTheDocument();
   });
 
+  it("Fundstelle zeigt den gemessenen Anteil des Wortlauts in Prozent; ohne Messung keine Leiste", () => {
+    const evidence = [
+      ref("e-customer", 1, "identity.customer.evidence.3", EVIDENCE[1].snippet, { confidence: null, text_match: 1 }),
+      ref("e-start", 2, "dates.start_date.evidence.0", "beginnt am 01.04.2025", { location: "approx", text_verified: false, text_match: 0.67 }),
+    ];
+    const { unmount } = renderMode({ evidence, numbers: evidenceNumbers(evidence) });
+    expect(within(panel()).getByText("100 % · wörtlich")).toBeInTheDocument();
+    expect(within(panel()).queryByText(/^KI-Sicherheit$/)).not.toBeInTheDocument();
+    unmount();
+    renderMode({ evidence, numbers: evidenceNumbers(evidence), startId: "e-start" });
+    expect(within(panel()).getByText("67 %")).toBeInTheDocument();
+
+  });
+
+  it("Ende ohne offene Punkte: „Prüfung abgeschlossen“, keine offenen Prüfpunkte, „Vertrag ansehen“", async () => {
+    const user = userEvent.setup();
+    const evidence = [EVIDENCE[1]];
+    const { props } = renderMode({ evidence, numbers: evidenceNumbers(evidence) });
+    await user.click(within(panel()).getByRole("button", { name: /^Bestätigen/ }));
+    expect(await within(panel()).findByRole("heading", { name: "Prüfung abgeschlossen" })).toBeInTheDocument();
+    expect(within(panel()).getByText("Sie haben 1 Angabe geprüft.")).toBeInTheDocument();
+    expect(within(panel()).getByText("Keine offenen Prüfpunkte")).toBeInTheDocument();
+    expect(within(panel()).queryByText(/Gespeicherte Angabe/)).not.toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: "Vertrag ansehen" }));
+    expect(props.onExit).toHaveBeenCalled();
+  });
+
+  it("ohne gemessenen Anteil keine Fundstellen-Leiste", () => {
+    renderMode();
+    expect(within(panel()).queryByText("Fundstelle")).not.toBeInTheDocument();
+  });
+
   it("gleiche Werte trotz fehlender Leerzeichen stimmen überein", () => {
     renderMode({ startId: "e-cost", factByEvidence: factsByEvidence([...FACTS.slice(0, 2), fact("costs.annual", "Jahreskosten", "8000.0", ["e-cost"], { effective_value: "8000" })]) });
     expect(within(panel()).getByText("Dokument und MedFlux stimmen überein.")).toBeInTheDocument();
@@ -197,8 +229,22 @@ describe("Nachweise prüfen (geführt)", () => {
     await user.click(within(panel()).getByRole("button", { name: "Übernehmen · Weiter" }));
     await waitFor(() => expect(within(panel()).getByRole("heading", { name: /Jahreskosten/ })).toBeInTheDocument());
     await user.click(within(panel()).getByRole("button", { name: /^Überspringen/ }));
-    expect(await within(panel()).findByRole("heading", { name: "3 geprüft: 1 bestätigt · 1 abweichend (übernommen 1) · 1 übersprungen" })).toBeInTheDocument();
+    // Eine Runde mit offenen (übersprungenen) Punkten ist nur „beendet“, nicht abgeschlossen.
+    expect(await within(panel()).findByRole("heading", { name: "Runde beendet" })).toBeInTheDocument();
+    expect(within(panel()).getByText("Sie haben 2 Angaben geprüft und einen neuen Wert in MedFlux gespeichert; 1 übersprungen.")).toBeInTheDocument();
+    expect(within(panel()).getByText(/1 Prüfpunkt ist noch offen/)).toBeInTheDocument();
+    const rows = within(panel()).getByRole("heading", { name: "Ergebnis Ihrer Prüfung" }).closest("div")!.parentElement!;
+    expect(within(rows).getByText("Unverändert bestätigt").nextSibling).toHaveTextContent("1 Angabe");
+    expect(within(rows).getByText("Abweichung geklärt").nextSibling).toHaveTextContent("1 Angabe");
+    expect(within(rows).getByText("Davon in MedFlux gespeichert").nextSibling).toHaveTextContent("1 Angabe");
+    expect(within(rows).getByText("Gespeicherte Angabe")).toBeInTheDocument();
+    expect(within(rows).getByText("Vertragsbeginn")).toBeInTheDocument();
+    // Kein Blättern mehr am Ende der Runde.
+    expect(screen.queryByRole("navigation", { name: "Nachweise blättern" })).not.toBeInTheDocument();
     expect(api.logEvidenceRound).toHaveBeenCalledWith("test-klinik", "c-1", { confirmed: 1, document: 1, skipped: 1 });
+    await user.click(within(panel()).getByRole("button", { name: "Prüfung ansehen" }));
+    expect(screen.getByRole("dialog", { name: "Alle Nachweise" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     await user.click(within(panel()).getByRole("button", { name: "Übersprungene prüfen" }));
     expect(within(panel()).getByRole("heading", { name: /Jahreskosten/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Zurück zum Vertrag" }));

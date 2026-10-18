@@ -290,6 +290,7 @@ function Comparison({ rows, selected, onToggle, stale, busy, onSelectAllNew, onA
   return <div className="reextraction-result">
     <p className="cw-muted">Angehakte Angaben werden übernommen. Neu gefundene Angaben mit Fundstelle sind vorausgewählt; Abweichungen wählen Sie selbst.</p>
     <table className="reextraction-table">
+      <colgroup><col className="reextraction-col-pick" /><col className="reextraction-col-label" /><col /><col /><col className="reextraction-col-source" /></colgroup>
       <thead><tr><th scope="col"><span className="sr-only">Übernehmen</span></th><th scope="col">Angabe</th><th scope="col">Bisher</th><th scope="col">Neu</th><th scope="col">Fundstelle</th></tr></thead>
       {groups.map(({ group, items }) => <tbody key={group}>
         <tr className="reextraction-group"><th scope="rowgroup" colSpan={5}>{GROUP_TITLE[group]} ({items.length})</th></tr>

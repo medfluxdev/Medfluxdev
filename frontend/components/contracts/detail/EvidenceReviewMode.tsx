@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import ActionMenu from "@/components/ui/ActionMenu";
 import Dialog from "@/components/ui/Dialog";
 import Drawer from "@/components/ui/Drawer";
+import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
@@ -110,6 +111,8 @@ export default function EvidenceReviewMode({
   const [confirmAll, setConfirmAll] = useState(false);
   const [announce, setAnnounce] = useState("");
   const [roundLog, setRoundLog] = useState<string | null>(null);
+  // In dieser Runde in MedFlux gespeicherte Werte (für die Zusammenfassung).
+  const [saved, setSaved] = useState<Map<string, { label: string; value: string }>>(() => new Map());
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const deviationRef = useRef<HTMLFormElement | null>(null);
 
@@ -126,6 +129,7 @@ export default function EvidenceReviewMode({
   const review = current ? reviews.get(current.evidence_id) : undefined;
   // Wortlaut nachweislich an der markierten Stelle (Backend `text_verified`, genaue Lage).
   const verified = Boolean(current?.text_verified) && precision === "exact";
+  const textMatch = current?.text_match ?? null;
 
   const rows = evidenceRows(order, numbers, factByEvidence, statusOf);
   const totals = { confirmed: rows.filter((row) => row.status === "confirmed").length, deviation: rows.filter((row) => row.status === "deviation").length, skipped: rows.filter((row) => row.status === "skipped").length, open: rows.filter((row) => row.status === "open").length };
@@ -215,13 +219,20 @@ export default function EvidenceReviewMode({
     await saveEvidenceReview(orgSlug, contractId, { evidence_id: ref.evidence_id, status: outcome, fact_key: item?.fact_key ?? null, note });
   }
 
-  async function run(outcome: EvidenceReviewStatus, options: { factAction?: "confirmed" | "corrected"; value?: unknown; note?: string }, saidLabel: string) {
+  async function run(outcome: EvidenceReviewStatus, options: { factAction?: "confirmed" | "corrected"; value?: unknown; note?: string; shown?: string | null }, saidLabel: string) {
     if (!current || busy) return;
     setBusy(true);
     try {
       await decide(current, outcome, options);
       const after = new Map(round).set(current.evidence_id, outcome);
       setRound(after);
+      const ref = current;
+      setSaved((before) => {
+        const next = new Map(before);
+        if (options.shown != null && (outcome === "document" || outcome === "manual")) next.set(ref.evidence_id, { label: titleOf(ref, factByEvidence), value: options.shown });
+        else next.delete(ref.evidence_id);
+        return next;
+      });
       setDeviation(null);
       onReload();
       advance(after, saidLabel);
@@ -244,11 +255,11 @@ export default function EvidenceReviewMode({
     if (deviation.choice === "document") {
       // Angabe mit Feld: der Text wird wie eine Dokumentstelle gelesen; sonst der erkannte Rohwert.
       const value = fact?.register_field ? doc : fact?.original_value ?? doc;
-      void run("document", fact?.is_evidence_item ? { factAction: "confirmed", note } : { factAction: "corrected", value, note }, DEVIATION_LABEL.document);
+      void run("document", fact?.is_evidence_item ? { factAction: "confirmed", note, shown: doc } : { factAction: "corrected", value, note, shown: doc }, DEVIATION_LABEL.document);
     } else if (deviation.choice === "medflux") {
       void run("medflux", { factAction: "confirmed", note }, DEVIATION_LABEL.medflux);
     } else if (deviation.value.trim()) {
-      void run("manual", { factAction: "corrected", value: deviation.value.trim(), note }, DEVIATION_LABEL.manual);
+      void run("manual", { factAction: "corrected", value: deviation.value.trim(), note, shown: deviation.value.trim() }, DEVIATION_LABEL.manual);
     }
   }
 
@@ -371,20 +382,12 @@ export default function EvidenceReviewMode({
 
       <div className="erm-panel" role="region" aria-label="Aktueller Nachweis">
         <p className="visually-hidden" aria-live="polite">{announce}</p>
-        {done || !current ? <div className="erm-done">
-          <Signal tone={totals.open ? "info" : "done"}>{totals.open ? `${totals.open} noch offen` : "Alles geprüft"}</Signal>
-          <h3 ref={headingRef} tabIndex={-1}>{round.size ? roundLog ?? roundSummary(roundCounts) : "Keine Entscheidung in dieser Runde"}</h3>
-          <p>{totals.open
-            ? "Offene und übersprungene Nachweise bleiben in der Liste und unter „Offene Punkte“."
-            : "Jeder Nachweis ist bestätigt oder als Abweichung geklärt."}</p>
-          <div className="erm-done-actions">
-            <button type="button" className="btn btn-primary" onClick={exit}>Zum Vertrag</button>
-            {totals.skipped ? <button type="button" className="btn" onClick={() => {
-              const first = order.findIndex((ref) => statusOf(ref) === "skipped");
-              setRound(new Map()); setRoundLog(null); setDone(false); setIndex(Math.max(0, first));
-            }}>Übersprungene prüfen</button> : null}
-          </div>
-        </div> : <>
+        {done || !current ? <RoundSummary headingRef={headingRef} counts={roundCounts} open={totals.open + totals.skipped} saved={[...saved.values()]}
+          onShowAll={() => setDrawer(true)} onExit={exit}
+          onSkipped={totals.skipped ? () => {
+            const first = order.findIndex((ref) => statusOf(ref) === "skipped");
+            setRound(new Map()); setSaved(new Map()); setRoundLog(null); setDone(false); setIndex(Math.max(0, first));
+          } : null} /> : <>
           <div className="erm-head">
             <div className="erm-head-top">
               {section ? <SectionChip section={section} /> : null}
@@ -427,11 +430,12 @@ export default function EvidenceReviewMode({
               <span>KI-Sicherheit</span>
               <span className="erm-meter" aria-hidden="true"><i className={confidence >= 0.9 ? "is-high" : confidence >= 0.7 ? "is-mid" : "is-low"} style={{ width: `${Math.round(confidence * 100)}%` }} /></span>
               <span className="erm-meter-value">{percent(confidence)}</span>
-            </div> : verified ? <div className="erm-confidence">
-              {/* Keine KI-Sicherheit (feste Regel/Wortlaut): belegt ist die Fundstelle, keine Prozentzahl erfinden. */}
+            </div> : null}
+            {/* Gemessen im Backend: Anteil des Wortlauts, der auf dieser Seite steht (100 % nur bei zusammenhängendem Treffer). */}
+            {textMatch != null ? <div className="erm-confidence" title="Anteil des erkannten Wortlauts, der auf dieser Seite im Dokument steht">
               <span>Fundstelle</span>
-              <span className="erm-meter" aria-hidden="true"><i className="is-high" style={{ width: "100%" }} /></span>
-              <span className="erm-meter-value">Wörtlich belegt</span>
+              <span className="erm-meter" aria-hidden="true"><i className={textMatch >= 1 ? "is-high" : textMatch >= 0.7 ? "is-mid" : "is-low"} style={{ width: `${Math.round(textMatch * 100)}%` }} /></span>
+              <span className="erm-meter-value">{percent(textMatch)}{textMatch >= 1 ? " · wörtlich" : ""}</span>
             </div> : null}
 
             {!canReview ? <p className="erm-readonly">Nur Lesen – bestätigen und Abweichungen klären dürfen Prüfende und das Vertragsmanagement.</p>
@@ -475,11 +479,11 @@ export default function EvidenceReviewMode({
           </div>
         </>}
 
-        <nav className="erm-foot" aria-label="Nachweise blättern">
-          <button type="button" className="btn btn-sm" disabled={!done && index === 0} onClick={() => (done ? setDone(false) : go(index - 1))}>{PREV}Zurück</button>
-          <span className="erm-foot-next">{done ? "" : following ? `Nächster: ${titleOf(following, factByEvidence)}${following.page != null ? ` · Seite ${following.page}` : ""}` : "Letzter Nachweis"}</span>
-          <button type="button" className="btn btn-sm" disabled={done} onClick={() => go(index + 1)}>Weiter{NEXT}</button>
-        </nav>
+        {done || !current ? null : <nav className="erm-foot" aria-label="Nachweise blättern">
+          <button type="button" className="btn btn-sm" disabled={index === 0} onClick={() => go(index - 1)}>{PREV}Zurück</button>
+          <span className="erm-foot-next">{following ? `Nächster: ${titleOf(following, factByEvidence)}${following.page != null ? ` · Seite ${following.page}` : ""}` : "Letzter Nachweis"}</span>
+          <button type="button" className="btn btn-sm" onClick={() => go(index + 1)}>Weiter{NEXT}</button>
+        </nav>}
       </div>
     </div>
 
@@ -491,6 +495,56 @@ export default function EvidenceReviewMode({
       description={`${safe.length} offene ${safe.length === 1 ? "Nachweis hat" : "Nachweise haben"} eine KI-Sicherheit ab 95 %, eine genau belegte Fundstelle und keinen abweichenden gespeicherten Wert.`}
       actions={<><button type="button" className="btn" onClick={() => setConfirmAll(false)}>Abbrechen</button><button type="button" className="btn btn-primary" onClick={() => void confirmSafe()}>{safe.length} bestätigen</button></>} />
   </section>;
+}
+
+const angaben = (n: number) => `${n} ${n === 1 ? "Angabe" : "Angaben"}`;
+
+/** Ende der Runde: was entschieden und was in MedFlux gespeichert wurde. */
+function RoundSummary({ headingRef, counts, open, saved, onShowAll, onExit, onSkipped }: {
+  headingRef: RefObject<HTMLHeadingElement>; counts: Partial<Record<EvidenceReviewStatus, number>>; open: number;
+  saved: { label: string; value: string }[]; onShowAll: () => void; onExit: () => void; onSkipped: (() => void) | null;
+}) {
+  const confirmed = counts.confirmed ?? 0;
+  const resolved = (counts.document ?? 0) + (counts.medflux ?? 0) + (counts.manual ?? 0);
+  const stored = (counts.document ?? 0) + (counts.manual ?? 0);
+  const skipped = counts.skipped ?? 0;
+  const checked = confirmed + resolved;
+  const decided = checked + skipped;
+  const lead = decided === 0
+    ? "In dieser Runde wurde nichts entschieden."
+    : `Sie haben ${angaben(checked)} geprüft${stored ? ` und ${stored === 1 ? "einen neuen Wert" : `${stored} neue Werte`} in MedFlux gespeichert` : ""}${skipped ? `; ${skipped} übersprungen` : ""}.`;
+  return <div className="erm-done">
+    <p className="erm-done-eyebrow">Dokumentenprüfung</p>
+    <h3 ref={headingRef} tabIndex={-1} className="erm-done-title">
+      <span className={`erm-done-mark${open ? " is-open" : ""}`} aria-hidden="true">{open ? LIST : CHECK}</span>
+      {open ? "Runde beendet" : "Prüfung abgeschlossen"}
+    </h3>
+    <p className="erm-done-lead">{lead}</p>
+    {open
+      ? <InlineAlert tone="info">{open === 1 ? "1 Prüfpunkt ist noch offen" : `${open} Prüfpunkte sind noch offen`} – sie bleiben in der Liste und unter „Offene Punkte“.</InlineAlert>
+      : <p className="erm-done-clear">{CHECK_CIRCLE}Keine offenen Prüfpunkte</p>}
+    {decided ? <div className="erm-done-result">
+      <div className="erm-done-result-head">
+        <h4>Ergebnis Ihrer Prüfung</h4>
+        <Signal tone="done" size="sm">Gespeichert</Signal>
+      </div>
+      <dl className="erm-done-rows">
+        <div><dt>Unverändert bestätigt</dt><dd>{angaben(confirmed)}</dd></div>
+        <div><dt>Abweichung geklärt</dt><dd>{angaben(resolved)}</dd></div>
+        <div><dt>Davon in MedFlux gespeichert</dt><dd>{angaben(stored)}</dd></div>
+        {skipped ? <div><dt>Übersprungen</dt><dd>{angaben(skipped)}</dd></div> : null}
+      </dl>
+      {saved.length ? <div className="erm-done-saved">
+        <span className="erm-done-saved-label">{saved.length === 1 ? "Gespeicherte Angabe" : "Gespeicherte Angaben"}</span>
+        {saved.map((item, position) => <p key={position}><strong>{item.label}</strong><span>{item.value}</span></p>)}
+      </div> : null}
+    </div> : null}
+    <div className="erm-done-actions">
+      {onSkipped ? <button type="button" className="btn" onClick={onSkipped}>Übersprungene prüfen</button> : null}
+      <button type="button" className="btn" onClick={onShowAll}>Prüfung ansehen</button>
+      <button type="button" className="btn btn-primary" onClick={onExit}>Vertrag ansehen{NEXT}</button>
+    </div>
+  </div>;
 }
 
 function countRound(round: Map<string, EvidenceReviewStatus>): Partial<Record<EvidenceReviewStatus, number>> {

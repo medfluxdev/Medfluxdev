@@ -262,8 +262,11 @@
 /* Erneute Erfassung aus dem Dokument (Dokumente → Dokument) */
 .reextraction{display: grid;gap: var(--space-3)}
 .reextraction-result{display: grid;gap: var(--space-3)}
-.reextraction-table{width: 100%;border-collapse: collapse;font-size: var(--text-small)}
-.reextraction-table th,.reextraction-table td{padding: var(--space-2);text-align: left;vertical-align: top;border-bottom: 1px solid var(--color-border)}
+.reextraction-table{width: 100%;border-collapse: collapse;table-layout: fixed;font-size: var(--text-small)}
+.reextraction-table th,.reextraction-table td{padding: var(--space-2);text-align: left;vertical-align: top;border-bottom: 1px solid var(--color-border);hyphens: manual;overflow-wrap: break-word}
+.reextraction-col-pick{width: 2.75rem}
+.reextraction-col-label{width: 22%}
+.reextraction-col-source{width: 32%}
 .reextraction-table thead th{color: var(--color-text-muted);font-weight: var(--weight-semibold)}
 .reextraction-table tbody th[scope="row"]{font-weight: var(--weight-semibold)}
 .reextraction-table td:first-child{width: 2.5rem}
@@ -1120,11 +1123,32 @@ a.fin-basis-sub { color: var(--color-link); }
 .erm-picker-text{max-height: 180px;padding: 8px 10px;overflow: auto;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface-subtle);font-size: var(--text-caption);white-space: pre-wrap}
 .erm-picker-text:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 1px}
 
-.erm-done{display: grid;align-content: start;gap: 10px;padding: 18px}
-.erm-done h3{margin: 0;font-size: var(--text-title-s)}
-.erm-done h3:focus{outline: none}
-.erm-done p{margin: 0;color: var(--color-text-muted)}
-.erm-done-actions{display: flex;flex-wrap: wrap;gap: 8px}
+.erm-done{display: grid;align-content: start;gap: 16px;padding: 24px}
+.erm-done p{margin: 0}
+.erm-done-eyebrow{color: var(--color-text-muted);font-size: var(--text-caption);font-weight: 600;letter-spacing: .08em;text-transform: uppercase}
+.erm-done-title{display: flex;align-items: center;gap: 12px;margin: 0;font-size: var(--text-title-l)}
+.erm-done-title:focus{outline: none}
+.erm-done-mark{display: inline-grid;flex: none;place-items: center;width: 40px;height: 40px;border-radius: 999px;background: var(--color-success-fill);color: var(--color-text-inverse)}
+.erm-done-mark.is-open{background: var(--color-info-fill)}
+.erm-done-mark .erm-icon{width: 22px;height: 22px;stroke-width: 3}
+.erm-done-lead{color: var(--color-text-muted)}
+.erm-done-clear{display: flex;align-items: center;gap: 10px;padding: 12px 14px;border-radius: var(--radius-md);border: 1px solid var(--color-success-border);background: var(--color-success-bg);color: var(--color-success);font-weight: 600}
+.erm-done-clear .erm-icon{width: 20px;height: 20px}
+.erm-done-result{display: grid;gap: 8px;padding-top: 16px;border-top: 1px solid var(--color-border-subtle)}
+.erm-done-result-head{display: flex;align-items: center;justify-content: space-between;gap: 8px}
+.erm-done-result-head h4{margin: 0;font-size: var(--text-title-s)}
+.erm-done-rows{display: grid;margin: 0}
+.erm-done-rows div{display: flex;justify-content: space-between;gap: 12px;padding: 8px 0;border-bottom: 1px solid var(--color-border-subtle)}
+.erm-done-rows div:last-child{border-bottom: 0}
+.erm-done-rows dt{color: var(--color-text-muted)}
+.erm-done-rows dd{margin: 0;font-variant-numeric: tabular-nums}
+.erm-done-saved{display: grid;gap: 8px;padding: 14px 16px;border-radius: var(--radius-md);background: var(--color-surface-subtle)}
+.erm-done-saved-label{color: var(--color-text-muted);font-size: var(--text-caption);font-weight: 600}
+.erm-done-saved p{display: grid;gap: 2px}
+.erm-done-saved span{overflow-wrap: anywhere}
+.erm-done-actions{display: grid;grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));gap: 12px}
+.erm-done-actions .btn{display: inline-flex;align-items: center;justify-content: center;gap: 6px}
+.erm-done-actions .erm-icon{width: 16px;height: 16px}
 .erm-foot{display: flex;align-items: center;gap: 8px;padding: 10px 18px;border-top: 1px solid var(--color-border-subtle);color: var(--color-text-muted);font-size: var(--text-caption)}
 .erm-foot .btn{display: inline-flex;align-items: center;gap: 4px}
 .erm-foot .erm-icon{width: 15px;height: 15px}
