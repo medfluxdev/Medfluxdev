@@ -65,7 +65,7 @@ export function Diff({ tokens }: { tokens: { text: string; changed: boolean }[] 
  * Werte werden über die Faktprüfung gespeichert, das Ergebnis je Nachweis über `/evidence-reviews`.
  */
 export default function EvidenceReviewMode({
-  contractId, orgSlug, contractTitle, evidence, numbers, factByEvidence, reviews, startId, canReview, viewer,
+  contractId, orgSlug, contractTitle, evidence, numbers, factByEvidence, reviews, startId, initialFilter, onFilterChange, canReview, viewer,
   onShow, onExit, onReload, canRecognize = false, onRecognizeStarted,
 }: {
   contractId: string;
@@ -77,6 +77,10 @@ export default function EvidenceReviewMode({
   factByEvidence: Map<string, FactReviewStateDto>;
   reviews: Map<string, EvidenceReviewItem>;
   startId: string | null;
+  /** Filter aus der Nachweise-Liste des Arbeitsplatzes: die Prüfung startet auf dieser Auswahl. */
+  initialFilter?: EvidenceFilter;
+  /** Filter in „Alle Nachweise“ geändert (derselbe Filter wie in der Nachweise-Liste). */
+  onFilterChange?: (filter: EvidenceFilter) => void;
   canReview: boolean;
   /** Die Ansicht des Originals (vom Arbeitsplatz, damit Zoom/Seite erhalten bleiben). */
   viewer: ReactNode;
@@ -96,7 +100,13 @@ export default function EvidenceReviewMode({
   const [round, setRound] = useState<Map<string, EvidenceReviewStatus>>(() => new Map());
   // Filter aus „Alle Nachweise“: die Prüfung geht nur diese Nachweise durch. Die Auswahl wird beim Anwenden
   // festgehalten, damit ein eben bestätigter Nachweis nicht aus der Runde fällt.
-  const [scope, setScope] = useState<{ filter: EvidenceFilter; ids: Set<string> } | null>(null);
+  const [scope, setScope] = useState<{ filter: EvidenceFilter; ids: Set<string> } | null>(() => {
+    if (!initialFilter || !isFiltered(initialFilter)) return null;
+    const start = evidenceRows(allOrder, numbers, factByEvidence, (ref) => evidenceStatus(ref, factByEvidence.get(ref.evidence_id), reviews.get(ref.evidence_id)));
+    const ids = new Set(start.filter((row) => matchesFilter(row, initialFilter)).map((row) => row.ref.evidence_id));
+    // Gewählter Nachweis außerhalb der Auswahl: ohne Filter starten.
+    return ids.size && (!startId || ids.has(startId)) ? { filter: initialFilter, ids } : null;
+  });
   const order = useMemo(() => (scope ? allOrder.filter((ref) => scope.ids.has(ref.evidence_id)) : allOrder), [allOrder, scope]);
   const statusOf = (ref: EvidenceRef): EvidenceStatus => {
     const local = round.get(ref.evidence_id);
@@ -190,6 +200,7 @@ export default function EvidenceReviewMode({
     const keep = current ? nextOrder.findIndex((ref) => ref.evidence_id === current.evidence_id) : -1;
     const open = nextOrder.findIndex((ref) => statusOf(ref) === "open");
     setScope(next);
+    onFilterChange?.(filter);
     setIndex(keep >= 0 ? keep : Math.max(0, open));
     setDone(nextOrder.length === 0);
   }

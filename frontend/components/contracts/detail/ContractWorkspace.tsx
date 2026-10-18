@@ -62,6 +62,7 @@ import OpenPoints, { EVIDENCE_REVIEW_SECTION, PROPOSAL_REVIEW_SECTION, buildOpen
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
 import EvidenceReviewMode from "./EvidenceReviewMode";
+import { NO_FILTER, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
 import { evidenceNumbers, evidenceRows, evidenceStatus, factsByEvidence, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
@@ -424,6 +425,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const evidenceNumber = useMemo(() => evidenceNumbers(orderedEvidence), [orderedEvidence]);
   // „Nachweise prüfen“: geführter Modus, ein Nachweis nach dem anderen (startet beim gewählten oder ersten offenen).
   const [reviewMode, setReviewMode] = useState<{ startId: string | null } | null>(null);
+  // Ein Filter für die Nachweise-Liste und die geführte Prüfung („Nachweise prüfen“ geht nur die Auswahl durch).
+  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>(NO_FILTER);
   // „Vorschläge prüfen“: offene Vorschläge der letzten Analyse einzeln (gleicher Arbeitsplatz).
   const [proposalMode, setProposalMode] = useState<{ startKey: string | null } | null>(null);
   // Ergebnis der Nachweisprüfung je Nachweis (bestätigt, abweichend, übersprungen).
@@ -438,6 +441,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     (ref) => evidenceStatus(ref, evidenceFacts.get(ref.evidence_id), evidenceReviews.get(ref.evidence_id))),
   [orderedEvidence, evidenceNumber, evidenceFacts, evidenceReviews]);
   const openEvidenceCount = evidenceTableRows.filter((row) => row.status === "open").length;
+  // Aktiver Filter der Nachweise-Liste: „Nachweise prüfen“ wird „Auswahl prüfen · N“.
+  const filteredEvidence = isFiltered(evidenceFilter) ? evidenceTableRows.filter((row) => matchesFilter(row, evidenceFilter)).length : null;
   // Marken auf der Seite: nur Nachweise mit Lage auf dem geöffneten Dokument, gleiche Nummern wie die Liste.
   const pageMarkers = useMemo(() => data.evidence
     .filter((ref) => ref.document_version_id === documentVersionId && ref.page != null && ref.bbox)
@@ -910,7 +915,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 {REANALYSE_ICON}{reextractionBusy ? "KI-Analyse läuft" : analysisOpen ? `${analysisOpen} ${analysisOpen === 1 ? "Vorschlag" : "Vorschläge"} prüfen` : "Erneut erfassen"}
               </button> : null}
               {data.evidence.length && !reviewMode ? <button type="button" className={`btn btn-sm dw-review${openEvidenceCount ? " btn-primary" : ""}`} onClick={() => startEvidenceReview()}>
-                {REVIEW_ICON}Nachweise prüfen{openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}
+                {REVIEW_ICON}{filteredEvidence != null ? `Auswahl prüfen · ${filteredEvidence}` : `Nachweise prüfen${openEvidenceCount ? ` · ${openEvidenceCount} offen` : ""}`}
               </button> : null}
               {data.contract_review.relevant_count > 0 ? <span className="dw-progress">
                 <span className="dw-progress-bar" role="progressbar" aria-label="Geprüfte Angaben" aria-valuemin={0} aria-valuemax={data.contract_review.relevant_count} aria-valuenow={data.contract_review.reviewed_count}><span style={{ width: `${(data.contract_review.reviewed_count / data.contract_review.relevant_count) * 100}%` }} /></span>
@@ -959,6 +964,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             factByEvidence={evidenceFacts}
             reviews={evidenceReviews}
             startId={reviewMode.startId}
+            initialFilter={evidenceFilter}
+            onFilterChange={setEvidenceFilter}
             canReview={canReviewFacts}
             onShow={(ref) => openEvidence(ref, "evidence")}
             onExit={() => { setReviewMode(null); reloadEvidenceReviews(); }}
@@ -975,7 +982,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
               </div>
               {documentTab === "evidence"
                 ? <div className="dw-panel">{data.evidence.length
-                  ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={(ref) => startEvidenceReview(ref.evidence_id)} />
+                  ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={(ref) => startEvidenceReview(ref.evidence_id)}
+                    filters filter={evidenceFilter} onFilter={setEvidenceFilter} />
                   : <p className="cw-muted dw-empty">Keine Nachweise vorhanden.</p>}<CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
                 : data.documents.length === 0 ? <p className="cw-muted dw-empty">Keine Dokumente vorhanden.</p>
                   : <DocumentList documents={data.documents} selectedId={documentVersionId} mainId={mainDocumentId} onSelect={selectDocument} compact={!manyDocuments} />}

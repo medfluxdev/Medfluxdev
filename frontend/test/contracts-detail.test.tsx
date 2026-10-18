@@ -389,6 +389,18 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(screen.getByText("2 Nachweise", { exact: false })).toBeInTheDocument();
   });
 
+  it("derselbe Filter in der Nachweise-Liste: „Auswahl prüfen“ startet die Prüfung nur auf der Auswahl", async () => {
+    await renderWithData(detailFixture());
+    await openDocuments("Nachweise");
+    const list = screen.getByRole("group", { name: "Nach Prüfstand filtern" });
+    await userEvent.type(screen.getByRole("searchbox", { name: "Nachweise durchsuchen" }), "start date");
+    expect(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getAllByRole("row")).toHaveLength(2);
+    expect(within(list).getByRole("button", { name: /^Alle/ })).toHaveTextContent("1");
+    await userEvent.click(screen.getByRole("button", { name: /^Auswahl prüfen · 1/ }));
+    expect(await screen.findByRole("button", { name: "Nur „start date“ · 1" })).toBeInTheDocument();
+    expect(screen.getByText("Nachweis 1 von 1")).toBeInTheDocument();
+  });
+
   it("ein Nachweis aus der Tabelle öffnet die geführte Prüfung an seiner Stelle im Original", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");

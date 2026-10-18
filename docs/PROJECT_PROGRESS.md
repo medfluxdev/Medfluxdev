@@ -6009,3 +6009,7 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 ### Nachtrag 2026-10-18 – „Alle Nachweise“: Feldname lesbar im schmalen Seitenfenster
 
 - Die festen Spalten (#, Abschnitt, Seite, Status) ließen im ca. 460px breiten Seitenfenster für „Feld“ fast keinen Platz; Feld und Abschnitt überlagerten sich. Der Abschnitt steht jetzt als graue zweite Zeile unter dem Feldnamen (Spalte „Feld · Abschnitt“), Status-Signal ohne Umbruch. Datei `EvidenceTable.tsx`, `contract-register.css`; Test in `evidence-review-mode.test.tsx`.
+
+### Nachtrag 2026-10-18 – Ein Filter für Nachweise-Liste und Prüfung
+
+- Die Nachweise-Liste im Arbeitsplatz (Dokumente → Dokument → Nachweise) hat denselben Filter wie „Alle Nachweise“ (Prüfstand, Abschnitt, Suche). Ist er gesetzt, heißt der Knopf „Auswahl prüfen · N“ und die geführte Prüfung startet auf dieser Auswahl; Änderungen in „Alle Nachweise“ gelten auch für die Liste (ein gemeinsamer Zustand in `ContractWorkspace`). Test in `contracts-detail.test.tsx`; `npm run verify` grün (508).
