@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
-import { sameText, sectionByKey, wordDiff } from "@/lib/evidence";
+import { sameText, wordDiff } from "@/lib/evidence";
 import { applyReextraction, decideReextraction, type Proposal, type ProposalEvidence, type ReextractionRun } from "@/lib/domain-api/reextraction";
 import { Diff, SectionChip } from "./EvidenceReviewMode";
+import { analysisSection } from "./Reextraction";
 
 const icon = (body: ReactNode, className = "erm-icon") => <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">{body}</svg>;
 const BACK = icon(<path d="m15 6-6 6 6 6" />);
@@ -148,7 +149,7 @@ export default function ProposalReviewMode({ contractId, orgSlug, contractTitle,
         </div> : <>
           <div className="erm-head">
             <div className="erm-head-top">
-              <SectionChip section={sectionByKey(current.section)} />
+              <SectionChip section={analysisSection(current.section)} />
               <span className="erm-pos">{index + 1} / {order.length}</span>
               <span className="erm-space" />
               <Signal tone={status !== "pending" ? (status === "accepted" ? "done" : "neutral") : current.kind === "new" ? "info" : current.kind === "missing" ? "critical" : "warning"} size="sm">
@@ -157,7 +158,7 @@ export default function ProposalReviewMode({ contractId, orgSlug, contractTitle,
             </div>
             <h3 ref={headingRef} tabIndex={-1} className="erm-title">{current.label}</h3>
             <p className="erm-where">
-              <span>{page != null ? `Seite ${page}` : "Ohne Seite"} · {sectionByKey(current.section).label}</span>
+              <span>{page != null ? `Seite ${page}` : "Ohne Seite"} · {analysisSection(current.section).label}</span>
               {current.confidence != null ? <span>KI-Sicherheit {Math.round(current.confidence * 100)} %</span> : null}
             </p>
           </div>

@@ -21,13 +21,14 @@ from app.models.contract import Contract as ExtractedContract
 
 GROUPS = ("identity", "dates", "termination", "costs", "payment", "services", "sla")
 
-# Bereiche wie in "Nachweise pruefen" (frontend lib/evidence.ts, EVIDENCE_SECTIONS).
+# Bereiche der erneuten Erfassung, benannt nach den Reitern der Vertragsakte, in denen die Angaben stehen
+# (Schluessel wie in "Nachweise pruefen", frontend lib/evidence.ts; Namen wie ANALYSIS_SECTION_LABEL im Frontend).
 SECTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "partner": ("Vertrag & Partner", ("identity",)),
-    "term": ("Laufzeit & Fristen", ("dates", "termination")),
-    "cost": ("Kosten", ("costs", "payment")),
+    "partner": ("Vertragsdaten", ("identity",)),
+    "term": ("Fristen & Aufgaben", ("dates", "termination")),
+    "cost": ("Finanzen", ("costs", "payment")),
     "services": ("Leistungen & SLA", ("services", "sla")),
-    "device": ("Geräte", ("equipment",)),
+    "device": ("Verknüpfungen (Geräte)", ("equipment",)),
 }
 _SKIP = {"evidence", "default_currency"}
 # Enum-Werte, die "nichts gefunden" bedeuten.

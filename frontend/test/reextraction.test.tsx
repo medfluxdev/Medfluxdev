@@ -61,8 +61,8 @@ function state(overrides: Partial<ReextractionState> = {}): ReextractionState {
     missing: [{ key: "dates.start_date", label: "Vertragsbeginn" }],
     run: null, rows: [], open_fields: 9, evidence_count: 34, review_minutes: 14, duration_minutes: 2,
     sections: [
-      { key: "partner", label: "Vertrag & Partner" }, { key: "term", label: "Laufzeit & Fristen" },
-      { key: "cost", label: "Kosten" }, { key: "services", label: "Leistungen & SLA" }, { key: "device", label: "Geräte" },
+      { key: "partner", label: "Vertragsdaten" }, { key: "term", label: "Fristen & Aufgaben" },
+      { key: "cost", label: "Finanzen" }, { key: "services", label: "Leistungen & SLA" }, { key: "device", label: "Verknüpfungen (Geräte)" },
     ],
     history: [
       { id: "run-2", number: 2, mode: "full", mode_label: "Vollständig neu bewerten", status: "applied", date: "2026-10-12T10:00:00Z", requested_by_name: "Ahmad", summary: { new: 3 }, accepted: 3, can_rollback: false },
@@ -120,7 +120,7 @@ describe("Erneut aus dem Dokument erfassen – Auswahl", () => {
     expect(screen.getByText("34 Nachweise · ca. 14 Min. Prüfung")).toBeInTheDocument();
     expect(screen.getByText(/Dauer ca. 2 Minuten · läuft im Hintergrund/)).toBeInTheDocument();
     // Bereiche nur bei „Bereich neu erfassen“, Zurücksetzen nur bei „Vollständig“.
-    expect(screen.getByRole("button", { name: "Kosten" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Finanzen" })).toBeDisabled();
     expect(screen.queryByRole("checkbox", { name: /Bestätigungen zurücksetzen/ })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Manuell gesetzte Werte schützen/ })).toBeChecked();
     await user.type(screen.getByRole("textbox", { name: "Hinweis an die KI (optional)" }), "Preisstaffel steht auf Seite 7");
@@ -143,8 +143,8 @@ describe("Erneut aus dem Dokument erfassen – Auswahl", () => {
     await user.keyboard(" ");
     expect(screen.getByRole("radio", { name: /Bereich neu erfassen/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Analyse starten" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Kosten" }));
-    expect(screen.getByRole("button", { name: "Kosten" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Finanzen" }));
+    expect(screen.getByRole("button", { name: "Finanzen" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("1 Bereich gewählt")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Analyse starten" }));
     expect(api.startReextraction).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ mode: "sections", sections: ["cost"] }));
@@ -192,9 +192,9 @@ describe("Erneut aus dem Dokument erfassen – läuft", () => {
   it("zeigt Analyse, Schritt, Fortschritt, Start und Abbrechen", async () => {
     const user = userEvent.setup();
     api.cancelReextraction.mockResolvedValue({ status: "running", cancel_requested: true });
-    panel(state({ run: run({ status: "running", progress: { step: 2, steps: 4, label: "Kosten", found: 4 }, finished_at: null }) }));
+    panel(state({ run: run({ status: "running", progress: { step: 2, steps: 4, label: "Finanzen", found: 4 }, finished_at: null }) }));
     expect(screen.getByText("Läuft")).toBeInTheDocument();
-    expect(screen.getByText(/Schritt 2 von 4 · Kosten · bisher 4 Angaben erkannt/)).toBeInTheDocument();
+    expect(screen.getByText(/Schritt 2 von 4 · Finanzen · bisher 4 Angaben erkannt/)).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Fortschritt der Analyse" })).toHaveAttribute("aria-valuenow", "38");
     expect(screen.getByText(/Gestartet .* von Ahmad/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Analyse starten" })).not.toBeInTheDocument();
@@ -226,6 +226,9 @@ describe("Erneut aus dem Dokument erfassen – Ergebnis", () => {
     expect(within(table).getByText("96 %")).toBeInTheDocument();
     expect(within(table).getByText("78 %")).toBeInTheDocument();
     expect(within(table).queryByText("Laufzeit")).not.toBeInTheDocument(); // unverändert: nicht in der Liste
+    // Bereiche heißen wie die Reiter der Vertragsakte.
+    expect(within(within(table).getByRole("row", { name: /Preisanpassung/ })).getByText("Finanzen")).toBeInTheDocument();
+    expect(within(within(table).getByRole("row", { name: /Ansprechpartner/ })).getByText("Vertragsdaten")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
 
     const newRow = within(table).getByRole("row", { name: /Reaktionszeit/ });

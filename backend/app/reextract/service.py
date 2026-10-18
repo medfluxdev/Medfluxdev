@@ -48,7 +48,7 @@ MODE_LABELS = {"supplement": "Ergänzen", "sections": "Bereich neu erfassen", "f
 # Pruefaufwand je Nachweis fuer die Schaetzung "ca. M Min. Prüfung".
 SECONDS_PER_EVIDENCE = 25
 # Packs der Harness als Fortschrittsschritte.
-PACK_LABELS = {"core": "Vertrag & Laufzeit", "commercial": "Kosten", "payment": "Zahlung", "operations": "Leistungen & SLA"}
+PACK_LABELS = {"core": "Vertragsdaten & Fristen", "commercial": "Finanzen", "payment": "Finanzen (Zahlung)", "operations": "Leistungen & SLA"}
 _KIND = {"new": "new", "changed": "deviating", "missing_again": "missing", "same": "unchanged"}
 # Entscheidbare Vorschlaege (unveraendert ist nur zu bestaetigen).
 OPEN_KINDS = ("new", "deviating", "missing")

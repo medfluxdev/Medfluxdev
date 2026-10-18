@@ -9,7 +9,7 @@ import InlineAlert from "@/components/ui/InlineAlert";
 import Signal, { type SignalTone } from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
-import { sectionByKey, wordDiff } from "@/lib/evidence";
+import { sectionByKey, wordDiff, type EvidenceSection } from "@/lib/evidence";
 import { MISSING_SEARCH, SEARCH_PARAM, baseFieldKey } from "@/lib/fix-targets";
 import { formatDate } from "@/lib/format";
 import {
@@ -63,6 +63,21 @@ const DECISION: Record<Exclude<ProposalDecision, "pending">, { tone: SignalTone;
   rejected: { tone: "neutral", label: "Abgelehnt" },
   rolled_back: { tone: "neutral", label: "Zurückgenommen" },
 };
+
+/** Bereiche der erneuten Erfassung, benannt nach den Reitern der Vertragsakte (wie `facts.SECTIONS` im Backend). */
+export const ANALYSIS_SECTION_LABEL: Record<string, string> = {
+  partner: "Vertragsdaten",
+  term: "Fristen & Aufgaben",
+  cost: "Finanzen",
+  services: "Leistungen & SLA",
+  device: "Verknüpfungen (Geräte)",
+};
+
+/** Bereich eines Vorschlags: Kennfarbe wie in „Nachweise prüfen“, Name wie der Reiter. */
+export function analysisSection(key: string): EvidenceSection {
+  const section = sectionByKey(key);
+  return { ...section, label: ANALYSIS_SECTION_LABEL[key] ?? section.label };
+}
 
 /** Vertragsdaten-Feld (Basisname, z. B. notice_period) → Angaben zum Suchen. */
 export function fieldSearchMap(state: ReextractionState | null): Map<string, FieldOption[]> {
@@ -557,7 +572,7 @@ function ResultView({ run, rows, busy, canReview, safeCount, onConfirmSafe, onSh
           const page = row.evidence.find((item) => item.page != null)?.page ?? null;
           const decided = row.decision !== "pending" ? DECISION[row.decision] : null;
           return <tr key={row.key}>
-            <th scope="row"><span className="ra-field"><SectionChip section={sectionByKey(row.section)} /><span>{row.label}</span></span></th>
+            <th scope="row"><span className="ra-field"><SectionChip section={analysisSection(row.section)} /><span>{row.label}</span></span></th>
             <td className="ra-value">{row.current ? (row.kind === "deviating" ? <span className="ra-old">{row.current}</span> : row.current) : <span className="cw-muted">–</span>}</td>
             <td className="ra-value">{row.kind === "missing" ? <span className="ra-gone">nicht mehr gefunden</span> : diff ? <Diff tokens={diff.b} /> : row.proposed}</td>
             <td>{row.confidence != null ? <Signal tone={confidenceTone(row.confidence)} size="sm">{`${Math.round(row.confidence * 100)} %`}</Signal> : <span className="cw-muted">–</span>}</td>

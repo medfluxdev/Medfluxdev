@@ -593,7 +593,7 @@ def test_hint_progress_and_cancel_between_packs(tmp_path):
     service.drain(Reporting())
     run, _rows = _run(run_id)
     assert seen["user_hint"] == "Kündigungsfrist steht auf Seite 3"
-    assert run.progress == {"step": 2, "steps": 4, "label": "Kosten", "found": 3}
+    assert run.progress == {"step": 2, "steps": 4, "label": "Finanzen", "found": 3}
     assert run.status == "cancelled"
 
 

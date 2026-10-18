@@ -5994,3 +5994,8 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 - **Problem:** Die Karte „Erneut aus dem Dokument erfassen“ lag eingeklappt über der Dateiliste und war leicht zu übersehen; konnte der Stand nicht geladen werden (z. B. Datenbank noch nicht migriert), verschwand sie ganz.
 - **Neu:** Unterreiter **Dokumente → KI-Analyse** (`?subtab=analysis`, `REEXTRACTION_TARGET`) mit der Karte immer offen in voller Breite; Zähler am Unterreiter („läuft“ / offene Vorschläge). In der Leiste neben „Nachweise prüfen“ der Knopf „Erneut erfassen“ (bzw. „N Vorschläge prüfen“ / „KI-Analyse läuft“). Alle Einstiege (Kopfhinweis, Offene Punkte, „Im Dokument suchen“, Strg+K) führen dorthin. Nie leer: ohne Recht erklärt die Karte, wer starten darf; ein Ladefehler zeigt einen Hinweis mit „Erneut laden“. „Quelle“ und „Vorschläge prüfen“ wechseln zum Original.
 - **Tests:** `reextraction.test.tsx` (ohne Recht, Ladefehler), `contracts-detail.test.tsx` (Unterreiter), `direct-jump.test.tsx` (Link). `npm run verify` siehe Commit.
+
+### Nachtrag 2026-10-18 – KI-Analyse: Bereiche heißen wie die Reiter
+
+- Bereiche (Optionen, Vorschlagstabelle, „Vorschläge prüfen“) und Fortschrittsschritte nach den Reitern der Vertragsakte: Vertragsdaten, Fristen & Aufgaben, Finanzen, Leistungen & SLA, Verknüpfungen (Geräte). Vorher Vertrag & Partner, Laufzeit & Fristen, Kosten, Geräte. Schlüssel und Kennfarben unverändert; „Nachweise prüfen“ behält seine Abschnittsnamen.
+- Dateien: `backend/app/reextract/{facts,service}.py`, `frontend/components/contracts/detail/{Reextraction,ProposalReviewMode}.tsx`, Tests. Tests: `test_reextraction.py` 19, `reextraction.test.tsx` 24, `contracts-detail` grün.
