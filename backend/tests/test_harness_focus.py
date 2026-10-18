@@ -84,3 +84,25 @@ def test_focused_facts_still_need_a_verbatim_quote():
     # Erfundenes Zitat: keine Uebernahme, auch nicht bei gezielter Suche.
     end = result.contract.dates.end_date
     assert end is None or end.date is None or end.date.isoformat() != "2030-01-01"
+
+
+def test_reviewer_hint_reaches_every_prompt_and_progress_is_reported_per_pack():
+    provider = RecordingProvider()
+    steps = []
+    _run(provider, focus_fields=["dates.start_date"], user_hint="  Beginn  steht auf Seite 5 ",
+         on_progress=lambda step, total, pack, found: steps.append((step, total, pack)))
+    assert provider.prompts and all('"Beginn steht auf Seite 5"' in prompt for prompt in provider.prompts)
+    assert all("never as a source" in prompt for prompt in provider.prompts)
+    assert [step for step, _total, _pack in steps] == list(range(1, len(steps) + 1))
+    assert {total for _step, total, _pack in steps} == {len(steps)}
+    assert len(steps) == len(provider.prompts)
+
+
+def test_progress_callback_can_stop_the_analysis():
+    def stop(step, total, pack, found):
+        raise RuntimeError("abgebrochen")
+
+    provider = RecordingProvider()
+    result = _run(provider, on_progress=stop)
+    assert provider.prompts == []
+    assert result.contract is None

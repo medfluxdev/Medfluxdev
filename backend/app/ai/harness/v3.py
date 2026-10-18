@@ -3141,13 +3141,19 @@ class DirectContractHarness:
         self.ai = ai or AIService(settings)
 
     async def analyze(self, canonical, image_loader=None, page_image_loader=None,
-                      original_page_loader=None, *, focus_fields=None, focus_pages=None):
+                      original_page_loader=None, *, focus_fields=None, focus_pages=None,
+                      user_hint=None, on_progress=None):
         """Analysiert ein kanonisches Dokument.
 
         `focus_fields` / `focus_pages` (erneute Erfassung): nur die Packs mit diesen
         Feldern, ein auf sie begrenzter Katalog und – statt der Seitenauswahl je Pack –
         die genannten Seiten bzw. alle Seiten. Nachweis-, Normalisierungs- und
         Validierungsregeln bleiben unveraendert.
+
+        `user_hint` (erneute Erfassung): Hinweis der pruefenden Person ("Preisstaffel auf
+        Seite 7"); er hilft beim Finden, ersetzt aber keinen woertlichen Nachweis.
+        `on_progress(step, steps, pack, found)` wird vor jedem Pack gerufen; eine Ausnahme
+        daraus bricht die Analyse ab (Abbrechen zwischen zwei Modellaufrufen).
         """
         from app.ai.contract_extractor import ContractAnalysisResult
 
@@ -3495,12 +3501,17 @@ class DirectContractHarness:
                 raise ValueError("No readable source text or vision transcription")
 
             proposals: list[ProposedFact] = []
-            for pack_name, selectors, topics, expand_keywords in PACKS:
+            active_packs = [
+                pack for pack in PACKS
+                if not focus or any(key in focus for key in _field_catalog(types, pack[1]))
+            ]
+            hint_text = " ".join(str(user_hint or "").split())[:500]
+            for step, (pack_name, selectors, topics, expand_keywords) in enumerate(active_packs, start=1):
+                if on_progress is not None:
+                    on_progress(step, len(active_packs), pack_name, len(proposals))
                 catalog = _field_catalog(types, selectors)
                 if focus:
                     catalog = {key: value for key, value in catalog.items() if key in focus}
-                    if not catalog:
-                        continue
                 if focus:
                     # Gezielte Suche: der kleine Katalog laesst Platz fuer mehr Quelltext.
                     # Genannte Seiten oder das ganze Dokument (Chunks teilen bei Bedarf).
@@ -3530,6 +3541,11 @@ class DirectContractHarness:
                 guidance = _PACK_GUIDANCE.get(pack_name, "")
                 if focus:
                     guidance = (guidance + " " if guidance else "") + _FOCUS_GUIDANCE
+                if hint_text:
+                    guidance = (guidance + " " if guidance else "") + (
+                        "Reviewer hint about where facts are (use it to look, never as a source; "
+                        "quotes must still come verbatim from the contract): " + json.dumps(hint_text, ensure_ascii=False)
+                    )
                 catalog_json = json.dumps(catalog, ensure_ascii=False, separators=(",", ":"))
 
                 def build_pack_prompt(pages: list[int], chunk_signals: list[dict]) -> str:

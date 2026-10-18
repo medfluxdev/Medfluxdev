@@ -20,6 +20,15 @@ from app.contracts.review.material import SCOPE_FACTS
 from app.models.contract import Contract as ExtractedContract
 
 GROUPS = ("identity", "dates", "termination", "costs", "payment", "services", "sla")
+
+# Bereiche wie in "Nachweise pruefen" (frontend lib/evidence.ts, EVIDENCE_SECTIONS).
+SECTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "partner": ("Vertrag & Partner", ("identity",)),
+    "term": ("Laufzeit & Fristen", ("dates", "termination")),
+    "cost": ("Kosten", ("costs", "payment")),
+    "services": ("Leistungen & SLA", ("services", "sla")),
+    "device": ("Geräte", ("equipment",)),
+}
 _SKIP = {"evidence", "default_currency"}
 # Enum-Werte, die "nichts gefunden" bedeuten.
 _EMPTY_ENUMS = {"unknown", "other"}
@@ -207,6 +216,27 @@ def fact_paths(model: ExtractedContract) -> list[str]:
     return out
 
 
+def section_of(path: str) -> str:
+    group = "equipment" if path == "equipment" else path.split(".", 1)[0]
+    return next((key for key, (_label, groups) in SECTIONS.items() if group in groups), "partner")
+
+
+def all_paths() -> list[str]:
+    return fact_paths(ExtractedContract())
+
+
+def paths_for_sections(sections: Iterable[str]) -> list[str]:
+    wanted = set(sections)
+    return [path for path in all_paths() if section_of(path) in wanted]
+
+
+def empty_paths(model: Optional[ExtractedContract]) -> list[str]:
+    """Angaben ohne Wert (Modus "Ergaenzen"); ohne fruehere Analyse alle."""
+    if model is None:
+        return all_paths()
+    return [path for path in fact_paths(model) if is_empty(get_fact(model, path))]
+
+
 def get_fact(model: ExtractedContract, path: str) -> Any:
     if path == "equipment":
         return model.equipment
@@ -220,6 +250,74 @@ def _set_fact(model: ExtractedContract, path: str, value: Any) -> None:
         return
     group, name = path.split(".", 1)
     setattr(getattr(model, group), name, value)
+
+
+def dump_fact(value: Any) -> Any:
+    """JSON-Schnappschuss eines Fakts (fuer Vorschlag und Zuruecknahme)."""
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, list):
+        return [dump_fact(item) for item in value]
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def same_snapshot(value: Any, snapshot: Any) -> bool:
+    """Steht im Modell noch der Wert eines Schnappschusses? (ohne Nachweis-/Pruefmarker)"""
+    return _normal(value) == _normal(snapshot)
+
+
+def with_fact(model: ExtractedContract, path: str, snapshot: Any) -> ExtractedContract:
+    """Kopie des Modells mit dem Fakt aus einem JSON-Schnappschuss (None = leerer Standardwert)."""
+    data = model.model_dump(mode="json")
+    if snapshot is None:
+        snapshot = dump_fact(get_fact(ExtractedContract(), path))
+    if path == "equipment":
+        data["equipment"] = snapshot
+    else:
+        group, name = path.split(".", 1)
+        data[group][name] = snapshot
+    return ExtractedContract.model_validate(data)
+
+
+def _belongs(row: dict, key: str) -> bool:
+    name = str(row.get("field") or "")
+    return name == key or name.startswith(key + ".") or (key == "equipment" and name.startswith("identity_equipment"))
+
+
+def evidence_rows(model: Optional[ExtractedContract], path: str) -> list[dict]:
+    """Rohe Harness-Nachweise eines Fakts (fuer den Schnappschuss)."""
+    if model is None:
+        return []
+    return [dict(row) for row in (model.analysis.harness or {}).get("evidence") or [] if _belongs(row, path)]
+
+
+def with_evidence(model: ExtractedContract, path: str, rows: list[dict]) -> ExtractedContract:
+    """Nachweise eines Fakts ersetzen (Zuruecknahme)."""
+    harness = dict(model.analysis.harness or {})
+    harness["evidence"] = [row for row in harness.get("evidence") or [] if not _belongs(row, path)] + [dict(row) for row in rows]
+    copy = model.model_copy(deep=True)
+    copy.analysis.harness = harness
+    return copy
+
+
+def evidence_detail(rows: list[dict]) -> list[dict]:
+    """Anzeige der Nachweise: Seite, Zitat, Sicherheit, Box."""
+    out = []
+    for row in rows:
+        source = row.get("source") or {}
+        if source.get("source_text") or source.get("page"):
+            out.append({"page": source.get("page"), "quote": source.get("source_text"),
+                        "confidence": source.get("confidence"), "bbox": source.get("bounding_box")})
+    return out[:3]
+
+
+def confidence_of(rows: list[dict]) -> Optional[float]:
+    values = [float(row["confidence"]) for row in evidence_detail(rows) if row.get("confidence") is not None]
+    return max(values) if values else None
 
 
 def is_empty(value: Any) -> bool:
@@ -402,11 +500,7 @@ def merge(accepted: ExtractedContract, candidate: ExtractedContract, keys: Itera
             [item.model_copy(deep=True) if isinstance(item, BaseModel) else item for item in value] if isinstance(value, list) else value
         ))
 
-        def belongs(row: dict, key: str = key) -> bool:
-            name = str(row.get("field") or "")
-            return name == key or name.startswith(key + ".") or (key == "equipment" and name.startswith("identity_equipment"))
-
-        evidence = [row for row in evidence if not belongs(row)] + [row for row in candidate_evidence if belongs(row)]
+        evidence = [row for row in evidence if not _belongs(row, key)] + [row for row in candidate_evidence if _belongs(row, key)]
         applied.append(key)
     harness["evidence"] = evidence
     history = list(harness.get("reextractions") or [])

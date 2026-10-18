@@ -529,6 +529,8 @@ class DocumentProcessingService:
         model_override: Optional[str] = None,
         focus_fields: Optional[list[str]] = None,
         focus_pages: Optional[list[int]] = None,
+        user_hint: Optional[str] = None,
+        on_progress=None,
         as_of_date: Optional[date] = None,
     ) -> ProcessedDocument:
         """Erneute Erfassung: neue Extraktion als Kandidat, die Vertragswahrheit bleibt unveraendert.
@@ -556,6 +558,8 @@ class DocumentProcessingService:
             ai=ai,
             focus_fields=focus_fields,
             focus_pages=focus_pages,
+            user_hint=user_hint,
+            on_progress=on_progress,
         )
 
     def apply_candidate(
@@ -859,6 +863,8 @@ class DocumentProcessingService:
         ai=None,
         focus_fields: Optional[list[str]] = None,
         focus_pages: Optional[list[int]] = None,
+        user_hint: Optional[str] = None,
+        on_progress=None,
     ) -> ProcessedDocument:
         completed, run_id, expected_accepted_extraction_id = self._claim_processing(
             stored,
@@ -956,9 +962,11 @@ class DocumentProcessingService:
                         if hybrid_runtime is not None
                         else None
                     ),
-                    # Gezielte Suche gibt es nur in der produktiven Harness (v3).
+                    # Gezielte Suche, Hinweis und Fortschritt gibt es nur in der produktiven Harness (v3).
                     **({"focus_fields": focus_fields, "focus_pages": focus_pages}
                        if using_v3 and (focus_fields or focus_pages) else {}),
+                    **({"user_hint": user_hint} if using_v3 and user_hint else {}),
+                    **({"on_progress": on_progress} if using_v3 and on_progress is not None else {}),
                 ))
             if analysis.contract is None:
                 placeholder_id = self._persist_failed_analysis(

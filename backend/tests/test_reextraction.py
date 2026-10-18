@@ -151,7 +151,10 @@ def _start(contract_id, ids, **kwargs) -> uuid.UUID:
     try:
         contract = session.get(Contract, UUID(contract_id))
         run = service.start(session, contract=contract, actor=_actor(ids), mode=kwargs.get("mode", "full"),
-                            fields=kwargs.get("fields", []), page_hint=[], reread=False, provider_id="ollama", model_id=None)
+                            fields=kwargs.get("fields", []), page_hint=[], reread=False, provider_id="ollama", model_id=None,
+                            sections=kwargs.get("sections", ()), hint=kwargs.get("hint"),
+                            protect_manual=kwargs.get("protect_manual", True),
+                            reset_confirmations=kwargs.get("reset_confirmations", False))
         session.commit()
         return run.id
     finally:
@@ -183,9 +186,13 @@ def test_run_creates_candidate_only_and_apply_merges_selected(tmp_path):
     try:
         run = session.get(ContractReextraction, run_id)
         assert run.status == "ready"
-        assert run.summary["new"] >= 1 and run.summary["changed"] >= 1
+        assert run.summary["new"] >= 1 and run.summary["deviating"] >= 1
+        assert run.number == 2  # #1 ist die Erstanalyse beim Import
         rows = {row["key"]: row for row in service.rows(session, run)}
-        assert rows["dates.start_date"]["preselected"] is True
+        assert rows["dates.start_date"]["kind"] == "new" and rows["dates.start_date"]["decision"] == "pending"
+        assert rows["dates.start_date"]["section"] == "term"
+        assert rows["termination.cancellation_period"]["kind"] == "deviating"
+        assert rows["identity.contract_title"]["kind"] == "missing"
         contract = session.get(Contract, UUID(contract_id))
         merged, keys = service.prepare_apply(session, contract, run, ["dates.start_date"])
         version_id, base_id, candidate_id = run.document_version_id, run.base_extraction_id, run.candidate_extraction_id
@@ -230,7 +237,8 @@ def test_human_values_stay_and_only_one_active_run(tmp_path):
     finally:
         session.close()
 
-    run_id = _start(contract_id, ids)
+    # Ohne Schutz: ein Vorschlag fuer das von Hand gepflegte Feld – uebernommen nur als Vorschlag.
+    run_id = _start(contract_id, ids, protect_manual=False)
     with pytest.raises(service.ReextractError) as conflict:
         _start(contract_id, ids)
     assert conflict.value.status_code == 409
@@ -272,7 +280,9 @@ def test_missing_fields_mode_and_discard_and_cancel(tmp_path):
     finally:
         session.close()
     with pytest.raises(service.ReextractError):
-        _start(contract_id, ids, mode="missing_fields", fields=[])
+        _start(contract_id, ids, mode="sections", sections=[])
+    with pytest.raises(service.ReextractError):
+        _start(contract_id, ids, mode="supplement", reset_confirmations=True)
     run_id = _start(contract_id, ids, mode="missing_fields", fields=["dates.start_date"])
     service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
     session = create_session()
@@ -386,6 +396,7 @@ def test_missing_fields_run_passes_focus_and_pages_to_the_harness(tmp_path):
             calls.append(kwargs)
             raise RuntimeError("nur aufzeichnen")
 
+
     service.drain(Recording())
     # Die Warteschlange ist organisationsuebergreifend; hier zaehlt der eigene Lauf.
     call = next(item for item in calls if item["contract_id"] == UUID(contract_id))
@@ -416,7 +427,8 @@ def test_first_analysis_for_manually_captured_contract(tmp_path):
         run = session.get(ContractReextraction, run_id)
         assert run.status == "ready" and run.base_extraction_id is None
         rows = {row["key"]: row for row in service.rows(session, run)}
-        assert rows["dates.start_date"]["group"] == "new"
+        assert rows["dates.start_date"]["kind"] == "new"
+        assert run.number == 1  # ohne Erstanalyse ist die erste Erfassung #1
         contract = session.get(Contract, UUID(contract_id))
         merged, keys = service.prepare_apply(session, contract, run, ["dates.start_date"])
         version_id, candidate_id = run.document_version_id, run.candidate_extraction_id
@@ -432,3 +444,269 @@ def test_first_analysis_for_manually_captured_contract(tmp_path):
     assert after_id is not None
     assert start.isoformat() == "2025-01-01"   # gewählt: übernommen
     assert notice is None                        # nicht gewählt: bleibt leer
+
+
+# --- Modi, Vorschlaege, Entscheidungen, Zuruecknahme (Analyse #N) -----------------------------
+
+
+def _run(run_id):
+    session = create_session()
+    try:
+        run = session.get(ContractReextraction, run_id)
+        return run, {row["key"]: row for row in service.rows(session, run)}
+    finally:
+        session.commit()
+        session.close()
+
+
+def _apply(tmp_path, ids, contract_id, run_id, keys):
+    session = create_session()
+    try:
+        run = session.get(ContractReextraction, run_id)
+        contract = session.get(Contract, UUID(contract_id))
+        merged, chosen = service.prepare_apply(session, contract, run, keys)
+        args = dict(document_version_id=run.document_version_id, base_extraction_id=run.base_extraction_id,
+                    candidate_extraction_id=run.candidate_extraction_id)
+    finally:
+        session.close()
+    result = _service(tmp_path, TEXT, _model(SECOND)).apply_candidate(
+        organization_id=ids["org"], contract_id=UUID(contract_id), merged_model=merged, applied_keys=chosen, **args,
+    )
+    assert result.status == "reanalyzed", result.message
+    session = create_session()
+    try:
+        run = session.get(ContractReextraction, run_id, with_for_update=True)
+        service.mark_applied(session, _actor(ids), run, chosen)
+        session.commit()
+        return run.status
+    finally:
+        session.close()
+
+
+def test_supplement_searches_open_facts_and_sections_limit_the_comparison(tmp_path):
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    supplement = _start(contract_id, ids, mode="supplement")
+    session = create_session()
+    try:
+        run = session.get(ContractReextraction, supplement)
+        assert "dates.start_date" in run.fields and "identity.supplier" not in run.fields  # nur leere Angaben
+        assert run.mode == "supplement"
+        service.cancel(session, run)
+        session.commit()
+    finally:
+        session.close()
+    sections = _start(contract_id, ids, mode="sections", sections=["term"])
+    service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
+    run, rows = _run(sections)
+    assert run.status == "ready" and run.sections == ["term"]
+    assert set(rows) == {"dates.start_date", "termination.cancellation_period"}  # Partner gehoert nicht dazu
+    assert run.number == 3
+
+
+def test_manual_values_are_protected_and_shown_as_unchanged(tmp_path):
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    session = create_session()
+    try:
+        from app.register.service import update_register
+
+        contract = session.get(Contract, UUID(contract_id), with_for_update=True)
+        update_register(session, contract=contract, actor=_actor(ids), changes={"notice_period_value": 4}, confirm=[])
+        session.commit()
+    finally:
+        session.close()
+    run_id = _start(contract_id, ids)
+    service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
+    run, rows = _run(run_id)
+    notice = rows["termination.cancellation_period"]
+    assert notice["kind"] == "unchanged" and notice["protected"] is True
+    assert run.summary["protected"] == 1
+    session = create_session()
+    try:
+        contract = session.get(Contract, UUID(contract_id))
+        with pytest.raises(service.ReextractError):
+            service.prepare_apply(session, contract, run, ["termination.cancellation_period"])
+    finally:
+        session.close()
+
+
+def test_decisions_one_by_one_settle_the_analysis_and_never_touch_the_contract(tmp_path):
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    run_id = _start(contract_id, ids)
+    service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
+    before = _state(contract_id)
+
+    # Behalten / Selbst erfassen aendern keinen Wert.
+    session = create_session()
+    try:
+        run = session.get(ContractReextraction, run_id, with_for_update=True)
+        assert service.decide(session, _actor(ids), run, ["identity.contract_title"], "kept_old") == 1
+        with pytest.raises(service.ReextractError):
+            service.decide(session, _actor(ids), run, ["identity.contract_title"], "kept_old")  # schon entschieden
+        session.commit()
+    finally:
+        session.close()
+    assert _state(contract_id)[0] == before[0]
+
+    # Zwei Uebernahmen nacheinander im selben Lauf: die Grundlage wandert mit.
+    assert _apply(tmp_path, ids, contract_id, run_id, ["dates.start_date"]) == "ready"
+    assert _apply(tmp_path, ids, contract_id, run_id, ["termination.cancellation_period"]) == "ready"
+    _id, after, notice, start = _state(contract_id)
+    assert (notice, start.isoformat()) == (6, "2025-01-01")
+    run, rows = _run(run_id)
+    assert rows["dates.start_date"]["decision"] == "accepted"
+    assert run.summary["accepted"] == 2
+
+    # Der Rest wird entschieden -> Analyse abgeschlossen.
+    pending = [key for key, row in rows.items() if row["decision"] == "pending" and row["kind"] != "unchanged"]
+    if pending:
+        session = create_session()
+        try:
+            run = session.get(ContractReextraction, run_id, with_for_update=True)
+            service.decide(session, _actor(ids), run, pending, "rejected")
+            session.commit()
+        finally:
+            session.close()
+    assert _run(run_id)[0].status == "applied"
+
+
+def test_hint_progress_and_cancel_between_packs(tmp_path):
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    run_id = _start(contract_id, ids, hint="  Kündigungsfrist   steht auf Seite 3 ")
+    seen = {}
+
+    class Reporting:
+        def extract_candidate(self, **kwargs):
+            seen.update(kwargs)
+            kwargs["on_progress"](1, 4, "core", 0)
+            session = create_session()
+            try:
+                session.get(ContractReextraction, run_id).cancel_requested = True
+                session.commit()
+            finally:
+                session.close()
+            kwargs["on_progress"](2, 4, "commercial", 3)  # bricht ab
+
+    service.drain(Reporting())
+    run, _rows = _run(run_id)
+    assert seen["user_hint"] == "Kündigungsfrist steht auf Seite 3"
+    assert run.progress == {"step": 2, "steps": 4, "label": "Kosten", "found": 3}
+    assert run.status == "cancelled"
+
+
+def test_reset_confirmations_reopens_reviews_but_keeps_values(tmp_path):
+    from app.contracts.review.service import _latest_fact_reviews, record_fact_action
+
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    session = create_session()
+    try:
+        record_fact_action(session, organization_id=ids["org"], contract_id=UUID(contract_id),
+                           fact_key="termination.cancellation_period", action="confirmed",
+                           reviewer_display_name="Manager", system_value="3 Monate")
+        session.commit()
+    finally:
+        session.close()
+    run_id = _start(contract_id, ids, reset_confirmations=True)
+    service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
+    session = create_session()
+    try:
+        latest = _latest_fact_reviews(session, UUID(contract_id))
+        assert latest["termination.cancellation_period"].action == "reopened"
+        events = {row.event_name for row in session.scalars(select(ActivityLog).where(ActivityLog.object_id == UUID(contract_id)))}
+        assert "contract.reextraction_reset" in events
+    finally:
+        session.close()
+    assert _state(contract_id)[2] == 3  # Wert unveraendert
+    assert _run(run_id)[0].status == "ready"
+
+
+def test_rollback_restores_the_earlier_state_and_skips_later_changes(tmp_path):
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    run_id = _start(contract_id, ids)
+    service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
+    _apply(tmp_path, ids, contract_id, run_id, ["dates.start_date", "termination.cancellation_period"])
+    assert _state(contract_id)[2:] [0] == 6
+
+    session = create_session()
+    try:
+        contract = session.get(Contract, UUID(contract_id))
+        history = service.history(session, contract)
+        assert [item["number"] for item in history] == [2, 1]
+        assert history[1]["mode_label"] == "Erstanalyse" and history[1]["can_rollback"] is True
+        assert history[0]["can_rollback"] is False  # danach wurde nichts uebernommen
+        model, entries, undo = service.rollback_plan(session, contract, 1)
+        assert {entry["key"] for entry in entries} == {"dates.start_date", "termination.cancellation_period"}
+        assert not any(entry["conflict"] for entry in entries)
+        assert model.dates.start_date is None or facts.is_empty(model.dates.start_date)
+        assert model.termination.cancellation_period.value == 3
+        rows = [row["field"] for row in model.analysis.harness["evidence"]]
+        assert "dates.start_date" not in rows  # Nachweise des zurueckgenommenen Werts weg
+        base = contract.accepted_extraction_id
+        version = service.main_document_version(session, contract)
+        keys = [item.field_key for item in undo]
+        undo_ids = {item.id for item in undo}
+    finally:
+        session.close()
+
+    result = _service(tmp_path, TEXT, _model(SECOND)).apply_candidate(
+        organization_id=ids["org"], contract_id=UUID(contract_id), document_version_id=version,
+        merged_model=model, base_extraction_id=base, candidate_extraction_id=base, applied_keys=keys,
+    )
+    assert result.status == "reanalyzed", result.message
+    session = create_session()
+    try:
+        contract = session.get(Contract, UUID(contract_id))
+        entry = service.record_rollback(session, _actor(ids), contract, 1, service.proposals_by_id(session, undo_ids), entries, base)
+        session.commit()
+        assert entry.mode == "rollback" and entry.number == 3 and entry.summary["rolled_back"] == 2
+    finally:
+        session.close()
+    _id, after, notice, start = _state(contract_id)
+    assert (notice, start) == (3, None)
+    _run_after, rows = _run(run_id)
+    assert rows["dates.start_date"]["decision"] == "rolled_back"
+    # Nichts mehr zurueckzunehmen.
+    session = create_session()
+    try:
+        contract = session.get(Contract, UUID(contract_id))
+        assert service.rollback_plan(session, contract, 1)[2] == []
+    finally:
+        session.close()
+
+
+def test_rollback_skips_a_value_changed_after_the_analysis():
+    accepted = _model({"termination": {"cancellation_period": {"value": 9, "unit": "months"}}})
+    item = SimpleNamespace(field_key="termination.cancellation_period", new_value={"value": 6, "unit": "months"})
+    assert not facts.same_snapshot(facts.get_fact(accepted, item.field_key), item.new_value)
+    assert facts.same_snapshot(facts.get_fact(accepted, item.field_key), {"value": 9, "unit": "months", "evidence": []})
+
+
+def test_api_decide_confirm_and_rollback_need_rights(tmp_path, monkeypatch):
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    run_id = _start(contract_id, ids)
+    service.drain(_service(tmp_path, TEXT, _model(SECOND, SECOND_EVIDENCE)))
+    params = {"organization_slug": slug}
+    viewer = _client(monkeypatch, ids, "viewer", "viewer")
+    assert viewer.post(f"/api/contracts/{contract_id}/reextraction/{run_id}/decide", params=params,
+                       json={"keys": ["identity.contract_title"], "decision": "kept_old"}).status_code == 403
+    assert viewer.post(f"/api/contracts/{contract_id}/reextraction/{run_id}/confirm-unchanged", params=params).status_code == 403
+    assert viewer.get(f"/api/contracts/{contract_id}/reextraction/rollback/1", params=params).status_code == 403
+
+    manager = _client(monkeypatch, ids, "manager", "contract_manager")
+    state = manager.get(f"/api/contracts/{contract_id}/reextraction", params=params).json()
+    assert state["run"]["number"] == 2 and state["run"]["mode_label"] == "Vollständig neu bewerten"
+    assert state["open_fields"] > 0 and {item["key"] for item in state["sections"]} >= {"partner", "term", "cost"}
+    assert [item["number"] for item in state["history"]] == [2, 1]
+    decided = manager.post(f"/api/contracts/{contract_id}/reextraction/{run_id}/decide", params=params,
+                           json={"keys": ["identity.contract_title"], "decision": "kept_old"})
+    assert decided.status_code == 200, decided.text
+    confirmed = manager.post(f"/api/contracts/{contract_id}/reextraction/{run_id}/confirm-unchanged", params=params)
+    assert confirmed.status_code == 200, confirmed.text
+    preview = manager.get(f"/api/contracts/{contract_id}/reextraction/rollback/1", params=params)
+    assert preview.status_code == 200 and preview.json()["entries"] == []
