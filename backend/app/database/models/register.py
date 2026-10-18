@@ -469,3 +469,22 @@ class ContractRule(OrgOwnedMixin, Base):
     __table_args__ = (
         Index("ix_contract_rule_org_active", "organization_id", "is_active"),
     )
+
+
+class PartnerSuggestionDismissal(OrgOwnedMixin, Base):
+    """Ignorierter Stammdaten-Vorschlag fuer einen Vertragspartner (Feld + Wert): wird nicht erneut angeboten."""
+
+    __tablename__ = "partner_suggestion_dismissal"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    partner_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("contract_partner.id", ondelete="CASCADE"), nullable=False
+    )
+    field_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    value: Mapped[str] = mapped_column(String(500), nullable=False)
+    dismissed_by_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    dismissed_by_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "field_key", "value", name="uq_partner_suggestion_dismissal_value"),
+    )

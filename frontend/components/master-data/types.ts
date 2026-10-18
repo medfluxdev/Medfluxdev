@@ -81,6 +81,8 @@ export interface EntityDefinition<T, C> {
   exportHeader?: string[];
   /** Hinweistext ueber der Tabelle (z. B. was Deaktivieren bewirkt). */
   intro?: ReactNode;
+  /** Inhalt ueber dem Formular beim Bearbeiten (z. B. KI-Vorschlaege aus Vertraegen); `refresh` laedt den Eintrag neu. */
+  editorTop?: (row: T, organizationSlug: string, refresh: () => void) => ReactNode;
 }
 
 export interface ManagerApi<T> {

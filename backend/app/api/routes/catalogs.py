@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
 from app.auth.dependencies import current_actor
-from app.auth.permissions import is_admin, require
+from app.auth.permissions import can, is_admin, require
 from app.database.scope_queries import scoped_contract_ids
 from app.core.scope_context import current_scope_context
 from app.database.models import ActivityLog, Contract
@@ -25,6 +25,7 @@ from app.database.models.register import (
 )
 from app.database.session import create_session
 from app.register import catalogs
+from app.register import partner_suggestions
 from app.register.catalogs import CatalogError
 from app.register.service import (
     CONTRACT_NUMBER_PURPOSE,
@@ -345,6 +346,86 @@ def patch_partner(partner_id: UUID, payload: CatalogEntry, request: Request, org
         _log(session, actor, "partner.updated", "contract_partner", row.id, {"fields": changed})
         session.commit()
         return catalogs.partner_payload(row)
+    finally:
+        session.close()
+
+
+class PartnerSuggestionChoice(BaseModel):
+    field: str = Field(max_length=40)
+    value: str = Field(max_length=500)
+
+
+def _suggestion_contracts(session, actor, row: ContractPartner, contract_id: Optional[UUID]) -> list[Contract]:
+    """Vertraege des Partners, die die Person sehen darf (optional nur einer)."""
+    allowed = None
+    if not is_admin(actor):
+        scope = current_scope_context()
+        allowed = scoped_contract_ids(session, actor.organization_id, scope.hospital_id, scope.department_id)
+    contracts = partner_suggestions.partner_contracts(session, row, set(allowed) if allowed is not None else None)
+    if contract_id is not None:
+        contracts = [contract for contract in contracts if contract.id == contract_id]
+    return contracts
+
+
+@router.get("/partners/{partner_id}/suggestions")
+def partner_suggestion_list(partner_id: UUID, request: Request, organization_slug: str, contract_id: Optional[UUID] = None):
+    """Stammdaten-Vorschlaege aus den Vertragsanalysen (E-Mail, Telefon, Anschrift) fuer diesen Partner."""
+    actor = _actor(request, organization_slug)
+    session = create_session()
+    try:
+        row = _own(session, ContractPartner, partner_id, actor.organization_id)
+        items = partner_suggestions.suggestions(session, row, _suggestion_contracts(session, actor, row, contract_id))
+        return {
+            "partner": {"id": str(row.id), "short_name": row.short_name},
+            "items": [item.as_dict() for item in items],
+            "can_apply": can(actor, "partner.edit"),
+        }
+    finally:
+        session.close()
+
+
+@router.post("/partners/{partner_id}/suggestions/apply")
+def partner_suggestion_apply(partner_id: UUID, payload: PartnerSuggestionChoice, request: Request, organization_slug: str):
+    """Vorschlag in die Stammdaten des Partners uebernehmen (nur ein tatsaechlich angebotener Wert)."""
+    actor = _actor(request, organization_slug)
+    _require_partner_write(actor)
+    session = create_session()
+    try:
+        row = _own(session, ContractPartner, partner_id, actor.organization_id)
+        found = partner_suggestions.find(session, row, _suggestion_contracts(session, actor, row, None), payload.field, payload.value)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Dieser Vorschlag liegt nicht (mehr) vor.")
+        before = getattr(row, found.field)
+        try:
+            catalogs.update_partner(session, row, {found.field: found.value})
+        except CatalogError as exc:
+            session.rollback()
+            raise _http(exc)
+        _log(session, actor, "partner.updated", "contract_partner", row.id, {
+            "fields": {found.field: {"before": before, "after": getattr(row, found.field)}},
+            "source": {"kind": "ai_suggestion", "contract_id": found.contract_id, "register_number": found.register_number, "page": found.page},
+        })
+        session.commit()
+        return catalogs.partner_payload(row)
+    finally:
+        session.close()
+
+
+@router.post("/partners/{partner_id}/suggestions/dismiss")
+def partner_suggestion_dismiss(partner_id: UUID, payload: PartnerSuggestionChoice, request: Request, organization_slug: str):
+    """Vorschlag ignorieren: der Partner bleibt, wie er ist; derselbe Wert wird nicht erneut angeboten."""
+    actor = _actor(request, organization_slug)
+    _require_partner_write(actor)
+    session = create_session()
+    try:
+        row = _own(session, ContractPartner, partner_id, actor.organization_id)
+        found = partner_suggestions.find(session, row, _suggestion_contracts(session, actor, row, None), payload.field, payload.value)
+        if found is None:
+            raise HTTPException(status_code=404, detail="Dieser Vorschlag liegt nicht (mehr) vor.")
+        partner_suggestions.dismiss(session, row, found.field, found.value, account_id=getattr(actor, "account_id", None), name=getattr(actor, "display_name", None))
+        _log(session, actor, "partner.suggestion_dismissed", "contract_partner", row.id, {"field": found.field, "value": found.value})
+        session.commit()
+        return {"dismissed": True}
     finally:
         session.close()
 

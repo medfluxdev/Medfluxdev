@@ -223,6 +223,21 @@ export default function EntityManager<T, C>({ definition, section, organizationS
     setDrawer({ mode: "closed" });
   }
 
+  // Eintrag nach einer Änderung außerhalb des Formulars (z. B. übernommener Vorschlag) frisch anzeigen.
+  const [editorVersion, setEditorVersion] = useState(0);
+  async function refreshOpenRow() {
+    if (drawer.mode !== "edit") return;
+    const id = definition.id(drawer.row);
+    try {
+      const result = await definition.load(organizationSlug);
+      setRows(result.rows);
+      const fresh = result.rows.find((row) => definition.id(row) === id);
+      if (fresh) { setDrawer({ mode: "edit", row: fresh }); setEditorVersion((value) => value + 1); setDirty(false); }
+    } catch {
+      // Liste bleibt; der Eintrag wird beim nächsten Laden aktualisiert.
+    }
+  }
+
   async function saved(result: { id: string; created: boolean; label: string }) {
     closeDrawer();
     toast(result.created ? `${definition.singular} „${result.label}“ angelegt.` : `${definition.singular} „${result.label}“ gespeichert.`, "success");
@@ -325,7 +340,9 @@ export default function EntityManager<T, C>({ definition, section, organizationS
         fieldKey={section.fieldKey}
         onImported={(count) => { toast(`${count} ${definition.plural} importiert.`, "success"); void load(); }}
       /> : null}
+      {drawer.mode === "edit" && definition.editorTop ? definition.editorTop(drawer.row, organizationSlug, () => void refreshOpenRow()) : null}
       {(drawer.mode === "create" || drawer.mode === "edit") && context !== null ? <EntityEditor
+        key={drawer.mode === "edit" ? `${definition.id(drawer.row)}-${editorVersion}` : "create"}
         definition={definition}
         context={context}
         organizationSlug={organizationSlug}

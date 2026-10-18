@@ -59,6 +59,7 @@ EVENT_LABELS: dict[str, str] = {
     "notification.deadline_escalation": "Eskalation gemeldet",
     "partner.created": "Vertragspartner angelegt",
     "partner.updated": "Vertragspartner geändert",
+    "partner.suggestion_dismissed": "Vorschlag für Vertragspartner ignoriert",
     "partner.merged": "Vertragspartner zusammengeführt",
     "partner.merged_into": "Vertragspartner in Dublette überführt",
     "partner.bulk_imported": "Vertragspartner importiert",

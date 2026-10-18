@@ -97,6 +97,39 @@ export function listPartners(
   return apiGet<{ total: number; items: PartnerDto[] }>(`/api/catalogs/partners?${params.toString()}`);
 }
 
+/** Angabe, die eine Vertragsanalyse für den verknüpften Vertragspartner belegt gefunden hat. */
+export interface PartnerSuggestion {
+  field: "email" | "phone" | "street" | "postal_code" | "city" | "country";
+  label: string;
+  value: string;
+  /** Bisher beim Partner gepflegt (nur bei „abweichend“). */
+  current: string | null;
+  kind: "new" | "deviating";
+  page: number | null;
+  quote: string | null;
+  contract_id: string;
+  register_number: string | null;
+  contract_label: string | null;
+  /** In wie vielen Verträgen derselbe Wert steht. */
+  sources: number;
+}
+
+export function getPartnerSuggestions(organizationSlug: string, partnerId: string, contractId?: string) {
+  const params = new URLSearchParams({ organization_slug: organizationSlug });
+  if (contractId) params.set("contract_id", contractId);
+  return apiGet<{ partner: { id: string; short_name: string }; items: PartnerSuggestion[]; can_apply: boolean }>(
+    `/api/catalogs/partners/${encodeURIComponent(partnerId)}/suggestions?${params.toString()}`,
+  );
+}
+
+export function applyPartnerSuggestion(organizationSlug: string, partnerId: string, item: Pick<PartnerSuggestion, "field" | "value">) {
+  return apiPost<PartnerDto>(`/api/catalogs/partners/${encodeURIComponent(partnerId)}/suggestions/apply?${orgQuery(organizationSlug)}`, { field: item.field, value: item.value });
+}
+
+export function dismissPartnerSuggestion(organizationSlug: string, partnerId: string, item: Pick<PartnerSuggestion, "field" | "value">) {
+  return apiPost<{ dismissed: boolean }>(`/api/catalogs/partners/${encodeURIComponent(partnerId)}/suggestions/dismiss?${orgQuery(organizationSlug)}`, { field: item.field, value: item.value });
+}
+
 export function getPartner(organizationSlug: string, partnerId: string) {
   return apiGet<PartnerDto & { contracts: { id: string; register_number: string | null; short_description: string | null; business_status: string }[] }>(
     `/api/catalogs/partners/${encodeURIComponent(partnerId)}?${orgQuery(organizationSlug)}`,

@@ -9,6 +9,8 @@ import {
   type PartnerValues,
 } from "@/lib/domain-api/catalogs";
 import { optional, text, type EntityDefinition, type FieldDef, type FormValues } from "../types";
+import { createElement } from "react";
+import PartnerSuggestions from "../PartnerSuggestions";
 
 export interface PartnerContext {
   industries: LookupDto[];
@@ -88,6 +90,10 @@ export async function loadPartnerContext(organizationSlug: string): Promise<Part
 }
 
 export const partnerDefinition: EntityDefinition<PartnerDto, PartnerContext> = {
+  // KI-Vorschläge aus den Verträgen dieses Partners (E-Mail, Telefon, Anschrift) über dem Formular.
+  editorTop: (row, organizationSlug, refresh) => createElement(PartnerSuggestions, {
+    key: row.id, orgSlug: organizationSlug, partnerId: row.id, partnerName: row.short_name, variant: "drawer", onApplied: refresh,
+  }),
   kind: "partner",
   singular: "Vertragspartner",
   plural: "Vertragspartner",

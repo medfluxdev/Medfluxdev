@@ -13,6 +13,7 @@ import ContractAccessCard, { type AccessChanges } from "./ContractAccessCard";
 import ContractRetentionCard from "./ContractRetentionCard";
 import type { FormValues } from "@/components/master-data/types";
 import MissingList from "@/components/ui/MissingList";
+import PartnerSuggestions from "@/components/master-data/PartnerSuggestions";
 import AiOrigin from "@/components/ui/AiOrigin";
 import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
@@ -904,6 +905,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
         {proposalKeys.map((key) => <li key={key}><AiOrigin state="unreviewed" factKey={register.fields[key].ai_proposed_value?.source_field} subject={labelFor(key)} /> {register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <span className="rg-proposal-actions"><button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => dismissProposal(key)} title="Der aktuelle Wert ist richtig – dieser Vorschlag wird nicht erneut angezeigt">Ignorieren</button></span></li>)}
       </ul>
     </section> : null}
+    {/* Angaben aus dem Vertrag, die in die Stammdaten des Vertragspartners gehören (E-Mail, Telefon, Anschrift). */}
+    {typeof register.fields.partner_id?.value === "string" && register.fields.partner_id.value
+      ? <PartnerSuggestions orgSlug={orgSlug} partnerId={register.fields.partner_id.value} contractId={contractId} /> : null}
     </> : null}
 
     {/* Erfolg nur als Toast; ein Text hier stünde zwischen den Kästen. Fehler bleiben sichtbar. */}

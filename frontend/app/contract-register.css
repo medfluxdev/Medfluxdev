@@ -14,6 +14,19 @@
 .rg-explanation{margin: 12px 0 0;padding-left: 18px;color: var(--color-text-subtle);font-size: var(--text-small)}
 .rg-ai ul{margin: 0;padding: 0;list-style: none;display: grid;gap: 10px}
 .rg-proposal-actions{display: inline-flex;flex-wrap: wrap;gap: 8px}
+/* Für den Vertragspartner gefunden (Vertrag und Stammdaten-Fenster) */
+.ps-list{display: grid;gap: 8px;margin: 0;padding: 0;list-style: none}
+.ps-item{display: grid;grid-template-columns: minmax(0, 1fr) auto;gap: 4px 12px;align-items: center;padding: 10px 12px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
+.ps-what{display: flex;flex-wrap: wrap;align-items: center;gap: 6px 10px;min-width: 0}
+.ps-value{overflow-wrap: anywhere}
+.ps-current{color: var(--color-text-muted);font-size: var(--text-small)}
+.ps-source{grid-column: 1;color: var(--color-text-muted);font-size: var(--text-caption)}
+.ps-actions{grid-column: 2;grid-row: 1 / span 2;display: inline-flex;flex-wrap: wrap;justify-content: flex-end;gap: 6px}
+.ps--drawer{display: grid;gap: 10px;margin-bottom: 16px;padding: 12px;border: 1px solid var(--color-ai-border);border-radius: var(--radius-sm);background: var(--color-ai-bg)}
+.ps-title{display: flex;align-items: center;gap: 8px;margin: 0;font-size: var(--text-body);font-weight: 600}
+.ps-intro{margin: 0;color: var(--color-text-muted);font-size: var(--text-small)}
+.ps-icon{width: 16px;height: 16px;flex: none;fill: none;stroke: var(--color-ai);stroke-width: 1.9;stroke-linecap: round;stroke-linejoin: round}
+@media (max-width: 640px){.ps-item{grid-template-columns: 1fr}.ps-actions{grid-column: 1;grid-row: auto;justify-content: flex-start}}
 .rg-ai li{display: flex;flex-wrap: wrap;gap: 8px;align-items: center;padding: 10px 12px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
 .rg-toolbar{display: flex;gap: 10px;align-items: center;flex-wrap: wrap}
 .rg-fields{display: grid;grid-template-columns: repeat(2,minmax(0,1fr));gap: 0 26px;margin: 0}
