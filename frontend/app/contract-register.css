@@ -1099,10 +1099,14 @@ a.fin-basis-sub { color: var(--color-link); }
 .evf-icon--deviation{fill: var(--color-warning-fill);stroke: var(--color-text-inverse);stroke-width: 2;stroke-linecap: round}
 .evf-icon--deviation path:first-child{stroke: none}
 .evf-icon--skipped{fill: var(--color-text-muted)}
+.evf-select{position: relative;display: block}
+.evf-select select{appearance: none}
+.evf-chevron{position: absolute;top: 50%;right: 10px;width: 18px;height: 18px;fill: none;stroke: var(--color-text-muted);stroke-width: 2;stroke-linecap: round;stroke-linejoin: round;transform: translateY(-50%);pointer-events: none}
+.evf-select:hover .evf-chevron, .evf-select:focus-within .evf-chevron{stroke: var(--color-accent)}
 .evf-fields{display: grid;grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr);gap: 16px}
 .evf-field{display: grid;gap: 6px}
 .evf-label{font-size: var(--text-small);font-weight: 600}
-.evf-field select{min-height: 40px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit}
+.evf-field select{width: 100%;min-height: 40px;padding: 0 36px 0 10px;cursor: pointer;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit}
 .evf-search{display: flex;align-items: center;gap: 8px;min-height: 40px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface)}
 .evf-search:focus-within{outline: 2px solid var(--color-focus);outline-offset: 1px}
 .evf-search input{flex: 1;min-width: 0;border: 0;background: none;color: var(--color-text);font: inherit;outline: none}
@@ -1150,7 +1154,7 @@ a.fin-basis-sub { color: var(--color-link); }
 .evt-sub{display: block;margin-top: 2px;color: var(--color-text-muted);font-size: var(--text-caption)}
 .evt-table td .signal{white-space: nowrap}
 .evt-row{display: flex;flex-wrap: wrap;gap: 8px;width: 100%}
-.evt-section select{min-height: 34px;padding: 0 8px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
+.evt-section select{min-height: 34px;padding: 0 32px 0 8px;cursor: pointer;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
 .erm-scope{display: inline-flex;align-items: center;overflow: hidden;border: 1px solid var(--color-accent);border-radius: 999px;background: var(--color-surface-accent);color: var(--color-accent);font-size: var(--text-small);font-weight: 600}
 .erm-scope button{min-height: 30px;border: 0;background: none;color: inherit;font: inherit;cursor: pointer}
 .erm-scope-label{padding: 0 4px 0 12px}

@@ -6042,3 +6042,7 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 - **Frontend:** `PartnerSuggestions` – auf dem Vertrag (Vertragsdaten, nach „KI-Vorschläge“) „Für den Vertragspartner gefunden“, in Stammdaten → Vertragspartner im Fenster „Aus Verträgen gefunden“ (aus allen Verträgen, mit Vertragsnummer und Seite; neuer Platz `EntityDefinition.editorTop`, Formular lädt nach Übernahme neu). Knöpfe „Beim Partner ergänzen“ / „Beim Partner ersetzen“ / „Ignorieren“, „Alle neuen ergänzen (N)“ (nie abweichende).
 - **Tests:** Backend voll 1747 grün (neu `test_partner_suggestions.py`: Anschrift-Lesen, Übernehmen/Ignorieren/Rechte, Kunden-Kontakt); Migration hoch/runter/hoch; lokale DB auf `zj0e2f4a5028`. Frontend `npm run verify` grün (511, neu `partner-suggestions.test.tsx` mit axe).
 - **Später möglich:** weitere Ziele nach demselben Muster (z. B. Ansprechpartner, Kundennummer beim Partner, Anschrift des Krankenhauses).
+
+### Nachtrag 2026-10-18 – Pfeil im Abschnitt-Feld
+
+- Das Auswahlfeld „Abschnitt“ (Aufklapper „Nachweise filtern“ und „Alle Nachweise“) zeigt rechts einen Pfeil nach unten, damit klar ist, dass sich eine Liste öffnet; beim Darüberfahren/Fokus in Akzentfarbe. `EvidenceTable.tsx`, `contract-register.css`; `npm run verify` grün.

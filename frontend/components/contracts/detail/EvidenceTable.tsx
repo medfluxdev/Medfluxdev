@@ -65,10 +65,13 @@ export function EvidenceFilterBar({ rows, filter, onFilter }: { rows: EvidenceRo
     <div className="evt-row">
       <label className="evt-section">
         <span className="visually-hidden">Abschnitt</span>
-        <select value={filter.section} onChange={(event) => onFilter({ ...filter, section: event.target.value })} aria-label="Nach Abschnitt filtern">
-          <option value="">Alle Abschnitte</option>
-          {sections.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-        </select>
+        <span className="evf-select">
+          <select value={filter.section} onChange={(event) => onFilter({ ...filter, section: event.target.value })} aria-label="Nach Abschnitt filtern">
+            <option value="">Alle Abschnitte</option>
+            {sections.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
+          {CHEVRON}
+        </span>
       </label>
       <input type="search" className="evt-search" aria-label="Nachweise durchsuchen" placeholder="Feld oder Wortlaut suchen" value={filter.query} onChange={(event) => onFilter({ ...filter, query: event.target.value })} />
     </div>
@@ -84,6 +87,8 @@ const STATUS_ICON: Record<"" | EvidenceStatus, ReactNode> = {
   skipped: ico(<path d="M3 5.5 11 12l-8 6.5zM12 5.5l8 6.5-8 6.5z" />, "evf-icon evf-icon--skipped"),
 };
 const FILTER_ICON = ico(<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4" />, "evf-title-icon");
+// Pfeil im Auswahlfeld: zeigt, dass sich hier eine Liste öffnet.
+const CHEVRON = ico(<path d="m6 9 6 6 6-6" />, "evf-chevron");
 const SEARCH_ICON = ico(<><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>, "evf-search-icon");
 
 /**
@@ -120,10 +125,13 @@ export function EvidenceFilterPanel({ rows, filter, onApply }: { rows: EvidenceR
     <div className="evf-fields">
       <label className="evf-field">
         <span className="evf-label">Abschnitt</span>
-        <select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value })} aria-label="Nach Abschnitt filtern">
-          <option value="">Alle Abschnitte</option>
-          {sections.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
-        </select>
+        <span className="evf-select">
+          <select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value })} aria-label="Nach Abschnitt filtern">
+            <option value="">Alle Abschnitte</option>
+            {sections.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+          </select>
+          {CHEVRON}
+        </span>
       </label>
       <label className="evf-field evf-field--search">
         <span className="evf-label">Suche</span>
