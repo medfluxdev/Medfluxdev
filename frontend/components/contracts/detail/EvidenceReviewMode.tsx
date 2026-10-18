@@ -51,11 +51,11 @@ function Kbd({ children }: { children: string }) {
   return <kbd className="erm-kbd" aria-hidden="true">{children}</kbd>;
 }
 
-function SectionChip({ section }: { section: EvidenceSection }) {
+export function SectionChip({ section }: { section: EvidenceSection }) {
   return <span className={`erm-section erm-tone--${section.tone}`}>{icon(SECTION_ICON[section.key] ?? SECTION_ICON.other, "erm-section-icon")}{section.label}</span>;
 }
 
-function Diff({ tokens }: { tokens: { text: string; changed: boolean }[] }) {
+export function Diff({ tokens }: { tokens: { text: string; changed: boolean }[] }) {
   return <>{tokens.map((token, index) => <span key={index}>{index ? " " : ""}{token.changed ? <mark className="erm-diff">{token.text}</mark> : token.text}</span>)}</>;
 }
 
@@ -300,7 +300,7 @@ export default function EvidenceReviewMode({
     const keys = Array.from(new Set([base, base.split(".").slice(0, 2).join(".")].filter(Boolean)));
     const pageHint = current.page != null ? [current.page] : [];
     const attempts = [
-      ...keys.map((key) => ({ mode: "missing_fields" as const, fields: [key], page_hint: pageHint })),
+      ...keys.map((key) => ({ mode: "supplement" as const, fields: [key], page_hint: pageHint })),
       { mode: "full" as const, page_hint: pageHint },
     ];
     setBusy(true);
@@ -308,7 +308,7 @@ export default function EvidenceReviewMode({
       for (const attempt of attempts) {
         try {
           await startReextraction(orgSlug, contractId, attempt);
-          toast(`Erkennung gestartet${current.page != null ? ` (Seite ${current.page})` : ""}. Das Ergebnis erscheint oben unter „Neue Auswertung“.`, "success");
+          toast(`Erkennung gestartet${current.page != null ? ` (Seite ${current.page})` : ""}. Das Ergebnis erscheint unter „Erneut aus dem Dokument erfassen“.`, "success");
           onRecognizeStarted?.();
           return;
         } catch (err) {

@@ -48,7 +48,8 @@ import { servicesVisible as servicesVisibleFor } from "@/lib/contract-services";
 import { CONFLICT_TARGET, FIELD_PARAM, FINANCE_ENTRIES_TARGET, FINANCE_SUGGESTIONS_TARGET, SECTION_PARAM, normalizeTarget, contractHref, documentSearchHref, MISSING_SEARCH, sectionAnchor, warningTarget, type FixTarget } from "@/lib/fix-targets";
 import { useContractGaps } from "./ContractGaps";
 import { setPageCommands } from "@/lib/page-commands";
-import ReextractionPanel, { ReextractionBanner, fieldSearchMap, useReextraction } from "./Reextraction";
+import ReextractionPanel, { ReextractionBanner, fieldSearchMap, openProposals, useReextraction } from "./Reextraction";
+import ProposalReviewMode from "./ProposalReviewMode";
 import SourceCapture from "./SourceCapture";
 import AiReviewButton from "./AiReviewButton";
 import RiskButton from "./RiskButton";
@@ -57,7 +58,7 @@ import { AiReviewContext, type AiOriginTarget } from "@/components/ui/AiOrigin";
 import { findReviewFact } from "@/lib/review-facts";
 import ContractTermBar from "./ContractTermBar";
 import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
-import OpenPoints, { EVIDENCE_REVIEW_SECTION, buildOpenPoints } from "./OpenPoints";
+import OpenPoints, { EVIDENCE_REVIEW_SECTION, PROPOSAL_REVIEW_SECTION, buildOpenPoints } from "./OpenPoints";
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
 import EvidenceReviewMode from "./EvidenceReviewMode";
@@ -314,6 +315,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     if (!linkedSection) return;
     // „Nachweise prüfen“ (Offene Punkte): geführten Modus öffnen statt zu scrollen.
     if (linkedSection === EVIDENCE_REVIEW_SECTION) { setReviewMode((mode) => mode ?? { startId: null }); return; }
+    // „Vorschläge prüfen“ (Offene Punkte): geführten Modus der letzten Analyse öffnen.
+    if (linkedSection === PROPOSAL_REVIEW_SECTION) { setProposalMode((mode) => mode ?? { startKey: null }); return; }
     const anchor = sectionAnchor(linkedSection);
     let tries = 0;
     let timer = 0;
@@ -415,6 +418,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   const evidenceNumber = useMemo(() => evidenceNumbers(orderedEvidence), [orderedEvidence]);
   // „Nachweise prüfen“: geführter Modus, ein Nachweis nach dem anderen (startet beim gewählten oder ersten offenen).
   const [reviewMode, setReviewMode] = useState<{ startId: string | null } | null>(null);
+  // „Vorschläge prüfen“: offene Vorschläge der letzten Analyse einzeln (gleicher Arbeitsplatz).
+  const [proposalMode, setProposalMode] = useState<{ startKey: string | null } | null>(null);
   // Ergebnis der Nachweisprüfung je Nachweis (bestätigt, abweichend, übersprungen).
   const [evidenceReviews, setEvidenceReviews] = useState<Map<string, EvidenceReviewItem>>(() => new Map());
   const reloadEvidenceReviews = useCallback(() => {
@@ -434,7 +439,18 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   [data.evidence, documentVersionId, evidenceNumber, evidenceFacts, activeEvidenceId]);
   function startEvidenceReview(startId: string | null = null) {
     if (!inDocumentWorkspace) setRoute("documents", "evidence");
+    setProposalMode(null);
     setReviewMode({ startId });
+  }
+  function startProposalReview(startKey: string | null = null) {
+    if (!inDocumentWorkspace) setRoute("documents", "document");
+    setReviewMode(null);
+    setProposalMode({ startKey });
+  }
+  function showProposalEvidence(evidence: { page: number | null; quote: string | null }) {
+    if (!mainDocumentId || evidence.page == null) return;
+    setDocumentVersionId(mainDocumentId);
+    setNavTarget({ document_version_id: mainDocumentId, page: evidence.page, bbox: null, bbox_space: "pdf_points", supports_exact_navigation: false, label: evidence.quote ?? `Fundstelle Seite ${evidence.page}` });
   }
   function selectDocument(doc: { document_version_id: string }) {
     setDocumentVersionId(doc.document_version_id);
@@ -674,6 +690,11 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     slaToCheck: showSla ? slaRows.filter((row) => factOpen(row.fact)).length : 0,
     reviewOpen: data.contract_review?.unresolved_count ?? 0,
     evidenceOpen: openEvidenceCount,
+    analysis: reextraction.state ? {
+      number: reextraction.state.run?.status === "ready" && !reextraction.state.run.stale ? reextraction.state.run.number : null,
+      open: reextraction.state.run?.status === "ready" && !reextraction.state.run.stale ? openProposals(reextraction.state.rows).length : 0,
+      newDocument: reextraction.state.new_document?.filename ?? (reextraction.state.new_document ? "" : null),
+    } : null,
     cancelByUnknown: !headerCancelBy && !fixedTerm,
     decision: pendingDecision(decisionBrief),
     decisionStep: decisionBrief?.decision?.next_step ? {
@@ -891,20 +912,35 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                 : data.contract_review.relevant_count > 0 ? <Signal tone="done" size="sm">Alles geprüft</Signal> : null}
             </div>
           </div>
-          {inDocumentWorkspace && <ReextractionPanel
+          {inDocumentWorkspace && !proposalMode && !reviewMode && <ReextractionPanel
             contractId={data.contract_id}
             orgSlug={orgSlug}
             state={reextraction.state}
             reload={reextraction.reload}
             onApplied={() => { reload(); reextraction.reload(); }}
             onShowPage={showDocumentPage}
-            onEditManually={() => setRoute("register")}
+            onEditManually={(key) => (key ? openTarget({ tab: "register", field: key }) : setRoute("register"))}
             onMarkInDocument={canEditData && mainDocumentId ? openCapture : undefined}
-            compact
+            onReviewProposals={startProposalReview}
+            onReviewEvidence={() => startEvidenceReview()}
           />}
+          {inDocumentWorkspace && proposalMode && reextraction.state?.run ? <ProposalReviewMode
+            contractId={data.contract_id}
+            orgSlug={orgSlug}
+            contractTitle={data.contract_title}
+            run={reextraction.state.run}
+            proposals={reextraction.state.rows}
+            startKey={proposalMode.startKey}
+            canDecide={Boolean(reextraction.state.can_start)}
+            onShow={showProposalEvidence}
+            onExit={() => { setProposalMode(null); reextraction.reload(); }}
+            onChanged={() => { reload(); reextraction.reload(); }}
+            onEditManually={(key) => { setProposalMode(null); if (key) openTarget({ tab: "register", field: key }); else setRoute("register"); }}
+            viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} variant="review" />}
+          /> : null}
           {inDocumentWorkspace && sourceLinkError ? <p role="alert" className="rg-error">Der verlinkte Nachweis ist in diesem Vertrag nicht verfügbar. Bitte wählen Sie einen verfügbaren Nachweis.</p> : null}
           {/* Ein Arbeitsplatz: links Dateien oder Nachweise, rechts immer dasselbe Original (bleibt beim Umschalten offen). */}
-          {inDocumentWorkspace && reviewMode ? <EvidenceReviewMode
+          {inDocumentWorkspace && reviewMode && !proposalMode ? <EvidenceReviewMode
             contractId={data.contract_id}
             orgSlug={orgSlug}
             contractTitle={data.contract_title}
@@ -921,7 +957,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onRecognizeStarted={reextraction.reload}
             viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
           /> : null}
-          {inDocumentWorkspace && !reviewMode && <div className="dw">
+          {inDocumentWorkspace && !reviewMode && !proposalMode && <div className="dw">
             <aside className="dw-side" aria-label="Dateien und Nachweise">
               <div className="dw-switch" role="group" aria-label="Seitenleiste">
                 <button type="button" aria-pressed={documentTab === "document"} onClick={() => setRoute("documents", "document")}>Dateien<span className="dw-count" aria-hidden="true">{data.documents.length}</span></button>

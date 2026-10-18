@@ -48,8 +48,10 @@ function bySeverity(severity: string): { tone: SignalTone; word: string; rank: n
 /** Abschnitt „Nachweise prüfen“: öffnet im Reiter Dokumente den geführten Modus. */
 export const EVIDENCE_REVIEW_SECTION = "nachweise-pruefen";
 export const EVIDENCE_REVIEW_TARGET: FixTarget = { tab: "documents", subtab: "evidence", section: EVIDENCE_REVIEW_SECTION };
+/** Abschnitt „Vorschläge prüfen“: geführter Modus für die Vorschläge der letzten Analyse. */
+export const PROPOSAL_REVIEW_SECTION = "vorschlaege-pruefen";
 
-export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, evidenceOpen = 0, cancelByUnknown = false, decision = null, decisionStep = null }: {
+export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTotal, slaToCheck = 0, reviewOpen = 0, evidenceOpen = 0, cancelByUnknown = false, decision = null, decisionStep = null, analysis = null }: {
   gaps: Gap[];
   tasks: OpenTask[];
   warnings: DetailWarning[];
@@ -68,6 +70,8 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
   decision?: { due: string; byCancel: boolean; urgency: string } | null;
   /** Erster offener Umsetzungsschritt der gültigen Entscheidung (Backend), mit Stichtag `today`. */
   decisionStep?: { label: string; title: string; detail: string; due: string | null; target: Record<string, string> | null; done: number; total: number; today: string } | null;
+  /** Erneute Erfassung: fertige Analyse mit offenen Vorschlägen; neues Hauptdokument (Dateiname, "" ohne Namen) seit der letzten Analyse. */
+  analysis?: { number: number | null; open: number; newDocument: string | null } | null;
 }): OpenPoint[] {
   const points: OpenPoint[] = [];
   if (decisionStep) {
@@ -123,6 +127,12 @@ export function buildOpenPoints({ gaps, tasks, warnings, scopeToCheck, scopeTota
     const level = bySeverity(warning.severity);
     points.push({ key: `warning-${warning.warning_type}-${index}`, tone: level.tone, word: level.word, title: warning.title_de, why: [warning.requires_review ? "Bitte prüfen" : null, level.priority ? "Priorität hoch" : null].filter(Boolean).join(" · ") || "Hinweis aus der Berechnung", action: "Ansehen", target: warningTarget(warning.warning_type, false) ?? { tab: "deadlines" }, rank: level.rank });
   });
+  if (analysis?.number != null && analysis.open > 0) {
+    points.push({ key: "analysis", tone: "ai", word: "KI-Prüfung", title: `Analyse #${analysis.number} fertig`, why: `${analysis.open} ${analysis.open === 1 ? "Vorschlag prüfen" : "Vorschläge prüfen"} – die Vertragsdaten ändern sich erst, wenn Sie übernehmen.`, action: "Vorschläge prüfen", target: { tab: "documents", subtab: "document", section: PROPOSAL_REVIEW_SECTION }, rank: RANK.ai });
+  }
+  if (analysis?.newDocument != null) {
+    points.push({ key: "analysis-new-document", tone: "info", word: "Hinweis", title: "Neues Dokument – Ergänzen starten?", why: `${analysis.newDocument ? `„${analysis.newDocument}“` : "Ein neues Vertragsdokument"} wurde nach der letzten Analyse hinterlegt. „Ergänzen“ sucht nur, was noch fehlt.`, action: "Ergänzen starten", target: { tab: "documents", subtab: "document", section: "reextraction" }, rank: RANK.info });
+  }
   if (evidenceOpen > 0) {
     points.push({ key: "evidence-review", tone: "ai", word: "KI-Prüfung", title: "Nachweise prüfen", why: `${evidenceOpen} ${evidenceOpen === 1 ? "Nachweis ist" : "Nachweise sind"} noch nicht mit dem Dokument abgeglichen.`, action: "Nachweise prüfen", target: EVIDENCE_REVIEW_TARGET, rank: RANK.ai });
   }

@@ -289,6 +289,81 @@
   .reextraction-table tbody tr{border-bottom: 1px solid var(--color-border)}
 }
 
+/* Erneut aus dem Dokument erfassen: Auswahl → läuft → Ergebnis (Entwurf 18.10.2026) */
+.ra-body{display: grid;gap: 16px}
+.ra-icon{width: 16px;height: 16px;flex: none;fill: none;stroke: currentcolor;stroke-width: 1.8;stroke-linecap: round;stroke-linejoin: round}
+.ra-head-actions{display: flex;flex-wrap: wrap;gap: 8px}
+.ra-head-actions .btn{display: inline-flex;align-items: center;gap: 6px}
+.ra-modes{display: grid;grid-template-columns: repeat(3, minmax(0, 1fr));gap: 12px;margin: 0;padding: 0;border: 0}
+.ra-mode{position: relative;display: grid;grid-template-columns: 22px 1fr;gap: 10px;align-items: start;padding: 14px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface);cursor: pointer}
+.ra-mode input{width: 18px;height: 18px;margin: 2px 0 0;accent-color: var(--color-accent)}
+.ra-mode.is-on{border-color: var(--color-accent);background: var(--color-surface-accent);box-shadow: inset 0 0 0 1px var(--color-accent)}
+.ra-mode.is-disabled{cursor: not-allowed;opacity: .65}
+.ra-mode:focus-within{outline: 2px solid var(--color-focus);outline-offset: 2px}
+.ra-mode-body{display: grid;gap: 4px;min-width: 0}
+.ra-mode-title{display: flex;align-items: center;gap: 8px;font-weight: 600}
+.ra-mode-text{color: var(--color-text-muted);font-size: var(--text-small);line-height: 1.45}
+.ra-mode-tag{margin-top: 4px}
+.ra-opts{display: grid;gap: 12px;padding: 12px 14px;border: 1px solid var(--color-border-subtle);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
+.ra-opts-title{margin: 0;font-weight: 600;color: var(--color-text-muted);font-size: var(--text-caption);letter-spacing: .04em;text-transform: uppercase}
+.ra-preset{margin: 0;font-size: var(--text-small)}
+.ra-chips{display: flex;flex-wrap: wrap;gap: 6px}
+.ra-chip{cursor: pointer;font: inherit}
+.ra-chip:not(.is-on){border-style: dashed;background: transparent}
+.ra-chip:disabled{cursor: not-allowed;opacity: .55}
+.ra-check{display: flex;gap: 10px;align-items: flex-start;font-size: var(--text-small)}
+.ra-check input{width: 18px;height: 18px;margin: 2px 0 0;flex: none;accent-color: var(--color-accent)}
+.ra-check small{display: block;color: var(--color-text-muted);font-size: var(--text-caption)}
+.ra-inputs{display: grid;grid-template-columns: minmax(0, 1fr) 180px;gap: 10px;align-items: start}
+.ra-inputs .field{margin: 0}
+.ra-start{display: flex;flex-wrap: wrap;align-items: center;gap: 10px}
+.ra-start .btn{display: inline-flex;align-items: center;gap: 6px}
+.ra-est, .ra-legend{margin: 0;color: var(--color-text-muted);font-size: var(--text-small)}
+.ra-run{display: grid;gap: 10px;padding: 12px 14px;border: 1px solid var(--color-info-border);border-radius: var(--radius-sm);background: var(--color-info-bg)}
+.ra-run-line{display: flex;align-items: center;gap: 10px;color: var(--color-info);font-size: var(--text-small)}
+.ra-run-line > span{flex: 1;min-width: 0}
+.ra-run-bar{display: block;height: 8px;overflow: hidden;border: 1px solid var(--color-info-border);border-radius: 4px;background: var(--color-surface)}
+.ra-run-bar i{display: block;height: 100%;background: var(--color-info-fill);transition: width .4s ease}
+.ra-run-meta{display: flex;justify-content: space-between;gap: 12px;color: var(--color-text-muted);font-size: var(--text-caption)}
+.ra-result{display: grid;gap: 14px}
+.ra-tiles{display: grid;grid-template-columns: repeat(4, minmax(0, 1fr));gap: 10px}
+.ra-tile{display: grid;gap: 2px;padding: 10px 12px;border: 1px solid var(--color-border);border-top: 3px solid var(--color-border-strong);border-radius: var(--radius-sm);color: var(--color-text-muted);font-size: var(--text-caption)}
+.ra-tile-n{color: var(--color-text);font-size: var(--text-title-s);font-weight: 600;font-variant-numeric: tabular-nums}
+.ra-tile--new{border-top-color: var(--color-success)}
+.ra-tile--dev{border-top-color: var(--color-warning)}
+.ra-tile--gone{border-top-color: var(--color-danger)}
+.ra-sec{display: flex;align-items: center;gap: 8px;color: var(--color-text-muted);font-size: var(--text-caption);font-weight: 600;letter-spacing: .04em;text-transform: uppercase}
+.ra-sec-line{flex: 1;height: 1px;background: var(--color-border-subtle)}
+.ra-sec-note{font-weight: 500;letter-spacing: 0;text-transform: none}
+.ra-table{width: 100%;border-collapse: collapse;table-layout: fixed;font-size: var(--text-small)}
+.ra-table th, .ra-table td{padding: 9px 10px;border-bottom: 1px solid var(--color-border-subtle);text-align: left;vertical-align: top;hyphens: manual;overflow-wrap: break-word}
+.ra-table thead th{border-bottom-color: var(--color-border);color: var(--color-text-muted);font-size: var(--text-caption);font-weight: 600}
+.ra-col-field{width: 26%}
+.ra-col-conf{width: 7rem}
+.ra-col-act{width: 13rem}
+.ra-field{display: grid;gap: 4px;justify-items: start;font-weight: 600}
+.ra-value{font-family: var(--font-mono);font-size: var(--text-caption)}
+.ra-old{color: var(--color-text-muted);text-decoration: line-through;text-decoration-color: var(--color-border-strong)}
+.ra-gone{color: var(--color-danger)}
+.ra-actions{text-align: right;white-space: nowrap}
+.ra-actions .btn + .btn{margin-left: 6px}
+.ra-hist{display: grid;gap: 6px;margin: 0;padding: 0;list-style: none}
+.ra-hrow{display: grid;grid-template-columns: auto 1fr auto;gap: 12px;align-items: center;padding: 8px 10px;border: 1px solid var(--color-border-subtle);border-radius: var(--radius-sm);font-size: var(--text-small)}
+.ra-hrow .btn{display: inline-flex;align-items: center;gap: 6px}
+.ra-hno{color: var(--color-text-muted);font-family: var(--font-mono);font-size: var(--text-caption)}
+.ra-rollback{display: grid;gap: 6px;margin: 0 0 12px;padding-left: 18px;font-size: var(--text-small)}
+.prm-quote{margin: 0;color: var(--color-text-muted);font-size: var(--text-small);font-style: italic}
+@media (max-width: 800px){
+  .ra-modes{grid-template-columns: 1fr}
+  .ra-tiles{grid-template-columns: repeat(2, minmax(0, 1fr))}
+  .ra-inputs{grid-template-columns: 1fr}
+  .ra-table thead{display: none}
+  .ra-table, .ra-table tbody, .ra-table tr, .ra-table th, .ra-table td{display: block;width: auto}
+  .ra-table tr{padding: 8px 0;border-bottom: 1px solid var(--color-border-subtle)}
+  .ra-table th, .ra-table td{padding: 4px 0;border-bottom: 0}
+  .ra-actions{text-align: left;white-space: normal}
+}
+
 /* Angabe aus dem Text übernehmen (markierte Fundstelle) */
 .source-capture{display: grid;gap: var(--space-3)}
 .source-capture-open{display: flex;justify-content: flex-end;margin-bottom: var(--space-2)}

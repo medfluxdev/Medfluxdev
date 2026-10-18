@@ -272,7 +272,7 @@ describe("Nachweise prüfen (geführt)", () => {
     await user.click(screen.getByRole("menuitem", { name: "Nachweis neu erkennen" }));
     await waitFor(() => expect(started).toHaveBeenCalled());
     expect(api.startReextraction.mock.calls.map((call) => call[2])).toEqual([
-      { mode: "missing_fields", fields: ["identity.customer"], page_hint: [1] },
+      { mode: "supplement", fields: ["identity.customer"], page_hint: [1] },
       { mode: "full", page_hint: [1] },
     ]);
   });

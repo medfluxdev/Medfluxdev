@@ -96,6 +96,12 @@ export const EVIDENCE_SECTIONS: (EvidenceSection & { groups: string[] })[] = [
   { key: "other", label: "Weitere Angaben", tone: "neutral", groups: [] },
 ];
 
+/** Abschnitt nach Schlüssel (z. B. aus einem Vorschlag der erneuten Erfassung). */
+export function sectionByKey(key: string): EvidenceSection {
+  const found = EVIDENCE_SECTIONS.find((section) => section.key === key) ?? EVIDENCE_SECTIONS[EVIDENCE_SECTIONS.length - 1];
+  return { key: found.key, label: found.label, tone: found.tone };
+}
+
 function groupOf(ref: EvidenceRef, fact: FactReviewStateDto | undefined): string {
   const key = fact?.fact_key.replace(/^evidence\./, "") ?? ref.field_ref ?? "";
   if (key.startsWith("identity.system_identity")) return "equipment";
