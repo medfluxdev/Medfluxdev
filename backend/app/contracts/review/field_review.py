@@ -165,6 +165,7 @@ def _evidence_entries(state: dict, evidence_index: dict[str, dict], documents: s
             "snippet": ref.get("snippet", link.get("snippet")),
             "location": ref.get("location") or "none",
             "text_verified": bool(ref.get("text_verified")),
+            "text_match": ref.get("text_match"),
             "confidence": ref.get("confidence"),
             "extraction_method": ref.get("extraction_method"),
             "requires_review": bool(link.get("requires_review")),
