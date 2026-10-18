@@ -6013,3 +6013,9 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 ### Nachtrag 2026-10-18 – Ein Filter für Nachweise-Liste und Prüfung
 
 - Die Nachweise-Liste im Arbeitsplatz (Dokumente → Dokument → Nachweise) hat denselben Filter wie „Alle Nachweise“ (Prüfstand, Abschnitt, Suche). Ist er gesetzt, heißt der Knopf „Auswahl prüfen · N“ und die geführte Prüfung startet auf dieser Auswahl; Änderungen in „Alle Nachweise“ gelten auch für die Liste (ein gemeinsamer Zustand in `ContractWorkspace`). Test in `contracts-detail.test.tsx`; `npm run verify` grün (508).
+
+### Nachtrag 2026-10-18 – KI-Vorschläge in den Vertragsdaten ignorieren
+
+- **Neu:** Neben „Übernehmen“ steht „Ignorieren“: Der gepflegte Wert bleibt, der Vorschlag verschwindet. Er wird als ignoriert vermerkt (`ai_proposed_value.dismissed`, wer, wann; Verlauf „KI-Vorschlag ignoriert“) und beim nächsten Abgleich derselben Analyse nicht erneut vorgeschlagen – erst ein anderer KI-Wert ist wieder ein Vorschlag. `POST /api/contracts/{id}/register/proposals/{field}/dismiss` (Schreibrecht wie Übernehmen). Verlauf-Beschriftungen auch für die KI-Analyse-Ereignisse (entschieden, unveränderte bestätigt, zurückgesetzt, Stand wiederhergestellt) ergänzt.
+- **Dateien:** `backend/app/register/service.py`, `backend/app/api/routes/contract_register.py`, `backend/app/history/service.py`, `backend/tests/test_reextraction.py`; `frontend/components/contracts/detail/ContractRegisterPanel.tsx`, `frontend/lib/domain-api/register.ts`, `frontend/app/contract-register.css`, `frontend/test/contract-register.test.tsx`.
+- **Tests:** Backend voll 1744 grün; Frontend `npm run verify` grün (508). Keine Migration nötig (JSON-Feld).

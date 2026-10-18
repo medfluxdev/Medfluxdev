@@ -35,6 +35,7 @@ import {
   ORIGIN_LABEL,
   TERM_MODEL_LABEL,
   acceptRegisterProposal,
+  dismissRegisterProposal,
   changeContractStatus,
   getContractRegister,
   updateContractConfidentiality,
@@ -471,6 +472,10 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     void run(() => acceptRegisterProposal(orgSlug, contractId, key), "KI-Vorschlag übernommen.");
   }
 
+  function dismissProposal(key: string) {
+    void run(() => dismissRegisterProposal(orgSlug, contractId, key), "Vorschlag ignoriert – der aktuelle Wert bleibt.");
+  }
+
   function applySuggestion(key: string, value: string) {
     void run(() => updateContractRegister(orgSlug, contractId, { changes: { [key]: value } }), "Vorschlag übernommen.");
   }
@@ -896,7 +901,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
       <ul>
         {register.partner_suggestions.map((item) => <li key={item.id}>Vertragspartner „{register.supplier_text}“ entspricht vermutlich <strong>{item.short_name}</strong>{item.city ? ` (${item.city})` : ""} · Übereinstimmung {Math.round(item.score * 100)} % <button type="button" className="btn" disabled={busy} onClick={() => applySuggestion("partner_id", item.id)}>Übernehmen</button></li>)}
         {register.type_suggestion ? <li>Vertragstyp <strong>{register.type_suggestion.label}</strong> (aus {register.type_suggestion.reason}) <button type="button" className="btn" disabled={busy} onClick={() => applySuggestion("contract_type_id", register.type_suggestion!.id)}>Übernehmen</button></li> : null}
-        {proposalKeys.map((key) => <li key={key}><AiOrigin state="unreviewed" factKey={register.fields[key].ai_proposed_value?.source_field} subject={labelFor(key)} /> {register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button></li>)}
+        {proposalKeys.map((key) => <li key={key}><AiOrigin state="unreviewed" factKey={register.fields[key].ai_proposed_value?.source_field} subject={labelFor(key)} /> {register.fields[key].ai_proposed_value?.document ? `„${register.fields[key].ai_proposed_value?.document}“` : "Neue Analyse"} schlägt für <strong>{labelFor(key)}</strong> vor: {String(register.fields[key].ai_proposed_value?.value ?? "leer")} (aktuell: {String(register.fields[key].value ?? "leer")}) <span className="rg-proposal-actions"><button type="button" className="btn" disabled={busy} onClick={() => acceptProposal(key)}>Übernehmen</button><button type="button" className="btn btn-ghost" disabled={busy} onClick={() => dismissProposal(key)} title="Der aktuelle Wert ist richtig – dieser Vorschlag wird nicht erneut angezeigt">Ignorieren</button></span></li>)}
       </ul>
     </section> : null}
     </> : null}

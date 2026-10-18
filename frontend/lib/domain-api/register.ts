@@ -224,6 +224,14 @@ export function captureFromDocument(organizationSlug: string, contractId: string
   return apiPost<ContractRegister>(contractPath(contractId, "register/from-document", organizationSlug), body);
 }
 
+/** KI-Vorschlag ignorieren: der gepflegte Wert bleibt; derselbe Wert wird nicht erneut vorgeschlagen. */
+export function dismissRegisterProposal(organizationSlug: string, contractId: string, fieldKey: string) {
+  return apiPost<ContractRegister>(
+    contractPath(contractId, `register/proposals/${encodeURIComponent(fieldKey)}/dismiss`, organizationSlug),
+    {},
+  );
+}
+
 export function acceptRegisterProposal(organizationSlug: string, contractId: string, fieldKey: string) {
   return apiPost<ContractRegister>(
     contractPath(contractId, `register/proposals/${encodeURIComponent(fieldKey)}/accept`, organizationSlug),

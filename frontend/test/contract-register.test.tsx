@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   getContractRegister: vi.fn(),
   updateContractRegister: vi.fn(),
   acceptRegisterProposal: vi.fn(),
+  dismissRegisterProposal: vi.fn(),
   changeContractStatus: vi.fn(),
   updateContractConfidentiality: vi.fn(),
   listContractRemarks: vi.fn(),
@@ -114,6 +115,7 @@ describe("Vertragsregister – Stammdaten", () => {
     api.getContractRegister.mockResolvedValue(register());
     api.updateContractRegister.mockImplementation(async () => register());
     api.acceptRegisterProposal.mockResolvedValue(register());
+    api.dismissRegisterProposal.mockResolvedValue(register());
     api.changeContractStatus.mockResolvedValue(register({ business_status: "gueltig", business_status_label: "Gültig", allowed_transitions: [] }));
   });
 
@@ -191,6 +193,9 @@ describe("Vertragsregister – Stammdaten", () => {
     expect(api.updateContractRegister).toHaveBeenCalledWith("test-klinik", "c-1", { changes: { partner_id: "p-1" } });
     await user.click(buttons[1]);
     expect(api.acceptRegisterProposal).toHaveBeenCalledWith("test-klinik", "c-1", "term_start_date");
+    // Der gepflegte Wert ist richtig: Vorschlag ignorieren.
+    await user.click(within(suggestions).getByRole("button", { name: "Ignorieren" }));
+    expect(api.dismissRegisterProposal).toHaveBeenCalledWith("test-klinik", "c-1", "term_start_date");
   });
 
   it("Interne Nummer ist die automatisch vergebene Vertragsnummer – nicht von Hand änderbar", async () => {

@@ -710,3 +710,36 @@ def test_api_decide_confirm_and_rollback_need_rights(tmp_path, monkeypatch):
     assert confirmed.status_code == 200, confirmed.text
     preview = manager.get(f"/api/contracts/{contract_id}/reextraction/rollback/1", params=params)
     assert preview.status_code == 200 and preview.json()["entries"] == []
+
+
+def test_ignored_proposal_keeps_the_value_and_is_not_proposed_again(tmp_path):
+    from app.register.service import build_register, dismiss_ai_proposal, sync_from_extraction, update_register
+
+    slug, ids = _seed()
+    contract_id = _imported(tmp_path, slug)
+    session = create_session()
+    try:
+        contract = session.get(Contract, UUID(contract_id), with_for_update=True)
+        update_register(session, contract=contract, actor=_actor(ids), changes={"notice_period_value": 4}, confirm=[])
+        six = _model({**FIRST, "termination": {"cancellation_period": {"value": 6, "unit": "months"}}})
+        sync_from_extraction(session, contract=contract, extracted=six, extraction_id=contract.accepted_extraction_id)
+        assert build_register(session, contract, _actor(ids))["fields"]["notice_period_value"]["ai_proposed_value"]["value"] == 6
+
+        dismiss_ai_proposal(session, contract=contract, actor=_actor(ids), field_key="notice_period_value")
+        assert contract.notice_period_value == 4
+        assert build_register(session, contract, _actor(ids))["fields"]["notice_period_value"]["ai_proposed_value"] is None
+        with pytest.raises(Exception):
+            dismiss_ai_proposal(session, contract=contract, actor=_actor(ids), field_key="notice_period_value")
+
+        # Dieselbe Analyse erneut abgeglichen: bleibt ignoriert.
+        sync_from_extraction(session, contract=contract, extracted=six, extraction_id=contract.accepted_extraction_id)
+        assert build_register(session, contract, _actor(ids))["fields"]["notice_period_value"]["ai_proposed_value"] is None
+        # Ein anderer Wert ist wieder ein Vorschlag.
+        nine = _model({**FIRST, "termination": {"cancellation_period": {"value": 9, "unit": "months"}}})
+        sync_from_extraction(session, contract=contract, extracted=nine, extraction_id=contract.accepted_extraction_id)
+        assert build_register(session, contract, _actor(ids))["fields"]["notice_period_value"]["ai_proposed_value"]["value"] == 9
+        events = {row.event_name for row in session.scalars(select(ActivityLog).where(ActivityLog.object_id == UUID(contract_id)))}
+        assert "contract.register_proposal_dismissed" in events
+        session.rollback()
+    finally:
+        session.close()

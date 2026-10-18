@@ -13,6 +13,7 @@
 .rg-terms strong{font-size: var(--text-title-m);color: var(--color-text)}
 .rg-explanation{margin: 12px 0 0;padding-left: 18px;color: var(--color-text-subtle);font-size: var(--text-small)}
 .rg-ai ul{margin: 0;padding: 0;list-style: none;display: grid;gap: 10px}
+.rg-proposal-actions{display: inline-flex;flex-wrap: wrap;gap: 8px}
 .rg-ai li{display: flex;flex-wrap: wrap;gap: 8px;align-items: center;padding: 10px 12px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface-subtle)}
 .rg-toolbar{display: flex;gap: 10px;align-items: center;flex-wrap: wrap}
 .rg-fields{display: grid;grid-template-columns: repeat(2,minmax(0,1fr));gap: 0 26px;margin: 0}

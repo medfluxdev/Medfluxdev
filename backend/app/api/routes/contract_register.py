@@ -25,6 +25,7 @@ from app.register.service import (
     RegisterActor,
     RegisterError,
     accept_ai_proposal,
+    dismiss_ai_proposal,
     add_remark,
     edit_remark,
     capture_from_document,
@@ -246,6 +247,25 @@ def accept_proposal(contract_id: UUID, field_key: str, request: Request, organiz
             session.rollback()
             raise _http(exc)
         sync_system_deadlines(session, contract, today_local())
+        session.commit()
+        return _register_payload(session, contract, actor)
+    finally:
+        session.close()
+
+
+@router.post("/{contract_id}/register/proposals/{field_key}/dismiss")
+def dismiss_proposal(contract_id: UUID, field_key: str, request: Request, organization_slug: str):
+    """KI-Vorschlag ignorieren: der gepflegte Wert bleibt, derselbe Wert wird nicht erneut vorgeschlagen."""
+    actor = _register_actor(request, organization_slug)
+    _require_write(actor)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id, for_update=True)
+        try:
+            dismiss_ai_proposal(session, contract=contract, actor=actor, field_key=field_key)
+        except RegisterError as exc:
+            session.rollback()
+            raise _http(exc)
         session.commit()
         return _register_payload(session, contract, actor)
     finally:

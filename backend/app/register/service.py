@@ -313,6 +313,10 @@ def sync_from_extraction(
 
         if origin in HUMAN_ORIGINS:
             if proposal is not None and not _same(ai_value, current):
+                if proposal_dismissed(row) and _same(row.ai_proposed_value.get("value"), to_json(ai_value)):
+                    # Dieser Wert wurde ignoriert: erst ein anderer KI-Wert ist wieder ein Vorschlag.
+                    actions[key] = "kept"
+                    continue
                 row.ai_proposed_value = {"value": to_json(ai_value), "source_field": source}
                 row.extraction_id = extraction_id
                 actions[key] = "proposed"
@@ -571,7 +575,7 @@ def build_register(session: Session, contract: Contract, actor: RegisterActor, a
                 else None
             ),
             "extraction_id": str(row.extraction_id) if row and row.extraction_id else None,
-            "ai_proposed_value": row.ai_proposed_value if row else None,
+            "ai_proposed_value": row.ai_proposed_value if row and not proposal_dismissed(row) else None,
             "confirmed_by_name": row.confirmed_by_name if row else None,
             "confirmed_at": row.confirmed_at.isoformat() if row and row.confirmed_at else None,
             "updated_by_name": row.updated_by_name if row else None,
@@ -808,9 +812,30 @@ def apply_review_to_register(
     return update_register(session, contract=contract, actor=actor, changes={}, confirm=open_ai) if open_ai else {}
 
 
+def proposal_dismissed(row) -> bool:
+    """KI-Vorschlag, den eine Person ignoriert hat (aktueller Wert bleibt; gleicher Wert wird nicht erneut vorgeschlagen)."""
+    return bool(row is not None and row.ai_proposed_value and row.ai_proposed_value.get("dismissed"))
+
+
+def dismiss_ai_proposal(session: Session, *, contract: Contract, actor: RegisterActor, field_key: str) -> None:
+    """„Ignorieren“: der gepflegte Wert ist richtig. Der Vorschlag bleibt als ignoriert vermerkt (wer, wann)."""
+    row = _provenance(session, contract.id).get(field_key)
+    if row is None or not row.ai_proposed_value or proposal_dismissed(row):
+        raise RegisterError(404, "Kein KI-Vorschlag für dieses Feld.", field_key)
+    proposed = dict(row.ai_proposed_value)
+    row.ai_proposed_value = {
+        **proposed, "dismissed": True, "dismissed_by": actor.display_name,
+        "dismissed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    log_activity(session, actor, contract.id, "contract.register_proposal_dismissed", {
+        "field": field_key, "proposed": proposed.get("value"), "kept": to_json(getattr(contract, field_key, None)),
+    })
+    session.flush()
+
+
 def accept_ai_proposal(session: Session, *, contract: Contract, actor: RegisterActor, field_key: str) -> dict:
     row = _provenance(session, contract.id).get(field_key)
-    if row is None or not row.ai_proposed_value:
+    if row is None or not row.ai_proposed_value or proposal_dismissed(row):
         raise RegisterError(404, "Kein KI-Vorschlag für dieses Feld.", field_key)
     value = row.ai_proposed_value.get("value")
     diffs = update_register(session, contract=contract, actor=actor, changes={field_key: value}, confirm=[])
