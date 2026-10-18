@@ -5999,3 +5999,9 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 
 - Bereiche (Optionen, Vorschlagstabelle, „Vorschläge prüfen“) und Fortschrittsschritte nach den Reitern der Vertragsakte: Vertragsdaten, Fristen & Aufgaben, Finanzen, Leistungen & SLA, Verknüpfungen (Geräte). Vorher Vertrag & Partner, Laufzeit & Fristen, Kosten, Geräte. Schlüssel und Kennfarben unverändert; „Nachweise prüfen“ behält seine Abschnittsnamen.
 - Dateien: `backend/app/reextract/{facts,service}.py`, `frontend/components/contracts/detail/{Reextraction,ProposalReviewMode}.tsx`, Tests. Tests: `test_reextraction.py` 19, `reextraction.test.tsx` 24, `contracts-detail` grün.
+
+### Nachtrag 2026-10-18 – „Nachweise prüfen“: Filter beschränkt die Prüfung
+
+- **Neu:** Die Auswahl in „Alle Nachweise“ (Prüfstand Alle/Offen/Bestätigt/Abweichend/Übersprungen, neu: Abschnitt, Suche) ist jetzt der Filter der geführten Prüfung: geprüft und geblättert wird nur in diesen Nachweisen („Nachweis 1 von 12“, Fortschrittsbalken der Auswahl). Die Auswahl wird beim Anwenden festgehalten, ein eben bestätigter Nachweis fällt nicht aus der Runde. In der Leiste steht der aktive Filter als Chip („Nur Offen · 37“, Klick öffnet die Auswahl, × hebt ihn auf); ein Klick auf einen Nachweis außerhalb des Filters hebt ihn auf. Zähler je Prüfstand berücksichtigen Abschnitt und Suche.
+- **Tabelle:** feste Spaltenbreiten, die Spalte „Feld“ trennt nicht mehr buchstabenweise.
+- **Dateien:** `frontend/components/contracts/detail/{EvidenceTable,EvidenceReviewMode}.tsx`, `frontend/app/contract-register.css`, `frontend/test/evidence-review-mode.test.tsx`. Tests: `npm run verify` grün (507). Im Browser nicht geprüft.

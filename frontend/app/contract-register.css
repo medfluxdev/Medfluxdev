@@ -1091,7 +1091,21 @@ a.fin-basis-sub { color: var(--color-link); }
 .evt-filter button:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 1px}
 .evt-count{min-width: 20px;padding: 0 5px;border-radius: 999px;background: var(--color-surface);color: var(--color-text-muted);font-size: var(--text-caption);text-align: center}
 .evt-search{flex: 1;min-width: 180px;min-height: 34px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
-.evt-table{width: 100%;border-collapse: collapse;font-size: var(--text-small)}
+.evt-table{width: 100%;border-collapse: collapse;table-layout: fixed;font-size: var(--text-small)}
+.evt-table th, .evt-table td{hyphens: manual;overflow-wrap: break-word}
+.evt-col-num{width: 2.75rem}
+.evt-col-section{width: 9.5rem}
+.evt-col-page{width: 3.5rem}
+.evt-col-status{width: 11rem}
+.evt-row{display: flex;flex-wrap: wrap;gap: 8px;width: 100%}
+.evt-section select{min-height: 34px;padding: 0 8px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small)}
+.erm-scope{display: inline-flex;align-items: center;overflow: hidden;border: 1px solid var(--color-accent);border-radius: 999px;background: var(--color-surface-accent);color: var(--color-accent);font-size: var(--text-small);font-weight: 600}
+.erm-scope button{min-height: 30px;border: 0;background: none;color: inherit;font: inherit;cursor: pointer}
+.erm-scope-label{padding: 0 4px 0 12px}
+.erm-scope-clear{padding: 0 10px;font-size: var(--text-body)}
+.erm-scope button:hover{text-decoration: underline}
+.erm-scope button:focus-visible{outline: 2px solid var(--color-focus);outline-offset: -2px}
+.erm-scope-note{margin: 0 12px;color: var(--color-text-muted);font-size: var(--text-small)}
 .evt-table th{padding: 6px 8px;border-bottom: 1px solid var(--color-border);color: var(--color-text-muted);font-weight: var(--weight-semibold);text-align: left;white-space: nowrap}
 .evt-table td{padding: 6px 8px;border-bottom: 1px solid var(--color-border-subtle);vertical-align: middle}
 .evt-table tr.is-current td{background: var(--color-surface-accent)}

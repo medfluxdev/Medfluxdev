@@ -177,6 +177,37 @@ describe("Nachweise prüfen (geführt)", () => {
     expect(api.saveEvidenceReview).toHaveBeenCalledWith("test-klinik", "c-1", expect.objectContaining({ status: "manual" }));
   });
 
+  it("Filter in „Alle Nachweise“ beschränkt die Prüfung auf die Auswahl; × hebt ihn auf", async () => {
+    const user = userEvent.setup();
+    renderMode();
+    expect(screen.getByText("Nachweis 1 von 3")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Alle Nachweise/ }));
+    const drawer = screen.getByRole("dialog", { name: "Alle Nachweise" });
+    await user.selectOptions(within(drawer).getByRole("combobox", { name: "Nach Abschnitt filtern" }), "Kosten");
+    expect(within(drawer).getByText(/Die Prüfung geht nur die gefilterten Nachweise durch \(1\)/)).toBeInTheDocument();
+    expect(within(drawer).getAllByRole("row")).toHaveLength(2); // Kopf + 1
+    await user.keyboard("{Escape}");
+    // Nur noch der Kosten-Nachweis; Blättern bleibt in der Auswahl.
+    expect(screen.getByRole("button", { name: "Nur Kosten · 1" })).toHaveAttribute("title", "Filter ändern");
+    expect(screen.getByText("Nachweis 1 von 1")).toBeInTheDocument();
+    expect(within(panel()).getByRole("heading", { name: /Jahreskosten/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Filter aufheben, alle Nachweise prüfen" }));
+    expect(screen.getByText(/Nachweis \d von 3/)).toBeInTheDocument();
+    expect(within(panel()).getByRole("heading", { name: /Jahreskosten/ })).toBeInTheDocument(); // bleibt beim aktuellen Nachweis
+  });
+
+  it("Filter nach Prüfstand: „Offen“ hält die Auswahl fest, auch wenn ein Nachweis bestätigt wird", async () => {
+    const user = userEvent.setup();
+    renderMode();
+    await user.click(screen.getByRole("button", { name: /Alle Nachweise/ }));
+    const drawer = screen.getByRole("dialog", { name: "Alle Nachweise" });
+    await user.click(within(drawer).getByRole("button", { name: /^Offen/ }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Nur Offen · 3" })).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: /^Bestätigen/ }));
+    await waitFor(() => expect(screen.getByText("Nachweis 2 von 3")).toBeInTheDocument());
+  });
+
   it("Tasten: A öffnet, Esc schließt; S überspringt; → blättert; Enter bestätigt", async () => {
     const user = userEvent.setup();
     renderMode();

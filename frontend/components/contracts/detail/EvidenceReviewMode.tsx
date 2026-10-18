@@ -16,7 +16,7 @@ import {
   PRECISION, STATUS_VIEW, confidenceOf, documentValue, evidenceRows, evidenceStatus, guidedOrder, percent, precisionOf,
   roundSummary, sameText, sectionOf, storedValue, titleOf, wordDiff, type EvidenceSection, type EvidenceStatus,
 } from "@/lib/evidence";
-import EvidenceTable from "./EvidenceTable";
+import EvidenceTable, { NO_FILTER, filterLabel, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
 
 const icon = (body: ReactNode, className = "erm-icon") => <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">{body}</svg>;
 const BACK = icon(<path d="m15 6-6 6 6 6" />);
@@ -91,9 +91,13 @@ export default function EvidenceReviewMode({
   onRecognizeStarted?: () => void;
 }) {
   const toast = useToast();
-  const order = useMemo(() => guidedOrder(evidence, factByEvidence), [evidence, factByEvidence]);
+  const allOrder = useMemo(() => guidedOrder(evidence, factByEvidence), [evidence, factByEvidence]);
   // Entscheidungen dieser Runde (sofort sichtbar, auch bevor der Stand neu geladen ist).
   const [round, setRound] = useState<Map<string, EvidenceReviewStatus>>(() => new Map());
+  // Filter aus „Alle Nachweise“: die Prüfung geht nur diese Nachweise durch. Die Auswahl wird beim Anwenden
+  // festgehalten, damit ein eben bestätigter Nachweis nicht aus der Runde fällt.
+  const [scope, setScope] = useState<{ filter: EvidenceFilter; ids: Set<string> } | null>(null);
+  const order = useMemo(() => (scope ? allOrder.filter((ref) => scope.ids.has(ref.evidence_id)) : allOrder), [allOrder, scope]);
   const statusOf = (ref: EvidenceRef): EvidenceStatus => {
     const local = round.get(ref.evidence_id);
     if (local) return local === "confirmed" ? "confirmed" : local === "skipped" ? "skipped" : "deviation";
@@ -131,7 +135,8 @@ export default function EvidenceReviewMode({
   const verified = Boolean(current?.text_verified) && precision === "exact";
   const textMatch = current?.text_match ?? null;
 
-  const rows = evidenceRows(order, numbers, factByEvidence, statusOf);
+  const rows = evidenceRows(allOrder, numbers, factByEvidence, statusOf);
+  const walkRows = scope ? rows.filter((row) => scope.ids.has(row.ref.evidence_id)) : rows;
   const totals = { confirmed: rows.filter((row) => row.status === "confirmed").length, deviation: rows.filter((row) => row.status === "deviation").length, skipped: rows.filter((row) => row.status === "skipped").length, open: rows.filter((row) => row.status === "open").length };
   const nextOpenIndex = (from: number) => {
     for (let step = 1; step <= order.length; step += 1) {
@@ -142,7 +147,7 @@ export default function EvidenceReviewMode({
   };
   const upcoming = nextOpenIndex(index);
   const following = order[index + 1] ?? null;
-  const safe = canReview ? order.filter((ref) => {
+  const safe = canReview ? allOrder.filter((ref) => {
     const item = factByEvidence.get(ref.evidence_id);
     const value = documentValue(ref, item);
     const kept = storedValue(item);
@@ -176,6 +181,17 @@ export default function EvidenceReviewMode({
       logEvidenceRound(orgSlug, contractId, countRound(round)).catch(() => undefined);
     }
     onExit();
+  }
+
+  /** Filter anwenden: Runde auf die passenden Nachweise beschränken (leer = alle). */
+  function applyFilter(filter: EvidenceFilter) {
+    const next = isFiltered(filter) ? { filter, ids: new Set(rows.filter((row) => matchesFilter(row, filter)).map((row) => row.ref.evidence_id)) } : null;
+    const nextOrder = next ? allOrder.filter((ref) => next.ids.has(ref.evidence_id)) : allOrder;
+    const keep = current ? nextOrder.findIndex((ref) => ref.evidence_id === current.evidence_id) : -1;
+    const open = nextOrder.findIndex((ref) => statusOf(ref) === "open");
+    setScope(next);
+    setIndex(keep >= 0 ? keep : Math.max(0, open));
+    setDone(nextOrder.length === 0);
   }
 
   function go(target: number) {
@@ -363,9 +379,13 @@ export default function EvidenceReviewMode({
       <span className="erm-file">{FILE}{[current?.original_filename, contractTitle].filter(Boolean).join(" · ")}</span>
       <div className="erm-progress">
         <span>{done ? `${order.length} von ${order.length}` : `Nachweis ${index + 1} von ${order.length}`}</span>
-        <span className="erm-seg" aria-hidden="true">{rows.map((row, position) => <i key={row.ref.evidence_id} className={!done && position === index ? "is-current" : `is-${row.status}`} />)}</span>
+        <span className="erm-seg" aria-hidden="true">{walkRows.map((row, position) => <i key={row.ref.evidence_id} className={!done && position === index ? "is-current" : `is-${row.status}`} />)}</span>
         <Signal tone={totals.deviation ? "warning" : totals.confirmed ? "done" : "neutral"} size="sm">{`${totals.confirmed} bestätigt · ${totals.deviation} abweichend`}</Signal>
       </div>
+      {scope ? <span className="erm-scope" role="status">
+        <button type="button" className="erm-scope-label" onClick={() => setDrawer(true)} title="Filter ändern">{`Nur ${filterLabel(scope.filter, rows)} · ${scope.ids.size}`}</button>
+        <button type="button" className="erm-scope-clear" onClick={() => applyFilter(NO_FILTER)} aria-label="Filter aufheben, alle Nachweise prüfen">×</button>
+      </span> : null}
       <button type="button" className="btn erm-all" onClick={() => setDrawer(true)}>{LIST}Alle Nachweise</button>
       <ActionMenu items={[
         { label: "Zitat kopieren", onSelect: () => void copyQuote(), disabled: !current?.snippet },
@@ -387,6 +407,7 @@ export default function EvidenceReviewMode({
           onSkipped={totals.skipped ? () => {
             const first = order.findIndex((ref) => statusOf(ref) === "skipped");
             setRound(new Map()); setSaved(new Map()); setRoundLog(null); setDone(false); setIndex(Math.max(0, first));
+            if (first < 0) applyFilter(NO_FILTER);
           } : null} /> : <>
           <div className="erm-head">
             <div className="erm-head-top">
@@ -488,8 +509,20 @@ export default function EvidenceReviewMode({
     </div>
 
     <Drawer open={drawer} title="Alle Nachweise" onClose={() => setDrawer(false)} wide>
+      <p className="erm-scope-note">{scope
+        ? <>Die Prüfung geht nur die gefilterten Nachweise durch ({scope.ids.size}). <button type="button" className="rg-link" onClick={() => applyFilter(NO_FILTER)}>Alle prüfen</button></>
+        : "Filter wählen: Die Prüfung geht dann nur diese Nachweise durch."}</p>
       <EvidenceTable rows={rows} currentId={done ? null : current?.evidence_id ?? null} withSection filters caption="Alle Nachweise dieses Vertrags"
-        onPick={(ref) => { setDrawer(false); go(order.findIndex((item) => item.evidence_id === ref.evidence_id)); }} />
+        filter={scope?.filter ?? NO_FILTER} onFilter={applyFilter}
+        onPick={(ref) => {
+          setDrawer(false);
+          const inWalk = order.findIndex((item) => item.evidence_id === ref.evidence_id);
+          if (inWalk >= 0) { go(inWalk); return; }
+          // Außerhalb des Filters gewählt: Filter aufheben und dorthin springen.
+          setScope(null);
+          setDone(false);
+          setIndex(Math.max(0, allOrder.findIndex((item) => item.evidence_id === ref.evidence_id)));
+        }} />
     </Drawer>
     <Dialog open={confirmAll} title="Alle sicheren Nachweise bestätigen?" onClose={() => setConfirmAll(false)}
       description={`${safe.length} offene ${safe.length === 1 ? "Nachweis hat" : "Nachweise haben"} eine KI-Sicherheit ab 95 %, eine genau belegte Fundstelle und keinen abweichenden gespeicherten Wert.`}
