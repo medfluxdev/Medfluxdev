@@ -113,7 +113,7 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
 
     await waitFor(() => expect(contractLoads).toBe(2));
     expect(screen.queryByText("Vertrag wird geladen…")).not.toBeInTheDocument();
-    expect(await within(panel).findByText(/Wesentliche Prüfung abgeschlossen/)).toBeInTheDocument();
+    expect(await within(panel).findByText("Geprüft (Aktualisiert)")).toBeInTheDocument();
     expect(container.querySelector("#field-review-panel")).toBe(panel);
   });
 });
