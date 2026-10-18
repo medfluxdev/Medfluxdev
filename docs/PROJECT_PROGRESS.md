@@ -6025,3 +6025,7 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 - Der Knopf „Nachweise“ in der Seitenleiste (Dokumente → Dokument) öffnet den Filter als Aufklapper (Prüfstand mit Zählern, Abschnitt, Suche; „Zurücksetzen“, „N anzeigen“). Ein Klick von „Dateien“ aus zeigt die Liste und klappt den Filter gleich auf. Die Liste trägt den Filterblock nicht mehr; ein aktiver Filter steht als Zeile „Nur Offen · 37 ×“ über der Tabelle, der Knopf zeigt die gefilterte Zahl. „Alle Nachweise“ in der Prüfung behält den Filter über der Tabelle (`EvidenceFilterBar`, geteilt).
 - Tabelle wieder mit automatischen Spaltenbreiten (Zellen trennen Wörter nicht mehr buchstabenweise), damit „Feld“ nicht in „Seite“ läuft.
 - Dateien: `ContractWorkspace.tsx`, `EvidenceTable.tsx`, `contract-register.css`, `contracts-detail.test.tsx`. `npm run verify` grün (508).
+
+### Nachtrag 2026-10-18 – Abschnitte überall mit den Reiternamen
+
+- `EVIDENCE_SECTIONS` (`lib/evidence.ts`) heißen jetzt wie die Reiter: Vertragsdaten, Fristen & Aufgaben, Finanzen, Leistungen & SLA, Verknüpfungen (Geräte) – in „Nachweise prüfen“, im Abschnitt-Filter, in der Nachweise-Liste und in der KI-Analyse (eigene Namensliste dort entfällt). Abschnitt-Auswahl in Reiter-Reihenfolge. `npm run verify` grün (508).

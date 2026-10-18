@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Signal from "@/components/ui/Signal";
 import type { EvidenceRef } from "@/lib/contract-detail-types";
-import { STATUS_VIEW, matchKey, type EvidenceRow, type EvidenceStatus } from "@/lib/evidence";
+import { EVIDENCE_SECTIONS, STATUS_VIEW, matchKey, type EvidenceRow, type EvidenceStatus } from "@/lib/evidence";
 
 const FILTERS: { value: "" | EvidenceStatus; label: string }[] = [
   { value: "", label: "Alle" },
@@ -52,7 +52,9 @@ export function EvidenceFilterBar({ rows, filter, onFilter }: { rows: EvidenceRo
   const sections = useMemo(() => {
     const seen = new Map<string, string>();
     for (const row of rows) if (!seen.has(row.section.key)) seen.set(row.section.key, row.section.label);
-    return [...seen.entries()];
+    // Reihenfolge wie die Reiter der Vertragsakte, nicht wie die Nachweise zufällig vorkommen.
+    const rank = (key: string) => EVIDENCE_SECTIONS.findIndex((section) => section.key === key);
+    return [...seen.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
   }, [rows]);
   return <div className="evt-tools">
     <div className="evt-filter" role="group" aria-label="Nach Prüfstand filtern">

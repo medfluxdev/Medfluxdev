@@ -86,13 +86,14 @@ export function percent(value: number): string {
 export type SectionTone = "partner" | "accent" | "cost" | "type" | "device" | "neutral";
 export interface EvidenceSection { key: string; label: string; tone: SectionTone }
 
-/** Reihenfolge der geführten Prüfung; Kennfarbe je Abschnitt (wie die Karten der Vertragsakte). */
+/** Reihenfolge der geführten Prüfung; Kennfarbe je Abschnitt, Name wie der Reiter der Vertragsakte, in dem die Angabe steht
+ *  (gleiche Namen in der KI-Analyse, Backend `reextract/facts.SECTIONS`). */
 export const EVIDENCE_SECTIONS: (EvidenceSection & { groups: string[] })[] = [
-  { key: "partner", label: "Vertrag & Partner", tone: "partner", groups: ["identity"] },
-  { key: "term", label: "Laufzeit", tone: "accent", groups: ["dates", "termination"] },
-  { key: "cost", label: "Kosten", tone: "cost", groups: ["costs", "payment"] },
-  { key: "services", label: "Leistungen", tone: "type", groups: ["scope", "services", "sla"] },
-  { key: "device", label: "Gerät", tone: "device", groups: ["equipment", "identity_equipment"] },
+  { key: "partner", label: "Vertragsdaten", tone: "partner", groups: ["identity"] },
+  { key: "term", label: "Fristen & Aufgaben", tone: "accent", groups: ["dates", "termination"] },
+  { key: "cost", label: "Finanzen", tone: "cost", groups: ["costs", "payment"] },
+  { key: "services", label: "Leistungen & SLA", tone: "type", groups: ["scope", "services", "sla"] },
+  { key: "device", label: "Verknüpfungen (Geräte)", tone: "device", groups: ["equipment", "identity_equipment"] },
   { key: "other", label: "Weitere Angaben", tone: "neutral", groups: [] },
 ];
 

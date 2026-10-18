@@ -71,7 +71,7 @@ describe("Nachweise prüfen (geführt)", () => {
     expect(screen.getByText("Nachweis 1 von 3")).toBeInTheDocument();
     expect(screen.getByText("Full-Service-Vertrag.pdf · Impella® AIC System")).toBeInTheDocument();
     expect(within(panel()).getByRole("heading", { name: /Auftraggeber/ })).toBeInTheDocument();
-    expect(within(panel()).getByText("Vertrag & Partner")).toBeInTheDocument();
+    expect(within(panel()).getByText("Vertragsdaten")).toBeInTheDocument();
     expect(within(panel()).getByText("Noch nicht geprüft")).toBeInTheDocument();
     expect(within(panel()).getByText("KI-Sicherheit 97 %")).toBeInTheDocument();
     // Reiner Nachweis: kein gespeicherter Wert; Nummer wie in der Liste (Lesereihenfolge: 2).
@@ -185,12 +185,15 @@ describe("Nachweise prüfen (geführt)", () => {
     const drawer = screen.getByRole("dialog", { name: "Alle Nachweise" });
     // Schmales Seitenfenster: Abschnitt unter dem Feldnamen, keine eigene Spalte.
     expect(within(drawer).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["#", "Feld · Abschnitt", "Seite", "Status"]);
-    await user.selectOptions(within(drawer).getByRole("combobox", { name: "Nach Abschnitt filtern" }), "Kosten");
+    // Abschnitte heißen wie die Reiter der Vertragsakte, in deren Reihenfolge.
+    expect(within(within(drawer).getByRole("combobox", { name: "Nach Abschnitt filtern" })).getAllByRole("option").map((option) => option.textContent))
+      .toEqual(["Alle Abschnitte", "Vertragsdaten", "Fristen & Aufgaben", "Finanzen"]);
+    await user.selectOptions(within(drawer).getByRole("combobox", { name: "Nach Abschnitt filtern" }), "Finanzen");
     expect(within(drawer).getByText(/Die Prüfung geht nur die gefilterten Nachweise durch \(1\)/)).toBeInTheDocument();
     expect(within(drawer).getAllByRole("row")).toHaveLength(2); // Kopf + 1
     await user.keyboard("{Escape}");
     // Nur noch der Kosten-Nachweis; Blättern bleibt in der Auswahl.
-    expect(screen.getByRole("button", { name: "Nur Kosten · 1" })).toHaveAttribute("title", "Filter ändern");
+    expect(screen.getByRole("button", { name: "Nur Finanzen · 1" })).toHaveAttribute("title", "Filter ändern");
     expect(screen.getByText("Nachweis 1 von 1")).toBeInTheDocument();
     expect(within(panel()).getByRole("heading", { name: /Jahreskosten/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Filter aufheben, alle Nachweise prüfen" }));

@@ -64,19 +64,9 @@ const DECISION: Record<Exclude<ProposalDecision, "pending">, { tone: SignalTone;
   rolled_back: { tone: "neutral", label: "Zurückgenommen" },
 };
 
-/** Bereiche der erneuten Erfassung, benannt nach den Reitern der Vertragsakte (wie `facts.SECTIONS` im Backend). */
-export const ANALYSIS_SECTION_LABEL: Record<string, string> = {
-  partner: "Vertragsdaten",
-  term: "Fristen & Aufgaben",
-  cost: "Finanzen",
-  services: "Leistungen & SLA",
-  device: "Verknüpfungen (Geräte)",
-};
-
-/** Bereich eines Vorschlags: Kennfarbe wie in „Nachweise prüfen“, Name wie der Reiter. */
+/** Bereich eines Vorschlags: Kennfarbe und Name wie in „Nachweise prüfen“ (Name = Reiter der Vertragsakte). */
 export function analysisSection(key: string): EvidenceSection {
-  const section = sectionByKey(key);
-  return { ...section, label: ANALYSIS_SECTION_LABEL[key] ?? section.label };
+  return sectionByKey(key);
 }
 
 /** Vertragsdaten-Feld (Basisname, z. B. notice_period) → Angaben zum Suchen. */
