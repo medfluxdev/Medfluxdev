@@ -383,9 +383,15 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     const trigger = screen.getByRole("button", { name: "Nachweise filtern" });
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("group", { name: "Nach Prüfstand filtern" })).toBeInTheDocument();
+    const panel = document.querySelector(".evf");
+    expect(screen.getByText("Nachweise filtern", { selector: ".evf-title" })).toBeInTheDocument();
+    expect(screen.getByText("Zeigt alle 2 Nachweise.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^Offen/ }));
+    // Erst „Filter anwenden“ übernimmt die Auswahl.
+    expect(screen.queryByText(/^Nur Offen · 2$/)).not.toBeInTheDocument();
+    expect(await axe(panel as HTMLElement)).toHaveNoViolations();
+    await userEvent.click(screen.getByRole("button", { name: "Filter anwenden" }));
     expect(screen.getByText(/^Nur Offen · 2$/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "2 anzeigen" }));
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(trigger).toHaveAccessibleName("Nachweise filtern (2 von 2)");
     await userEvent.click(screen.getByRole("button", { name: "Filter aufheben" }));
@@ -404,8 +410,10 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await openDocuments("Nachweise");
     const list = screen.getByRole("group", { name: "Nach Prüfstand filtern" });
     await userEvent.type(screen.getByRole("searchbox", { name: "Nachweise durchsuchen" }), "start date");
-    expect(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getAllByRole("row")).toHaveLength(2);
     expect(within(list).getByRole("button", { name: /^Alle/ })).toHaveTextContent("1");
+    expect(screen.getByText("1 Treffer")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Filter anwenden" }));
+    expect(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getAllByRole("row")).toHaveLength(2);
     await userEvent.click(screen.getByRole("button", { name: /^Auswahl prüfen · 1/ }));
     expect(await screen.findByRole("button", { name: "Nur „start date“ · 1" })).toBeInTheDocument();
     expect(screen.getByText("Nachweis 1 von 1")).toBeInTheDocument();

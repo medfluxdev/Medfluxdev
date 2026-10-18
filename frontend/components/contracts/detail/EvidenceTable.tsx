@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Signal from "@/components/ui/Signal";
 import type { EvidenceRef } from "@/lib/contract-detail-types";
 import { EVIDENCE_SECTIONS, STATUS_VIEW, matchKey, type EvidenceRow, type EvidenceStatus } from "@/lib/evidence";
@@ -73,6 +73,69 @@ export function EvidenceFilterBar({ rows, filter, onFilter }: { rows: EvidenceRo
       <input type="search" className="evt-search" aria-label="Nachweise durchsuchen" placeholder="Feld oder Wortlaut suchen" value={filter.query} onChange={(event) => onFilter({ ...filter, query: event.target.value })} />
     </div>
   </div>;
+}
+
+const ico = (body: ReactNode, className: string) => <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">{body}</svg>;
+const STATUS_ICON: Record<"" | EvidenceStatus, ReactNode> = {
+  "": null,
+  open: ico(<circle cx="12" cy="12" r="6" />, "evf-icon evf-icon--open"),
+  confirmed: ico(<><circle cx="12" cy="12" r="10" /><path d="m7.5 12.5 3 3 6-7" /></>, "evf-icon evf-icon--confirmed"),
+  deviation: ico(<><path d="M12 2.5 22.5 21h-21z" /><path d="M12 9.5v5M12 17.5v.5" /></>, "evf-icon evf-icon--deviation"),
+  skipped: ico(<path d="M3 5.5 11 12l-8 6.5zM12 5.5l8 6.5-8 6.5z" />, "evf-icon evf-icon--skipped"),
+};
+const FILTER_ICON = ico(<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4" />, "evf-title-icon");
+const SEARCH_ICON = ico(<><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>, "evf-search-icon");
+
+/**
+ * Aufklapper „Nachweise filtern“ (Entwurf 18.10.2026): Prüfstand als Karten mit Zählern, Abschnitt, Suche;
+ * die Auswahl gilt erst mit „Filter anwenden“. Treffer und Zusammenfassung zeigen den Entwurf.
+ */
+export function EvidenceFilterPanel({ rows, filter, onApply }: { rows: EvidenceRow[]; filter: EvidenceFilter; onApply: (filter: EvidenceFilter) => void }) {
+  const [draft, setDraft] = useState<EvidenceFilter>(filter);
+  const counts = useMemo(() => {
+    const scoped = rows.filter((row) => matchesFilter(row, { ...draft, status: "" }));
+    const out: Record<string, number> = { "": scoped.length };
+    for (const row of scoped) out[row.status] = (out[row.status] ?? 0) + 1;
+    return out;
+  }, [rows, draft]);
+  const sections = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of rows) if (!seen.has(row.section.key)) seen.set(row.section.key, row.section.label);
+    const rank = (key: string) => EVIDENCE_SECTIONS.findIndex((section) => section.key === key);
+    return [...seen.entries()].sort((a, b) => rank(a[0]) - rank(b[0]));
+  }, [rows]);
+  const hits = rows.filter((row) => matchesFilter(row, draft)).length;
+  const label = filterLabel(draft, rows);
+  return <form className="evf" onSubmit={(event) => { event.preventDefault(); onApply(draft); }}>
+    <div className="evf-head">
+      {FILTER_ICON}
+      <p className="evf-title">Nachweise filtern</p>
+      <span className="evf-hits" aria-live="polite">{hits} Treffer</span>
+    </div>
+    <div className="evf-status" role="group" aria-label="Nach Prüfstand filtern">
+      {FILTERS.map((option) => <button key={option.value || "all"} type="button" className={`evf-card evf-card--${option.value || "all"}`} aria-pressed={draft.status === option.value} onClick={() => setDraft({ ...draft, status: option.value })}>
+        {STATUS_ICON[option.value]}<span className="evf-card-label">{option.label}</span><span className="evf-card-count" aria-hidden="true">{counts[option.value] ?? 0}</span>
+      </button>)}
+    </div>
+    <div className="evf-fields">
+      <label className="evf-field">
+        <span className="evf-label">Abschnitt</span>
+        <select value={draft.section} onChange={(event) => setDraft({ ...draft, section: event.target.value })} aria-label="Nach Abschnitt filtern">
+          <option value="">Alle Abschnitte</option>
+          {sections.map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+        </select>
+      </label>
+      <label className="evf-field evf-field--search">
+        <span className="evf-label">Suche</span>
+        <span className="evf-search">{SEARCH_ICON}<input type="search" aria-label="Nachweise durchsuchen" placeholder="Feld oder Wortlaut suchen" value={draft.query} onChange={(event) => setDraft({ ...draft, query: event.target.value })} /></span>
+      </label>
+    </div>
+    <div className="evf-foot">
+      <p className="evf-summary">{isFiltered(draft) ? `Zeigt ${hits} von ${rows.length} Nachweisen · ${label}.` : `Zeigt alle ${rows.length} Nachweise.`}</p>
+      <button type="button" className="btn btn-ghost" disabled={!isFiltered(draft)} onClick={() => setDraft(NO_FILTER)}>Zurücksetzen</button>
+      <button type="submit" className="btn btn-primary">Filter anwenden</button>
+    </div>
+  </form>;
 }
 
 /**

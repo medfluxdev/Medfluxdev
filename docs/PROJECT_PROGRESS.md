@@ -6029,3 +6029,7 @@ Ziel: der Reiter beantwortet (1) was zu entscheiden ist, (2) was ansteht und wer
 ### Nachtrag 2026-10-18 – Abschnitte überall mit den Reiternamen
 
 - `EVIDENCE_SECTIONS` (`lib/evidence.ts`) heißen jetzt wie die Reiter: Vertragsdaten, Fristen & Aufgaben, Finanzen, Leistungen & SLA, Verknüpfungen (Geräte) – in „Nachweise prüfen“, im Abschnitt-Filter, in der Nachweise-Liste und in der KI-Analyse (eigene Namensliste dort entfällt). Abschnitt-Auswahl in Reiter-Reihenfolge. `npm run verify` grün (508).
+
+### Nachtrag 2026-10-18 – Aufklapper „Nachweise filtern“ nach Entwurf
+
+- `EvidenceFilterPanel` (`EvidenceTable.tsx`): Kopf mit Filtersymbol, „Nachweise filtern“ und „N Treffer“; Prüfstand als fünf Karten mit Symbol (Punkt, Häkchen, Warndreieck, Überspringen) und eingefärbtem Zähler; „Abschnitt“ und „Suche“ (mit Lupe) beschriftet; Fuß mit Zusammenfassung („Zeigt alle 62 Nachweise.“ / „Zeigt 12 von 62 Nachweisen · Offen.“), „Zurücksetzen“, „Filter anwenden“. Die Auswahl ist ein Entwurf und gilt erst mit „Filter anwenden“ (Enter im Suchfeld wendet ebenfalls an). Unter 720px Felder untereinander. Test inkl. axe in `contracts-detail.test.tsx`; `npm run verify` grün (508).

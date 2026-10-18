@@ -1063,8 +1063,40 @@ a.fin-basis-sub { color: var(--color-link); }
 .dw-switch-popover{display: grid}
 .dw-switch .dw-switch-trigger{width: 100%}
 .dw-switch .popover-trigger--active{box-shadow: 0 0 0 1px var(--color-accent);color: var(--color-accent)}
-.dw-filter{display: grid;gap: 10px;min-width: min(420px, 80vw)}
-.dw-filter-actions{display: flex;justify-content: flex-end;gap: 8px}
+.dw-switch-popover .popover-panel{max-width: min(780px, calc(100vw - 2 * var(--space-4)));padding: 20px}
+/* Aufklapper „Nachweise filtern“ (Entwurf 18.10.2026) */
+.evf{display: grid;gap: 18px;width: min(740px, calc(100vw - 4 * var(--space-4)))}
+.evf-head{display: flex;align-items: center;gap: 12px}
+.evf-title-icon{width: 26px;height: 26px;flex: none;fill: none;stroke: currentcolor;stroke-width: 1.8;stroke-linecap: round}
+.evf-title{flex: 1;margin: 0;font-size: var(--text-title-s);font-weight: var(--weight-semibold)}
+.evf-hits{padding: 4px 12px;border-radius: var(--radius-sm);background: var(--color-surface-accent);color: var(--color-accent);font-size: var(--text-small);font-weight: 600;font-variant-numeric: tabular-nums}
+.evf-status{display: grid;grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));gap: 8px}
+.evf-card{display: flex;align-items: center;justify-content: center;gap: 8px;min-height: 48px;padding: 0 12px;border: 1px solid var(--color-border);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit;font-size: var(--text-small);cursor: pointer}
+.evf-card:hover{background: var(--color-surface-subtle)}
+.evf-card[aria-pressed="true"]{border-color: var(--color-accent);background: var(--color-surface-accent);box-shadow: inset 0 0 0 1px var(--color-accent);font-weight: 600}
+.evf-card:focus-visible{outline: 2px solid var(--color-focus);outline-offset: 2px}
+.evf-card-count{min-width: 24px;padding: 1px 7px;border-radius: 6px;background: var(--color-neutral-bg);color: var(--color-neutral);font-size: var(--text-caption);font-weight: 600;text-align: center;font-variant-numeric: tabular-nums}
+.evf-card--all .evf-card-count, .evf-card--open .evf-card-count{background: var(--color-info-bg);color: var(--color-info)}
+.evf-card--confirmed .evf-card-count{background: var(--color-success-bg);color: var(--color-success)}
+.evf-card--deviation .evf-card-count{background: var(--color-warning-bg);color: var(--color-warning)}
+.evf-icon{width: 18px;height: 18px;flex: none}
+.evf-icon--open{fill: var(--color-info-fill)}
+.evf-icon--confirmed{fill: var(--color-success-fill);stroke: var(--color-text-inverse);stroke-width: 2.4;stroke-linecap: round;stroke-linejoin: round}
+.evf-icon--confirmed circle{stroke: none}
+.evf-icon--deviation{fill: var(--color-warning-fill);stroke: var(--color-text-inverse);stroke-width: 2;stroke-linecap: round}
+.evf-icon--deviation path:first-child{stroke: none}
+.evf-icon--skipped{fill: var(--color-text-muted)}
+.evf-fields{display: grid;grid-template-columns: minmax(180px, 1fr) minmax(0, 2fr);gap: 16px}
+.evf-field{display: grid;gap: 6px}
+.evf-label{font-size: var(--text-small);font-weight: 600}
+.evf-field select{min-height: 40px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface);color: var(--color-text);font: inherit}
+.evf-search{display: flex;align-items: center;gap: 8px;min-height: 40px;padding: 0 10px;border: 1px solid var(--color-border-strong);border-radius: var(--radius-sm);background: var(--color-surface)}
+.evf-search:focus-within{outline: 2px solid var(--color-focus);outline-offset: 1px}
+.evf-search input{flex: 1;min-width: 0;border: 0;background: none;color: var(--color-text);font: inherit;outline: none}
+.evf-search-icon{width: 18px;height: 18px;flex: none;fill: none;stroke: var(--color-text-muted);stroke-width: 2;stroke-linecap: round}
+.evf-foot{display: flex;flex-wrap: wrap;align-items: center;gap: 12px;padding-top: 14px;border-top: 1px solid var(--color-border-subtle)}
+.evf-summary{flex: 1;min-width: 200px;margin: 0;color: var(--color-text-muted);font-size: var(--text-small)}
+@media (max-width: 720px){.evf-fields{grid-template-columns: 1fr}}
 .dw-filter-line{display: flex;align-items: center;justify-content: space-between;gap: 8px;margin: 8px 12px 0;padding: 4px 4px 4px 12px;border: 1px solid var(--color-accent);border-radius: 999px;background: var(--color-surface-accent);color: var(--color-accent);font-size: var(--text-small);font-weight: 600}
 .dw-filter-line button{min-width: 28px;min-height: 28px;border: 0;border-radius: 999px;background: none;color: inherit;font: inherit;cursor: pointer}
 .dw-filter-line button:hover{background: var(--color-surface)}

@@ -62,7 +62,7 @@ import OpenPoints, { EVIDENCE_REVIEW_SECTION, PROPOSAL_REVIEW_SECTION, buildOpen
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
 import EvidenceReviewMode from "./EvidenceReviewMode";
-import { EvidenceFilterBar, NO_FILTER, filterLabel, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
+import { EvidenceFilterPanel, NO_FILTER, filterLabel, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
 import Popover from "@/components/ui/Popover";
 import { evidenceNumbers, evidenceRows, evidenceStatus, factsByEvidence, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
 import CapturedSources from "./CapturedSources";
@@ -993,13 +993,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
                     defaultOpen={filterOnOpen}
                     wide
                   >
-                    {(close) => <div className="dw-filter">
-                      <EvidenceFilterBar rows={evidenceTableRows} filter={evidenceFilter} onFilter={setEvidenceFilter} />
-                      <div className="dw-filter-actions">
-                        <button type="button" className="btn btn-sm" disabled={filteredEvidence == null} onClick={() => setEvidenceFilter(NO_FILTER)}>Zurücksetzen</button>
-                        <button type="button" className="btn btn-sm btn-primary" onClick={close}>{filteredEvidence != null ? `${filteredEvidence} anzeigen` : "Fertig"}</button>
-                      </div>
-                    </div>}
+                    {(close) => <EvidenceFilterPanel rows={evidenceTableRows} filter={evidenceFilter} onApply={(next) => { setEvidenceFilter(next); close(); }} />}
                   </Popover>
                   : <button type="button" aria-pressed={false} onClick={() => { setFilterOnOpen(true); setRoute("documents", "evidence"); }}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>}
               </div>
