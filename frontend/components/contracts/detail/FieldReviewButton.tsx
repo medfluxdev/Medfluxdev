@@ -42,27 +42,34 @@ export default function FieldReviewButton({ review, onOpenField, onStartGuided }
   </Popover>;
 }
 
-/** Stand der Prüfung in der Kopfzeile von Dokumente: ein Fortschritt, eine Handlung – ehrlich formuliert. */
-export function ReviewControl({ review, onStart, onOpenOverview }: {
+const RC_ICON = <svg className="dw-rc-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" /><path d="M9 3h6v3H9z" /><path d="m9 12 1.5 1.5L13 11M9 17l1.5 1.5L13 16" /></svg>;
+const RC_ARROW = <svg className="dw-rc-btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
+
+/** Stand der Prüfung über dem Dokument: eine Karte mit Fortschritt (Felder, nicht Nachweise) und einer Handlung – ehrlich formuliert. */
+export function ReviewControl({ review, onStart }: {
   review: FieldReviewDto | null | undefined;
   onStart: (tier: FieldTier) => void;
-  onOpenOverview: () => void;
 }) {
   const essential = stageOf(review, "essential");
   const headline = reviewHeadline(review);
   if (!review || !essential || (essential.total === 0 && review.decisions_open === 0)) return null;
   const next = nextOpenTier(review);
-  return <>
-    {essential.total > 0 ? <span className="dw-progress">
-      <span className="dw-progress-bar" role="progressbar" aria-label="Wesentliche Angaben entschieden" aria-valuemin={0} aria-valuemax={essential.total} aria-valuenow={essential.decided}><span style={{ width: `${(essential.decided / essential.total) * 100}%` }} /></span>
-      <span>{essential.decided} von {essential.total} wesentlichen Angaben entschieden</span>
-    </span> : null}
-    {next
-      ? <button type="button" className="btn btn-sm btn-primary dw-review" onClick={() => onStart(next)}>
-        {next === "essential" ? "Wesentliches prüfen" : `${TIER_NAME[next]} prüfen`} · {stageOf(review, next)?.open}
-      </button>
-      : headline ? <Signal tone={headline.tone} size="sm">{headline.text}</Signal> : null}
-    {next && next !== "essential" && headline ? <Signal tone={headline.tone} size="sm">{headline.text}</Signal> : null}
-    <button type="button" className="btn btn-sm btn-ghost" onClick={onOpenOverview}>Übersicht</button>
-  </>;
+  const open = essential.total - essential.decided;
+  return <section className="dw-rc" aria-label="Vertragsprüfung">
+    <div className="dw-rc-head">
+      <span className="dw-rc-tile">{RC_ICON}</span>
+      <span className="dw-rc-title"><strong>Vertragsprüfung</strong><span>Wesentliche Angaben</span></span>
+    </div>
+    {essential.total > 0 ? <div className="dw-rc-progress">
+      <div className="dw-rc-line"><strong>{essential.decided} von {essential.total} geprüft</strong><span>{open} offen</span></div>
+      <span className="dw-progress-bar dw-rc-bar" role="progressbar" aria-label="Wesentliche Angaben entschieden" aria-valuemin={0} aria-valuemax={essential.total} aria-valuenow={essential.decided}><span style={{ width: `${(essential.decided / essential.total) * 100}%` }} /></span>
+    </div> : null}
+    <div className="dw-rc-actions">
+      {next
+        ? <button type="button" className="btn btn-sm btn-primary dw-review" onClick={() => onStart(next)}>
+          {next === "essential" ? "Prüfung starten" : `${TIER_NAME[next]} prüfen`}{RC_ARROW}
+        </button>
+        : headline ? <Signal tone={headline.tone} size="sm">{headline.text}</Signal> : null}
+    </div>
+  </section>;
 }

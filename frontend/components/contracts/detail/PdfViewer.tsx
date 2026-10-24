@@ -415,7 +415,14 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     if (!currentMarker || !pageBox) return;
     const frame = stageRef.current?.querySelector<HTMLElement>(".pdf-frame.is-current");
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    frame?.scrollIntoView?.({ block: "center", inline: "nearest", behavior: reduce ? "auto" : "smooth" });
+    if (!frame) return;
+    // Nur die Ansicht des Originals scrollen – nicht die ganze Seite (scrollIntoView würde auch die Seite verschieben).
+    let box: HTMLElement | null = frame.parentElement;
+    while (box && !(box.scrollHeight > box.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+    if (!box || box === document.body || box === document.documentElement) return;
+    const f = frame.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    box.scrollTo?.({ top: box.scrollTop + (f.top - b.top) - (box.clientHeight - f.height) / 2, behavior: reduce ? "auto" : "smooth" });
   }, [currentMarker, pageBox]);
 
   if (!active || !documentVersionId) {
@@ -425,16 +432,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
   const hitNow = searchHits && searchHits.length ? searchHits[hitIndex] : null;
   return (
     <section className={`pdf-viewer${review ? " pdf-viewer--review" : ""}`} aria-label="Quellansicht (PDF)" ref={rootRef}>
-      {review ? <div className="pdf-controls pdf-controls--slim" role="toolbar" aria-label="PDF-Ansicht steuern">
-        <span className="pdf-slim-page" aria-live="polite">Seite <strong>{pageNumber}</strong> von {pageCount || "–"}</span>
-        <span className="pdf-slim-space" />
-        <span className="pdf-tool-group">
-          <button type="button" className="pdf-icon-btn" aria-label="Zoom verkleinern" disabled={!canRender} onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}>{TOOL_ICON.minus}</button>
-          <button type="button" className="zoom-value" aria-label="Zoom zurücksetzen" disabled={!canRender} onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
-          <button type="button" className="pdf-icon-btn" aria-label="Zoom vergrößern" disabled={!canRender} onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}>{TOOL_ICON.plus}</button>
-        </span>
-        <button type="button" className="btn btn-sm pdf-slim-fit" disabled={!canRender} onClick={() => void fit("page")}>{TOOL_ICON.fit}Ganze Seite</button>
-      </div> : <div className="pdf-controls" role="toolbar" aria-label="PDF-Ansicht steuern">
+      <div className="pdf-controls" role="toolbar" aria-label="PDF-Ansicht steuern">
         <button type="button" className="pdf-tool" aria-pressed={showPages} onClick={() => setShowPages((open) => !open)}>{TOOL_ICON.pages}Seiten</button>
         <form className="pdf-search" role="search" onSubmit={(event) => { event.preventDefault(); void search(); }}>
           {TOOL_ICON.search}
@@ -468,7 +466,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
           </select>
         </label>
         <button type="button" className="pdf-tool pdf-fullscreen" onClick={toggleFullscreen}>{TOOL_ICON.expand}{fullscreen ? "Vollbild beenden" : "Vollbild"}</button>
-      </div>}
+      </div>
       {status === "loading" && <p className="pdf-status" role="status">Quelle wird geladen…</p>}
       {status === "error" && (
         <div className="pdf-status pdf-error" role="alert">

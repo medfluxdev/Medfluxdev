@@ -367,6 +367,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
   it("zeigt die Quelldokumente und lädt den PDF-Viewer", async () => {
     await renderWithData(detailFixture());
     await openDocuments();
+    await userEvent.click(screen.getByRole("button", { name: "Dateien" }));
     // Arbeitsplatz: links Dateien (nach Art gruppiert), Stand oben rechts mit nächstem Schritt.
     const files = screen.getByRole("navigation", { name: "Quelldokumente" });
     expect(within(files).getByRole("button", { name: /wartung\.pdf/ })).toHaveAttribute("aria-current", "true");
@@ -386,63 +387,99 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
   it("Dateien und Nachweise teilen sich das Original; „Nachweise“ ist eine kompakte Tabelle ohne Zitate", async () => {
     await renderWithData(detailFixture());
     await openDocuments();
-    expect(screen.queryByRole("button", { name: "Nachweise", pressed: true })).not.toBeInTheDocument();
+    // Zu Beginn zeigt die Seitenleiste die Nachweise (nicht die Dateien).
+    expect(screen.getByRole("button", { name: "Nachweise", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dateien", pressed: false })).toBeInTheDocument();
     expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).queryByRole("button", { name: "Nachweise" })).not.toBeInTheDocument();
     // Erneut erfassen hat einen festen Ort: Unterreiter „KI-Analyse“ (nicht mehr über dem Original).
     expect(within(screen.getByRole("navigation", { name: "Dokumente und Prüfung" })).getByRole("button", { name: "KI-Analyse" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Erneut aus dem Dokument erfassen" })).not.toBeInTheDocument();
     // Eine Prüfung, ein Einstieg: Felder zählen, nicht Nachweise.
-    expect(screen.getByRole("button", { name: "Wesentliches prüfen · 2" })).toBeInTheDocument();
-    expect(screen.getByText("0 von 2 wesentlichen Angaben entschieden")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prüfung starten" })).toBeInTheDocument();
+    expect(screen.getByText("0 von 2 geprüft")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Nachweise prüfen/ })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Nachweise" }));
-    // Klick auf „Nachweise“: Liste und gleich der Filter (Prüfstand, Abschnitt, Suche) im Aufklapper.
-    const trigger = screen.getByRole("button", { name: "Nachweise filtern" });
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("group", { name: "Nach Prüfstand filtern" })).toBeInTheDocument();
-    const panel = document.querySelector(".evf");
-    expect(screen.getByText("Nachweise filtern", { selector: ".evf-title" })).toBeInTheDocument();
-    expect(screen.getByText("Zeigt alle 2 Nachweise.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /^Offen/ }));
-    // Erst „Filter anwenden“ übernimmt die Auswahl.
-    expect(screen.queryByText(/^Nur Offen · 2$/)).not.toBeInTheDocument();
-    expect(await axe(panel as HTMLElement)).toHaveNoViolations();
-    await userEvent.click(screen.getByRole("button", { name: "Filter anwenden" }));
-    expect(screen.getByText(/^Nur Offen · 2$/)).toBeInTheDocument();
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(trigger).toHaveAccessibleName("Nachweise filtern (2 von 2)");
-    await userEvent.click(screen.getByRole("button", { name: "Filter aufheben" }));
-    expect(screen.getByRole("button", { name: "Nachweise filtern" })).toBeInTheDocument();
+    // Nachweise sind schon offen: Liste und darüber der Filter (Suche, Prüfstand, Abschnitt) – er wirkt sofort.
+    const filter = screen.getByRole("search", { name: "Nachweise filtern" });
+    expect(within(filter).getByRole("button", { name: /^Status:/ })).toBeInTheDocument();
+    expect(within(filter).getByText("2 Nachweise")).toBeInTheDocument();
+    expect(await axe(filter)).toHaveNoViolations();
+    await userEvent.click(within(filter).getByRole("button", { name: /^Status:/ }));
+    await userEvent.click(within(screen.getByRole("listbox", { name: "Status" })).getByRole("option", { name: /Offen/ }));
+    expect(within(filter).getByText("2 von 2")).toBeInTheDocument();
+    expect(within(filter).getByRole("button", { name: /^Status:/ })).toHaveTextContent("Offen");
+    await userEvent.click(within(filter).getByRole("button", { name: "Zurücksetzen" }));
+    expect(within(filter).getByText("2 Nachweise")).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "PDF-Ansicht steuern" })).toBeInTheDocument();
-    const table = screen.getByRole("table", { name: "Nachweise dieses Vertrags" });
-    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["#", "Feld", "Seite", "Status"]);
-    expect(within(table).getAllByRole("row")).toHaveLength(3);
-    expect(within(table).getAllByText("Offen")).toHaveLength(2);
+    const table = screen.getByRole("group", { name: "Nachweise dieses Vertrags" });
+    expect(within(table).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(table).getAllByText(/ · Offen/)).toHaveLength(2);
     expect(within(table).queryByText(/Laufzeit beginnt am/)).not.toBeInTheDocument();
-    expect(screen.getByText("2 Nachweise", { exact: false })).toBeInTheDocument();
+    expect(screen.getAllByText("2 Nachweise", { exact: false }).length).toBeGreaterThan(0);
+  });
+
+  it("Nachweise-Filter: Suche leeren per Esc, Abschnitte als einklappbare Überschriften, „Nächster offener“ öffnet die Prüfung", async () => {
+    await renderWithData(detailFixture());
+    await openDocuments("Nachweise");
+    expect(screen.queryByRole("searchbox", { name: "Nachweise durchsuchen" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Nachweise durchsuchen öffnen" }));
+    const search = screen.getByRole("searchbox", { name: "Nachweise durchsuchen" });
+    await userEvent.type(search, "start date");
+    await userEvent.keyboard("{Escape}");
+    expect(search).toHaveValue("");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("searchbox", { name: "Nachweise durchsuchen" })).not.toBeInTheDocument();
+    const group = screen.getByRole("group", { name: "Nachweise dieses Vertrags" });
+    const head = within(group).getAllByRole("button", { expanded: true })[0];
+    await userEvent.click(head);
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(head);
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(screen.getByRole("button", { name: /Nächster offener/ }));
+    expect(await screen.findByRole("region", { name: "Aktuelle Angabe" })).toBeInTheDocument();
+  });
+
+  it("Nachweise-Liste folgt den zwei Stufen: Gruppen Pflicht/Optional; Status und Kategorie als Aufklapper", async () => {
+    await renderWithData(detailFixture());
+    await openDocuments("Nachweise");
+    const list = screen.getByRole("group", { name: "Nachweise dieses Vertrags" });
+    expect(within(list).getAllByRole("heading", { level: 2 }).map((head) => head.textContent)).toEqual(expect.arrayContaining([expect.stringMatching(/^(Pflicht|Optional)/)]));
+    expect(screen.queryByRole("group", { name: "Nach Stufe filtern" })).not.toBeInTheDocument();
+    // Zwei Auswahlfelder: „Status: Alle“ und „Kategorie: Alle“.
+    const status = screen.getByRole("button", { name: /^Status:/ });
+    expect(status).toHaveTextContent("Status:Alle");
+    expect(screen.getByRole("button", { name: /^Kategorie:/ })).toHaveTextContent("Kategorie:Alle");
+    await userEvent.click(status);
+    expect(status).toHaveAttribute("aria-expanded", "true");
+    const options = within(screen.getByRole("listbox", { name: "Status" })).getAllByRole("option");
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(options[1]);
+    expect(status).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Zurücksetzen" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Zurücksetzen" }));
+    await userEvent.click(screen.getByRole("button", { name: /^Kategorie:/ }));
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(screen.getByRole("button", { name: "Zurücksetzen" })).toBeInTheDocument();
   });
 
   it("der Filter der Nachweise-Liste ist nur eine Ansicht – die Prüfung bleibt ein einziger Ablauf", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    const list = screen.getByRole("group", { name: "Nach Prüfstand filtern" });
+    await userEvent.click(screen.getByRole("button", { name: "Nachweise durchsuchen öffnen" }));
     await userEvent.type(screen.getByRole("searchbox", { name: "Nachweise durchsuchen" }), "start date");
-    expect(within(list).getByRole("button", { name: /^Alle/ })).toHaveTextContent("1");
-    expect(screen.getByText("1 Treffer")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Filter anwenden" }));
-    expect(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("1 von 2")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Nachweise dieses Vertrags" })).getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /Auswahl prüfen/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Wesentliches prüfen · 2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Prüfung starten" })).toBeInTheDocument();
   });
 
   it("ein Nachweis aus der Tabelle öffnet die geführte Prüfung an seiner Stelle im Original", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
     const panel = await screen.findByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Angaben prüfen" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("von 3", { exact: false })).toHaveTextContent("Seite 2 von 3"));
+    await waitFor(() => expect(screen.getByText("2 / 3", { exact: false })).toHaveTextContent("Seite 2 / 3"));
     // Aktueller Nachweis: Rahmen mit derselben Nummer wie in der Tabelle.
     await waitFor(() => expect(document.querySelector(".pdf-frame.is-current")).toHaveTextContent("1"));
   });
@@ -450,7 +487,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
   it("Nachweis ohne Seitenangabe erfindet keinen Rahmen; zurück zum Vertrag beendet die Prüfung", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /annual cost/i }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /annual cost/i }));
     const panel = await screen.findByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
     // Ungeklärte Fundstelle wird nicht als belegt ausgegeben.
@@ -458,7 +495,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     expect(document.querySelector(".pdf-frame.is-current")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Zurück zum Vertrag" }));
     expect(screen.queryByRole("region", { name: "Aktuelle Angabe" })).not.toBeInTheDocument();
-    expect(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Nachweise dieses Vertrags" })).toBeInTheDocument();
   });
 
   it("hat im Dokument-Workspace keine automatisierten WCAG-A11y-Verstöße", async () => {
@@ -472,7 +509,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
   it("behält beim Wechsel zwischen Prüfung und Vertrags-Tabs den Workspace-Kontext", async () => {
     await renderWithData(detailFixture());
     await openDocuments("Nachweise");
-    await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
     await screen.findByRole("region", { name: "Aktuelle Angabe" });
     await openTab("Übersicht");
     expect(screen.getByRole("heading", { name: "MRT Wartungsvertrag" })).toBeInTheDocument();

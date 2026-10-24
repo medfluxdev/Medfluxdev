@@ -1,7 +1,7 @@
 "use client";
 
 import { revealBox } from "@/lib/box-collapse";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type {
@@ -65,9 +65,8 @@ import { SECTION_LABELS, sectionVisible } from "@/lib/contract-sections";
 import OpenPoints, { EVIDENCE_REVIEW_SECTION, PROPOSAL_REVIEW_SECTION, buildOpenPoints } from "./OpenPoints";
 import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
-import { EvidenceFilterPanel, NO_FILTER, filterLabel, isFiltered, matchesFilter, type EvidenceFilter } from "./EvidenceTable";
-import Popover from "@/components/ui/Popover";
-import { evidenceNumbers, evidenceRows, factsByEvidence, fieldEvidenceStatus, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
+import EvidencePanel from "./EvidencePanel";
+import { evidenceNumbers, evidenceRows, factsByEvidence, fieldEvidenceStatus, fieldEvidenceLevel, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
 import { decisionFields, fieldByKey, fieldsOf } from "@/lib/field-review";
 import { announceRegisterChange } from "@/lib/register-events";
 import CapturedSources from "./CapturedSources";
@@ -241,7 +240,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   };
   const initialTab = tabFromUrl();
   const [timelineVersion, setTimelineVersion] = useState(0);
-  const initialSubtab = isDocumentTab(searchParams.get("subtab")) ? searchParams.get("subtab") as DocumentTab : "document";
+  const initialSubtab = isDocumentTab(searchParams.get("subtab")) ? searchParams.get("subtab") as DocumentTab : data.evidence.length ? "evidence" : "document";
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [documentTab, setDocumentTab] = useState<DocumentTab>(initialSubtab);
   const [showAllSections, setShowAllSections] = useState(false);
@@ -433,19 +432,17 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   // Entscheidung zu einem Feld direkt aus der Karte (Schublade) – gleiche Ansicht wie in der geführten Prüfung.
   const [fieldDrawer, setFieldDrawer] = useState<string | null>(null);
   // Ein Filter für die Nachweise-Liste und die geführte Prüfung („Nachweise prüfen“ geht nur die Auswahl durch).
-  const [evidenceFilter, setEvidenceFilter] = useState<EvidenceFilter>(NO_FILTER);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [queryActive, setQueryActive] = useState(false);
   // Klick auf „Nachweise“ (von „Dateien“ aus): Liste zeigen und gleich den Filter aufklappen.
-  const [filterOnOpen, setFilterOnOpen] = useState(false);
-  useEffect(() => { if (documentTab !== "evidence") setFilterOnOpen(false); }, [documentTab]);
   // „Vorschläge prüfen“: offene Vorschläge der letzten Analyse einzeln (gleicher Arbeitsplatz).
   const [proposalMode, setProposalMode] = useState<{ startKey: string | null } | null>(null);
   // Prüfstand eines Nachweises = Stand seines Felds (ein Feld, eine Entscheidung); ausgeschlossene Nachweise sind kenntlich.
   const fieldReview = data.field_review ?? null;
   const evidenceTableRows = useMemo(() => evidenceRows(orderedEvidence, evidenceNumber, evidenceFacts,
-    (ref) => fieldEvidenceStatus(ref.evidence_id, fieldReview)),
+    (ref) => fieldEvidenceStatus(ref.evidence_id, fieldReview), (ref) => fieldEvidenceLevel(ref.evidence_id, fieldReview)),
   [orderedEvidence, evidenceNumber, evidenceFacts, fieldReview]);
   // Aktiver Filter der Nachweise-Liste: „Nachweise prüfen“ wird „Auswahl prüfen · N“.
-  const filteredEvidence = isFiltered(evidenceFilter) ? evidenceTableRows.filter((row) => matchesFilter(row, evidenceFilter)).length : null;
   // Marken auf der Seite: nur Nachweise mit Lage auf dem geöffneten Dokument, gleiche Nummern wie die Liste.
   const pageMarkers = useMemo(() => data.evidence
     .filter((ref) => ref.document_version_id === documentVersionId && ref.page != null && ref.bbox)
@@ -457,6 +454,16 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     announceRegisterChange();
   }
   // Geführte Prüfung der Felder (wesentliche zuerst); `key` startet bei einem bestimmten Feld.
+  // Beim Start der geführten Prüfung steht die Seite so, dass die Unterreiter oben im Blick sind und Original und Entscheidung
+  // darunter ganz sichtbar – nicht zu hoch (Kopf der Akte) und nicht zu tief (Entscheidung abgeschnitten).
+  const docHead = useRef<HTMLDivElement | null>(null);
+  const reviewActive = reviewMode !== null;
+  useEffect(() => {
+    if (!reviewActive) return;
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frame = window.requestAnimationFrame(() => docHead.current?.scrollIntoView?.({ block: "start", behavior: reduce ? "auto" : "smooth" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [reviewActive]);
   function startFieldReview(tier: FieldTier | null = null, key: string | null = null) {
     if (!inDocumentWorkspace) setRoute("documents", "document");
     setProposalMode(null);
@@ -937,18 +944,18 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
 
         {activeTab === "deadlines" && slots.deadlines}
         {activeTab === "documents" && <>
-          {/* Kopf: Unterreiter links; rechts Stand der Prüfung mit dem nächsten Schritt. */}
-          <div className="cw-doc-head">
-            <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "active" : ""} aria-current={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "page" : undefined} onClick={() => setRoute("documents", tab.key)}>{tab.label}{tab.key === "analysis" && analysisBadge ? <span className="dw-count">{analysisBadge}</span> : null}</button>)}</nav>
+          {/* Kopf: Unterreiter links; rechts Dateizahl und „Erneut erfassen“ (auf jedem Unterreiter an derselben Stelle). */}
+          <div className="cw-doc-head" ref={docHead}>
+            <nav className="cw-subtabs" aria-label="Dokumente und Prüfung">{DOCUMENT_TABS.map((tab) => <button key={tab.key} type="button" className={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "active" : ""} aria-current={(tab.key === "document" ? inDocumentWorkspace : documentTab === tab.key) ? "page" : undefined} onClick={() => setRoute("documents", tab.key === "document" ? (inDocumentWorkspace ? documentTab : data.evidence.length ? "evidence" : "document") : tab.key)}>{tab.label}{tab.key === "analysis" && analysisBadge ? <span className="dw-count">{analysisBadge}</span> : null}</button>)}</nav>
             <div className="dw-status" aria-label="Stand der Dokumente">
               <span className="dw-status-counts">{data.documents.length} {data.documents.length === 1 ? "Datei" : "Dateien"} · {data.evidence.length} Nachweise</span>
               {documentTab !== "analysis" && (reextraction.state?.can_start || analysisBadge) ? <button type="button" className="btn btn-sm dw-reanalyse" onClick={() => openTarget(REEXTRACTION_TARGET)}>
                 {REANALYSE_ICON}{reextractionBusy ? "KI-Analyse läuft" : analysisOpen ? `${analysisOpen} ${analysisOpen === 1 ? "Vorschlag" : "Vorschläge"} prüfen` : "Erneut erfassen"}
               </button> : null}
-              {/* Eine Prüfung: ein Fortschritt (Felder, nicht Nachweise), eine Handlung. */}
-              {!reviewMode && documentTab !== "review" ? <ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} onOpenOverview={() => setRoute("documents", "review")} /> : null}
             </div>
           </div>
+          {/* Eine Prüfung: ein Fortschritt (Felder, nicht Nachweise), eine Handlung – eigene Zeile, damit „Erneut erfassen“ immer oben rechts steht. */}
+          {!reviewMode && documentTab !== "review" && fieldReview ? <div className="dw-status dw-review-row"><ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} /></div> : null}
           {documentTab === "analysis" && <ReextractionPanel
             loadError={reextraction.error}
             contractId={data.contract_id}
@@ -994,37 +1001,23 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onReload={reloadAfterDecision}
             onOpenAnalysis={() => { setReviewMode(null); openTarget(REEXTRACTION_TARGET); }}
             onOpenFindings={() => { setReviewMode(null); setRoute("documents", "review"); }}
-            canRecognize={Boolean(reextraction.state?.can_start) && !reextractionBusy}
-            onRecognizeStarted={reextraction.reload}
             viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
           /> : null}
           {inDocumentWorkspace && !reviewMode && !proposalMode && <div className="dw">
             <aside className="dw-side" aria-label="Dateien und Nachweise">
               <div className="dw-switch" role="group" aria-label="Seitenleiste">
+                <button type="button" aria-pressed={documentTab === "evidence"} onClick={() => setRoute("documents", "evidence")}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>
                 <button type="button" aria-pressed={documentTab === "document"} onClick={() => setRoute("documents", "document")}>Dateien<span className="dw-count" aria-hidden="true">{data.documents.length}</span></button>
-                {documentTab === "evidence"
-                  ? <Popover
-                    label={<>Nachweise<span className="dw-count" aria-hidden="true">{filteredEvidence ?? data.evidence.length}</span></>}
-                    triggerLabel={filteredEvidence != null ? `Nachweise filtern (${filteredEvidence} von ${data.evidence.length})` : "Nachweise filtern"}
-                    panelLabel="Nachweise filtern"
-                    triggerClassName="dw-switch-trigger"
-                    className="dw-switch-popover"
-                    active={filteredEvidence != null}
-                    defaultOpen={filterOnOpen}
-                    wide
-                  >
-                    {(close) => <EvidenceFilterPanel rows={evidenceTableRows} filter={evidenceFilter} onApply={(next) => { setEvidenceFilter(next); close(); }} />}
-                  </Popover>
-                  : <button type="button" aria-pressed={false} onClick={() => { setFilterOnOpen(true); setRoute("documents", "evidence"); }}>Nachweise<span className="dw-count" aria-hidden="true">{data.evidence.length}</span></button>}
+                {documentTab === "evidence" && data.evidence.length ? <button type="button" className={`dw-switch-search${queryActive ? " has-query" : ""}`} aria-label="Nachweise durchsuchen öffnen" aria-expanded={searchOpen || Boolean(queryActive)} onClick={() => setSearchOpen((open) => !open)}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                </button> : null}
               </div>
               {documentTab === "evidence"
-                ? <div className="dw-panel">{filteredEvidence != null ? <p className="dw-filter-line" role="status">
-                  <span>{`Nur ${filterLabel(evidenceFilter, evidenceTableRows)} · ${filteredEvidence}`}</span>
-                  <button type="button" onClick={() => setEvidenceFilter(NO_FILTER)} aria-label="Filter aufheben">×</button>
-                </p> : null}{data.evidence.length
-                  ? <EvidenceTable rows={evidenceTableRows} currentId={activeEvidenceId} caption="Nachweise dieses Vertrags" onPick={reviewEvidence}
-                    filter={evidenceFilter} onFilter={setEvidenceFilter} />
-                  : <p className="cw-muted dw-empty">Keine Nachweise vorhanden.</p>}<CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>
+                ? (data.evidence.length
+                  ? <EvidencePanel rows={evidenceTableRows} currentId={activeEvidenceId} onPick={reviewEvidence} searchOpen={searchOpen} onSearchOpen={setSearchOpen} onQueryActive={setQueryActive}>
+                    <CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} />
+                  </EvidencePanel>
+                  : <div className="dw-panel"><p className="cw-muted dw-empty">Keine Nachweise vorhanden.</p><CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} /></div>)
                 : data.documents.length === 0 ? <p className="cw-muted dw-empty">Keine Dokumente vorhanden.</p>
                   : <DocumentList documents={data.documents} selectedId={documentVersionId} mainId={mainDocumentId} onSelect={selectDocument} compact={!manyDocuments} />}
             </aside>

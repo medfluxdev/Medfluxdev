@@ -94,9 +94,9 @@ describe("Geführte Prüfung nach Feldern", () => {
     const { onShow, onReload, container } = mode(model);
     const panel = screen.getByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
-    const counter = screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "1 von 3");
+    const counter = screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "0 / 3 geprüft · 3 offen");
     expect(counter).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pflicht, 3 offen" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Pflicht,.*3 offen/ })).toHaveAttribute("aria-pressed", "true");
     // Das Original springt zur Fundstelle des Hauptnachweises.
     expect(onShow).toHaveBeenCalledWith(expect.objectContaining({ evidence_id: "s1" }));
     expect(await axe(container)).toHaveNoViolations();
@@ -119,15 +119,15 @@ describe("Geführte Prüfung nach Feldern", () => {
     await user.click(screen.getByRole("button", { name: "Bestätigen" }));
     expect(await screen.findByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
     expect(screen.getByText("Pflicht fertig – jetzt Optional")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Optional, 2 offen" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "Pflicht, alle entschieden" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^Optional,.*2 offen/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Pflicht, alle entschieden/ })).toHaveAttribute("aria-pressed", "false");
     expect(onShow).toHaveBeenCalled();
   });
 
   it("die Stufe ist zugleich Filter: Klick, Tasten 1 und 2 wechseln und springen zur ersten offenen Angabe", async () => {
     const user = userEvent.setup();
     mode(review([start, end, sla, email]));
-    await user.click(screen.getByRole("button", { name: "Optional, 2 offen" }));
+    await user.click(screen.getByRole("button", { name: /^Optional,.*2 offen/ }));
     expect(screen.getByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
     await user.keyboard("1");
     expect(screen.getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
@@ -145,13 +145,13 @@ describe("Geführte Prüfung nach Feldern", () => {
     expect(screen.queryByRole("button", { name: /freigeben/ })).not.toBeInTheDocument();
   });
 
-  it("Freigabe bei allem geklärt: „14 von 14 geklärt“ und „Vertrag freigeben“; gesperrt ohne Recht oder bei kritischer Angabe", () => {
+  it("Freigabe bei allem geklärt: beide Stufen erledigt und „Vertrag freigeben“; gesperrt ohne Recht oder bei kritischer Angabe", () => {
     const all = review([decided(start), decided(sla)]);
     const ok = { status: "in_review", unresolved_count: 0, critical_unreviewed_count: 0 } as unknown as ContractDetailResponse["contract_review"];
     const view = mode(all, { contractReview: ok });
-    expect(screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "2 von 2 geklärt")).toBeInTheDocument();
+    // Alles geklärt: beide Stufenkarten melden „alle entschieden“.
+    expect(screen.getAllByRole("button", { name: /alle entschieden/ })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Vertrag freigeben" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pflicht, alle entschieden" })).toBeInTheDocument();
     view.unmount();
     const noRight = mode(all, { contractReview: ok, canReview: false });
     expect(screen.queryByRole("button", { name: "Vertrag freigeben" })).not.toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("Geführte Prüfung nach Feldern", () => {
   it("startet bei der Angabe, von der aus geöffnet wurde (Karte → geführt weiter)", () => {
     mode(review([start, end, price]), { startKey: "costs.monthly_recurring" });
     expect(screen.getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
-    expect(screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "3 von 3")).toBeInTheDocument();
+    expect(screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "0 / 3 geprüft · 3 offen")).toBeInTheDocument();
   });
 
   it("Weitere Informationen sind nicht Teil des Ablaufs; ein Hinweis nennt sie nur, ohne Zwang", async () => {
@@ -197,7 +197,7 @@ describe("Geführte Prüfung nach Feldern", () => {
   it("alle Angaben: Schublade mit Stand je Angabe, Sprung zur gewählten", async () => {
     const user = userEvent.setup();
     mode(review([start, end, decided(price), sla, email, calc]));
-    await user.click(screen.getByRole("button", { name: "Alle Angaben" }));
+    await user.click(screen.getByRole("button", { name: "Übersicht" }));
     const drawer = screen.getByRole("dialog", { name: "Alle Angaben" });
     expect(within(drawer).getByRole("table", { name: "Wesentliche Angaben" })).toBeInTheDocument();
     expect(within(drawer).getByRole("table", { name: "Optionale Angaben" })).toBeInTheDocument();

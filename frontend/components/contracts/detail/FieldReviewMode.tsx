@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import ActionMenu from "@/components/ui/ActionMenu";
 import Drawer from "@/components/ui/Drawer";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
@@ -9,7 +8,6 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, ContractReviewDto, EvidenceRef, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
 import { decideField } from "@/lib/domain-api/contracts";
-import { startReextraction } from "@/lib/domain-api/reextraction";
 import { sectionByKey } from "@/lib/evidence";
 import {
   LEVEL_NAME, LEVEL_ORDER, STATUS_TONE, TIER_NAME, TIER_ORDER, fieldByKey, fieldsOf, groupConfirmable, levelCounts, levelFields, levelOf, nextDecisionInLevel, nextOpenLevel,
@@ -33,7 +31,7 @@ const NEXT = icon(<path d="M5 12h14M13 6l6 6-6 6" />);
  * aus dem Dokument sind kein Teil dieses Ablaufs.
  */
 export default function FieldReviewMode({
-  contractId, orgSlug, contractTitle, data, review, startKey, startTier, canReview, contractReview = null, viewer, onShow, onShowPage, onExit, onReload, onOpenAnalysis, onOpenFindings, canRecognize = false, onRecognizeStarted,
+  contractId, orgSlug, contractTitle, data, review, startKey, startTier, canReview, contractReview = null, viewer, onShow, onShowPage, onExit, onReload, onOpenAnalysis, onOpenFindings
 }: {
   contractId: string;
   orgSlug: string;
@@ -54,11 +52,7 @@ export default function FieldReviewMode({
   onOpenAnalysis?: () => void;
   /** Weitere Informationen aus dem Dokument ansehen (nicht erforderlich). */
   onOpenFindings?: () => void;
-  /** „Beleg neu erkennen“ erlaubt (Recht `contract.reanalyze`, kein Lauf aktiv). */
-  canRecognize?: boolean;
-  onRecognizeStarted?: () => void;
 }) {
-  const toast = useToast();
   // Lokaler Stand: die Antwort jeder Entscheidung gilt sofort; der Arbeitsplatz lädt parallel neu.
   const [live, setLive] = useState(review);
   useEffect(() => setLive(review), [review]);
@@ -85,7 +79,7 @@ export default function FieldReviewMode({
     const entry = current.evidence.find((item) => item.primary) ?? current.evidence.find((item) => !item.excluded);
     const ref = refOf(data, entry?.evidence_id);
     if (ref) onShow(ref);
-    headingRef.current?.focus();
+    headingRef.current?.focus({ preventScroll: true });
     // onShow wechselt nur die Ansicht; neu auslösen soll nur ein anderes Feld.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.fact_key, done]);
@@ -115,40 +109,6 @@ export default function FieldReviewMode({
     if (level === "pflicht" && other) { setLevel("optional"); setKey(other.fact_key); setDone(false); setAnnounce("Pflicht fertig – jetzt Optional"); return; }
     setDone(true);
     setAnnounce("Gespeichert · Stufe abgeschlossen");
-  }
-
-  /** Zitat des Hauptnachweises in die Zwischenablage. */
-  async function copyQuote() {
-    const entry = current?.evidence.find((item) => item.primary) ?? current?.evidence[0];
-    if (!entry?.snippet) return;
-    try {
-      await navigator.clipboard.writeText(entry.snippet);
-      toast("Zitat kopiert.", "success");
-    } catch {
-      toast("Das Zitat konnte nicht kopiert werden.", "error");
-    }
-  }
-
-  /** „Beleg neu erkennen“: die KI liest die Seite erneut – gezielt für dieses Feld, sonst die ganze Seite; Ergebnis als Vorschlag. */
-  async function recognizeAgain() {
-    if (!current) return;
-    const entry = current.evidence.find((item) => item.primary) ?? current.evidence[0];
-    const pageHint = entry?.page != null ? [entry.page] : [];
-    const keys = Array.from(new Set([current.fact_key, current.fact_key.split(".").slice(0, 2).join(".")]));
-    const attempts = [...keys.map((key) => ({ mode: "supplement" as const, fields: [key], page_hint: pageHint })), { mode: "full" as const, page_hint: pageHint }];
-    for (const attempt of attempts) {
-      try {
-        await startReextraction(orgSlug, contractId, attempt);
-        toast(`Erkennung gestartet${entry?.page != null ? ` (Seite ${entry.page})` : ""}. Das Ergebnis erscheint als Vorschlag unter „KI-Analyse“.`, "success");
-        onRecognizeStarted?.();
-        return;
-      } catch (err) {
-        if (!(err instanceof ApiError && err.status === 422)) {
-          toast(err instanceof ApiError && err.message ? err.message : "Die Erkennung konnte nicht gestartet werden.", "error");
-          return;
-        }
-      }
-    }
   }
 
   function switchLevel(next: ReviewLevel) {
@@ -185,40 +145,36 @@ export default function FieldReviewMode({
 
   return <section className="erm frm" aria-labelledby="erm-title">
     <header className="erm-bar pst-bar">
-      <button type="button" className="btn btn-ghost erm-icon-btn" onClick={onExit} aria-label="Zurück zum Vertrag">{BACK}</button>
-      <div className="pst-ttl"><h2 id="erm-title">Angaben prüfen</h2><span className="erm-file">{contractTitle ?? ""}</span></div>
-      <div className="pst-two" role="group" aria-label="Prüfstufe">
-        {LEVEL_ORDER.map((item) => {
-          const info = counts[item];
-          if (info.total === 0) return null;
-          const finished = info.open === 0;
-          const state = finished ? "is-done" : level === item ? "is-cur" : "is-todo";
-          return <button key={item} type="button" className={`pst-seg ${state}`} aria-pressed={level === item} onClick={() => switchLevel(item)}
-            aria-label={`${LEVEL_NAME[item]}, ${finished ? "alle entschieden" : `${info.open} offen`}`}>
-            {finished ? <span aria-hidden="true">{CHECK}</span> : null}{LEVEL_NAME[item]}
-            {finished ? null : <span className="pst-count" aria-hidden="true">{info.open}</span>}
-          </button>;
-        })}
+      <button type="button" className="btn btn-ghost erm-icon-btn pst-back" onClick={onExit} aria-label="Zurück zum Vertrag">{BACK}</button>
+      <div className="pst-ttl pst-cell"><h2 id="erm-title">Angaben prüfen</h2><span className="erm-file">{contractTitle ?? ""}</span></div>
+      <div className="pst-cell pst-stage">
+        {/* Stufe und Fortschritt in einem: zwei Karten, die aktive zeigt Zähler, Balken und Rest; die andere nur, wie viel offen ist. */}
+        <div className="pst-cards" role="group" aria-label="Prüfstufe">
+          {LEVEL_ORDER.map((item) => {
+            const info = counts[item];
+            if (info.total === 0) return null;
+            const finished = info.open === 0;
+            const selected = level === item;
+            return <button key={item} type="button" className={`pst-card${selected ? " is-cur" : ""}${finished ? " is-done" : ""}`} aria-pressed={selected} onClick={() => switchLevel(item)}
+              aria-label={finished ? `${LEVEL_NAME[item]}, alle entschieden` : `${LEVEL_NAME[item]}, ${info.decided} von ${info.total} geprüft, ${info.open} offen`}>
+              <span className="pst-card-top">
+                <span className="pst-card-title">{finished ? <span className="pst-card-check" aria-hidden="true">{CHECK}</span> : null}{LEVEL_NAME[item]}</span>
+                {selected
+                  ? <span className="pst-card-stat">{info.decided} / {info.total} geprüft{finished ? "" : ` · ${info.open} offen`}</span>
+                  : <span className="pst-card-pill">{finished ? "erledigt" : `${info.open} offen`}</span>}
+              </span>
+              {selected
+                ? <span className="pst-meter" aria-hidden="true"><i style={{ width: `${(info.decided / info.total) * 100}%` }} /></span>
+                : null}
+            </button>;
+          })}
+        </div>
       </div>
-      <div className="erm-progress pst-mid">
-        {allDone
-          ? <span><b>{allTotal}</b> von <b>{allTotal}</b> geklärt</span>
-          : done
-            ? <span><b>{counts[level].decided}</b> von <b>{counts[level].total}</b> entschieden</span>
-            : <>
-              <span><b>{Math.max(index, 0) + 1}</b> von <b>{stageFields.length}</b></span>
-              <span className="erm-seg" aria-hidden="true">{stageFields.map((field) => <i key={field.fact_key} className={field.fact_key === current?.fact_key ? "is-current" : field.decision_needed ? "is-open" : "is-confirmed"} />)}</span>
-              {following ? <span>Nächste: <b>{following.label}</b></span> : null}
-            </>}
+      <div className="pst-cell pst-actions">
+        {canRelease && allDone ? <button type="button" className="btn btn-primary" onClick={() => setReleaseOpen(true)}>Vertrag freigeben</button> : null}
+        {canRelease && !allDone && pflichtDone ? <button type="button" className="btn btn-ghost pst-link" onClick={() => setReleaseOpen(true)}>Jetzt freigeben</button> : null}
+        <button type="button" className="btn pst-overview" onClick={() => setDrawer(true)}>{LIST}Übersicht</button>
       </div>
-      <span className="pst-sp" />
-      {canRelease && allDone ? <button type="button" className="btn btn-primary" onClick={() => setReleaseOpen(true)}>Vertrag freigeben</button> : null}
-      {canRelease && !allDone && pflichtDone ? <button type="button" className="btn btn-ghost pst-link" onClick={() => setReleaseOpen(true)}>Jetzt freigeben</button> : null}
-      <button type="button" className="btn erm-icon-btn" onClick={() => setDrawer(true)} aria-label="Alle Angaben">{LIST}</button>
-      <ActionMenu items={[
-        { label: "Zitat kopieren", onSelect: () => void copyQuote(), disabled: !current?.evidence.some((item) => item.snippet) },
-        { label: "Beleg neu erkennen", onSelect: () => void recognizeAgain(), disabled: !canRecognize || !current },
-      ]} />
     </header>
 
     <div className="erm-body">

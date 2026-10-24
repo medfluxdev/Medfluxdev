@@ -1,4 +1,5 @@
 import type { SignalTone } from "@/components/ui/Signal";
+import { levelOf, type ReviewLevel } from "@/lib/field-review";
 import type { EvidenceRef, FactReviewStateDto, FieldReviewDto } from "@/lib/contract-detail-types";
 import type { EvidenceReviewItem } from "@/lib/domain-api/register";
 import { formatDate } from "@/lib/format";
@@ -127,6 +128,20 @@ function fieldStatusMap(review: FieldReviewDto): Map<string, EvidenceStatus> {
   return map;
 }
 
+const levelCache = new WeakMap<FieldReviewDto, Map<string, ReviewLevel>>();
+
+/** Prüfstufe eines Nachweises = Stufe seines Felds (Pflicht/Optional); Weitere Informationen und Unzugeordnetes sind Optional. */
+export function fieldEvidenceLevel(evidenceId: string, review: FieldReviewDto | null | undefined): ReviewLevel {
+  if (!review) return "optional";
+  let map = levelCache.get(review);
+  if (!map) {
+    map = new Map<string, ReviewLevel>();
+    for (const field of review.fields) for (const entry of field.evidence) if (entry.evidence_id) map.set(entry.evidence_id, levelOf(field.tier));
+    levelCache.set(review, map);
+  }
+  return map.get(evidenceId) ?? "optional";
+}
+
 /** Stand eines Nachweises aus der Feldprüfung; ohne Feldprüfung oder ohne Zuordnung bleibt er offen. */
 export function fieldEvidenceStatus(evidenceId: string, review: FieldReviewDto | null | undefined): EvidenceStatus {
   return review ? fieldStatusMap(review).get(evidenceId) ?? "open" : "open";
@@ -195,6 +210,7 @@ export function wordDiff(a: string, b: string): { a: DiffToken[]; b: DiffToken[]
 // ---------------------------------------------------------------------------- Zeilen und Runde
 
 export interface EvidenceRow {
+  level: ReviewLevel;
   ref: EvidenceRef;
   fact: FactReviewStateDto | undefined;
   number: number;
@@ -208,9 +224,10 @@ export function evidenceRows(
   numbers: Map<string, number>,
   factByEvidence: Map<string, FactReviewStateDto>,
   statusOf: (ref: EvidenceRef) => EvidenceStatus,
+  levelOfRef: (ref: EvidenceRef) => ReviewLevel = () => "optional",
 ): EvidenceRow[] {
   return ordered.map((ref, index) => {
     const fact = factByEvidence.get(ref.evidence_id);
-    return { ref, fact, number: numbers.get(ref.evidence_id) ?? index + 1, title: titleOf(ref, factByEvidence), section: sectionOf(ref, fact), status: statusOf(ref) };
+    return { ref, fact, number: numbers.get(ref.evidence_id) ?? index + 1, title: titleOf(ref, factByEvidence), section: sectionOf(ref, fact), status: statusOf(ref), level: levelOfRef(ref) };
   });
 }
