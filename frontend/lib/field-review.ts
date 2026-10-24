@@ -19,6 +19,47 @@ export const TIER_HINT: Record<FieldTier, string> = {
 };
 export const TIER_SHORT: Record<FieldTier, string> = { essential: "Wesentlich", important: "Weitere wichtige", optional: "Optional" };
 
+/**
+ * Zwei Prüfstufen für die geführte Prüfung: Pflicht und Optional. Die drei Wichtigkeitsstufen des Backends bleiben
+ * unverändert; hier werden sie nur für die Anzeige zusammengefasst. „Wichtig“ geht standardmäßig in Optional auf.
+ */
+export const WICHTIG_ALS_PFLICHT = false;
+export type ReviewLevel = "pflicht" | "optional";
+export const LEVEL_ORDER: ReviewLevel[] = ["pflicht", "optional"];
+export const LEVEL_NAME: Record<ReviewLevel, string> = { pflicht: "Pflicht", optional: "Optional" };
+
+export function levelOf(tier: FieldTier, wichtigAlsPflicht: boolean = WICHTIG_ALS_PFLICHT): ReviewLevel {
+  if (tier === "essential") return "pflicht";
+  if (tier === "important") return wichtigAlsPflicht ? "pflicht" : "optional";
+  return "optional";
+}
+
+export function levelFields(review: FieldReviewDto | null | undefined, level: ReviewLevel, wichtigAlsPflicht: boolean = WICHTIG_ALS_PFLICHT): FieldReviewFieldDto[] {
+  return fieldsOf(review, undefined).filter((field) => levelOf(field.tier, wichtigAlsPflicht) === level);
+}
+
+/** Zähler einer Stufe aus den Stufen des Backends (nicht aus den Feldern, damit Berechnetes und Nachweise nicht mitzählen). */
+export function levelCounts(review: FieldReviewDto | null | undefined, level: ReviewLevel, wichtigAlsPflicht: boolean = WICHTIG_ALS_PFLICHT): { total: number; open: number; decided: number } {
+  const stages = (review?.stages ?? []).filter((stage) => levelOf(stage.tier, wichtigAlsPflicht) === level);
+  return stages.reduce((sum, stage) => ({ total: sum.total + stage.total, open: sum.open + stage.open, decided: sum.decided + stage.decided }), { total: 0, open: 0, decided: 0 });
+}
+
+/** Die Stufe, in der die Prüfung weitergeht: Pflicht zuerst, dann Optional; null, wenn nichts mehr offen ist. */
+export function nextOpenLevel(review: FieldReviewDto | null | undefined, wichtigAlsPflicht: boolean = WICHTIG_ALS_PFLICHT): ReviewLevel | null {
+  return LEVEL_ORDER.find((level) => levelCounts(review, level, wichtigAlsPflicht).open > 0) ?? null;
+}
+
+/** Das nächste Feld mit offener Entscheidung in einer Stufe nach `afterKey` (reihum). */
+export function nextDecisionInLevel(review: FieldReviewDto | null | undefined, level: ReviewLevel, afterKey: string | null): FieldReviewFieldDto | null {
+  const all = levelFields(review, level);
+  const start = afterKey ? all.findIndex((field) => field.fact_key === afterKey) : -1;
+  for (let step = 1; step <= all.length; step += 1) {
+    const candidate = all[(start + step + all.length) % all.length];
+    if (candidate && candidate.decision_needed && candidate.fact_key !== afterKey) return candidate;
+  }
+  return null;
+}
+
 /** Ruhe & Signal: Farbe nur, wo eine Entscheidung wartet; Entschiedenes bleibt grün, Rest grau. */
 export const STATUS_TONE: Record<FieldStatus, SignalTone> = {
   decided: "done",

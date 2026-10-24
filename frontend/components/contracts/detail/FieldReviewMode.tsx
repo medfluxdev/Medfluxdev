@@ -7,14 +7,16 @@ import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
-import type { ContractDetailResponse, EvidenceRef, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
+import type { ContractDetailResponse, ContractReviewDto, EvidenceRef, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
 import { decideField } from "@/lib/domain-api/contracts";
 import { startReextraction } from "@/lib/domain-api/reextraction";
 import { sectionByKey } from "@/lib/evidence";
 import {
-  STATUS_TONE, TIER_HINT, TIER_NAME, TIER_ORDER, fieldByKey, fieldsOf, groupConfirmable, nextDecision, nextOpenTier, pluralize, refOf, stageOf,
+  LEVEL_NAME, LEVEL_ORDER, STATUS_TONE, TIER_NAME, TIER_ORDER, fieldByKey, fieldsOf, groupConfirmable, levelCounts, levelFields, levelOf, nextDecisionInLevel, nextOpenLevel,
+  pluralize, refOf, type ReviewLevel,
 } from "@/lib/field-review";
 import FieldDecision from "./FieldDecision";
+import { ReleaseDialog } from "./ReviewCompletion";
 import { SectionChip, icon } from "./ReviewParts";
 
 const BACK = icon(<path d="m15 6-6 6 6 6" />);
@@ -23,16 +25,15 @@ const CHECK = icon(<path d="M20 6 9 17l-5-5" />);
 const CHECK_CIRCLE = icon(<><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>);
 const PREV = icon(<path d="M19 12H5M11 6l-6 6 6 6" />);
 const NEXT = icon(<path d="M5 12h14M13 6l6 6-6 6" />);
-const FILE = icon(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6" /></>);
 
 /**
- * Geführte Prüfung nach Feldern: ein Feld nach dem anderen, wesentliche Angaben zuerst, danach die nächste Stufe.
+ * Geführte Prüfung nach Feldern: ein Feld nach dem anderen, zwei Stufen – Pflicht zuerst, danach Optional.
  * Links das Original an der Fundstelle, rechts die Entscheidung (`FieldDecision` – dieselbe wie in der Karte).
  * Was entschieden ist, kommt nicht wieder; Berechnetes wird nicht einzeln bestätigt; Weitere Informationen
  * aus dem Dokument sind kein Teil dieses Ablaufs.
  */
 export default function FieldReviewMode({
-  contractId, orgSlug, contractTitle, data, review, startKey, startTier, canReview, viewer, onShow, onShowPage, onExit, onReload, onOpenAnalysis, onOpenFindings, canRecognize = false, onRecognizeStarted,
+  contractId, orgSlug, contractTitle, data, review, startKey, startTier, canReview, contractReview = null, viewer, onShow, onShowPage, onExit, onReload, onOpenAnalysis, onOpenFindings, canRecognize = false, onRecognizeStarted,
 }: {
   contractId: string;
   orgSlug: string;
@@ -42,6 +43,8 @@ export default function FieldReviewMode({
   startKey: string | null;
   startTier?: FieldTier | null;
   canReview: boolean;
+  /** Stand der Vertragsprüfung (für „Jetzt freigeben“ / „Vertrag freigeben“); fehlt er, gibt es hier keine Freigabe. */
+  contractReview?: ContractReviewDto | null;
   /** Die Ansicht des Originals (vom Arbeitsplatz, damit Zoom/Seite erhalten bleiben). */
   viewer: ReactNode;
   onShow: (ref: EvidenceRef) => void;
@@ -61,18 +64,19 @@ export default function FieldReviewMode({
   useEffect(() => setLive(review), [review]);
 
   const startField = fieldByKey(review, startKey);
-  const [tier, setTier] = useState<FieldTier>(() => startField?.tier ?? startTier ?? nextOpenTier(review) ?? "essential");
-  const [key, setKey] = useState<string | null>(() => startField?.fact_key ?? nextDecision(review, startField?.tier ?? startTier ?? nextOpenTier(review) ?? "essential", null)?.fact_key ?? null);
-  const [done, setDone] = useState(() => !startField && !nextDecision(review, startTier ?? nextOpenTier(review) ?? "essential", null));
+  const initialLevel: ReviewLevel = startField ? levelOf(startField.tier) : startTier ? levelOf(startTier) : nextOpenLevel(review) ?? "pflicht";
+  const [level, setLevel] = useState<ReviewLevel>(initialLevel);
+  const [key, setKey] = useState<string | null>(() => startField?.fact_key ?? nextDecisionInLevel(review, initialLevel, null)?.fact_key ?? null);
+  const [done, setDone] = useState(() => !startField && !nextDecisionInLevel(review, initialLevel, null));
   const [drawer, setDrawer] = useState(false);
+  const [releaseOpen, setReleaseOpen] = useState(false);
   const [announce, setAnnounce] = useState("");
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   // Reihenfolge der Stufe: alle gelesenen Felder (Entschiedene bleiben zum Zurückblättern erreichbar).
-  const stageFields = useMemo(() => fieldsOf(live, tier).filter((field) => field.kind === "extracted" && (field.present || field.decision_needed || field.status === "absent")), [live, tier]);
+  const stageFields = useMemo(() => levelFields(live, level).filter((field) => field.kind === "extracted" && (field.present || field.decision_needed || field.status === "absent")), [live, level]);
   const current = !done ? fieldByKey(live, key) : undefined;
   const index = current ? stageFields.findIndex((field) => field.fact_key === current.fact_key) : -1;
-  const stage = stageOf(live, tier);
   const section = current ? sectionByKey(current.card) : null;
 
   // Im Original zeigen; Fokus auf die Überschrift (Screenreader hört das neue Feld).
@@ -104,9 +108,13 @@ export default function FieldReviewMode({
     if (!detail?.field_review) return;
     setLive(detail.field_review);
     // Entschieden oder zurückgestellt: weiter zum nächsten offenen Feld; ist keines mehr offen, ist die Stufe fertig.
-    const next = nextDecision(detail.field_review, tier, key);
-    if (next) { setKey(next.fact_key); setAnnounce(`Gespeichert · weiter zu ${next.label}`); }
-    else { setDone(true); setAnnounce("Gespeichert · Stufe abgeschlossen"); }
+    const next = nextDecisionInLevel(detail.field_review, level, key);
+    if (next) { setKey(next.fact_key); setAnnounce(`Gespeichert · weiter zu ${next.label}`); return; }
+    // Nach der letzten Pflichtangabe geht die Prüfung von selbst zu Optional (nur wenn dort etwas wartet).
+    const other = nextDecisionInLevel(detail.field_review, "optional", null);
+    if (level === "pflicht" && other) { setLevel("optional"); setKey(other.fact_key); setDone(false); setAnnounce("Pflicht fertig – jetzt Optional"); return; }
+    setDone(true);
+    setAnnounce("Gespeichert · Stufe abgeschlossen");
   }
 
   /** Zitat des Hauptnachweises in die Zwischenablage. */
@@ -143,9 +151,9 @@ export default function FieldReviewMode({
     }
   }
 
-  function switchTier(next: FieldTier) {
-    setTier(next);
-    const first = nextDecision(live, next, null);
+  function switchLevel(next: ReviewLevel) {
+    setLevel(next);
+    const first = nextDecisionInLevel(live, next, null);
     setKey(first?.fact_key ?? null);
     setDone(!first);
   }
@@ -157,6 +165,8 @@ export default function FieldReviewMode({
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) return;
+      if (event.key === "1") { event.preventDefault(); switchLevel("pflicht"); }
+      if (event.key === "2") { event.preventDefault(); switchLevel("optional"); }
       if (event.key === "ArrowRight") { event.preventDefault(); go(index + 1); }
       if (event.key === "ArrowLeft") { event.preventDefault(); if (done) setDone(false); else go(index - 1); }
     }
@@ -165,29 +175,46 @@ export default function FieldReviewMode({
   });
 
   const following = index >= 0 ? stageFields[index + 1] : undefined;
-  const total = stage?.total ?? stageFields.length;
-  const open = stage?.open ?? 0;
+  const counts = Object.fromEntries(LEVEL_ORDER.map((item) => [item, levelCounts(live, item)])) as Record<ReviewLevel, ReturnType<typeof levelCounts>>;
+  const allTotal = counts.pflicht.total + counts.optional.total;
+  const allOpen = counts.pflicht.open + counts.optional.open;
+  const allDone = allTotal > 0 && allOpen === 0;
+  const pflichtDone = counts.pflicht.total > 0 && counts.pflicht.open === 0;
+  // Freigabe: dieselbe Handlung wie „Review abschließen“ im Prüfkopf – nie bei offener wesentlicher Angabe oder bereits abgeschlossener Prüfung.
+  const canRelease = canReview && contractReview != null && contractReview.status !== "reviewed" && contractReview.critical_unreviewed_count === 0;
 
   return <section className="erm frm" aria-labelledby="erm-title">
-    <header className="erm-bar">
+    <header className="erm-bar pst-bar">
       <button type="button" className="btn btn-ghost erm-icon-btn" onClick={onExit} aria-label="Zurück zum Vertrag">{BACK}</button>
-      <h2 id="erm-title">{TIER_NAME[tier]} prüfen</h2>
-      <span className="erm-file">{FILE}{contractTitle ?? ""}</span>
-      <div className="erm-progress">
-        <span>{done ? `${total - open} von ${total} entschieden` : `Angabe ${Math.max(index, 0) + 1} von ${stageFields.length}`}</span>
-        <span className="erm-seg" aria-hidden="true">{stageFields.map((field) => <i key={field.fact_key} className={field.fact_key === current?.fact_key ? "is-current" : field.decision_needed ? "is-open" : "is-confirmed"} />)}</span>
-        <Signal tone={open ? "ai" : "done"} size="sm">{open ? `${pluralize(open, "Entscheidung", "Entscheidungen")} offen` : "Alles entschieden"}</Signal>
-      </div>
-      <div className="frm-tiers" role="group" aria-label="Stufe wählen">
-        {TIER_ORDER.map((item) => {
-          const info = stageOf(live, item);
-          if (!info || info.total === 0) return null;
-          return <button key={item} type="button" className="btn btn-sm" aria-pressed={tier === item} onClick={() => switchTier(item)}>
-            {TIER_NAME[item]}<span className="evt-count" aria-hidden="true">{info.open}</span>
+      <div className="pst-ttl"><h2 id="erm-title">Angaben prüfen</h2><span className="erm-file">{contractTitle ?? ""}</span></div>
+      <div className="pst-two" role="group" aria-label="Prüfstufe">
+        {LEVEL_ORDER.map((item) => {
+          const info = counts[item];
+          if (info.total === 0) return null;
+          const finished = info.open === 0;
+          const state = finished ? "is-done" : level === item ? "is-cur" : "is-todo";
+          return <button key={item} type="button" className={`pst-seg ${state}`} aria-pressed={level === item} onClick={() => switchLevel(item)}
+            aria-label={`${LEVEL_NAME[item]}, ${finished ? "alle entschieden" : `${info.open} offen`}`}>
+            {finished ? <span aria-hidden="true">{CHECK}</span> : null}{LEVEL_NAME[item]}
+            {finished ? null : <span className="pst-count" aria-hidden="true">{info.open}</span>}
           </button>;
         })}
       </div>
-      <button type="button" className="btn erm-all" onClick={() => setDrawer(true)}>{LIST}Alle Angaben</button>
+      <div className="erm-progress pst-mid">
+        {allDone
+          ? <span><b>{allTotal}</b> von <b>{allTotal}</b> geklärt</span>
+          : done
+            ? <span><b>{counts[level].decided}</b> von <b>{counts[level].total}</b> entschieden</span>
+            : <>
+              <span><b>{Math.max(index, 0) + 1}</b> von <b>{stageFields.length}</b></span>
+              <span className="erm-seg" aria-hidden="true">{stageFields.map((field) => <i key={field.fact_key} className={field.fact_key === current?.fact_key ? "is-current" : field.decision_needed ? "is-open" : "is-confirmed"} />)}</span>
+              {following ? <span>Nächste: <b>{following.label}</b></span> : null}
+            </>}
+      </div>
+      <span className="pst-sp" />
+      {canRelease && allDone ? <button type="button" className="btn btn-primary" onClick={() => setReleaseOpen(true)}>Vertrag freigeben</button> : null}
+      {canRelease && !allDone && pflichtDone ? <button type="button" className="btn btn-ghost pst-link" onClick={() => setReleaseOpen(true)}>Jetzt freigeben</button> : null}
+      <button type="button" className="btn erm-icon-btn" onClick={() => setDrawer(true)} aria-label="Alle Angaben">{LIST}</button>
       <ActionMenu items={[
         { label: "Zitat kopieren", onSelect: () => void copyQuote(), disabled: !current?.evidence.some((item) => item.snippet) },
         { label: "Beleg neu erkennen", onSelect: () => void recognizeAgain(), disabled: !canRecognize || !current },
@@ -203,7 +230,7 @@ export default function FieldReviewMode({
       <div className="erm-panel" role="region" aria-label="Aktuelle Angabe">
         <p className="visually-hidden" aria-live="polite">{announce}</p>
         {done || !current
-          ? <StageSummary headingRef={headingRef} review={live} tier={tier} onSwitch={switchTier} onExit={onExit} onShowAll={() => setDrawer(true)} onOpenFindings={onOpenFindings} />
+          ? <StageSummary headingRef={headingRef} review={live} level={level} onSwitch={switchLevel} onExit={onExit} onShowAll={() => setDrawer(true)} onOpenFindings={onOpenFindings} />
           : <>
             <div className="erm-head">
               <div className="erm-head-top">
@@ -228,8 +255,9 @@ export default function FieldReviewMode({
     </div>
 
     <Drawer open={drawer} title="Alle Angaben" onClose={() => setDrawer(false)} wide>
-      <FieldList review={live} currentKey={current?.fact_key ?? null} onPick={(field) => { setDrawer(false); setTier(field.tier); setKey(field.fact_key); setDone(false); }} />
+      <FieldList review={live} currentKey={current?.fact_key ?? null} onPick={(field) => { setDrawer(false); setLevel(levelOf(field.tier)); setKey(field.fact_key); setDone(false); }} />
     </Drawer>
+    {contractReview ? <ReleaseDialog open={releaseOpen} onClose={() => setReleaseOpen(false)} contractId={contractId} orgSlug={orgSlug} unresolved={contractReview.unresolved_count} onDone={onReload} /> : null}
   </section>;
 }
 
@@ -283,33 +311,37 @@ function GroupConfirm({ contractId, orgSlug, review, current, onDone }: {
 }
 
 /** Ende einer Stufe: sagt ehrlich, was entschieden ist und was noch wartet – nie „alles verifiziert“. */
-function StageSummary({ headingRef, review, tier, onSwitch, onExit, onShowAll, onOpenFindings }: {
-  headingRef: React.RefObject<HTMLHeadingElement>; review: FieldReviewDto; tier: FieldTier; onSwitch: (tier: FieldTier) => void;
+function StageSummary({ headingRef, review, level, onSwitch, onExit, onShowAll, onOpenFindings }: {
+  headingRef: React.RefObject<HTMLHeadingElement>; review: FieldReviewDto; level: ReviewLevel; onSwitch: (level: ReviewLevel) => void;
   onExit: () => void; onShowAll: () => void; onOpenFindings?: () => void;
 }) {
-  const stage = stageOf(review, tier);
-  const open = stage?.open ?? 0;
-  const essentialDone = review.essential_complete;
-  const others = TIER_ORDER.filter((item) => item !== tier).map((item) => ({ tier: item, stage: stageOf(review, item) })).filter((entry) => entry.stage && entry.stage.open > 0);
-  const title = open > 0 ? "Stufe beendet" : tier === "essential" ? "Wesentliche Prüfung abgeschlossen" : `${TIER_NAME[tier]}: alles entschieden`;
+  const stage = levelCounts(review, level);
+  const inLevel = review.stages.filter((item) => levelOf(item.tier) === level);
+  const deferred = inLevel.reduce((sum, item) => sum + item.deferred, 0);
+  const missing = inLevel.reduce((sum, item) => sum + item.missing, 0);
+  const open = stage.open;
+  const pflichtOpen = levelCounts(review, "pflicht").open;
+  const otherLevel: ReviewLevel = level === "pflicht" ? "optional" : "pflicht";
+  const other = levelCounts(review, otherLevel);
+  const title = open > 0 ? "Stufe beendet" : level === "pflicht" ? "Pflicht abgeschlossen" : "Optional: alles entschieden";
   return <div className="erm-done">
     <p className="erm-done-eyebrow">Prüfung</p>
     <h3 ref={headingRef} tabIndex={-1} className="erm-done-title">
       <span className={`erm-done-mark${open ? " is-open" : ""}`} aria-hidden="true">{open ? LIST : CHECK}</span>{title}
     </h3>
     <p className="erm-done-lead">
-      {stage ? `${stage.decided} von ${stage.total} Angaben entschieden${stage.deferred ? `, ${stage.deferred} zurückgestellt` : ""}${stage.missing ? `, ${stage.missing} nicht gefunden` : ""}.` : "Keine Angaben in dieser Stufe."}
+      {stage.total ? `${stage.decided} von ${stage.total} Angaben entschieden${deferred ? `, ${deferred} zurückgestellt` : ""}${missing ? `, ${missing} nicht gefunden` : ""}.` : "Keine Angaben in dieser Stufe."}
       {" "}Das heißt nicht, dass jede Angabe des Vertrags verifiziert ist.
     </p>
     {open > 0 ? <InlineAlert tone="info">{pluralize(open, "Entscheidung wartet", "Entscheidungen warten")} noch – sie bleiben unter „Offene Punkte“ sichtbar.</InlineAlert>
       : <p className="erm-done-clear">{CHECK_CIRCLE}Keine offene Entscheidung in dieser Stufe</p>}
-    {tier !== "essential" && !essentialDone ? <InlineAlert tone="warning">Wesentliche Angaben sind noch offen.</InlineAlert> : null}
+    {level === "optional" && pflichtOpen > 0 ? <InlineAlert tone="warning">Pflichtangaben sind noch offen.</InlineAlert> : null}
     {review.findings_open > 0 ? <p className="fd-muted">{pluralize(review.findings_open, "Weitere Information", "Weitere Informationen")} aus dem Dokument liegen zur Ansicht bereit – Sie müssen dazu nichts entscheiden.{onOpenFindings ? <> <button type="button" className="rg-link" onClick={onOpenFindings}>Ansehen</button></> : null}</p> : null}
     <div className="erm-done-actions">
-      {open > 0 ? <button type="button" className="btn btn-primary" onClick={() => onSwitch(tier)}>Offene Entscheidungen prüfen</button> : null}
-      {others.map((entry) => <button key={entry.tier} type="button" className={open > 0 || entry.tier === "optional" ? "btn" : "btn btn-primary"} onClick={() => onSwitch(entry.tier)}>
-        {TIER_NAME[entry.tier]} prüfen · {entry.stage!.open}
-      </button>)}
+      {open > 0 ? <button type="button" className="btn btn-primary" onClick={() => onSwitch(level)}>Offene Entscheidungen prüfen</button> : null}
+      {other.open > 0 ? <button type="button" className={open > 0 || otherLevel === "optional" ? "btn" : "btn btn-primary"} onClick={() => onSwitch(otherLevel)}>
+        {LEVEL_NAME[otherLevel]} prüfen · {other.open}
+      </button> : null}
       <button type="button" className="btn" onClick={onShowAll}>Alle Angaben ansehen</button>
       <button type="button" className="btn" onClick={onExit}>Vertrag ansehen{NEXT}</button>
     </div>

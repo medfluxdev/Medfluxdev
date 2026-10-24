@@ -987,6 +987,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             startKey={reviewMode.startKey}
             startTier={reviewMode.tier}
             canReview={canReviewFacts}
+            contractReview={data.contract_review}
             onShow={(ref) => openEvidence(ref, "evidence")}
             onShowPage={showPageQuote}
             onExit={() => setReviewMode(null)}

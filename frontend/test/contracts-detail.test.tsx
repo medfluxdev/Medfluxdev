@@ -441,7 +441,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     await userEvent.click(within(screen.getByRole("table", { name: "Nachweise dieses Vertrags" })).getByRole("button", { name: /start date/i }));
     const panel = await screen.findByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Wesentliche Angaben prüfen" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Angaben prüfen" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("von 3", { exact: false })).toHaveTextContent("Seite 2 von 3"));
     // Aktueller Nachweis: Rahmen mit derselben Nummer wie in der Tabelle.
     await waitFor(() => expect(document.querySelector(".pdf-frame.is-current")).toHaveTextContent("1"));

@@ -1542,3 +1542,24 @@ li.is-open .frv-chevron{transform: rotate(180deg)}
 .frv-bulk-svg{width: 24px;height: 24px;fill: none;stroke: currentColor;stroke-width: 2;stroke-linecap: round;stroke-linejoin: round}
 .frv-bulk-list{display: grid;gap: var(--space-2);margin: 0 0 var(--space-3);padding: 0;list-style: none}
 .frv-bulk-list label{display: flex;align-items: flex-start;gap: var(--space-2);cursor: pointer}
+
+/* Prüfstufen: Kopf der geführten Prüfung – ein Schalter mit zwei Stufen (Pflicht | Optional), zugleich Anzeige und Filter */
+.pst-bar{flex-wrap: nowrap;gap: var(--space-3)}
+.pst-ttl{display: grid;min-width: 0}
+.pst-ttl .erm-file{font-size: var(--text-caption)}
+.pst-sp{flex: 1}
+.pst-two{display: inline-flex;margin-left: var(--space-2)}
+.pst-seg{display: inline-flex;align-items: center;gap: 7px;min-height: 36px;padding: 0 14px;margin-right: -1px;border: 1px solid var(--color-border);background: var(--color-surface);color: var(--color-text-muted);font: inherit;font-size: var(--text-small);font-weight: var(--weight-medium, 500);cursor: pointer}
+.pst-seg:first-child{border-radius: 18px 0 0 18px}
+.pst-seg:last-child{border-radius: 0 18px 18px 0;margin-right: 0}
+.pst-seg:only-child{border-radius: 18px}
+.pst-count{padding: 1px 7px;border: 1px solid var(--color-border-subtle);border-radius: 9px;background: var(--color-surface-subtle);font-size: var(--text-caption);font-variant-numeric: tabular-nums}
+.pst-seg.is-cur{z-index: var(--z-raised);border-color: var(--color-accent);background: var(--color-accent);color: var(--color-accent-contrast);font-weight: var(--weight-semibold)}
+.pst-seg.is-cur .pst-count{border-color: transparent;background: transparent;color: inherit;box-shadow: inset 0 0 0 1px currentColor}
+.pst-seg.is-done{border-color: var(--color-success-border);background: var(--color-success-bg);color: var(--color-success)}
+.pst-seg.is-done .erm-icon{width: 14px;height: 14px}
+.pst-mid{margin-left: 0}
+.pst-mid b{color: var(--color-text);font-variant-numeric: tabular-nums}
+.pst-link{border-color: transparent;color: var(--color-link)}
+@media (max-width: 900px){.pst-bar{flex-wrap: wrap}.pst-sp{display: none}.pst-mid{flex-basis: 100%}}
+@media (forced-colors: active){.pst-seg.is-cur{forced-color-adjust: none;background: Highlight;color: HighlightText}}

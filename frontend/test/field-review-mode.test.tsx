@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import FieldReviewMode from "@/components/contracts/detail/FieldReviewMode";
 import FieldReviewOverview from "@/components/contracts/detail/FieldReviewOverview";
 import type { ContractDetailResponse, FieldReviewDto } from "@/lib/contract-detail-types";
-import { decisionFields, groupConfirmable, nextDecision, nextOpenTier, reviewHeadline } from "@/lib/field-review";
+import { WICHTIG_ALS_PFLICHT, decisionFields, groupConfirmable, levelCounts, levelOf, nextDecision, nextOpenLevel, nextOpenTier, reviewHeadline } from "@/lib/field-review";
 import { candidate, evidence, field, finding, review, twoAgreeing } from "./fixtures/field-review";
 
 const api = vi.hoisted(() => ({ decideField: vi.fn(), setFieldEvidence: vi.fn(), decideFinding: vi.fn() }));
@@ -70,6 +70,23 @@ describe("Hilfen der Feldprüfung", () => {
   });
 });
 
+describe("Zwei Prüfstufen: Pflicht und Optional", () => {
+  it("drei Wichtigkeitsstufen → zwei Prüfstufen; „Wichtig“ geht standardmäßig in Optional auf, einstellbar in Pflicht", () => {
+    expect(WICHTIG_ALS_PFLICHT).toBe(false);
+    expect(levelOf("essential")).toBe("pflicht");
+    expect(levelOf("optional")).toBe("optional");
+    expect(levelOf("important")).toBe("optional");
+    expect(levelOf("important", true)).toBe("pflicht");
+    const model = review([start, end, sla, email, calc]);
+    expect(levelCounts(model, "pflicht")).toEqual({ total: 2, open: 2, decided: 0 });
+    expect(levelCounts(model, "optional")).toEqual({ total: 2, open: 2, decided: 0 });
+    expect(levelCounts(model, "pflicht", true)).toEqual({ total: 3, open: 3, decided: 0 });
+    expect(nextOpenLevel(model)).toBe("pflicht");
+    expect(nextOpenLevel(review([decided(start), sla]))).toBe("optional");
+    expect(nextOpenLevel(review([decided(start), decided(sla)]))).toBeNull();
+  });
+});
+
 describe("Geführte Prüfung nach Feldern", () => {
   it("geht wesentliche Felder nacheinander durch, zeigt die Fundstelle im Original und kennt nur Felder – nicht Nachweise", async () => {
     const user = userEvent.setup();
@@ -77,8 +94,9 @@ describe("Geführte Prüfung nach Feldern", () => {
     const { onShow, onReload, container } = mode(model);
     const panel = screen.getByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
-    expect(screen.getByText("Angabe 1 von 3")).toBeInTheDocument();
-    expect(screen.getByText("3 Entscheidungen offen")).toBeInTheDocument();
+    const counter = screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "1 von 3");
+    expect(counter).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pflicht, 3 offen" })).toHaveAttribute("aria-pressed", "true");
     // Das Original springt zur Fundstelle des Hauptnachweises.
     expect(onShow).toHaveBeenCalledWith(expect.objectContaining({ evidence_id: "s1" }));
     expect(await axe(container)).toHaveNoViolations();
@@ -92,26 +110,60 @@ describe("Geführte Prüfung nach Feldern", () => {
     expect(screen.getByText("Gespeichert · weiter zu Vertragsende")).toBeInTheDocument();
   });
 
-  it("am Ende der wesentlichen Stufe: „Wesentliche Prüfung abgeschlossen“, nächste Stufe angeboten, kein Anspruch auf Vollständigkeit", async () => {
+  it("nach der letzten Pflichtangabe geht die Prüfung von selbst zu Optional; „Wichtig“ zählt dort mit", async () => {
     const user = userEvent.setup();
     const model = review([start, sla, email]);
     const { onShow } = mode(model);
+    expect(screen.getByRole("heading", { name: "Angaben prüfen" })).toBeInTheDocument();
     api.decideField.mockResolvedValue(detailAfter(review([decided(start), sla, email])));
     await user.click(screen.getByRole("button", { name: "Bestätigen" }));
-    const title = await screen.findByRole("heading", { name: "Wesentliche Prüfung abgeschlossen" });
-    expect(title).toBeInTheDocument();
-    expect(screen.getByText(/Das heißt nicht, dass jede Angabe des Vertrags verifiziert ist/)).toBeInTheDocument();
-    // Die nächste Stufe wird angeboten, nicht erzwungen.
-    await user.click(screen.getByRole("button", { name: "Weitere wichtige Angaben prüfen · 1" }));
     expect(await screen.findByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Weitere wichtige Angaben prüfen" })).toBeInTheDocument();
+    expect(screen.getByText("Pflicht fertig – jetzt Optional")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Optional, 2 offen" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Pflicht, alle entschieden" })).toHaveAttribute("aria-pressed", "false");
     expect(onShow).toHaveBeenCalled();
+  });
+
+  it("die Stufe ist zugleich Filter: Klick, Tasten 1 und 2 wechseln und springen zur ersten offenen Angabe", async () => {
+    const user = userEvent.setup();
+    mode(review([start, end, sla, email]));
+    await user.click(screen.getByRole("button", { name: "Optional, 2 offen" }));
+    expect(screen.getByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
+    await user.keyboard("1");
+    expect(screen.getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
+    await user.keyboard("2");
+    expect(screen.getByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
+  });
+
+  it("Freigabe: „Jetzt freigeben“ erst wenn Pflicht fertig und Optional offen; „Vertrag freigeben“ erst wenn alles geklärt; nie ohne Recht oder bei offener kritischer Angabe", () => {
+    const base = { status: "in_review", unresolved_count: 2, critical_unreviewed_count: 0 } as unknown as ContractDetailResponse["contract_review"];
+    const view = mode(review([decided(start), sla, email]), { contractReview: base });
+    expect(screen.getByRole("button", { name: "Jetzt freigeben" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Vertrag freigeben" })).not.toBeInTheDocument();
+    view.unmount();
+    mode(review([start, sla, email]), { contractReview: base });
+    expect(screen.queryByRole("button", { name: /freigeben/ })).not.toBeInTheDocument();
+  });
+
+  it("Freigabe bei allem geklärt: „14 von 14 geklärt“ und „Vertrag freigeben“; gesperrt ohne Recht oder bei kritischer Angabe", () => {
+    const all = review([decided(start), decided(sla)]);
+    const ok = { status: "in_review", unresolved_count: 0, critical_unreviewed_count: 0 } as unknown as ContractDetailResponse["contract_review"];
+    const view = mode(all, { contractReview: ok });
+    expect(screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "2 von 2 geklärt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vertrag freigeben" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pflicht, alle entschieden" })).toBeInTheDocument();
+    view.unmount();
+    const noRight = mode(all, { contractReview: ok, canReview: false });
+    expect(screen.queryByRole("button", { name: "Vertrag freigeben" })).not.toBeInTheDocument();
+    noRight.unmount();
+    mode(all, { contractReview: { ...ok, critical_unreviewed_count: 1 } as typeof ok });
+    expect(screen.queryByRole("button", { name: "Vertrag freigeben" })).not.toBeInTheDocument();
   });
 
   it("startet bei der Angabe, von der aus geöffnet wurde (Karte → geführt weiter)", () => {
     mode(review([start, end, price]), { startKey: "costs.monthly_recurring" });
     expect(screen.getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
-    expect(screen.getByText("Angabe 3 von 3")).toBeInTheDocument();
+    expect(screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "3 von 3")).toBeInTheDocument();
   });
 
   it("Weitere Informationen sind nicht Teil des Ablaufs; ein Hinweis nennt sie nur, ohne Zwang", async () => {
@@ -119,7 +171,7 @@ describe("Geführte Prüfung nach Feldern", () => {
     const onOpenFindings = vi.fn();
     const model = review([decided(start)], { findings: [finding(), finding({ finding_key: "evidence.x", label: "Sonstiges", consequential: false })], findings_open: 2 });
     mode(model, { onOpenFindings });
-    expect(screen.getByRole("heading", { name: "Wesentliche Prüfung abgeschlossen" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Pflicht abgeschlossen" })).toBeInTheDocument();
     expect(screen.getByText(/2 Weitere Informationen aus dem Dokument liegen zur Ansicht bereit – Sie müssen dazu nichts entscheiden/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Ansehen" }));
     expect(onOpenFindings).toHaveBeenCalled();

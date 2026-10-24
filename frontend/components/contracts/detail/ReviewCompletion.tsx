@@ -33,10 +33,6 @@ export default function ReviewHeader({ contractId, orgSlug, review, fallback, ca
   const toast = useToast();
   const { account, role } = useAuth();
   const [dialog, setDialog] = useState(false);
-  const [ack, setAck] = useState(false);
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const total = review?.relevant_count ?? fallback.total;
   const decided = review?.reviewed_count ?? fallback.decided;
@@ -46,32 +42,21 @@ export default function ReviewHeader({ contractId, orgSlug, review, fallback, ca
   const blocking = review?.critical_unreviewed_count ?? 0;
   const unresolved = review?.unresolved_count ?? open;
   const canFinish = canReview && !reviewed && blocking === 0;
-  const blocked = unresolved > 0 && (!ack || !note.trim());
 
-  async function post(path: "start" | "complete") {
-    setBusy(true);
-    setError(null);
+  async function reopen() {
     try {
-      await apiPost(`/api/contracts/${encodeURIComponent(contractId)}/review/${path}?organization_slug=${encodeURIComponent(orgSlug)}`, {
-        note: path === "complete" ? note : null,
-        acknowledge_unreviewed: path === "complete" ? ack : false,
-      });
-      toast(path === "complete" ? "Review abgeschlossen." : "Review erneut geöffnet.", "success");
-      setDialog(false);
-      setNote("");
-      setAck(false);
+      await apiPost(`/api/contracts/${encodeURIComponent(contractId)}/review/start?organization_slug=${encodeURIComponent(orgSlug)}`, { note: null, acknowledge_unreviewed: false });
+      toast("Review erneut geöffnet.", "success");
       onReload();
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "Die Review-Aktion konnte nicht gespeichert werden.");
-    } finally {
-      setBusy(false);
+      toast(err instanceof Error && err.message ? err.message : "Die Review-Aktion konnte nicht gespeichert werden.", "error");
     }
   }
 
   const menu = [
     ...(onGuided ? [{ label: "Im Dokument prüfen", onSelect: onGuided }] : []),
     ...(canFinish ? [{ label: "Review abschließen …", onSelect: () => setDialog(true) }] : []),
-    ...(canReview && (reviewed || review?.status === "changed_after_review") ? [{ label: "Review erneut öffnen", onSelect: () => void post("start") }] : []),
+    ...(canReview && (reviewed || review?.status === "changed_after_review") ? [{ label: "Review erneut öffnen", onSelect: () => void reopen() }] : []),
   ];
 
   return <div className="frv-head">
@@ -98,15 +83,49 @@ export default function ReviewHeader({ contractId, orgSlug, review, fallback, ca
       </div> : null}
     </div>
 
-    <Dialog open={dialog} title="Review abschließen" onClose={() => setDialog(false)}
-      description={unresolved > 0 ? `${pluralize(unresolved, "Angabe ist", "Angaben sind")} noch ungeprüft. Zum Abschluss bitte ausdrücklich akzeptieren und kurz begründen.` : "Alle Angaben sind entschieden."}
-      actions={<><button type="button" className="btn" onClick={() => setDialog(false)}>Abbrechen</button>
-        <button type="button" className="btn btn-primary" disabled={busy || blocked} onClick={() => void post("complete")}>Review abschließen</button></>}>
-      {unresolved > 0 ? <label className="frv-ack"><input type="checkbox" checked={ack} onChange={(event) => setAck(event.target.checked)} /> Verbleibende nicht-wesentliche ungeprüfte Angaben akzeptieren</label> : null}
-      <label className="erm-field">Abschluss-Notiz{unresolved > 0 ? " (erforderlich)" : " (optional)"}
-        <input value={note} onChange={(event) => setNote(event.target.value)} />
-      </label>
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-    </Dialog>
+    <ReleaseDialog open={dialog} onClose={() => setDialog(false)} contractId={contractId} orgSlug={orgSlug} unresolved={unresolved} onDone={onReload} />
   </div>;
+}
+
+/**
+ * Abschluss der Vertragsprüfung („Review abschließen“): Notiz und, solange Angaben ungeprüft sind, die ausdrückliche Annahme.
+ * Eine Stelle für Prüfkopf und geführte Prüfung („Jetzt freigeben“ / „Vertrag freigeben“).
+ */
+export function ReleaseDialog({ open, onClose, contractId, orgSlug, unresolved, onDone }: {
+  open: boolean; onClose: () => void; contractId: string; orgSlug: string; unresolved: number; onDone: () => void;
+}) {
+  const toast = useToast();
+  const [ack, setAck] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const blocked = unresolved > 0 && (!ack || !note.trim());
+
+  async function complete() {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiPost(`/api/contracts/${encodeURIComponent(contractId)}/review/complete?organization_slug=${encodeURIComponent(orgSlug)}`, { note, acknowledge_unreviewed: ack });
+      toast("Review abgeschlossen.", "success");
+      onClose();
+      setNote("");
+      setAck(false);
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "Die Review-Aktion konnte nicht gespeichert werden.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <Dialog open={open} title="Review abschließen" onClose={onClose}
+    description={unresolved > 0 ? `${pluralize(unresolved, "Angabe ist", "Angaben sind")} noch ungeprüft. Zum Abschluss bitte ausdrücklich akzeptieren und kurz begründen.` : "Alle Angaben sind entschieden."}
+    actions={<><button type="button" className="btn" onClick={onClose}>Abbrechen</button>
+      <button type="button" className="btn btn-primary" disabled={busy || blocked} onClick={() => void complete()}>Review abschließen</button></>}>
+    {unresolved > 0 ? <label className="frv-ack"><input type="checkbox" checked={ack} onChange={(event) => setAck(event.target.checked)} /> Verbleibende nicht-wesentliche ungeprüfte Angaben akzeptieren</label> : null}
+    <label className="erm-field">Abschluss-Notiz{unresolved > 0 ? " (erforderlich)" : " (optional)"}
+      <input value={note} onChange={(event) => setNote(event.target.value)} />
+    </label>
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+  </Dialog>;
 }
