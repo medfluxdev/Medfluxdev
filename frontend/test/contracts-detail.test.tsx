@@ -491,7 +491,7 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     const panel = await screen.findByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
     // Ungeklärte Fundstelle wird nicht als belegt ausgegeben.
-    expect(within(panel).getByText("Fundstelle nicht aufgelöst", { selector: ".signal-label" })).toBeInTheDocument();
+    expect(within(panel).getByText(/Die Fundstelle konnte nicht aufgelöst werden/)).toBeInTheDocument();
     expect(document.querySelector(".pdf-frame.is-current")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Zurück zum Vertrag" }));
     expect(screen.queryByRole("region", { name: "Aktuelle Angabe" })).not.toBeInTheDocument();

@@ -103,7 +103,7 @@ describe("Geführte Prüfung nach Feldern", () => {
 
     // Bestätigen speichert, die Antwort zeigt das Feld als entschieden → weiter zum nächsten offenen Feld.
     api.decideField.mockResolvedValue(detailAfter(review([decided(start), end, price, sla])));
-    await user.click(within(panel).getByRole("button", { name: "Bestätigen" }));
+    await user.click(within(panel).getByRole("button", { name: /^Bestätigen/ }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "dates.start_date", decision: "keep" }));
     expect(onReload).toHaveBeenCalled();
     expect(await screen.findByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("Geführte Prüfung nach Feldern", () => {
     const { onShow } = mode(model);
     expect(screen.getByRole("heading", { name: "Angaben prüfen" })).toBeInTheDocument();
     api.decideField.mockResolvedValue(detailAfter(review([decided(start), sla, email])));
-    await user.click(screen.getByRole("button", { name: "Bestätigen" }));
+    await user.click(screen.getByRole("button", { name: /^Bestätigen/ }));
     expect(await screen.findByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
     expect(screen.getByText("Pflicht fertig – jetzt Optional")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Optional,.*2 offen/ })).toHaveAttribute("aria-pressed", "true");
@@ -337,7 +337,7 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     const row = screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false });
     await user.click(row);
     expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: true })).toBeInTheDocument();
-    expect(within(row.closest("li")!).getByRole("button", { name: "Bestätigen" })).toBeInTheDocument();
+    expect(within(row.closest("li")!).getByRole("button", { name: /^Bestätigen/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Vertragsende/, expanded: false }));
     expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false })).toBeInTheDocument();
     await user.click(within(screen.getByRole("button", { name: /Vertragsende/, expanded: true }).closest("li")!).getByRole("button", { name: "Im Dokument weiter prüfen →" }));

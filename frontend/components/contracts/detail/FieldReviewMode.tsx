@@ -8,25 +8,23 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, ContractReviewDto, EvidenceRef, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
 import { decideField } from "@/lib/domain-api/contracts";
-import { sectionByKey } from "@/lib/evidence";
 import {
   LEVEL_NAME, LEVEL_ORDER, STATUS_TONE, TIER_NAME, TIER_ORDER, fieldByKey, fieldsOf, groupConfirmable, levelCounts, levelFields, levelOf, nextDecisionInLevel, nextOpenLevel,
   pluralize, refOf, type ReviewLevel,
 } from "@/lib/field-review";
-import FieldDecision from "./FieldDecision";
+import FieldValuePanel from "./FieldValuePanel";
 import { ReleaseDialog } from "./ReviewCompletion";
-import { SectionChip, icon } from "./ReviewParts";
+import { icon } from "./ReviewParts";
 
 const BACK = icon(<path d="m15 6-6 6 6 6" />);
 const LIST = icon(<path d="M8 6h13M8 12h13M8 18h13M3 6h.5M3 12h.5M3 18h.5" />);
 const CHECK = icon(<path d="M20 6 9 17l-5-5" />);
 const CHECK_CIRCLE = icon(<><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>);
-const PREV = icon(<path d="M19 12H5M11 6l-6 6 6 6" />);
 const NEXT = icon(<path d="M5 12h14M13 6l6 6-6 6" />);
 
 /**
  * Geführte Prüfung nach Feldern: ein Feld nach dem anderen, zwei Stufen – Pflicht zuerst, danach Optional.
- * Links das Original an der Fundstelle, rechts die Entscheidung (`FieldDecision` – dieselbe wie in der Karte).
+ * Links das Original an der Fundstelle, rechts die Entscheidung (`FieldValuePanel`: Werte als Karten, ein Hauptknopf).
  * Was entschieden ist, kommt nicht wieder; Berechnetes wird nicht einzeln bestätigt; Weitere Informationen
  * aus dem Dokument sind kein Teil dieses Ablaufs.
  */
@@ -36,7 +34,7 @@ export default function FieldReviewMode({
   contractId: string;
   orgSlug: string;
   contractTitle: string | null;
-  data: Pick<ContractDetailResponse, "evidence">;
+  data: Pick<ContractDetailResponse, "evidence" | "documents">;
   review: FieldReviewDto;
   startKey: string | null;
   startTier?: FieldTier | null;
@@ -71,7 +69,6 @@ export default function FieldReviewMode({
   const stageFields = useMemo(() => levelFields(live, level).filter((field) => field.kind === "extracted" && (field.present || field.decision_needed || field.status === "absent")), [live, level]);
   const current = !done ? fieldByKey(live, key) : undefined;
   const index = current ? stageFields.findIndex((field) => field.fact_key === current.fact_key) : -1;
-  const section = current ? sectionByKey(current.card) : null;
 
   // Im Original zeigen; Fokus auf die Überschrift (Screenreader hört das neue Feld).
   useEffect(() => {
@@ -187,26 +184,13 @@ export default function FieldReviewMode({
         <p className="visually-hidden" aria-live="polite">{announce}</p>
         {done || !current
           ? <StageSummary headingRef={headingRef} review={live} level={level} onSwitch={switchLevel} onExit={onExit} onShowAll={() => setDrawer(true)} onOpenFindings={onOpenFindings} />
-          : <>
-            <div className="erm-head">
-              <div className="erm-head-top">
-                {section ? <SectionChip section={section} /> : null}
-                <span className="erm-pos">{index + 1} / {stageFields.length}</span>
-              </div>
-            </div>
-            <div className="erm-main">
-              <FieldDecision key={`${current.fact_key}|${current.version ?? ""}|${current.status}`} contractId={contractId} orgSlug={orgSlug} field={current} review={live} canReview={canReview}
-                headingRef={headingRef} shortcuts onChanged={changed} onShowEvidence={showEvidence} onShowPage={onShowPage} onOpenAnalysis={onOpenAnalysis} />
-              {canReview ? <GroupConfirm key={current.fact_key} contractId={contractId} orgSlug={orgSlug} review={live} current={current}
-                onDone={(detail) => { onReload(); if (detail?.field_review) setLive(detail.field_review); }} /> : null}
-            </div>
-          </>}
-
-        {done || !current ? null : <nav className="erm-foot" aria-label="Angaben blättern">
-          <button type="button" className="btn btn-sm" disabled={index <= 0} onClick={() => go(index - 1)}>{PREV}Zurück</button>
-          <span className="erm-foot-next">{following ? `Nächste: ${following.label}` : "Letzte Angabe der Stufe"}</span>
-          <button type="button" className="btn btn-sm" onClick={() => go(index + 1)}>Weiter{NEXT}</button>
-        </nav>}
+          : <FieldValuePanel key={`${current.fact_key}|${current.version ?? ""}|${current.status}`} contractId={contractId} orgSlug={orgSlug} field={current} review={live}
+            documents={data.documents ?? []} canReview={canReview} headingRef={headingRef} position={{ index: Math.max(index, 0), total: stageFields.length }}
+            nextLabel={following?.label ?? null} onPrev={() => go(index - 1)} onNext={() => go(index + 1)}
+            onChanged={changed} onShowEvidence={showEvidence} onShowPage={onShowPage} onOpenAnalysis={onOpenAnalysis}>
+            {canReview ? <GroupConfirm key={current.fact_key} contractId={contractId} orgSlug={orgSlug} review={live} current={current}
+              onDone={(detail) => { onReload(); if (detail?.field_review) setLive(detail.field_review); }} /> : null}
+          </FieldValuePanel>}
       </div>
     </div>
 
@@ -247,7 +231,7 @@ function GroupConfirm({ contractId, orgSlug, review, current, onDone }: {
   }
 
   return <section className="frm-group" aria-labelledby="frm-group-title">
-    <h4 id="frm-group-title">Auch in „{current.card_label}“</h4>
+    <h3 id="frm-group-title">Auch in „{current.card_label}“</h3>
     <p className="fd-muted">Eindeutiger Wert, Fundstelle genau belegt, kein Widerspruch. Bestätigt wird nur, was hier steht.</p>
     <ul>
       {rows.map((row) => {
