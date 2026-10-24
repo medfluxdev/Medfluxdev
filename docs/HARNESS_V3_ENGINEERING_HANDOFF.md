@@ -133,7 +133,7 @@ These are the acceptance criteria for a future real-model run.
 
 ## 10. Migration facts (this snapshot)
 
-- New official remote: `https://github.com/jamallionjan-dev/medflux.git` (origin), official branch `main`.
+- New official remote: `https://github.com/medfluxdev/Medfluxdev.git` (origin), official branch `main`.
 - Previous review remote preserved under a descriptive backup name (see `git remote -v`).
 - Snapshot commit: `MedFlux official repository baseline` — includes all current source changes, the V3 harness files, tests, documentation, and new docs below. No history rewriting, no force push.
 - Local project directory is unchanged: `C:\Users\JAMAL\Desktop\Medflux`.

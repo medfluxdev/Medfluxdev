@@ -4,7 +4,7 @@
 
 ## Resolve current canonical workspace before writing
 1. Inspect the existing local `Medflux-Integrated-Test` (JAMAL branch, previously 6 tracked modifications) and `Medflux-VisualFirst-Experiment` (previously master, live experimental work), their real HEADs, modifications INCLUDING untracked, and any running agents. Determine where active OpenCode work resides; do not automatically switch branch, reset, clean, or overwrite.
-2. Canonical GitHub integration target is `jamallionjan-dev/medflux` branch `JAMAL` unless owner has since designated another existing branch. Treat the local working copy as authoritative for its uncommitted work; preserve its changes and integrate only reviewed improvements.
+2. Canonical GitHub integration target is `medfluxdev/Medfluxdev` branch `main` unless owner has since designated another existing branch. Treat the local working copy as authoritative for its uncommitted work; preserve its changes and integrate only reviewed improvements.
 3. The isolated `audit/finance-provenance-20260926`, `architecture/modular-domains-20260926` and `review/ahmad-hospital-20260926` branches are **sources of reviewed patches/design** only. Do not merge an entire branch blindly. Draft PR #10 stays unmerged. Cherry-pick or adapt only verified changes after conflict and regression inspection.
 4. Report canonical working location, branch and conflicts to the architect. If the user-designated canonical workspace isn't determinable, perform read-only audit rather than write into a guessed directory.
 
