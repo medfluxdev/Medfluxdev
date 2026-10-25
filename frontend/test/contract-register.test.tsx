@@ -214,7 +214,7 @@ describe("Vertragsregister – Stammdaten", () => {
     api.getContractRegister.mockResolvedValue({ ...(await api.getContractRegister()), fields: { ...(await api.getContractRegister()).fields, internal_number: { ...(await api.getContractRegister()).fields.internal_number, value: "ALT-12" } } });
     render(<ContractRegisterPanel contractId="c-1" orgSlug="test-klinik" />);
     const field = (await screen.findByText("Interne Nummer")).closest(".rg-field") as HTMLElement;
-    expect(within(field).getByText("automatisch")).toBeInTheDocument();
+    expect(within(field).getByText("Automatisch")).toBeInTheDocument();
     expect(within(field).getByText("Frühere interne Nummer: ALT-12")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Vertrag & Partner bearbeiten" }));
     expect(screen.queryByLabelText("Interne Nummer")).not.toBeInTheDocument();

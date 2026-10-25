@@ -275,7 +275,7 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* ---------- Layout ---------- */
-  --content-max: 1360px;       /* Mein Tag v2: ruhigere Zeilenlaenge auf breiten Bildschirmen (war 1680px) */
+  --content-max: clamp(1360px, 82vw, 3200px); /* wächst beim Herauszoomen mit (mehr CSS-Pixel Breite), bleibt auf normalen Bildschirmen bei ~1360px */
   --content-narrow: 900px;
   --sidebar-width: 248px;
   --color-sidebar: #f6f8fa;  /* Mein Tag v2: Seitenleiste heller als der Seitengrund */

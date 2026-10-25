@@ -103,7 +103,7 @@ describe("Gerätearten am Vertrag", () => {
     expect(within(table).getByText("2 Geräte")).toBeInTheDocument();
     expect(within(table).getByText("Haus A")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /hinzufügen|entfernen|speichern|übernehmen/i })).not.toBeInTheDocument();
   });
 });
 

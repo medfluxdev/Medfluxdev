@@ -84,7 +84,7 @@ describe("Anlagen", () => {
     api.restoreContractDocument.mockResolvedValue({ items: [doc(), doc({ link_id: "l-3", title: "1. Nachtrag", is_main: false })], removed: [] });
     render(<ContractAttachmentsPanel contractId="c-1" orgSlug="test-klinik" />);
     await screen.findByText("1. Nachtrag");
-    expect(screen.getByText("Hauptdokument kann nicht entfernt werden")).toBeInTheDocument();
+    expect(screen.getByText("Geschützt")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "vertrag.pdf entfernen" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "1. Nachtrag entfernen" }));

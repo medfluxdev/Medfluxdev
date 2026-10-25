@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { askAssistant, type AssistantReply } from "@/lib/domain-api/assistant";
 
@@ -63,15 +64,9 @@ export default function ContractAiSummary({ contractId, orgSlug }: { contractId:
     <svg className="btn-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d={SPARK} /></svg>Zusammenfassung erstellen
   </button>;
 
-  return <section className="cw-section ai-summary" aria-labelledby="ai-summary-heading" aria-busy={busy}>
-    <div className="cw-section-head">
-      <div>
-        <h2 id="ai-summary-heading">KI-Zusammenfassung</h2>
-        <p>Die wichtigsten Vertragsinhalte auf einen Blick.</p>
-      </div>
-      {busy ? <button type="button" className="btn btn-sm" onClick={cancel}>Abbrechen</button>
-        : reply ? <button type="button" className="btn btn-sm" onClick={() => void create()}>Neu erstellen</button> : null}
-    </div>
+  return <CollapsibleSection id="ai-summary" className="ai-summary" title="KI-Zusammenfassung" tone="ai" description="Die wichtigsten Vertragsinhalte auf einen Blick."
+    actions={busy ? <button type="button" className="btn btn-sm" onClick={cancel}>Abbrechen</button>
+      : reply ? <button type="button" className="btn btn-sm" onClick={() => void create()}>Neu erstellen</button> : undefined}>
     {busy ? <p className="cw-muted" role="status">Zusammenfassung wird erstellt … Das lokale Modell kann bis zu drei Minuten brauchen.</p> : null}
     {error ? <InlineAlert tone="critical" role="alert">{error}</InlineAlert> : null}
     {!reply && !busy ? <EmptyState variant="illustrated" illustration={SUMMARY_ART} title="Noch keine Zusammenfassung erstellt." action={startButton} /> : null}
@@ -90,5 +85,5 @@ export default function ContractAiSummary({ contractId, orgSlug }: { contractId:
       </details> : <p className="cw-muted">Ohne Quellenauszüge – die Kurzfassung beruht nur auf den Stammangaben des Vertrags.</p>}
     </div> : null}
     <p className="card-foot-note"><SignalIcon tone="info" />Lokal generiert · Ungeprüft · Wird nicht gespeichert.</p>
-  </section>;
+  </CollapsibleSection>;
 }

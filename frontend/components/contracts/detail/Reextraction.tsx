@@ -32,7 +32,9 @@ import {
   type RollbackEntry,
   type StartReextraction,
 } from "@/lib/domain-api/reextraction";
+import { roleLabel } from "./DocumentList";
 import { Diff, SectionChip } from "./ReviewParts";
+import type { DetailDocument } from "@/lib/contract-detail-types";
 
 const POLL_MS = 4000;
 const SAFE_CONFIDENCE = 0.95;
@@ -190,10 +192,12 @@ interface PanelProps {
   onReviewEvidence?: () => void;
   /** Ladefehler des Stands (wird angezeigt statt die Karte zu verstecken). */
   loadError?: string | null;
+  /** Dokumente des Vertrags: die Analyse läuft über das gewählte (Standard: Hauptdokument). */
+  documents?: DetailDocument[];
 }
 
 /** Karte „Erneut aus dem Dokument erfassen“ (Dokumente → Dokument): Auswahl → läuft → Ergebnis. */
-export default function ReextractionPanel({ contractId, orgSlug, state: given, reload, onApplied, onShowPage, onEditManually, onMarkInDocument, onReviewProposals, onReviewEvidence, loadError = null }: PanelProps) {
+export default function ReextractionPanel({ contractId, orgSlug, state: given, reload, onApplied, onShowPage, onEditManually, onMarkInDocument, onReviewProposals, onReviewEvidence, loadError = null, documents = [] }: PanelProps) {
   const state = useMemo(() => (given ? withDefaults(given) : null), [given]);
   const toast = useToast();
   const router = useRouter();
@@ -314,6 +318,7 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
       {!active && !ready && run?.status === "failed" ? <InlineAlert tone="critical" role="alert">{run.message ?? `Analyse #${run.number} ist fehlgeschlagen.`}</InlineAlert> : null}
 
       {!active && !ready && state.can_start ? <Chooser
+        documents={documents}
         contractId={contractId}
         orgSlug={orgSlug}
         state={state}
@@ -337,7 +342,8 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
   </CollapsibleSection>;
 }
 
-function Chooser({ contractId, orgSlug, state, preset, onClearPreset, onStarted }: {
+function Chooser({ contractId, orgSlug, state, preset, onClearPreset, onStarted, documents }: {
+  documents: DetailDocument[];
   contractId: string;
   orgSlug: string;
   state: ReextractionState;
@@ -357,6 +363,9 @@ function Chooser({ contractId, orgSlug, state, preset, onClearPreset, onStarted 
   const [pagesText, setPagesText] = useState("");
   const pages = parsePages(pagesText);
   const [reread, setReread] = useState(state.reread_suggested);
+  const mainDocument = documents.find((doc) => doc.role === "main") ?? documents[0] ?? null;
+  const [documentId, setDocumentId] = useState("");
+  const chosenDocument = documentId && documents.some((doc) => doc.document_version_id === documentId) ? documentId : mainDocument?.document_version_id ?? "";
   const [models, setModels] = useState<ReextractionModel[] | null>(null);
   const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
@@ -385,6 +394,7 @@ function Chooser({ contractId, orgSlug, state, preset, onClearPreset, onStarted 
         reset_confirmations: mode === "full" && reset,
         reread_document: reread,
         model_id: model || null,
+        document_version_id: chosenDocument && chosenDocument !== mainDocument?.document_version_id ? chosenDocument : null,
       });
       onStarted();
     } catch (err) {
@@ -408,6 +418,13 @@ function Chooser({ contractId, orgSlug, state, preset, onClearPreset, onStarted 
   const duration = state.duration_minutes;
 
   return <div className="ra-choose">
+      {documents.length > 0 ? <label className="field ra-document">
+        <span className="field-label">Welches Dokument soll analysiert werden?</span>
+        <select value={chosenDocument} disabled={documents.length < 2} onChange={(event) => setDocumentId(event.target.value)}>
+          {documents.map((doc) => <option key={doc.document_version_id} value={doc.document_version_id}>{doc.original_filename ?? "Dokument"} · {roleLabel(doc, mainDocument?.document_version_id ?? null)}</option>)}
+        </select>
+        <span className="field-hint">{documents.length < 2 ? "Es ist nur ein Dokument hinterlegt. Weitere Dokumente fügen Sie unter „Anlagen“ hinzu – dann können Sie hier wählen." : "Standard ist das Hauptdokument. Die Analyse liest nur das gewählte Dokument; Gefundenes erscheint als Vorschlag."}</span>
+      </label> : null}
     <fieldset className="ra-modes">
       <legend className="visually-hidden">Modus</legend>
       {MODES.map((item) => {

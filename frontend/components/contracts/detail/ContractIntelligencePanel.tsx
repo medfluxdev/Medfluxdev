@@ -1,5 +1,6 @@
 "use client";
 
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import EmptyState from "@/components/ui/EmptyState";
 import Link from "next/link";
 import { REVIEW_TARGET, contractHref } from "@/lib/fix-targets";
@@ -136,14 +137,8 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
   );
 
   return (
-    <section className="cw-section" aria-labelledby="contract-intelligence-heading">
-      <div className="cw-section-head">
-        <div>
-          <h2 id="contract-intelligence-heading">Vertragsanalyse</h2>
-          <p>Beziehungen, Pflichten und Handlungsvorschläge.</p>
-        </div>
-        <button type="button" className="btn btn-sm" onClick={() => void load()} disabled={loading}>Aktualisieren</button>
-      </div>
+    <CollapsibleSection id="contract-intelligence" title="Vertragsanalyse" tone="accent" description="Beziehungen, Pflichten und Handlungsvorschläge."
+      actions={<button type="button" className="btn btn-sm" onClick={() => void load()} disabled={loading}>Aktualisieren</button>}>
 
       {loading && <LoadingState>Vertragsanalyse wird geladen…</LoadingState>}
       {error && <InlineAlert tone="warning" role="status">{error}</InlineAlert>}
@@ -219,6 +214,6 @@ export default function ContractIntelligencePanel({ contractId, organizationSlug
           </div>
         </div>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

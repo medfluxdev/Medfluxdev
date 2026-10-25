@@ -1,3 +1,5 @@
+// Karten starten im Programm eingeklappt; die bestehenden Tests prüfen den Inhalt und starten daher aufgeklappt.
+process.env.NEXT_PUBLIC_CARDS_START_CLOSED = "false";
 import "@testing-library/jest-dom/vitest";
 import { toHaveNoViolations } from "jest-axe";
 import { vi } from "vitest";

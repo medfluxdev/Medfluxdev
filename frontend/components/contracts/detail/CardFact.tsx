@@ -279,7 +279,7 @@ export function FactSaveBar({ edit, title }: { edit: FactCardEdit; title: string
       {edit.hasOpenSuggestions ? <button type="button" className="rg-link" onClick={edit.confirmAll}>Alle KI-Vorschläge bestätigen</button> : null}
     </div>
     <div className="cw-savebar-actions">
-      <button type="button" className="btn btn-ghost" disabled={edit.busy} onClick={edit.cancel}>Verwerfen</button>
+      <button type="button" className="btn btn-ghost" disabled={edit.busy} onClick={edit.cancel}>Abbrechen</button>
       <button type="button" className="btn btn-primary" disabled={edit.busy} onClick={edit.save} aria-keyshortcuts="Control+S">{edit.busy ? "Wird gespeichert…" : "Speichern"}</button>
     </div>
   </div>;

@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { clearSelection, isHeadDoubleClick } from "@/lib/box-collapse";
 import { cardIcon, tileClass } from "@/lib/card-icons";
 
-const STORAGE_KEY = "medflux.collapsed-sections";
-// Kästen, die anfangs zu sind (`defaultCollapsed`), merken sich das Aufklappen.
+// Karten starten eingeklappt, bis die Person sie aufklappt (gemerkt für die Sitzung des Browsers, nicht darüber hinaus).
+// Nur Tests setzen NEXT_PUBLIC_CARDS_START_CLOSED=false.
+const CARDS_START_CLOSED = process.env.NEXT_PUBLIC_CARDS_START_CLOSED !== "false";
 const EXPANDED_KEY = "medflux.expanded-sections";
+const CLOSED_KEY = "medflux.closed-sections";
 
 /** Kennfarbe der Kachel: Art des Inhalts, nie Zustand. */
 export type SectionTone = "cost" | "unit" | "department" | "accent" | "ai" | "neutral";
@@ -21,7 +23,7 @@ const TONE_CLASS: Record<SectionTone, string> = {
 
 function readIds(key: string): Set<string> {
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.sessionStorage.getItem(key);
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
   } catch {
     return new Set();
@@ -30,14 +32,15 @@ function readIds(key: string): Set<string> {
 
 function writeIds(key: string, ids: Set<string>) {
   try {
-    window.localStorage.setItem(key, JSON.stringify([...ids]));
+    window.sessionStorage.setItem(key, JSON.stringify([...ids]));
   } catch {
     // Nur Komfort: ohne Speicher gilt der Ausgangszustand.
   }
 }
 
-const readCollapsed = () => readIds(STORAGE_KEY);
-const writeCollapsed = (ids: Set<string>) => writeIds(STORAGE_KEY, ids);
+// Ohne Vorgabe „zu“ merkt sich die Sitzung das Aufklappen; mit `defaultCollapsed={false}` das Zuklappen.
+const readCollapsed = () => readIds(CLOSED_KEY);
+const writeCollapsed = (ids: Set<string>) => writeIds(CLOSED_KEY, ids);
 
 interface Props {
   /** Stabile Kennung (Überschrift-ID `<id>-heading`, gemerkter Zustand). */
@@ -67,7 +70,7 @@ interface Props {
  * Kurzfassung und Aktionen rechts. Nur der Knopf klappt (plus Doppelklick auf freie Kopffläche),
  * damit Aktionen im Kopf bedienbar bleiben. Eingeklappte Kästen merkt sich der Browser (je Kennung).
  */
-export default function CollapsibleSection({ id, title, description, summary, icon, iconClassName, tone, defaultCollapsed = false, actions, forceOpen = false, className, children }: Props) {
+export default function CollapsibleSection({ id, title, description, summary, icon, iconClassName, tone, defaultCollapsed = CARDS_START_CLOSED, actions, forceOpen = false, className, children }: Props) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   useEffect(() => { setCollapsed(defaultCollapsed ? !readIds(EXPANDED_KEY).has(id) : readCollapsed().has(id)); }, [defaultCollapsed, id]);
 

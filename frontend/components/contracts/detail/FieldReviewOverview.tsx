@@ -22,7 +22,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "deferred", label: "Zurückgestellt" }, { value: "conflict", label: "Widerspruch" }, { value: "changed", label: "Neu zu prüfen" },
   { value: "missing", label: "Nicht gefunden" }, { value: "absent", label: "Nicht im Vertrag" }, { value: "multi", label: "Mehrere Fundstellen" },
   // Nur Weitere Informationen (Stufe Optional)
-  { value: "finding", label: "Weitere Informationen" }, { value: "linked", label: "Einer Angabe zugeordnet" }, { value: "note", label: "Als Notiz gesichert" }, { value: "dismissed", label: "Ausgeblendet" },
+  { value: "finding", label: "Weitere Informationen" }, { value: "linked", label: "Einer Angabe zugeordnet" }, { value: "note", label: "Im Verlauf vermerkt" }, { value: "dismissed", label: "Ausgeblendet" },
 ];
 const FINDING_PREFIX = "finding:";
 

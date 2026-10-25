@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AiOrigin, { AiReviewContext } from "@/components/ui/AiOrigin";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import Signal from "@/components/ui/Signal";
 import { registerHref } from "@/lib/fix-targets";
 import { BUSINESS_STATUS_LABEL, type BusinessStatus } from "@/lib/domain-api/register";
@@ -75,10 +76,9 @@ export default function ContractRelationsPanel({ contractId, orgSlug }: { contra
 
   return <div className="rg-panel">
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
-    <section className="cw-section rel-card" aria-labelledby="relations-framework-heading">
-      <span className="rel-tile rel-tile--framework" aria-hidden="true">{LINK_ICON}</span>
+    <CollapsibleSection id="relations-framework" title="Rahmenvertrag" icon={LINK_ICON} iconClassName="section-tile--type" description={<Signal tone={state.tone} size="sm">{state.label}</Signal>}
+      actions={<Link className="btn" href={manageHref}>{GEAR_ICON}Rahmenverträge verwalten</Link>}>
       <div className="rel-main">
-        <div className="rel-title"><h2 id="relations-framework-heading">Rahmenvertrag</h2><Signal tone={state.tone} size="sm">{state.label}</Signal></div>
         {data.frameworks.length === 0
           ? <p className="rel-lead">{options.length ? "Kein Rahmenvertrag zugeordnet." : "Kein Rahmenvertrag zugeordnet – noch keiner verfügbar."}</p>
           : <ul className="rg-deadlines">{data.frameworks.map(row)}</ul>}
@@ -87,16 +87,11 @@ export default function ContractRelationsPanel({ contractId, orgSlug }: { contra
           <button type="submit" className="btn btn-primary" disabled={busy || !selected}>Verknüpfen</button>
         </form> : null}
       </div>
-      <div className="rel-side">
-        <Link className="btn" href={manageHref}>{GEAR_ICON}Rahmenverträge verwalten</Link>
-      </div>
-    </section>
-    {data.is_framework || data.members.length > 0 ? <section className="cw-section rel-card" aria-labelledby="relations-members-heading">
-      <span className="rel-tile rel-tile--framework" aria-hidden="true">{LINK_ICON}</span>
+    </CollapsibleSection>
+    {data.is_framework || data.members.length > 0 ? <CollapsibleSection id="relations-members" title="Einzelverträge dieses Rahmenvertrags" icon={LINK_ICON} iconClassName="section-tile--type" description={<Signal tone="neutral" size="sm">{`${data.members.length} zugeordnet`}</Signal>}>
       <div className="rel-main">
-        <div className="rel-title"><h2 id="relations-members-heading">Einzelverträge dieses Rahmenvertrags</h2><Signal tone="neutral" size="sm">{`${data.members.length} zugeordnet`}</Signal></div>
         {data.members.length === 0 ? <p className="rel-lead">Noch keine Einzelverträge zugeordnet.</p> : <ul className="rg-deadlines">{data.members.map(row)}</ul>}
       </div>
-    </section> : null}
+    </CollapsibleSection> : null}
   </div>;
 }

@@ -121,6 +121,8 @@ export interface StartReextraction {
   reset_confirmations?: boolean;
   reread_document?: boolean;
   model_id?: string | null;
+  /** Anderes gültiges Dokument des Vertrags statt des Hauptdokuments. */
+  document_version_id?: string | null;
 }
 
 export interface RollbackEntry {

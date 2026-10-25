@@ -28,7 +28,6 @@ import FieldReviewOverview from "./FieldReviewOverview";
 import FieldReviewMode from "./FieldReviewMode";
 import FieldDecisionDrawer from "./FieldDecisionDrawer";
 import FieldReviewButton, { ReviewControl } from "./FieldReviewButton";
-import OverridePanel from "./OverridePanel";
 import { hasCalculationBasis } from "./CalculationBasisPanel";
 import ContractRegisterPanel from "./ContractRegisterPanel";
 import ContractRemarksPanel from "./ContractRemarksPanel";
@@ -106,7 +105,7 @@ interface Props {
 type TabKey = "overview" | "register" | "services" | "deadlines" | "finance" | "documents" | "relations" | "notes" | "history";
 // Fruehere Reiter (Links aus E-Mails, Lesezeichen) zeigen auf den neuen Ort.
 const TAB_ALIASES: Record<string, TabKey> = { term: "deadlines", leistungen: "services", equipment: "relations", remarks: "notes", notizen: "notes" };
-type DocumentTab = "document" | "attachments" | "evidence" | "review" | "analysis" | "history";
+type DocumentTab = "document" | "attachments" | "evidence" | "review" | "analysis";
 type OriginKind = "extracted" | "reviewed" | "corrected" | "calculated" | "missing" | "system";
 
 // Schlüssel bleiben (Links, Lesezeichen); die Beschriftung folgt dem Plan (U11).
@@ -132,7 +131,6 @@ const DOCUMENT_TABS: { key: DocumentTab; label: string }[] = [
   // Erneut aus dem Dokument erfassen: Auswahl, Lauf, Ergebnis und Verlauf an einem festen Ort.
   { key: "analysis", label: "KI-Analyse" },
   { key: "attachments", label: "Anlagen" },
-  { key: "history", label: "Korrekturen" },
 ];
 
 const ORIGIN_LABEL: Record<OriginKind, string> = {
@@ -765,9 +763,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
       ? <span className="tab-signal tab-signal--critical" role="img" aria-label="Kritischer offener Punkt"><SignalIcon tone="critical" /></span>
       : tab.key === "register" && aiOpenCount > 0
         ? <span className="tab-signal tab-signal--ai" role="img" aria-label={`${aiOpenCount} ${aiOpenCount === 1 ? "Entscheidung" : "Entscheidungen"} offen`}><SignalIcon tone="ai" /></span>
-        : tab.key === "documents" && data.documents.length > 0
-          ? <span className="tab-count" aria-hidden="true">{data.documents.length}</span>
-          : undefined,
+        : undefined,
   }));
 
   // KI-Plakette: zur Prüfung der Angabe, aus der der Wert stammt; ohne passende Angabe zur Fundstelle,
@@ -901,6 +897,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           searchableKeys={reextraction.state?.can_start ? new Set(fieldSearchMap(reextraction.state).keys()) : undefined}
           onSearchInDocument={(key) => router.replace(documentSearchHref(data.contract_id, key), { scroll: false })}
           onShowSource={showSource}
+          reviewFields={fieldsOf(fieldReview)}
           hiddenSections={maintenanceHidden}
           afterStatus={slots.register}
           onOpenField={(key, view) => openTarget({ tab: view === "deadlines" ? "deadlines" : "register", field: key })}
@@ -912,7 +909,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           {showScope || showSla ? <div className="svc-grid">
             {/* Entwurf: links Leistungsumfang + weitere inklusive Leistungen, rechts SLA + exklusive Leistungen. */}
             <div className="svc-col">
-              {showScope ? <ScopeCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={scopeRows} historyHref={contractHref(data.contract_id, { tab: "documents", subtab: "history" })} /> : null}
+              {showScope ? <ScopeCard contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} rows={scopeRows} historyHref={contractHref(data.contract_id, { tab: "history" })} /> : null}
               {showScope ? scopeLists.filter((list) => list.key === "other_included").map((list) => <ScopeListCard key={list.key} contractId={data.contract_id} orgSlug={orgSlug} canEdit={canReviewFacts} onSaved={reload} list={list} />) : null}
             </div>
             <div className="svc-col">
@@ -959,9 +956,10 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             </div>
           </div>
           {/* Eine Prüfung: ein Fortschritt (Felder, nicht Nachweise), eine Handlung – eigene Zeile, damit „Erneut erfassen“ immer oben rechts steht. */}
-          {!reviewMode && documentTab !== "review" && fieldReview ? <div className="dw-status dw-review-row"><ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} /></div> : null}
+          {!reviewMode && documentTab !== "review" && documentTab !== "attachments" && documentTab !== "analysis" && fieldReview ? <div className="dw-status dw-review-row"><ReviewControl review={fieldReview} onStart={(tier) => startFieldReview(tier)} /></div> : null}
           {documentTab === "analysis" && <ReextractionPanel
             loadError={reextraction.error}
+            documents={data.documents}
             contractId={data.contract_id}
             orgSlug={orgSlug}
             state={reextraction.state}
@@ -1048,7 +1046,6 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           {documentTab === "review" && <div className="cw-integrated-panel"><FieldReviewOverview data={data} orgSlug={orgSlug} canReview={canReviewFacts} focusKey={reviewFocus} onReload={reloadAfterDecision}
             onStartGuided={(tier, key) => startFieldReview(tier, key ?? null)} onShowEvidence={showFieldEvidence} onShowPage={showPageQuote} onOpenAnalysis={() => openTarget(REEXTRACTION_TARGET)} />
             <CapturedSources contractId={data.contract_id} orgSlug={orgSlug} version={data} onShow={showSource} compact /></div>}
-          {documentTab === "history" && <div className="cw-integrated-panel"><OverridePanel data={data} orgSlug={orgSlug} onReload={reload} /></div>}
         </>}
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ActionMenu, { type ActionMenuItem } from "@/components/ui/ActionMenu";
@@ -148,16 +149,9 @@ export default function ContractRemarksPanel({ contractId, orgSlug }: { contract
     return entries;
   }
 
-  return <section className="cw-section rg-notes" aria-labelledby="rg-remarks-heading">
-    <div className="rg-notes-head">
-      <div className="rg-notes-title">
-        <span className="rg-notes-tile" aria-hidden="true">{NOTEPAD}</span>
-        <div>
-        <h2 id="rg-remarks-heading">Notizen{total ? <span className="count-chip" aria-label={`${total} Notizen`}>{total}</span> : null}</h2>
-        <p>Absprachen und Hinweise zum Vertrag.</p>
-        </div>
-      </div>
-      {total ? <div className="rg-notes-tools">
+  return <CollapsibleSection id="rg-remarks" className="rg-notes" title="Notizen" tone="accent" icon={NOTEPAD}
+    description={<>Absprachen und Hinweise zum Vertrag.{total ? <span className="count-chip" aria-label={`${total} Notizen`}>{total}</span> : null}</>}
+    actions={total ? <div className="rg-notes-tools">
         <label className="rg-notes-search">{SEARCH}<span className="visually-hidden">Notizen durchsuchen</span>
           <input type="search" placeholder="Notizen durchsuchen" value={query} onChange={(event) => setQuery(event.target.value)} />
         </label>
@@ -167,8 +161,7 @@ export default function ContractRemarksPanel({ contractId, orgSlug }: { contract
             <option value="oldest">Älteste zuerst</option>
           </select>
         </label>
-      </div> : null}
-    </div>
+      </div> : undefined}>
 
     {editable ? (composing
       ? <form className="rg-notes-composer" aria-label="Neue Notiz" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
@@ -255,5 +248,5 @@ export default function ContractRemarksPanel({ contractId, orgSlug }: { contract
             </ol>
           </div>)}
     {total ? <p className="rg-notes-foot">{INFO}Frühere Versionen öffnen sich direkt unter dem jeweiligen Eintrag.</p> : null}
-  </section>;
+  </CollapsibleSection>;
 }

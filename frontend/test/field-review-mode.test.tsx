@@ -207,7 +207,7 @@ describe("Geführte Prüfung nach Feldern", () => {
     await user.click(screen.getByRole("button", { name: /^Optional, / }));
     expect(screen.getByText("Angabe 1 von 2")).toBeInTheDocument();
     expect(screen.getByText("Weitere Information")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Als Notiz sichern" }));
+    await user.click(screen.getByRole("button", { name: "Im Verlauf vermerken" }));
     expect(api.decideFinding).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "note" }));
     expect(await screen.findByText("Angabe 2 von 2")).toBeInTheDocument();
   });
@@ -309,9 +309,9 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     await user.click(screen.getByRole("button", { name: /^Optional, / }));
     await user.click(screen.getByRole("button", { name: /^Status:/ }));
     expect(screen.getByRole("option", { name: /Weitere Informationen/ })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /Als Notiz gesichert/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Im Verlauf vermerkt/ })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Ausgeblendet/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("option", { name: /Als Notiz gesichert/ }));
+    await user.click(screen.getByRole("option", { name: /Im Verlauf vermerkt/ }));
     const items = within(screen.getByRole("navigation", { name: "Angaben" })).getAllByRole("button");
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent("Hinweis");
@@ -375,7 +375,7 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(within(screen.getByRole("region", { name: "Aktuelle Angabe" })).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
   });
 
-  it("Weitere Informationen sind Schritte der Stufe Optional: Quelle, zuordnen, als Notiz sichern, ausblenden", async () => {
+  it("Weitere Informationen sind Schritte der Stufe Optional: Quelle, zuordnen, im Verlauf vermerken, ausblenden", async () => {
     const user = userEvent.setup();
     api.decideFinding.mockResolvedValue({});
     const model = review([decided(start), end], { findings: [finding()], findings_open: 1, findings_consequential: 1 });

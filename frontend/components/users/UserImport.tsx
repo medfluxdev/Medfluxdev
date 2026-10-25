@@ -143,7 +143,7 @@ export default function UserImport({ organizationSlug, onImported }: { organizat
           <div className="btn-group">
             <button type="button" className="btn" disabled={busy} onClick={() => void submit(true)}>Liste prüfen</button>
             <button type="button" className="btn btn-primary" disabled={busy || !checkCurrent || !check.valid} onClick={() => void submit(false)}>{rows.length} Benutzer anlegen</button>
-            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setRows([]); setCheck(null); }}>Verwerfen</button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => { setRows([]); setCheck(null); }}>Abbrechen</button>
           </div>
           {!checkCurrent ? <p className="field-hint">Erst prüfen: Angelegt wird nur, wenn keine Zeile einen Fehler hat.</p> : null}
         </>

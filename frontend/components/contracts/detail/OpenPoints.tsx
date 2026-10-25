@@ -1,6 +1,7 @@
 "use client";
 
 import { revealBox } from "@/lib/box-collapse";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
 import Signal, { type SignalTone } from "@/components/ui/Signal";
@@ -152,14 +153,9 @@ export default function OpenPoints({ contractId, points, searchHref, onOpen }: {
   onOpen: (target: FixTarget) => void;
 }) {
   const primary = (points ?? []).findIndex((point) => point.tone === "critical");
-  return <section className="cw-section open-points" aria-labelledby="open-points-heading">
-    <div className="cw-section-head">
-      <div>
-        <h2 id="open-points-heading">Offene Punkte{points?.length ? <span className="count-chip" aria-label={`${points.length} offen`}>{points.length}</span> : null}</h2>
-        <p>Nach Dringlichkeit sortiert.</p>
-      </div>
-      {searchHref ? <Link className="btn btn-sm" href={searchHref}>Fehlende Angaben im Dokument suchen</Link> : null}
-    </div>
+  return <CollapsibleSection id="open-points" className="open-points" title="Offene Punkte" tone="neutral"
+    description={<>Nach Dringlichkeit sortiert.{points?.length ? <span className="count-chip" aria-label={`${points.length} offen`}>{points.length}</span> : null}</>}
+    actions={searchHref ? <Link className="btn btn-sm" href={searchHref}>Fehlende Angaben im Dokument suchen</Link> : undefined}>
     {points === null ? <p className="cw-muted" role="status">Wird geladen…</p> : points.length === 0 ? <EmptyState variant="illustrated" illustration={OPEN_POINTS_ART} title="Keine offenen Punkte">Jeder Punkt führt direkt zur passenden Stelle im Vertrag.</EmptyState> : <ul className="open-points-list">
       {points.map((point, index) => {
         const className = `btn ${index === primary ? "btn-primary" : "btn-sm"}`;
@@ -181,5 +177,5 @@ export default function OpenPoints({ contractId, points, searchHref, onOpen }: {
       <svg className="signal-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h.5M11 10h.5M15 10h.5M8 14h8" /></svg>
       Schnellzugriff <kbd>Strg</kbd> + <kbd>K</kbd>
     </p>
-  </section>;
+  </CollapsibleSection>;
 }

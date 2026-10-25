@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import ChipPicker, { type ChipPickerGroup } from "@/components/ui/ChipPicker";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import InlineAlert from "@/components/ui/InlineAlert";
+import RequiredBadge from "./RequiredBadge";
 import Signal from "@/components/ui/Signal";
 import TagChip, { PersonTag, TagIcon } from "@/components/ui/TagChip";
 import { useToast } from "@/components/ui/Toast";
@@ -38,7 +39,7 @@ type Item = { id: string; name: string; code: string; is_active: boolean };
 type Department = Item & { hospital_id: string; parent_id?: string | null };
 type Center = Item & { hospital_id: string; department_id: string | null };
 type Assignee = { id: string; display_name: string; role: string; hospital_id: string | null; department_id: string | null };
-/** Gespeicherter Stand: Grundlage für „Ungespeicherte Änderungen“ und „Verwerfen“. */
+/** Gespeicherter Stand: Grundlage für „Ungespeicherte Änderungen“ und „Abbrechen“. */
 type Snapshot = {
   typeId: string;
   hospitalId: string;
@@ -377,12 +378,9 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
   ];
   const missing = required.filter(([, value]) => !value).map(([label]) => label);
   const completeness = loading || loadFailed ? null : missing.length === 0
-    ? <span className="cw-complete" title={`${required.map(([label]) => label).join(", ")}: alle erfasst`}>
-      <svg className="cw-complete-ring" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle className="cw-complete-track" cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" /><path d="m8.5 12.3 2.3 2.3 4.7-4.8" /></svg>
-      {required.length} von {required.length} Pflichtangaben
-    </span>
+    ? <RequiredBadge tone="done" title={`${required.map(([label]) => label).join(", ")}: alle erfasst`}>{required.length} von {required.length} Pflichtangaben</RequiredBadge>
     : <button type="button" className="cw-missing" onClick={startEdit} title={`Es fehlen: ${missing.join(", ")}`}>
-      <Signal tone="warning" size="sm">{missing.length === 1 ? "1 Angabe fehlt" : `${missing.length} Angaben fehlen`}</Signal>
+      <RequiredBadge tone="warning">{missing.length === 1 ? "1 Angabe fehlt" : `${missing.length} Angaben fehlen`}</RequiredBadge>
     </button>;
   const summary = loading || loadFailed ? null : <>
     <span>{saved.hospitalId ? <b>{hospitalName(saved.hospitalId)}</b> : "Organisationsweit"}</span>
@@ -579,7 +577,7 @@ export default function ContractOwnershipPanel({ contractId, orgSlug, onSaved }:
       {dirty ? <div className="cw-savebar" role="region" aria-label="Änderungen speichern">
         <div className="cw-savebar-msg"><Signal tone="info" size="sm">Ungespeicherte Änderungen</Signal><span><kbd>Strg</kbd> + <kbd>S</kbd> speichert</span></div>
         <div className="cw-savebar-actions">
-          <button type="button" className="btn btn-ghost" onClick={discard} disabled={saving}>Verwerfen</button>
+          <button type="button" className="btn btn-ghost" onClick={discard} disabled={saving}>Abbrechen</button>
           <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={saving} aria-keyshortcuts="Control+S">{saving ? "Wird gespeichert…" : "Zuordnung speichern"}</button>
         </div>
       </div> : null}

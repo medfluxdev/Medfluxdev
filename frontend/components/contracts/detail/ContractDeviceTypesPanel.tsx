@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AiOrigin from "@/components/ui/AiOrigin";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import ActionMenu from "@/components/ui/ActionMenu";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
@@ -129,19 +130,12 @@ export default function ContractDeviceTypesPanel({ contractId, orgSlug, canEdit,
 
   if (data === null) return error ? <p role="alert" className="rg-error">{error}</p> : <p role="status">Gerätearten werden geladen…</p>;
 
-  return <section className="cw-section rel-card dt-card" aria-labelledby="contract-device-types-heading">
-    <span className="rel-tile rel-tile--device" aria-hidden="true">{MONITOR_ICON}</span>
+  return <CollapsibleSection id="contract-device-types" className="dt-card" title={`Gerätearten (${rows.length})`} icon={MONITOR_ICON} iconClassName="section-tile--device" description="Zuordnung für Filter und Vertragsvergleiche."
+    actions={<div className="dt-head-actions">
+      {canEdit && groups.length ? <button type="button" className="btn btn-primary" aria-expanded={adding} disabled={busy} onClick={() => (adding ? closeAdd() : setAdding(true))}>{PLUS_ICON}Geräteart hinzufügen</button> : null}
+      <Link className="rg-link" href="/stammdaten/geraetearten">Gerätearten verwalten</Link>
+    </div>}>
     <div className="rel-main">
-      <div className="dt-head">
-        <div>
-          <h2 id="contract-device-types-heading">Gerätearten ({rows.length})</h2>
-          <p className="rel-lead">Zuordnung für Filter und Vertragsvergleiche.</p>
-        </div>
-        <div className="dt-head-actions">
-          {canEdit && groups.length ? <button type="button" className="btn btn-primary" aria-expanded={adding} disabled={busy} onClick={() => (adding ? closeAdd() : setAdding(true))}>{PLUS_ICON}Geräteart hinzufügen</button> : null}
-          <Link className="rg-link" href="/stammdaten/geraetearten">Gerätearten verwalten</Link>
-        </div>
-      </div>
 
       {adding ? <form className="dt-add" aria-label="Geräteart hinzufügen" onSubmit={(event) => { event.preventDefault(); addNew(); }}>
         {/* Alle Angaben auf einmal: Geräteart, Anzahl und Notiz, dann einmal speichern. */}
@@ -192,5 +186,5 @@ export default function ContractDeviceTypesPanel({ contractId, orgSlug, canEdit,
       {rows.length && canEdit ? <p className="rel-info">{INFO_ICON}Anzahl und Notiz können je Zuordnung ergänzt werden. „Zuordnung entfernen“ lässt die Geräteart in den Stammdaten bestehen.</p> : null}
       {error ? <p role="alert" className="rg-error">{error}</p> : null}
     </div>
-  </section>;
+  </CollapsibleSection>;
 }

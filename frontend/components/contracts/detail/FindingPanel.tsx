@@ -14,11 +14,11 @@ const BACK = icon(<path d="m15 6-6 6 6 6" />);
 const NEXT = icon(<path d="M5 12h14M13 6l6 6-6 6" />);
 const DOC = icon(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>);
 
-const DECISION_LABEL = { linked: "Einem Feld zugeordnet", note: "Als Notiz gesichert", dismissed: "Ausgeblendet" } as const;
+const DECISION_LABEL = { linked: "Einem Feld zugeordnet", note: "Im Verlauf vermerkt", dismissed: "Ausgeblendet" } as const;
 
 /**
  * Ein Schritt der Stufe Optional: eine Weitere Information aus dem Dokument (Fund der KI ohne offizielles Feld).
- * Zuordnen (als Kandidat eines Felds), als Notiz sichern oder ausblenden; Weiter lässt sie unverändert.
+ * Zuordnen (als Kandidat eines Felds), im Verlauf vermerken oder ausblenden; Weiter lässt sie unverändert.
  * Nichts davon fließt in eine Berechnung.
  */
 export default function FindingPanel({ contractId, orgSlug, finding, review, canReview, position, nextLabel, headingRef, onPrev, onNext, onShowPage, onDecided }: {
@@ -102,7 +102,7 @@ export default function FindingPanel({ contractId, orgSlug, finding, review, can
         </label>
         <div className="vp-finding-actions">
           <button type="button" className="btn btn-primary btn-sm vp-finding-link" disabled={busy || !target} onClick={() => void act("link", "Zur Angabe hinzugefügt – bitte dort prüfen.")}>Zur Angabe hinzufügen und prüfen</button>
-          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void act("note", "Als Notiz gesichert.")}>Als Notiz sichern</button>
+          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void act("note", "Im Verlauf vermerkt.")}>Im Verlauf vermerken</button>
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void act("dismiss", "Ausgeblendet.")}>Ausblenden</button>
         </div>
       </section> : <p className="vp-muted">Nur Lesen – entscheiden dürfen Prüfende und das Vertragsmanagement.</p>}

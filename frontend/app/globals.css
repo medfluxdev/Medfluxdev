@@ -1119,7 +1119,7 @@ a:focus-visible {
 
 .content,
 .page {
-  max-width: 1700px;
+  max-width: max(1700px, var(--content-max));
   margin: 0 auto;
   padding: 24px 28px 36px;
   width: 100%;

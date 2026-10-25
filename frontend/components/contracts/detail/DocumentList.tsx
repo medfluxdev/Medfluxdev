@@ -31,7 +31,7 @@ const GROUPS: { key: string; label: string; roles: string[] | null }[] = [
   { key: "attachments", label: "Anlagen", roles: null },
 ];
 
-export function fileKind(doc: DetailDocument): FileKind {
+export function fileKind(doc: Pick<DetailDocument, "original_filename"> & { mime_type?: string | null }): FileKind {
   const name = (doc.original_filename ?? "").toLowerCase();
   const mime = doc.mime_type ?? "";
   if (mime.includes("pdf") || name.endsWith(".pdf")) return "pdf";
@@ -46,7 +46,7 @@ export function roleLabel(doc: DetailDocument, mainId: string | null): string {
   return ROLE_LABEL[doc.role ?? ""] ?? "Anlage";
 }
 
-export function FileIcon({ doc }: { doc: DetailDocument }) {
+export function FileIcon({ doc }: { doc: Pick<DetailDocument, "original_filename"> & { mime_type?: string | null } }) {
   const kind = fileKind(doc);
   return <span className={`cw-doc-type is-${kind}`} aria-hidden="true">{kind === "pdf" ? "PDF" : kind === "word" ? "W" : kind === "excel" ? "X" : "•"}</span>;
 }

@@ -135,7 +135,7 @@ export default function CsvImport({ organizationSlug, kind, columns, plural, fil
       <div className="btn-group">
         <Button disabled={busy} onClick={() => void submit(true)}>Liste prüfen</Button>
         <Button variant="primary" disabled={busy || !check || !check.valid} onClick={() => void submit(false)}>{rows.length} {plural} anlegen</Button>
-        <Button disabled={busy} onClick={() => { setRows([]); setCheck(null); }}>Verwerfen</Button>
+        <Button disabled={busy} onClick={() => { setRows([]); setCheck(null); }}>Abbrechen</Button>
       </div>
       {!check ? <p className="field-hint">Erst prüfen: Angelegt wird nur, wenn keine Zeile einen Fehler hat.</p> : null}
     </> : null}

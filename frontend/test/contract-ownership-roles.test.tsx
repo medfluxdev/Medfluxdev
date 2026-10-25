@@ -177,7 +177,7 @@ describe("Contract360 Organisationszuordnung", () => {
     expect(screen.queryByRole("button", { name: /hinzufügen/ })).not.toBeInTheDocument();
   });
 
-  it("Bearbeiten: Speicherleiste erst nach einer Änderung; Verwerfen stellt die gespeicherten Werte wieder her", async () => {
+  it("Bearbeiten: Speicherleiste erst nach einer Änderung; Abbrechen stellt die gespeicherten Werte wieder her", async () => {
     const user = userEvent.setup();
     const { container } = render(<ContractOwnershipPanel contractId="contract-1" orgSlug="klinik" />);
     await openEdit(user);
@@ -188,13 +188,13 @@ describe("Contract360 Organisationszuordnung", () => {
     await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-miete");
     const bar = screen.getByRole("region", { name: "Änderungen speichern" });
     expect(bar).toHaveTextContent("Ungespeicherte Änderungen");
-    expect(screen.queryByRole("button", { name: "Abbrechen" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Abbrechen" })).toHaveLength(1);
     // Zurück auf den gespeicherten Wert: keine Änderung mehr.
     await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-wartung");
     expect(screen.queryByRole("region", { name: "Änderungen speichern" })).not.toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Vertragstyp"), "t-miete");
-    await user.click(within(screen.getByRole("region", { name: "Änderungen speichern" })).getByRole("button", { name: "Verwerfen" }));
+    await user.click(within(screen.getByRole("region", { name: "Änderungen speichern" })).getByRole("button", { name: "Abbrechen" }));
     expect(screen.getByRole("button", { name: "Organisationszuordnung bearbeiten" })).toBeInTheDocument();
     expect(screen.getByText("Wartungsvertrag")).toBeInTheDocument();
     expect(mocks.updateContractOwnership).not.toHaveBeenCalled();

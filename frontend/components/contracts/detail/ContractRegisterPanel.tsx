@@ -14,6 +14,10 @@ import ContractRetentionCard from "./ContractRetentionCard";
 import type { FormValues } from "@/components/master-data/types";
 import MissingList from "@/components/ui/MissingList";
 import PartnerSuggestions from "@/components/master-data/PartnerSuggestions";
+import { levelOf } from "@/lib/field-review";
+import RequiredBadge from "./RequiredBadge";
+import FieldSuggestion, { type SuggestionKind } from "./FieldSuggestion";
+import type { FieldReviewFieldDto } from "@/lib/contract-detail-types";
 import AiOrigin from "@/components/ui/AiOrigin";
 import Signal, { SignalIcon } from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
@@ -39,6 +43,7 @@ import {
   dismissRegisterProposal,
   changeContractStatus,
   getContractRegister,
+  getPartnerPrefill,
   updateContractConfidentiality,
   updateContractRegister,
   type BusinessStatus,
@@ -80,6 +85,60 @@ const SECTION_ICONS: Record<string, { icon: ReactNode; tile: string }> = {
   price: { icon: svgIcon(<path d="M4 17l6-6 4 4 6-7M15 8h5v5" />), tile: "section-tile--cost" },
   service: { icon: svgIcon(<><path d="M9 6h11M9 12h11M9 18h11" /><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" /></>), tile: "section-tile--device" },
 };
+// Gruppen im Kasten „Vertrag & Partner“: wie in der Organisationszuordnung links Titel + Zweck, rechts die Angaben.
+const REGISTER_GROUPS: Record<string, { id: string; title: string; intro: string; icon: ReactNode; tile: string; keys: string[] }[]> = {
+  identity: [
+    { id: "contract", title: "Vertrag", intro: "Titel, Gegenstand und interne Nummer des Vertrags.", tile: "type",
+      icon: svgIcon(<><path d="M7 3h7l4 4v14H7z" /><path d="M14 3v4h4M10 12h5M10 16h5" /></>),
+      keys: ["contract_title", "subject_text", "short_description", "register_number"] },
+    { id: "partner", title: "Partner", intro: "Mit wem der Vertrag geschlossen ist und ob er Teil eines Rahmenvertrags ist.", tile: "partner",
+      icon: svgIcon(<><circle cx="9" cy="8" r="3.2" /><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5.5a3 3 0 0 1 0 5.8M18 14.5c1.8.8 3 2.7 3 5.5" /></>),
+      keys: ["partner_id", "is_framework"] },
+    { id: "class", title: "Einordnung", intro: "Art und Kategorie bestimmen Fristenregeln und Auswertungen.", tile: "device",
+      icon: svgIcon(<><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" /></>),
+      keys: ["contract_type_id", "contract_category_id"] },
+    { id: "maintenance", title: "Wartung", intro: "Wie oft gewartet wird; daraus entsteht „Wartung fällig“ in Fristen & Aufgaben.", tile: "device",
+      icon: svgIcon(<><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z" /></>),
+      keys: ["maintenance_next_date", "maintenance_interval_months"] },
+  ],
+  term: [
+    { id: "kind", title: "Vertragsart & Beginn", intro: "Wie der Vertrag läuft und wann er beginnt.", tile: "type",
+      icon: svgIcon(<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></>),
+      keys: ["term_model", "term_start_date"] },
+    { id: "span", title: "Laufzeit & Ende", intro: "Wie lange der Vertrag läuft und wann er endet.", tile: "device",
+      icon: svgIcon(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>),
+      keys: ["term_fixed_end_date", "initial_term", "minimum_term"] },
+    { id: "notice", title: "Kündigung & Verlängerung", intro: "Wann und wie gekündigt oder verlängert wird.", tile: "partner",
+      icon: svgIcon(<><path d="M5 4h14v16H5z" /><path d="M9 9h6M9 13h4" /></>),
+      keys: ["notice_period", "notice_to", "renewal_period"] },
+  ],
+  organisation: [
+    { id: "storage", title: "Ablage", intro: "Wo das Original liegt.", tile: "cost",
+      icon: svgIcon(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />),
+      keys: ["storage_location_code"] },
+    { id: "billing", title: "Abrechnung", intro: "Konto und Abrechnungsart.", tile: "cost",
+      icon: svgIcon(<><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18M7 15h3" /></>),
+      keys: ["account_number", "manual_billing"] },
+  ],
+  price: [
+    { id: "adjustment", title: "Art & Höhe", intro: "Wie sich der Preis ändert.", tile: "cost",
+      icon: svgIcon(<path d="M4 17l6-6 4 4 6-7M15 8h5v5" />),
+      keys: ["price_adjustment_kind", "price_adjustment_percent", "price_adjustment_index_name"] },
+    { id: "schedule", title: "Zeitplan", intro: "Wann die nächste Anpassung kommt.", tile: "type",
+      icon: svgIcon(<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></>),
+      keys: ["price_adjustment_next_date", "price_adjustment_interval_months"] },
+  ],
+};
+
+function RegisterGroup({ id, title, intro, icon, tile, children }: { id: string; title: string; intro: string; icon: ReactNode; tile: string; children: ReactNode }) {
+  return <section className="cw-og" aria-labelledby={id}>
+    <div className="cw-og-intro">
+      <span className={`cw-og-tile cw-og-tile--${tile}`} aria-hidden="true"><span className="cw-og-icon">{icon}</span></span>
+      <div><h3 id={id}>{title}</h3><p>{intro}</p></div>
+    </div>
+    <div className="cw-og-body">{children}</div>
+  </section>;
+}
 const STATUS_ICON = svgIcon(<path d="M5 21V4h11l-1.5 4L16 12H5" />);
 
 const SECTIONS: { id: string; title: string; description: string; fields: FieldDef[]; view?: RegisterView }[] = [
@@ -258,7 +317,7 @@ function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, hiddenSections, afterStatus, view = "data", onOpenField, onOpenStatus }: {
+export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, searchableKeys, onSearchInDocument, onShowSource, reviewFields, hiddenSections, afterStatus, view = "data", onOpenField, onOpenStatus }: {
   contractId: string;
   /** Welche Kästen: Vertragsdaten (Standard, mit Status, Regeln, KI-Vorschlägen) oder Fristen & Aufgaben (Erinnerungen). */
   view?: RegisterView;
@@ -277,6 +336,8 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
   onSearchInDocument?: (key: string) => void;
   /** Fundstelle eines aus dem Dokument übernommenen Werts zeigen. */
   onShowSource?: (source: { document_version_id: string; page: number; quote: string }) => void;
+  /** Vertragsdaten-Feld -> zugehörige Prüf-Angabe (für Felder ohne eigene KI-Herkunft, z. B. Vertragspartner). */
+  reviewFields?: FieldReviewFieldDto[];
 }) {
   const { role, account } = useAuth();
   const editable = Boolean(account?.is_developer || role === "admin" || role === "contract_manager");
@@ -666,6 +727,70 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
     }
   }
 
+  // Prüf-Angabe je Vertragsdaten-Feld (Vertragstitel, Vertragspartner, Vertragstyp) – für Plakette und Vorschlag.
+  const reviewByField = useMemo(() => {
+    const map: Record<string, FieldReviewFieldDto> = {};
+    for (const field of reviewFields ?? []) if (field.kind === "extracted" && field.present && field.register_field) map[field.register_field] = field;
+    return map;
+  }, [reviewFields]);
+  const reviewLinks = useMemo(() => Object.fromEntries(Object.entries(reviewByField).map(([key, field]) => [key, { factKey: field.fact_key, decided: field.status === "decided" }])), [reviewByField]);
+  const [kept, setKept] = useState<Record<string, true>>({});
+  const keepKey = (key: string, docValue: string, stored: string) => `medflux.keep.${contractId}.${key}.${docValue}|${stored}`;
+  useEffect(() => {
+    try {
+      const next: Record<string, true> = {};
+      for (let i = 0; i < window.localStorage.length; i += 1) {
+        const k = window.localStorage.key(i);
+        if (k?.startsWith(`medflux.keep.${contractId}.`)) next[k] = true;
+      }
+      setKept(next);
+    } catch {
+      setKept({});
+    }
+  }, [contractId]);
+
+  /** Vorschlag aus der Prüfung für ein Feld: leer + Prüfwert = Vorschlag; gefüllt + anderer Prüfwert = Widerspruch. */
+  function suggestionFor(def: FieldDef): { kind: SuggestionKind; text: string; value: string; page: number | null } | null {
+    if (!register) return null;
+    const field = reviewByField[def.key];
+    if (!field) return null;
+    const docText = (field.current ?? field.document_value ?? "").trim();
+    if (!docText) return null;
+    let value: string | null = null;
+    if (def.key === "contract_title") value = docText;
+    else if (def.key === "contract_type_id") value = types.find((item) => item.label.trim().toLowerCase() === docText.toLowerCase())?.id ?? null;
+    else if (def.key === "partner_id") value = partners.find((item) => [item.short_name, item.name1].some((name) => name.trim().toLowerCase() === docText.toLowerCase()))?.id ?? null;
+    if (!value) return null;
+    const stored = register.fields[def.key];
+    const page = (field.evidence.find((item) => item.evidence_id === field.primary_evidence_id) ?? field.evidence[0])?.page ?? null;
+    if (stored?.value == null || stored.value === "") return { kind: field.status === "decided" ? "confirmed" : "ai", text: docText, value, page };
+    if (String(stored.value) === value) return null;
+    const storedText = stored.display ?? String(stored.value);
+    if (kept[keepKey(def.key, docText, storedText)]) return null;
+    return { kind: "conflict", text: docText, value, page };
+  }
+
+  function keepCurrent(def: FieldDef, docText: string) {
+    const stored = register?.fields[def.key];
+    const key = keepKey(def.key, docText, stored?.display ?? String(stored?.value ?? ""));
+    try { window.localStorage.setItem(key, "1"); } catch { /* nur Komfort */ }
+    setKept((current) => ({ ...current, [key]: true }));
+  }
+
+  // „Neuer Partner“: Name aus dem Vertrag und alles, was die KI zum Partner belegt gefunden hat (Adresse, Telefon, E-Mail).
+  async function startNewPartner() {
+    const name = register?.supplier_text ?? "";
+    const base: FormValues = { short_name: name, name1: name };
+    try {
+      const found = await getPartnerPrefill(orgSlug, contractId);
+      const filled = Object.keys(found.values);
+      if (filled.length) toast(`Aus dem Vertrag vorbelegt: ${found.sources.map((item) => item.label).join(", ")}. Bitte prüfen.`, "success");
+      setNewPartner({ ...base, ...found.values });
+    } catch {
+      setNewPartner(base);
+    }
+  }
+
   function originOf(def: FieldDef): RegisterField | undefined {
     return register?.fields[fieldKeys(def)[0]];
   }
@@ -715,7 +840,7 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
             <option value="">Kein Vertragspartner</option>
             {partners.filter((item) => item.is_active || item.id === draft[key]).map((item) => <option key={item.id} value={item.id}>{item.short_name}{item.city ? ` · ${item.city}` : ""}</option>)}
           </select>
-          {can("partner.edit") ? <button type="button" className="rg-link" onClick={() => setNewPartner({ short_name: register?.supplier_text ?? "", name1: register?.supplier_text ?? "" })}>Neuer Partner</button> : null}
+          {can("partner.edit") ? <button type="button" className="rg-link" onClick={() => void startNewPartner()}>Neuer Partner</button> : null}
         </span>;
       case "type":
         return <select id={id} value={text(key)} onChange={(event) => setDraft((current) => ({ ...current, contract_type_id: event.target.value || null, contract_category_id: null }))}>
@@ -943,16 +1068,22 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           ? <button type="button" className="btn btn-sm" disabled={busy} onClick={() => startEdit(section.id)} aria-label={`${section.title} bearbeiten`} data-shortcut="edit" aria-keyshortcuts="E" title="Bearbeiten (E)">Bearbeiten</button>
           : null;
       const isTerm = section.id === "term";
-      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={SECTION_ICONS[section.id]?.icon} iconClassName={SECTION_ICONS[section.id]?.tile}>
-        {isTerm ? terminationRow : null}
-        <dl className="rg-fields">{fields.map((def) => {
+      // Kopf von „Vertrag & Partner“: nur die Pflichtangaben der Prüfung zu dieser Karte (Vertragspartner, Vertragsgegenstand, Vertragsart …);
+      // gezählt wird, was in der Prüfung entschieden ist. Widersprüche stehen daneben.
+      const pflicht = (reviewFields ?? []).filter((field) => field.card === "partner" && field.kind === "extracted" && levelOf(field.tier) === "pflicht" && (field.decision_needed || field.status === "decided"));
+      const filledCount = pflicht.filter((field) => field.status === "decided").length;
+      const conflictCount = section.id === "identity" ? fields.filter((def) => suggestionFor(def)?.kind === "conflict").length : 0;
+      const identityBadge = section.id === "identity" && pflicht.length > 0
+        ? <RequiredBadge tone={filledCount === pflicht.length && conflictCount === 0 ? "done" : "warning"}>{`${filledCount} von ${pflicht.length} Pflichtangaben${conflictCount ? ` · ${conflictCount} ${conflictCount === 1 ? "Widerspruch" : "Widersprüche"}` : ""}`}</RequiredBadge>
+        : null;
+      const renderField = (def: FieldDef) => {
           if (def.kind === "auto_number") {
             const earlier = register.fields.internal_number?.value;
             return <div key={def.key} id="rg-field-register_number" className="rg-field">
               <dt>Interne Nummer</dt>
               <dd>
                 <span className="rg-value">{register.register_number ?? "Wird beim ersten Speichern vergeben"}</span>
-                <span className="rg-origin rg-origin-system" title="Vom Programm aus dem Nummernkreis vergeben – eindeutig, nicht änderbar">automatisch</span>
+                <span className="rg-origin rg-origin-system" title="Vom Programm aus dem Nummernkreis vergeben – eindeutig, nicht änderbar">Automatisch</span>
                 {earlier ? <span className="field-hint rg-help">Frühere interne Nummer: {String(earlier)}</span> : null}
               </dd>
             </div>;
@@ -967,27 +1098,47 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           // KI-Werte: eine Plakette (Bestätigt/Ungeprüft), die die Quelle öffnet; sonst die stille Herkunft wie bisher.
           // Die Vertragsart nach Laufzeit („Feste Laufzeit“ …) ist keine eigene Prüf-Angabe: die Plakette führt zur Angabe, aus der sie folgt.
           const termModelFact = def.key === "term_model" ? TERM_MODEL_FACT[String(register.fields.term_model?.value ?? "")] : undefined;
+          // Felder ohne eigene KI-Herkunft (z. B. Vertragspartner) führen trotzdem zur zugehörigen Prüf-Angabe.
+          const reviewLink = !aiState ? reviewLinks[def.key] : undefined;
+          const suggestion = suggestionFor(def);
           const originBadge = aiState ? <AiOrigin state={aiState} onOpenSource={openSource} factKey={termModelFact ?? provenance?.source_field} subject={def.key === "term_model" ? undefined : label} />
+            : reviewLink ? <AiOrigin state={reviewLink.decided ? "confirmed" : "unreviewed"} onOpenSource={openSource} factKey={reviewLink.factKey} subject={label} />
             : provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null;
           const sourceChip = !aiState && provenance?.document_source && onShowSource ? <button type="button" className="cw-source-button" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>Quelle</button> : null;
           return <div key={def.key} id={`rg-field-${def.key}`} className={isTarget ? "rg-field rg-field--target" : "rg-field"} tabIndex={isTarget ? -1 : undefined}>
             <dt>{editing && def.kind !== "period" ? <label htmlFor={`rg-${def.key}`}>{label}</label> : label}{editing && isTerm ? <>{originBadge}{sourceChip}</> : null}</dt>
             <dd>
-              {editing ? input(def) : <span className="rg-value">{display(def)}</span>}
+              {editing ? input(def) : suggestion && suggestion.kind !== "conflict" ? null : <span className="rg-value">{display(def)}</span>}
+              {!editing && suggestion ? <FieldSuggestion kind={suggestion.kind} value={suggestion.text} page={suggestion.page} busy={busy}
+                onApply={() => void run(() => updateContractRegister(orgSlug, contractId, { changes: { [def.key]: suggestion.value } }), "Aus der Prüfung übernommen.")}
+                onKeep={suggestion.kind === "conflict" ? () => keepCurrent(def, suggestion.text) : undefined}
+                onOther={suggestion.kind === "ai" ? () => { startEdit(section.id); } : undefined} /> : null}
               {editing && FIELD_HELP[def.key] ? <span className="field-hint rg-help">{FIELD_HELP[def.key]}</span> : null}
               {!editing ? <>{originBadge}{sourceChip}</> : null}
               {!editing && editable && provenance?.origin === "ai" ? <button type="button" className="rg-link" disabled={busy} onClick={() => confirm(fieldKeys(def))}>Bestätigen</button> : null}
-              {empty && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => jumpTo(def.key)} aria-label={`${label} erfassen`}>Erfassen</button> : null}
+              {empty && !suggestion && editable && register.business_status !== "geloescht" ? <button type="button" className="rg-add" onClick={() => jumpTo(def.key)} aria-label={`${label} erfassen`}>Erfassen</button> : null}
               {empty && editable && onSearchInDocument && searchableKeys?.has(def.key) && register.business_status !== "geloescht" ? <button type="button" className="rg-link" onClick={() => onSearchInDocument(def.key)} aria-label={`${label} im Dokument suchen`}>Im Dokument suchen</button> : null}
               {isTarget && target?.note ? <span className="rg-field-note" role="status">{target.note}</span> : null}
             </dd>
           </div>;
-        })}</dl>
+      };
+      const groupDefs = REGISTER_GROUPS[section.id];
+      const renderFields = () => groupDefs
+        ? <div className="cw-ov-groups cw-ov-groups--blocks">{groupDefs.map((group) => {
+          const items = fields.filter((def) => group.keys.includes(def.key));
+          if (items.length === 0) return null;
+          return <RegisterGroup key={group.id} id={`rg-group-${group.id}`} title={group.title} intro={group.intro} icon={group.icon} tile={group.tile}>
+            <dl className="rg-fields rg-fields--single">{items.map(renderField)}</dl>
+          </RegisterGroup>;
+        })}</div>
+        : <dl className="rg-fields">{fields.map(renderField)}</dl>;
+      return <Fragment key={section.id}><CollapsibleSection id={`rg-${section.id}`} title={section.title} description={editing && dirty ? "Ungespeicherte Änderungen · Strg+S speichert" : section.id === "identity" ? <>{section.description} {identityBadge}</> : section.description} summary={summaryFor(section.id)} actions={actions} forceOpen={editing || (target !== null && fields.some((def) => def.key === target.key))} icon={SECTION_ICONS[section.id]?.icon} iconClassName={SECTION_ICONS[section.id]?.tile}>
+        {isTerm ? terminationRow : null}
+        {renderFields()}
         {isTerm ? termCalc : null}
         {editing ? <div className="cw-savebar" role="region" aria-label={`${section.title} speichern`}>
           <div className="cw-savebar-msg">{dirty ? <><Signal tone="info" size="sm">Ungespeicherte Änderungen</Signal><span><kbd>Strg</kbd> + <kbd>S</kbd> speichert</span></> : <span>Keine Änderungen</span>}</div>
           <div className="cw-savebar-actions">
-            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => cancelEdit(section.id)}>Verwerfen</button>
             <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()} aria-keyshortcuts="Control+S">{busy ? "Wird gespeichert…" : "Speichern"}</button>
           </div>
         </div> : null}

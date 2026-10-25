@@ -6,6 +6,8 @@ import Signal from "@/components/ui/Signal";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { FileIcon } from "./DocumentList";
+import { contentUrl } from "@/lib/api";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
 import {
   listContractDocuments,
@@ -116,40 +118,73 @@ export default function ContractAttachmentsPanel({ contractId, orgSlug, onAnalyz
     if (ok) { setRemoving(null); setReason(""); }
   }
 
-  return <section className="cw-section" aria-labelledby="attachments-heading">
-    <div className="cw-section-head"><div><h2 id="attachments-heading">Dokumente zum Vertrag</h2><p>Hauptdokument, Nachträge, Kündigungen und weitere Anlagen. Analysierte Nachträge erzeugen nur Vorschläge in den Stammdaten.</p></div></div>
-    {editable ? <form className="rg-transition" aria-label="Dokument hinzufügen" onSubmit={(event) => { event.preventDefault(); void upload(); }}>
-      <div className="rg-form-grid">
-        <label>Dateien (PDF/DOCX)<input ref={fileInput} type="file" multiple accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /></label>
-        <label>Dokumentart<select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value)}>{(types.length ? types : [{ id: "n", code: "nachtrag", label: "Nachtrag" } as LookupDto]).map((item) => <option key={item.id} value={item.code}>{item.label}</option>)}</select></label>
-        <label>Bezeichnung (optional)<input value={title} maxLength={255} disabled={files.length > 1} onChange={(event) => setTitle(event.target.value)} /></label>
-        <label className="rg-check"><input type="checkbox" checked={analyze} disabled={!ANALYZABLE.has(attachmentType)} onChange={(event) => setAnalyze(event.target.checked)} />Mit lokaler KI analysieren und Änderungen vorschlagen</label>
+  const [dragging, setDragging] = useState(false);
+
+  return <section className="cw-section att" aria-labelledby="attachments-heading">
+    <header className="att-head">
+      <h2 id="attachments-heading">Dokumente zum Vertrag</h2>
+      <p>Verträge, Nachträge und weitere Anlagen verwalten. Analysierte Nachträge erzeugen nur Vorschläge in den Stammdaten.</p>
+    </header>
+    {editable ? <form className="att-add" aria-label="Dokument hinzufügen" onSubmit={(event) => { event.preventDefault(); void upload(); }}>
+      <h3>Dokument hinzufügen</h3>
+      <div
+        className={`att-drop${dragging ? " is-dragging" : ""}`}
+        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          const dropped = Array.from(event.dataTransfer.files).filter((file) => /\.(pdf|docx)$/i.test(file.name));
+          if (dropped.length) setFiles(dropped);
+        }}
+      >
+        <svg className="att-drop-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5 M12 17v-6 M9.5 13.5 12 11l2.5 2.5" /></svg>
+        <p className="att-drop-text"><strong>PDF oder DOCX</strong> hier ablegen</p>
+        <input ref={fileInput} className="sr-only" type="file" multiple aria-label="Dateien (PDF/DOCX)" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+        <button type="button" className="btn" onClick={() => fileInput.current?.click()}>Dateien auswählen</button>
+        <p className="att-drop-hint">{files.length ? files.map((file) => file.name).join(", ") : "Mehrere Dateien möglich."}</p>
       </div>
-      <div className="rg-actions"><button type="submit" className="btn btn-primary" disabled={busy || files.length === 0}>{busy ? "Wird verarbeitet…" : "Hinzufügen"}</button></div>
+      <div className="att-fields">
+        <label>Dokumentart<select value={attachmentType} onChange={(event) => setAttachmentType(event.target.value)}>{(types.length ? types : [{ id: "n", code: "nachtrag", label: "Nachtrag" } as LookupDto]).map((item) => <option key={item.id} value={item.code}>{item.label}</option>)}</select></label>
+        <label>Bezeichnung (optional)<input value={title} maxLength={255} disabled={files.length > 1} placeholder="Bezeichnung eingeben" onChange={(event) => setTitle(event.target.value)} /></label>
+      </div>
+      <div className="att-submit">
+        <label className="att-check"><input type="checkbox" checked={analyze} disabled={!ANALYZABLE.has(attachmentType)} onChange={(event) => setAnalyze(event.target.checked)} /><span><strong>Mit lokaler KI analysieren</strong><small>Änderungen werden als Vorschläge gespeichert.</small></span></label>
+        <button type="submit" className="btn btn-primary" disabled={busy || files.length === 0}>{busy ? "Wird verarbeitet…" : "Hinzufügen"}</button>
+      </div>
+      <p className="att-note">Vertragsdaten bleiben bis zur Bestätigung unverändert.</p>
     </form> : null}
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
     {results.length > 0 ? <ul className="rg-explanation" aria-label="Ergebnis des Uploads">{results.map((item) => <li key={`${item.original_filename}-${item.document_version_id}`}><strong>{item.original_filename}</strong>: {item.message ?? item.status}</li>)}</ul> : null}
-    {items === null ? <p role="status">Dokumente werden geladen…</p> : items.length === 0 ? <p className="cw-muted">Noch keine Dokumente.</p> : <div className="table-scroll"><table className="rg-table">
-      <thead><tr><th scope="col">Bezeichnung</th><th scope="col">Art</th><th scope="col">Hinzugefügt</th><th scope="col">Status</th>{editable ? <th scope="col"><span className="sr-only">Aktionen</span></th> : null}</tr></thead>
-      <tbody>{items.map((item) => <tr key={item.link_id} className={item.is_valid ? undefined : "rg-inactive"}>
-        <th scope="row">{item.title}{item.title !== item.original_filename ? <span className="contract-business-status">{item.original_filename}</span> : null}</th>
-        <td>{editable ? <select aria-label={`Dokumentart von ${item.title}`} value={item.attachment_type ?? ""} disabled={busy} onChange={(event) => void update(item, { attachment_type: event.target.value })}><option value="" disabled>Ohne Art</option>{types.map((type) => <option key={type.id} value={type.code}>{type.label}</option>)}</select> : label(item.attachment_type)}</td>
-        <td>{item.added_at ? timestamp.format(new Date(item.added_at)) : "–"}{item.added_by_name ? ` · ${item.added_by_name}` : ""}</td>
-        <td>{item.is_main ? <StatusBadge label="Hauptdokument" tone="information" /> : null}{!item.is_valid ? <Signal tone="warning">Ungültig</Signal> : null}</td>
-        {editable ? <td><span className="rg-actions">
-          {!item.is_main && item.is_valid ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_main: true })}>Als Hauptdokument</button> : null}
-          {!item.is_main ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_valid: !item.is_valid })}>{item.is_valid ? "Ungültig setzen" : "Wieder gültig"}</button> : null}
-          {item.is_main
-            ? <span className="cw-muted" title="Zuerst ein anderes Dokument als Hauptdokument festlegen.">Hauptdokument kann nicht entfernt werden</span>
-            : <button type="button" className="rg-link" disabled={busy} onClick={() => { setReason(""); setRemoving(item); }} aria-label={`${item.title} entfernen`}>Entfernen</button>}
-        </span></td> : null}
-      </tr>)}</tbody>
-    </table></div>}
-    {removed.length ? <details className="removed-documents">
+    <div className="att-list">
+      <h3>Vorhandene Dokumente{items ? <span className="att-count">{items.length}</span> : null}</h3>
+      {items === null ? <p role="status">Dokumente werden geladen…</p> : items.length === 0 ? <p className="cw-muted">Noch keine Dokumente.</p> : <div className="table-scroll"><table className="rg-table att-table">
+        <thead><tr><th scope="col">Dokument</th><th scope="col">Art</th><th scope="col">Hinzugefügt</th><th scope="col">Aktionen</th></tr></thead>
+        <tbody>{items.map((item) => <tr key={item.link_id} className={item.is_valid ? undefined : "rg-inactive"}>
+          <th scope="row"><span className="att-file">
+            <FileIcon doc={item} />
+            <span className="att-file-main">{item.title}{item.title !== item.original_filename ? <span className="contract-business-status">{item.original_filename}</span> : null}
+              <span className="att-file-badges">{item.is_main ? <StatusBadge label="Hauptdokument" tone="information" /> : null}{!item.is_valid ? <Signal tone="warning">Ungültig</Signal> : null}</span></span>
+          </span></th>
+          <td>{editable ? <select aria-label={`Dokumentart von ${item.title}`} value={item.attachment_type ?? ""} disabled={busy} onChange={(event) => void update(item, { attachment_type: event.target.value })}><option value="" disabled>Ohne Art</option>{types.map((type) => <option key={type.id} value={type.code}>{type.label}</option>)}</select> : label(item.attachment_type)}</td>
+          <td>{item.added_at ? timestamp.format(new Date(item.added_at)) : "–"}{item.added_by_name ? ` · ${item.added_by_name}` : ""}</td>
+          <td><span className="rg-actions">
+            <a className="btn" href={contentUrl(contractId, item.document_version_id, orgSlug)} target="_blank" rel="noreferrer" aria-label={`${item.title} öffnen`}>Öffnen</a>
+            {editable && !item.is_main && item.is_valid ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_main: true })}>Als Hauptdokument</button> : null}
+            {editable && !item.is_main ? <button type="button" className="rg-link" disabled={busy} onClick={() => void update(item, { is_valid: !item.is_valid })}>{item.is_valid ? "Ungültig setzen" : "Wieder gültig"}</button> : null}
+            {editable ? (item.is_main
+              ? <span className="att-locked cw-muted" title="Zuerst ein anderes Dokument als Hauptdokument festlegen."><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 11V8a5 5 0 0 1 10 0v3 M6 11h12v9H6z" /></svg>Geschützt<span className="sr-only">: Hauptdokument kann nicht entfernt werden</span></span>
+              : <button type="button" className="rg-link" disabled={busy} onClick={() => { setReason(""); setRemoving(item); }} aria-label={`${item.title} entfernen`}>Entfernen</button>) : null}
+          </span></td>
+        </tr>)}</tbody>
+      </table></div>}
+    </div>
+    {removed.length ? <details className="att-removed">
       <summary>Entfernte Dokumente ({removed.length})</summary>
-      <ul>{removed.map((item) => <li key={item.removed_id}>
-        <span><strong>{item.title}</strong> · {label(item.attachment_type)} · entfernt {item.removed_at ? timestamp.format(new Date(item.removed_at)) : ""}{item.removed_by_name ? ` von ${item.removed_by_name}` : ""}{item.reason ? ` – „${item.reason}“` : ""}</span>
-        {editable ? <button type="button" className="rg-link" disabled={busy} onClick={() => void change(() => restoreContractDocument(orgSlug, contractId, item.removed_id), "Wiederherstellen fehlgeschlagen.")} aria-label={`${item.title} wiederherstellen`}>Wiederherstellen</button> : null}
+      <ul className="removed-documents-list">{removed.map((item) => <li key={item.removed_id}>
+        <span className="att-file"><FileIcon doc={item} />
+          <span className="att-file-main"><strong>{item.title}</strong><span className="cw-muted">{label(item.attachment_type)} · entfernt {item.removed_at ? timestamp.format(new Date(item.removed_at)) : ""}{item.removed_by_name ? ` von ${item.removed_by_name}` : ""}{item.reason ? ` – „${item.reason}“` : ""}</span></span></span>
+        {editable ? <button type="button" className="btn" disabled={busy} onClick={() => void change(() => restoreContractDocument(orgSlug, contractId, item.removed_id), "Wiederherstellen fehlgeschlagen.")} aria-label={`${item.title} wiederherstellen`}>Wiederherstellen</button> : null}
       </li>)}</ul>
     </details> : null}
     <Dialog open={removing !== null} title="Dokument entfernen?" onClose={() => setRemoving(null)}

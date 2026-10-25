@@ -179,6 +179,16 @@ export function getContractRegister(organizationSlug: string, contractId: string
   return apiGet<ContractRegister>(contractPath(contractId, "register", organizationSlug));
 }
 
+/** Angaben zum Vertragspartner, die die KI im Vertrag gefunden hat (nur lesen; zum Vorbelegen von „Neuer Partner“). */
+export interface PartnerPrefill {
+  values: Partial<Record<"email" | "phone" | "street" | "postal_code" | "city" | "country", string>>;
+  sources: { field: string; label: string; page: number | null; quote: string | null }[];
+}
+
+export function getPartnerPrefill(organizationSlug: string, contractId: string) {
+  return apiGet<PartnerPrefill>(contractPath(contractId, "partner-prefill", organizationSlug));
+}
+
 export function updateContractRegister(
   organizationSlug: string,
   contractId: string,

@@ -1007,8 +1007,8 @@ body { background: var(--color-bg); }
 .type-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--space-2); border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text); font-size: var(--text-small); font-weight: var(--weight-semibold); }
 .removed-documents { margin-top: var(--space-4); }
 .removed-documents summary { cursor: pointer; font-size: var(--text-small); font-weight: var(--weight-semibold); color: var(--color-text-muted); }
-.removed-documents ul { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
-.removed-documents li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-small); }
+.removed-documents-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.removed-documents-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-small); }
 /* Jeder Kasten einklappbar (lib/box-collapse.ts): Knopf rechts oben, eingeklappt bleibt nur der Kopf. */
 [data-box] { position: relative; }
 /* Einklappen links vor der Überschrift, 40 × 40 wie CollapsibleSection (Position aus lib/box-collapse.ts) */
@@ -1236,3 +1236,16 @@ button.tag-chip:hover, a.tag-chip:hover { text-decoration: underline; transform:
 .tag-chip--critical { --tag-fg: var(--color-danger); --tag-bg: var(--color-danger-bg); --tag-border: var(--color-danger-border); }
 .object-header-signals .tag-chip { min-height: 24px; padding: 0 8px 0 6px; gap: 5px; font-size: var(--text-caption); }
 .object-header-signals .tag-chip-icon { width: 13px; height: 13px; }
+
+/* Eingeklappte Karten: einheitliche Höhe – die Kurzfassung bleibt einzeilig (Rest als …), Ausnahme-Karte ohne weißen Rest unter dem Kopf */
+.collapsible.is-collapsed .collapsible-summary { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.collapsible.is-collapsed .collapsible-summary > * + * { margin-left: var(--space-3); }
+.collapsible.is-collapsed .collapsible-title > p { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.collapsible.is-collapsed > .collapsible-head { margin-bottom: 0; }
+.scope-list-card--excluded.is-collapsed { border-top: 4px solid var(--color-warning-border); background: var(--color-warning-bg); }
+.scope-list-card--excluded.is-collapsed > .collapsible-head { margin: 0; padding: 0; border-top: 0; background: transparent; }
+.svc-col > .collapsible.is-collapsed { padding-block: var(--space-4); }
+
+/* Weitere Leistungen: je Gruppe Fundstelle (Seite) und Prüfen-Plakette neben dem Titel */
+.svc-group-src { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: var(--space-2); }
+.svc-group > summary .ai-origin, .svc-group > summary .cw-source-button { cursor: pointer; }

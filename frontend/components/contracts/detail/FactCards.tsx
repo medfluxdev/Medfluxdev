@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import AiOrigin, { AiReviewContext } from "@/components/ui/AiOrigin";
 import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import Signal, { SignalIcon } from "@/components/ui/Signal";
 import type { EvidenceRef, FactReviewStateDto } from "@/lib/contract-detail-types";
 import { groupServices } from "@/lib/service-groups";
-import { FactCardAction, FactInput, FactMenu, FactSaveBar, FactStatus, splitList, useFactCardEdit, type CardFactRow, type FactCardEdit } from "./CardFact";
+import { FactCardAction, FactInput, FactMenu, FactSaveBar, FactSourceContext, FactStatus, splitList, useFactCardEdit, type CardFactRow, type FactCardEdit } from "./CardFact";
 
 export const SCOPE_CHOICES = ["Inklusive", "Exklusive"] as const;
 
@@ -155,10 +155,25 @@ export function ScopeCard({ rows, historyHref, ...ctx }: CardContext & {
   </CollapsibleSection>;
 }
 
-/** Thematische Gruppe der weiteren Leistungen, einklappbar. */
-function ServiceGroup({ label, items }: { label: string; items: string[] }) {
+/**
+ * Thematische Gruppe der weiteren Leistungen, einklappbar. Alle Gruppen stammen aus einer Prüf-Angabe (Optional ›
+ * „Weitere inklusive Leistungen“); jede Gruppe zeigt deshalb, woher sie kommt (Seite) und führt mit „Prüfen“ dorthin.
+ */
+function ServiceGroup({ label, items, fact, factKey, listLabel }: { label: string; items: string[]; fact: FactReviewStateDto | undefined; factKey: string; listLabel: string }) {
+  const openSource = useContext(FactSourceContext)?.(fact) ?? null;
+  const page = fact?.linked_evidence?.find((entry) => entry.page != null)?.page ?? null;
+  const state = fact?.state;
+  const origin = state === "confirmed" ? "confirmed" : state === "auto_accepted" ? "auto" : fact?.present && (state === "unreviewed" || state === "needs_review" || state === undefined) ? "unreviewed" : null;
   return <details className="svc-group" open>
-    <summary><span className="svc-group-chevron" aria-hidden="true">{CHEVRON_ICON}</span><span className="svc-group-title">{label}</span><span className="svc-group-count">{items.length} {items.length === 1 ? "Punkt" : "Punkte"}</span></summary>
+    <summary>
+      <span className="svc-group-chevron" aria-hidden="true">{CHEVRON_ICON}</span>
+      <span className="svc-group-title">{label}</span>
+      <span className="svc-group-src">
+        {page != null ? <button type="button" className="cw-source-button svc-group-page" onClick={(event) => { event.preventDefault(); openSource?.(); }} disabled={!openSource} aria-label={`Fundstelle zu ${label}: Seite ${page}`}>Seite {page}</button> : null}
+        {origin ? <AiOrigin state={origin} onOpenSource={openSource} factKey={factKey} subject={`${listLabel}: ${label}`} /> : null}
+      </span>
+      <span className="svc-group-count">{items.length} {items.length === 1 ? "Punkt" : "Punkte"}</span>
+    </summary>
     <ul>{items.map((item) => <li key={item}>{item}</li>)}</ul>
   </details>;
 }
@@ -190,7 +205,7 @@ export function ScopeListCard({ list, ...ctx }: CardContext & { list: ScopeList 
       : <>
         {items.length === 0 ? <p className="side-none">Keine angegeben</p>
           : excluded ? <div className="svc-excluded-text">{items.map((item) => <p key={item}>{item}</p>)}</div>
-            : grouped ? <div className="svc-groups">{groups.map((group) => <ServiceGroup key={group.label} label={group.label} items={group.items} />)}</div>
+            : grouped ? <div className="svc-groups">{groups.map((group) => <ServiceGroup key={group.label} label={group.label} items={group.items} fact={list.fact} factKey={row.factKey} listLabel={list.label} />)}</div>
               : <ul className="scope-list">{items.map((item) => <li key={item}>{item}</li>)}</ul>}
         <div className="svc-card-foot">
           <span className="svc-card-origin"><FactStatus edit={edit} row={row} canEdit={ctx.canEdit} compact />{!excluded && list.fact?.state === "confirmed" ? <span className="svc-legend-text">= von einer Person geprüft · Klick öffnet die Prüfung mit Fundstelle.</span> : null}</span>

@@ -76,3 +76,52 @@
 }
 @media (prefers-reduced-motion: reduce) { .cw-ov-groups .cw-og { transition: none; } }
 @media (forced-colors: active) { .cw-og-tile, .cw-complete { border-color: CanvasText; } }
+
+/* Gruppen der Vertragsdaten (Vertrag & Partner): gleiche Gliederung wie die Organisationszuordnung */
+.cw-og-tile--partner { --tile-fg: var(--color-tag-partner); --tile-bg: var(--color-tag-partner-bg); --tile-border: var(--color-tag-partner-border); }
+.cw-og-tile--device { --tile-fg: var(--color-tag-device); --tile-bg: var(--color-tag-device-bg); --tile-border: var(--color-tag-device-border); }
+.cw-og-tile .cw-og-icon svg { width: 20px; height: 20px; fill: none; stroke: currentcolor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.cw-og .rg-fields--single { grid-template-columns: minmax(0, 1fr); }
+.cw-og .rg-fields--single .rg-field:first-child { padding-top: 0; }
+.cw-og .rg-fields--single .rg-field:last-child { border-bottom: 0; }
+
+/* Vorschlag aus der Prüfung im Feld (FieldSuggestion) */
+.fs { display: flex; align-items: center; gap: var(--space-3); max-width: 560px; padding: var(--space-2) var(--space-3); border: 1px dashed var(--color-ai-border); border-radius: var(--radius-sm); background: var(--color-ai-bg); font-size: var(--text-small); }
+.fs-icon { display: grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--color-ai); }
+.fs-icon svg { width: 18px; height: 18px; fill: none; stroke: currentcolor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fs-text { display: grid; flex: 1; min-width: 0; }
+.fs-value { font-weight: var(--weight-semibold); color: var(--color-text); overflow-wrap: anywhere; }
+.fs-source { color: var(--color-text-muted); font-size: var(--text-caption); }
+.fs-actions { display: flex; flex: none; gap: var(--space-2); }
+.fs--conflict { border: 1px solid var(--color-warning-border); background: var(--color-warning-bg); }
+.fs--conflict .fs-icon { color: var(--color-warning); }
+.cw-ov-groups .cw-og:nth-child(even) { background: var(--color-surface-subtle); }
+.rg-add { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-3); border: 1px dashed var(--color-border-strong); border-radius: 999px; background: transparent; color: var(--color-link); font: inherit; font-size: var(--text-small); font-weight: var(--weight-semibold); cursor: pointer; }
+.rg-add:hover { background: var(--color-surface-accent); }
+@media (max-width: 900px) { .fs { flex-wrap: wrap; } }
+.cw-complete--warning { border-color: var(--color-warning-border); background: var(--color-warning-bg); color: var(--color-warning); }
+.cw-complete--warning .cw-complete-ring .cw-complete-track { stroke: var(--color-warning-border); }
+.cw-missing .cw-complete { cursor: pointer; }
+.cw-missing:hover .cw-complete { text-decoration: underline; }
+
+/* Vertrag & Partner u. a.: ein Block, durch feine Linien in Bereiche geteilt (2 Spalten) */
+.cw-ov-groups--blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: var(--space-4) var(--space-3) var(--space-3); padding: 0; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); overflow: hidden; }
+.cw-ov-groups--blocks .cw-og { grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-3); padding: var(--space-4) var(--space-5); border: 0; border-radius: 0; background: transparent; }
+.cw-ov-groups--blocks .cw-og + .cw-og, .cw-ov-groups--blocks .cw-og:first-child { border-top: 0; padding-top: var(--space-4); }
+.cw-ov-groups--blocks .cw-og:nth-child(even) { background: transparent; border-left: 1px solid var(--color-border-subtle); }
+.cw-ov-groups--blocks .cw-og:nth-child(n+3) { border-top: 1px solid var(--color-border-subtle); }
+.cw-ov-groups--blocks .cw-og-intro { align-items: center; }
+.cw-ov-groups--blocks .cw-og-intro p { display: none; }
+.cw-ov-groups--blocks .cw-og-intro h3 { margin: 0; font-size: var(--text-title-s); line-height: 1.3; }
+.cw-ov-groups--blocks .cw-og-body { max-width: none; align-content: start; }
+.cw-ov-groups--blocks .fs { flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .cw-ov-groups--blocks { grid-template-columns: minmax(0, 1fr); }
+  .cw-ov-groups--blocks .cw-og:nth-child(even) { border-left: 0; }
+  .cw-ov-groups--blocks .cw-og + .cw-og { border-top: 1px solid var(--color-border-subtle); }
+}
+.cw-ov-groups--blocks .rg-field { padding: 8px 0; min-width: 0; }
+.cw-ov-groups--blocks .rg-field dd { min-width: 0; overflow-wrap: anywhere; }
+.cw-ov-groups--blocks .rg-field input[type=text], .cw-ov-groups--blocks .rg-field select, .cw-ov-groups--blocks .rg-field textarea { width: 100%; max-width: 100%; box-sizing: border-box; }
+/* Ungerade Anzahl Bereiche: der letzte füllt die volle Breite */
+.cw-ov-groups--blocks .cw-og:last-child:nth-child(odd) { grid-column: 1 / -1; }
