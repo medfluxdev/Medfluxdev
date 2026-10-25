@@ -94,8 +94,6 @@ describe("Geführte Prüfung nach Feldern", () => {
     const { onShow, onReload, container } = mode(model);
     const panel = screen.getByRole("region", { name: "Aktuelle Angabe" });
     expect(within(panel).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
-    const counter = screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "0 / 3 geprüft · 3 offen");
-    expect(counter).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Pflicht,.*3 offen/ })).toHaveAttribute("aria-pressed", "true");
     // Das Original springt zur Fundstelle des Hauptnachweises.
     expect(onShow).toHaveBeenCalledWith(expect.objectContaining({ evidence_id: "s1" }));
@@ -103,7 +101,7 @@ describe("Geführte Prüfung nach Feldern", () => {
 
     // Bestätigen speichert, die Antwort zeigt das Feld als entschieden → weiter zum nächsten offenen Feld.
     api.decideField.mockResolvedValue(detailAfter(review([decided(start), end, price, sla])));
-    await user.click(within(panel).getByRole("button", { name: /^Bestätigen/ }));
+    await user.click(within(panel).getByRole("button", { name: "Bestätigen" }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "dates.start_date", decision: "keep" }));
     expect(onReload).toHaveBeenCalled();
     expect(await screen.findByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
@@ -116,7 +114,7 @@ describe("Geführte Prüfung nach Feldern", () => {
     const { onShow } = mode(model);
     expect(screen.getByRole("heading", { name: "Angaben prüfen" })).toBeInTheDocument();
     api.decideField.mockResolvedValue(detailAfter(review([decided(start), sla, email])));
-    await user.click(screen.getByRole("button", { name: /^Bestätigen/ }));
+    await user.click(screen.getByRole("button", { name: "Bestätigen" }));
     expect(await screen.findByRole("heading", { name: "Reaktionszeit (SLA)" })).toBeInTheDocument();
     expect(screen.getByText("Pflicht fertig – jetzt Optional")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Optional,.*2 offen/ })).toHaveAttribute("aria-pressed", "true");
@@ -160,21 +158,58 @@ describe("Geführte Prüfung nach Feldern", () => {
     expect(screen.queryByRole("button", { name: "Vertrag freigeben" })).not.toBeInTheDocument();
   });
 
+  it("nach dem Ende der Stufe kann man alle Angaben noch einmal von vorn durchgehen", async () => {
+    const user = userEvent.setup();
+    mode(review([decided(start), decided(end)]), {});
+    expect(screen.getByRole("heading", { name: "Pflichtprüfung beendet" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Angaben noch einmal durchgehen" }));
+    expect(screen.getByRole("heading", { name: start.label })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Pflichtprüfung beendet" })).not.toBeInTheDocument();
+  });
+
+  it("eine Weitere Information lässt sich einer Angabe hinzufügen; danach öffnet sich diese Angabe zur Prüfung", async () => {
+    const user = userEvent.setup();
+    api.decideFinding.mockResolvedValue({});
+    mode(review([decided(start), end], { findings: [finding()], findings_open: 1 }), {});
+    await user.click(screen.getByRole("button", { name: /^Optional, / }));
+    await user.selectOptions(screen.getByRole("combobox", { name: /Zu welcher Angabe hinzufügen/ }), start.fact_key);
+    await user.click(screen.getByRole("button", { name: "Zur Angabe hinzufügen und prüfen" }));
+    expect(api.decideFinding).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "link", target_fact_key: start.fact_key }));
+    expect(await screen.findByRole("heading", { name: start.label })).toBeInTheDocument();
+  });
+
+  it("die Zahl „entschieden“ ist anklickbar und führt zurück zu den entschiedenen Angaben", async () => {
+    const user = userEvent.setup();
+    mode(review([decided(start), decided(end)]), {});
+    await user.click(screen.getByRole("button", { name: /^\d+\s?entschieden$/ }));
+    expect(screen.getByRole("heading", { name: start.label })).toBeInTheDocument();
+  });
+
+  it("Marken im Original tragen die Nummer der Angabe („Angabe n von N“), nicht die der Nachweisliste", () => {
+    mode(review([start, end, price]), { viewer: (numbers: Map<string, number>) => <div>{`Nr ${numbers.get("s1")}`}</div> });
+    expect(screen.getByText("Nr 1")).toBeInTheDocument();
+    expect(screen.getByText("Angabe 1 von 3")).toBeInTheDocument();
+  });
+
   it("startet bei der Angabe, von der aus geöffnet wurde (Karte → geführt weiter)", () => {
     mode(review([start, end, price]), { startKey: "costs.monthly_recurring" });
     expect(screen.getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
-    expect(screen.getByText((_, node) => node?.tagName === "SPAN" && node.textContent === "0 / 3 geprüft · 3 offen")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Pflicht, 0 von 3 geprüft, 3 offen/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("Weitere Informationen sind nicht Teil des Ablaufs; ein Hinweis nennt sie nur, ohne Zwang", async () => {
+  it("Weitere Informationen gehören zur Stufe Optional: nach den Feldern folgen sie als eigene Schritte, ohne den Pflicht-Stand zu ändern", async () => {
     const user = userEvent.setup();
-    const onOpenFindings = vi.fn();
+    api.decideFinding.mockResolvedValue({});
     const model = review([decided(start)], { findings: [finding(), finding({ finding_key: "evidence.x", label: "Sonstiges", consequential: false })], findings_open: 2 });
-    mode(model, { onOpenFindings });
-    expect(screen.getByRole("heading", { name: "Pflicht abgeschlossen" })).toBeInTheDocument();
-    expect(screen.getByText(/2 Weitere Informationen aus dem Dokument liegen zur Ansicht bereit – Sie müssen dazu nichts entscheiden/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Ansehen" }));
-    expect(onOpenFindings).toHaveBeenCalled();
+    mode(model, {});
+    // Pflicht ist fertig; Optional wartet mit den beiden Informationen.
+    expect(screen.getByRole("heading", { name: "Pflichtprüfung beendet" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Optional, / }));
+    expect(screen.getByText("Angabe 1 von 2")).toBeInTheDocument();
+    expect(screen.getByText("Weitere Information")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Als Notiz sichern" }));
+    expect(api.decideFinding).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "note" }));
+    expect(await screen.findByText("Angabe 2 von 2")).toBeInTheDocument();
   });
 
   it("Gruppenbestätigung zeigt jeden Wert, bestätigt nur die angehakten und nennt Fehler", async () => {
@@ -192,17 +227,6 @@ describe("Geführte Prüfung nach Feldern", () => {
     expect(api.decideField).toHaveBeenCalledTimes(1);
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", { fact_key: "costs.vat_rate", decision: "keep", expected_version: "v-vat" });
     await waitFor(() => expect(toast).toHaveBeenCalledWith("1 Angabe bestätigt.", "success"));
-  });
-
-  it("alle Angaben: Schublade mit Stand je Angabe, Sprung zur gewählten", async () => {
-    const user = userEvent.setup();
-    mode(review([start, end, decided(price), sla, email, calc]));
-    await user.click(screen.getByRole("button", { name: "Übersicht" }));
-    const drawer = screen.getByRole("dialog", { name: "Alle Angaben" });
-    expect(within(drawer).getByRole("table", { name: "Wesentliche Angaben" })).toBeInTheDocument();
-    expect(within(drawer).getByRole("table", { name: "Optionale Angaben" })).toBeInTheDocument();
-    await user.click(within(drawer).getByRole("button", { name: "Wiederkehrende Kosten (monatlich)" }));
-    expect(await screen.findByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
   });
 });
 
@@ -232,36 +256,65 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  it("Filter: Status und Priorität, Chips zum Entfernen, Zurücksetzen und Zähler; Standard sind die offenen Angaben", async () => {
+  it("Stufen: Pflicht und Optional mit festen Nummern; ein Klick auf die Stufe zeigt deren Angaben", async () => {
     const user = userEvent.setup();
-    overview(review([start, decided(end), price, sla]));
-    // Standard: offen.
-    expect(screen.queryByRole("button", { name: /Vertragsende/ })).not.toBeInTheDocument();
-    expect(screen.getByText("3 Angaben")).toBeInTheDocument();
-    expect(screen.getByText("Offen", { selector: ".frv-chip" })).toBeInTheDocument();
-    await setFilter(user, "Priorität", "essential");
-    expect(screen.getByText("2 Angaben")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Statusfilter entfernen" }));
-    expect(screen.getByRole("button", { name: /Vertragsende/, expanded: false })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Reaktionszeit/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Zurücksetzen" }));
-    expect(screen.getByRole("button", { name: /Reaktionszeit/, expanded: false })).toBeInTheDocument();
-    expect(screen.getByText("4 Angaben")).toBeInTheDocument();
+    overview(review([start, end, price, sla]));
+    const nav = screen.getByRole("navigation", { name: "Angaben" });
+    const items = within(nav).getAllByRole("button");
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent("1");
+    expect(items[2]).toHaveTextContent("3");
+    expect(screen.getByRole("button", { name: /^Pflicht, / })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: /^Optional, / }));
+    const optional = within(screen.getByRole("navigation", { name: "Angaben" })).getAllByRole("button");
+    expect(optional).toHaveLength(1);
+    expect(optional[0]).toHaveTextContent("Reaktionszeit");
+    expect(optional[0]).toHaveTextContent("1");
+  });
+
+  it("Suche und Status filtern die Liste, die Nummern bleiben die der Stufe", async () => {
+    const user = userEvent.setup();
+    overview(review([start, decided(end), price]));
+    await user.click(screen.getByRole("button", { name: /^Status:/ }));
+    await user.click(screen.getByRole("option", { name: /Entschieden/ }));
+    const nav = screen.getByRole("navigation", { name: "Angaben" });
+    const items = within(nav).getAllByRole("button");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("Vertragsende");
+    expect(items[0]).toHaveTextContent("2");
+    await user.click(screen.getByRole("button", { name: /^Status:/ }));
+    await user.click(screen.getByRole("option", { name: /Alle/ }));
     await user.type(screen.getByRole("searchbox", { name: "Angabe oder Wert suchen" }), "Kosten");
-    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/, expanded: false })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Angaben" })).getAllByRole("button")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /Vertragsbeginn/ })).not.toBeInTheDocument();
   });
 
-  it("Karten zeigen Wert, Seite und Stand je Zeile; Zähler der Karte folgen der Priorität, nicht dem Status", async () => {
+  it("Status „Mehrere Fundstellen“ zeigt nur Angaben mit mehr als einer Fundstelle; Widerspruch und Neu zu prüfen sind getrennte Filter", async () => {
     const user = userEvent.setup();
-    overview(review([start, decided(end), price, sla, calc]));
-    await setFilter(user, "Status", "all");
-    const terms = screen.getByRole("region", { name: "Laufzeit & Kündigung" });
-    expect(terms).toHaveTextContent("1 von 2 entschieden");
-    expect(within(terms).getByRole("button", { name: /Vertragsende/ })).toHaveTextContent("31.03.2029");
-    expect(within(terms).getByRole("img", { name: "Entschieden" })).toBeInTheDocument();
-    expect(within(terms).getByText("S. 3")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Berechnete Werte" })).getByText("Wartet auf Angaben")).toBeInTheDocument();
+    const several = field({ ...end, active_evidence_count: 2 });
+    overview(review([start, several, price]));
+    await user.click(screen.getByRole("button", { name: /^Status:/ }));
+    expect(screen.getByRole("option", { name: /Mehrere Fundstellen/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Widerspruch/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Mehrere Fundstellen/ }));
+    const items = within(screen.getByRole("navigation", { name: "Angaben" })).getAllByRole("button");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("Vertragsende");
+  });
+
+  it("in Optional bietet der Status-Filter auch Weitere Informationen, Notiz, Zugeordnet und Ausgeblendet an – nur wenn es sie gibt", async () => {
+    const user = userEvent.setup();
+    const model = review([decided(start), sla], { findings: [finding(), finding({ finding_key: "evidence.n", label: "Hinweis", decision: "note", consequential: false })], findings_open: 1 });
+    overview(model);
+    await user.click(screen.getByRole("button", { name: /^Optional, / }));
+    await user.click(screen.getByRole("button", { name: /^Status:/ }));
+    expect(screen.getByRole("option", { name: /Weitere Informationen/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Als Notiz gesichert/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Ausgeblendet/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Als Notiz gesichert/ }));
+    const items = within(screen.getByRole("navigation", { name: "Angaben" })).getAllByRole("button");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("Hinweis");
   });
 
   it("gemeinsame Bestätigung: Hinweis mit Anzahl, Liste mit Werten zum gezielten Auswählen, Widersprüchliche nie dabei", async () => {
@@ -271,9 +324,6 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     api.decideField.mockResolvedValue({ contract_id: "c-1", field_review: review([decided(price), decided(vat), disputed]) });
     const { onReload } = overview(review([price, vat, disputed]));
     expect(screen.getByText("2 Angaben für gemeinsame Bestätigung verfügbar")).toBeInTheDocument();
-    const card = screen.getByRole("region", { name: "Preise & Zahlung" });
-    expect(within(card).getByText("Widerspruch")).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: /MwSt\.-Satz/, expanded: false })).toHaveTextContent("19 %");
     await user.click(screen.getByRole("button", { name: "2 Angaben ansehen →" }));
     const dialog = screen.getByRole("dialog", { name: "Gemeinsame Bestätigung" });
     expect(within(dialog).queryByText("Währung")).not.toBeInTheDocument();
@@ -284,87 +334,63 @@ describe("Prüfung: Überblick und Weitere Informationen", () => {
     expect(onReload).toHaveBeenCalled();
   });
 
-  it("einzelne eindeutige Angabe lässt sich in der Zeile bestätigen", async () => {
-    const user = userEvent.setup();
-    api.decideField.mockResolvedValue({ contract_id: "c-1", field_review: review([decided(price)]) });
-    overview(review([price]));
-    await user.click(screen.getByRole("button", { name: "Wiederkehrende Kosten (monatlich) bestätigen" }));
-    expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "costs.monthly_recurring", decision: "keep" }));
-  });
-
   it("ohne wesentliche offene Entscheidung gibt es keinen Hinweis auf Blockade und nichts wird „verifiziert“ genannt", () => {
     overview(review([decided(start), decided(end), sla]), true, "list", { ...crDefaults, critical_unreviewed_count: 0 });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByText(/verifiziert|alles geprüft/i)).not.toBeInTheDocument();
   });
 
-  it("fehlende und zurückgestellte Angaben werden benannt", () => {
-    const missing = field({ fact_key: "termination.renewal_period", label: "Verlängerungszeitraum", status: "missing", status_label: "Nicht gefunden", present: false, current: null, candidates: [], evidence: [], source_state: null });
+  it("fehlende und zurückgestellte Angaben werden in der Liste benannt", () => {
+    const missing = field({ fact_key: "termination.renewal_period", label: "Verlängerungszeitraum", status: "missing", status_label: "Nicht gefunden", present: false, current: null, candidates: [], evidence: [], source_state: null as never });
     const later = field({ ...price, status: "deferred", status_label: "Zurückgestellt" });
     overview(review([start, missing, later]));
-    expect(screen.getByRole("button", { name: /Verlängerungszeitraum/, expanded: false })).toHaveTextContent("Nicht gefunden");
-    expect(screen.getByRole("button", { name: /Wiederkehrende Kosten/, expanded: false })).toHaveTextContent("Zurückgestellt");
-  });
-
-  it("Weitere Informationen: mit Quelle gezeigt, zuordnen, als Notiz sichern, ausblenden – kein Zähler, keine Pflicht", async () => {
-    const user = userEvent.setup();
-    api.decideFinding.mockResolvedValue({});
-    const model = review([decided(start), end], { findings: [finding(), finding({ finding_key: "evidence.done", label: "Altfund", decision: "dismissed", decided_by: "A. Prüfer", consequential: false })], findings_open: 1, findings_consequential: 1 });
-    const { onReload } = overview(model);
-    const section = screen.getByRole("region", { name: /Weitere Informationen aus dem Dokument/ });
-    expect(within(section).getByText(/Sie müssen nichts davon bestätigen; es fließt in keine Berechnung ein und zählt nicht zur Prüfung/)).toBeInTheDocument();
-    expect(within(section).getByText("„3 % Skonto bei Zahlung in 10 Tagen“")).toBeInTheDocument();
-    expect(within(section).getByText("KI-Fund, nicht bestätigt")).toBeInTheDocument();
-    expect(within(section).getByText("Zur Einschätzung")).toBeInTheDocument();
-    const link = within(section).getByRole("button", { name: "Als Kandidat zuordnen" });
-    expect(link).toBeDisabled();
-    await user.selectOptions(within(section).getByLabelText(/Feld für „Rabatte“/), "dates.end_date");
-    await user.click(link);
-    expect(api.decideFinding).toHaveBeenCalledWith("c-1", "test-klinik", { finding_key: "evidence.costs.discounts.0", decision: "link", target_fact_key: "dates.end_date" });
-    await user.click(within(section).getByRole("button", { name: "Als Notiz sichern" }));
-    expect(api.decideFinding).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "note" }));
-    await user.click(within(section).getByRole("button", { name: "Ausblenden" }));
-    expect(api.decideFinding).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "dismiss" }));
-    expect(onReload).toHaveBeenCalledTimes(3);
-    await user.click(within(section).getByText("1 bearbeitete Information"));
-    await user.click(within(section).getByRole("button", { name: "Wiederherstellen" }));
-    expect(api.decideFinding).toHaveBeenLastCalledWith("c-1", "test-klinik", expect.objectContaining({ finding_key: "evidence.done", decision: "restore" }));
-  });
-
-  it("eine Angabe anklicken klappt dieselbe Entscheidungsansicht wie in der geführten Prüfung direkt darunter auf", async () => {
-    const user = userEvent.setup();
-    const { onStartGuided } = overview(review([start, end]));
-    const row = screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false });
-    await user.click(row);
-    expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: true })).toBeInTheDocument();
-    expect(within(row.closest("li")!).getByRole("button", { name: /^Bestätigen/ })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Vertragsende/, expanded: false }));
-    expect(screen.getByRole("button", { name: /Vertragsbeginn/, expanded: false })).toBeInTheDocument();
-    await user.click(within(screen.getByRole("button", { name: /Vertragsende/, expanded: true }).closest("li")!).getByRole("button", { name: "Im Dokument weiter prüfen →" }));
-    expect(onStartGuided).toHaveBeenCalledWith("essential", "dates.end_date");
-  });
-
-  it("Einzelprüfung: nummerierte Liste links mit Stand, Entscheidung rechts, Pfeiltasten und Blättern; Ansicht wird gemerkt", async () => {
-    const user = userEvent.setup();
-    overview(review([start, end, price]), true, "single");
     const nav = screen.getByRole("navigation", { name: "Angaben" });
-    const items = within(nav).getAllByRole("button");
-    expect(items).toHaveLength(3);
-    expect(items[0]).toHaveTextContent("1");
-    expect(items[0]).toHaveAttribute("aria-current", "true");
-    const detail = screen.getByRole("region", { name: "Aktuelle Angabe" });
-    expect(within(detail).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
-    expect(within(detail).getByText("1 / 3")).toBeInTheDocument();
+    expect(within(within(nav).getByRole("button", { name: /Verlängerungszeitraum/ })).getByRole("img", { name: "Nicht gefunden" })).toBeInTheDocument();
+    expect(within(within(nav).getByRole("button", { name: /Wiederkehrende Kosten/ })).getByRole("img", { name: "Zurückgestellt" })).toBeInTheDocument();
+  });
+
+  it("eine Angabe wählen zeigt dieselbe Karte wie in der geführten Prüfung; Weiter, Pfeile und „Im Dokument weiter prüfen“", async () => {
+    const user = userEvent.setup();
+    const { onStartGuided } = overview(review([start, end, price]));
+    const detail = () => screen.getByRole("region", { name: "Aktuelle Angabe" });
+    expect(within(detail()).getByRole("heading", { name: "Vertragsbeginn" })).toBeInTheDocument();
+    expect(within(detail()).getByText("Angabe 1 von 3")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("navigation", { name: "Angaben" })).getByRole("button", { name: /Vertragsende/ }));
+    expect(within(detail()).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
+    expect(within(detail()).getByText("Angabe 2 von 3")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Im Dokument weiter prüfen →" }));
+    expect(onStartGuided).toHaveBeenCalledWith("essential", "dates.end_date");
+    await user.click(within(detail()).getByRole("button", { name: "Nächste Angabe" }));
+    expect(within(detail()).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
+    await user.click(within(detail()).getByRole("button", { name: "Vorherige Angabe" }));
+    expect(within(detail()).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
+  });
+
+  it("Pfeiltasten in der Liste wechseln die Angabe", async () => {
+    const user = userEvent.setup();
+    overview(review([start, end, price]));
+    const items = within(screen.getByRole("navigation", { name: "Angaben" })).getAllByRole("button");
     items[0].focus();
     await user.keyboard("{ArrowDown}");
     expect(within(screen.getByRole("region", { name: "Aktuelle Angabe" })).getByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Nächste Angabe →" }));
-    expect(within(screen.getByRole("region", { name: "Aktuelle Angabe" })).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Nächste Angabe →" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "← Vorherige Angabe" }));
-    await user.click(screen.getByRole("button", { name: "Übersicht" }));
-    expect(window.localStorage.getItem("medflux.review.view")).toBe("list");
-    expect(screen.getByRole("region", { name: "Laufzeit & Kündigung" })).toBeInTheDocument();
+  });
+
+  it("Weitere Informationen sind Schritte der Stufe Optional: Quelle, zuordnen, als Notiz sichern, ausblenden", async () => {
+    const user = userEvent.setup();
+    api.decideFinding.mockResolvedValue({});
+    const model = review([decided(start), end], { findings: [finding()], findings_open: 1, findings_consequential: 1 });
+    const { onReload } = overview(model);
+    await user.click(screen.getByRole("button", { name: /^Optional, / }));
+    const detail = screen.getByRole("region", { name: "Aktuelle Angabe" });
+    expect(within(detail).getByRole("heading", { name: "Rabatte" })).toBeInTheDocument();
+    expect(within(detail).getByText("„3 % Skonto bei Zahlung in 10 Tagen“")).toBeInTheDocument();
+    const link = within(detail).getByRole("button", { name: "Zur Angabe hinzufügen und prüfen" });
+    expect(link).toBeDisabled();
+    await user.selectOptions(within(detail).getByLabelText(/Zu welcher Angabe hinzufügen/), "dates.end_date");
+    await user.click(link);
+    expect(api.decideFinding).toHaveBeenCalledWith("c-1", "test-klinik", { finding_key: "evidence.costs.discounts.0", decision: "link", target_fact_key: "dates.end_date" });
+    expect(onReload).toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { name: "Vertragsende" })).toBeInTheDocument();
   });
 
   it("Vertragsprüfung ohne Sperre: ⋯-Menü → Review abschließen verlangt Annahme und Notiz; „Im Dokument prüfen“ steht im Menü", async () => {

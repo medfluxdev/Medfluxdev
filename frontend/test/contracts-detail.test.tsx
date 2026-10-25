@@ -322,12 +322,10 @@ describe("Vertrags-Detail + Quellenanzeige (tabbed Contract Workspace)", () => {
     } as Partial<ContractDetailResponse>));
     const header = screen.getByRole("heading", { level: 1 }).closest("header")!;
     await userEvent.click(within(header).getByRole("button", { name: /KI · Ungeprüft.*Prüfung öffnen/ }));
-    // Die Karte öffnet dieselbe Entscheidungsansicht wie die geführte Prüfung – in einer Schublade, ohne den Ablauf zu starten.
-    const drawer = await screen.findByRole("dialog", { name: "Jährliche Gesamtkosten" });
-    // Berechnete Werte werden nicht einzeln bestätigt: die Schublade zeigt, woraus sie entstehen.
-    expect(within(drawer).queryByRole("button", { name: "Bestätigen" })).not.toBeInTheDocument();
-    expect(within(drawer).getByText("Wiederkehrende Kosten (monatlich)")).toBeInTheDocument();
-    expect(within(drawer).getByText("Offen")).toBeInTheDocument();
+    // Die Plakette führt zur Karte in Dokumente → Prüfung. Berechnete Werte haben keine eigene Karte: sie stehen auf der Karte ihrer Angabe.
+    const card = await screen.findByRole("region", { name: "Aktuelle Angabe" });
+    expect(within(card).getByRole("heading", { name: "Wiederkehrende Kosten (monatlich)" })).toBeInTheDocument();
+    expect(within(within(card).getByRole("region", { name: "Daraus berechnet" })).getByText("Jährliche Gesamtkosten")).toBeInTheDocument();
   });
 
   it("Kopf: feste Laufzeit braucht kein „Kündbar bis“ – nichts Kritisches dazu", async () => {

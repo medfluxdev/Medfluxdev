@@ -1232,3 +1232,7 @@ button.tag-chip:hover, a.tag-chip:hover { text-decoration: underline; transform:
 .chip-options-group button:hover, .chip-options-group button:focus-visible { background: var(--color-surface-subtle); }
 .chip-options-empty { margin: 0; font-size: var(--text-small); color: var(--color-text-muted); }
 @media (forced-colors: active) { .chip-add-trigger { border-color: ButtonText; } }
+.tag-chip--attention { --tag-fg: var(--color-warning); --tag-bg: var(--color-warning-bg); --tag-border: var(--color-warning-border); }
+.tag-chip--critical { --tag-fg: var(--color-danger); --tag-bg: var(--color-danger-bg); --tag-border: var(--color-danger-border); }
+.object-header-signals .tag-chip { min-height: 24px; padding: 0 8px 0 6px; gap: 5px; font-size: var(--text-caption); }
+.object-header-signals .tag-chip-icon { width: 13px; height: 13px; }

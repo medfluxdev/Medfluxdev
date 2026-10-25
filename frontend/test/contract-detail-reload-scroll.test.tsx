@@ -106,8 +106,8 @@ describe("Vertrags-Detail: Scroll-Erhalt beim Fakt-Prüfen (UAT Defect C)", () =
     expect(panel).not.toBeNull();
     expect(await screen.findByRole("region", { name: "Prüfung" })).toBe(panel);
 
-    // Karte (Schublade) und geführte Prüfung nutzen dieselbe Entscheidung: hier „Bestätigen“ in der Schublade.
-    await user.click(within(panel).getByRole("button", { name: /Jährliche Kosten/, expanded: false }));
+    // Die Prüfung zeigt die offene Angabe gleich als Karte (dieselbe wie in der geführten Prüfung): „Bestätigen“ speichert.
+    expect(await within(panel).findByRole("heading", { name: "Jährliche Kosten" })).toBeInTheDocument();
     apiPostMock.mockResolvedValue(fixture("Geprüft (Aktualisiert)", "confirmed"));
     await user.click(within(panel).getByRole("button", { name: "Bestätigen", exact: true }));
 

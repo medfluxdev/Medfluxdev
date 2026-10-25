@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import Drawer from "@/components/ui/Drawer";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
@@ -9,10 +8,11 @@ import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, ContractReviewDto, EvidenceRef, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
 import { decideField } from "@/lib/domain-api/contracts";
 import {
-  LEVEL_NAME, LEVEL_ORDER, STATUS_TONE, TIER_NAME, TIER_ORDER, fieldByKey, fieldsOf, groupConfirmable, levelCounts, levelFields, levelOf, nextDecisionInLevel, nextOpenLevel,
-  pluralize, refOf, type ReviewLevel,
+  LEVEL_NAME, LEVEL_ORDER, STATUS_TONE, TIER_NAME, TIER_ORDER, angabeNumbers, fieldByKey, fieldsOf, groupConfirmable, levelFields, levelOf, nextDecisionInLevel, nextOpenLevel,
+  pluralize, refOf, reviewedFields, stageCounts, stageFindings, type ReviewLevel,
 } from "@/lib/field-review";
 import FieldValuePanel from "./FieldValuePanel";
+import FindingPanel from "./FindingPanel";
 import { ReleaseDialog } from "./ReviewCompletion";
 import { icon } from "./ReviewParts";
 
@@ -21,6 +21,7 @@ const LIST = icon(<path d="M8 6h13M8 12h13M8 18h13M3 6h.5M3 12h.5M3 18h.5" />);
 const CHECK = icon(<path d="M20 6 9 17l-5-5" />);
 const CHECK_CIRCLE = icon(<><circle cx="12" cy="12" r="9" /><path d="m8 12 3 3 5-6" /></>);
 const NEXT = icon(<path d="M5 12h14M13 6l6 6-6 6" />);
+const FINDING_PREFIX = "finding:";
 
 /**
  * Geführte Prüfung nach Feldern: ein Feld nach dem anderen, zwei Stufen – Pflicht zuerst, danach Optional.
@@ -41,8 +42,8 @@ export default function FieldReviewMode({
   canReview: boolean;
   /** Stand der Vertragsprüfung (für „Jetzt freigeben“ / „Vertrag freigeben“); fehlt er, gibt es hier keine Freigabe. */
   contractReview?: ContractReviewDto | null;
-  /** Die Ansicht des Originals (vom Arbeitsplatz, damit Zoom/Seite erhalten bleiben). */
-  viewer: ReactNode;
+  /** Die Ansicht des Originals (vom Arbeitsplatz, damit Zoom/Seite erhalten bleiben); als Funktion bekommt sie die Nummer der Angabe je Beleg (gleiche Zahl wie „Angabe n von N“). */
+  viewer: ReactNode | ((numbers: Map<string, number>) => ReactNode);
   onShow: (ref: EvidenceRef) => void;
   onShowPage: (page: number | null, quote: string | null) => void;
   onExit: () => void;
@@ -60,32 +61,45 @@ export default function FieldReviewMode({
   const [level, setLevel] = useState<ReviewLevel>(initialLevel);
   const [key, setKey] = useState<string | null>(() => startField?.fact_key ?? nextDecisionInLevel(review, initialLevel, null)?.fact_key ?? null);
   const [done, setDone] = useState(() => !startField && !nextDecisionInLevel(review, initialLevel, null));
-  const [drawer, setDrawer] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [announce, setAnnounce] = useState("");
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   // Reihenfolge der Stufe: alle gelesenen Felder (Entschiedene bleiben zum Zurückblättern erreichbar).
-  const stageFields = useMemo(() => levelFields(live, level).filter((field) => field.kind === "extracted" && (field.present || field.decision_needed || field.status === "absent")), [live, level]);
-  const current = !done ? fieldByKey(live, key) : undefined;
-  const index = current ? stageFields.findIndex((field) => field.fact_key === current.fact_key) : -1;
+  const stageFields = useMemo(() => reviewedFields(live, level), [live, level]);
+  // Optional: die Weiteren Informationen aus dem Dokument folgen als eigene Schritte auf die Felder.
+  const findings = useMemo(() => stageFindings(live, level), [live, level]);
+  const steps = useMemo(() => [
+    ...stageFields.map((field) => ({ key: field.fact_key, label: field.label })),
+    ...findings.map((finding) => ({ key: `${FINDING_PREFIX}${finding.finding_key}`, label: finding.label })),
+  ], [stageFields, findings]);
+  const currentFinding = !done && key?.startsWith(FINDING_PREFIX) ? findings.find((finding) => `${FINDING_PREFIX}${finding.finding_key}` === key) : undefined;
+  const current = !done && !currentFinding ? fieldByKey(live, key) : undefined;
+  const index = !done && key ? steps.findIndex((step) => step.key === key) : -1;
 
   // Im Original zeigen; Fokus auf die Überschrift (Screenreader hört das neue Feld).
   useEffect(() => {
-    if (!current || done) return;
+    if (done) return;
+    if (currentFinding) {
+      const ref = refOf(data, currentFinding.evidence_id ?? currentFinding.evidence_ids[0]);
+      if (ref) onShow(ref); else if (currentFinding.page != null) onShowPage(currentFinding.page, currentFinding.snippet);
+      headingRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!current) return;
     const entry = current.evidence.find((item) => item.primary) ?? current.evidence.find((item) => !item.excluded);
     const ref = refOf(data, entry?.evidence_id);
     if (ref) onShow(ref);
     headingRef.current?.focus({ preventScroll: true });
     // onShow wechselt nur die Ansicht; neu auslösen soll nur ein anderes Feld.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.fact_key, done]);
+  }, [key, done]);
 
   function go(target: number) {
     if (target < 0) return;
-    if (target >= stageFields.length) { setDone(true); return; }
+    if (target >= steps.length) { setDone(true); return; }
     setDone(false);
-    setKey(stageFields[target].fact_key);
+    setKey(steps[target].key);
   }
 
   function showEvidence(entry: FieldEvidenceDto) {
@@ -101,24 +115,40 @@ export default function FieldReviewMode({
     // Entschieden oder zurückgestellt: weiter zum nächsten offenen Feld; ist keines mehr offen, ist die Stufe fertig.
     const next = nextDecisionInLevel(detail.field_review, level, key);
     if (next) { setKey(next.fact_key); setAnnounce(`Gespeichert · weiter zu ${next.label}`); return; }
+    // Sind alle Felder der Stufe entschieden, folgen in Optional die offenen Weiteren Informationen.
+    const finding = stageFindings(detail.field_review, level).find((item) => item.decision === null);
+    if (finding) { setKey(`${FINDING_PREFIX}${finding.finding_key}`); setAnnounce(`Gespeichert · weiter zu ${finding.label}`); return; }
     // Nach der letzten Pflichtangabe geht die Prüfung von selbst zu Optional (nur wenn dort etwas wartet).
     const other = nextDecisionInLevel(detail.field_review, "optional", null);
-    if (level === "pflicht" && other) { setLevel("optional"); setKey(other.fact_key); setDone(false); setAnnounce("Pflicht fertig – jetzt Optional"); return; }
+    const otherFinding = stageFindings(detail.field_review, "optional").find((item) => item.decision === null);
+    if (level === "pflicht" && (other || otherFinding)) { setLevel("optional"); setKey(other?.fact_key ?? `${FINDING_PREFIX}${otherFinding!.finding_key}`); setDone(false); setAnnounce("Pflicht fertig – jetzt Optional"); return; }
     setDone(true);
     setAnnounce("Gespeichert · Stufe abgeschlossen");
+  }
+
+  // Alle Angaben der Stufe noch einmal von der ersten an durchgehen (auch bereits entschiedene).
+  function restart(target: ReviewLevel, only?: "decided" | "missing") {
+    const first = levelFields(live, target).find((field) => field.kind === "extracted" && (field.present || field.decision_needed || field.status === "absent")
+      && (!only || field.status === (only === "decided" ? "decided" : "missing")));
+    if (!first) return;
+    setLevel(target);
+    setKey(first.fact_key);
+    setDone(false);
+    setAnnounce(`Noch einmal von vorn: ${first.label}`);
   }
 
   function switchLevel(next: ReviewLevel) {
     setLevel(next);
     const first = nextDecisionInLevel(live, next, null);
-    setKey(first?.fact_key ?? null);
-    setDone(!first);
+    const firstFinding = stageFindings(live, next).find((item) => item.decision === null);
+    setKey(first?.fact_key ?? (firstFinding ? `${FINDING_PREFIX}${firstFinding.finding_key}` : null));
+    setDone(!first && !firstFinding);
   }
 
   // Tasten: ←/→ blättern (nicht in Eingabefeldern).
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (drawer || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) return;
@@ -131,8 +161,11 @@ export default function FieldReviewMode({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const following = index >= 0 ? stageFields[index + 1] : undefined;
-  const counts = Object.fromEntries(LEVEL_ORDER.map((item) => [item, levelCounts(live, item)])) as Record<ReviewLevel, ReturnType<typeof levelCounts>>;
+  // Marke im Original = Nummer der Angabe in dieser Stufe (nicht die Nummer in der Nachweisliste).
+  const evidenceNumbers = useMemo(() => angabeNumbers(live, level), [live, level]);
+
+  const following = index >= 0 ? steps[index + 1] : undefined;
+  const counts = Object.fromEntries(LEVEL_ORDER.map((item) => [item, stageCounts(live, item)])) as Record<ReviewLevel, ReturnType<typeof stageCounts>>;
   const allTotal = counts.pflicht.total + counts.optional.total;
   const allOpen = counts.pflicht.open + counts.optional.open;
   const allDone = allTotal > 0 && allOpen === 0;
@@ -141,62 +174,55 @@ export default function FieldReviewMode({
   const canRelease = canReview && contractReview != null && contractReview.status !== "reviewed" && contractReview.critical_unreviewed_count === 0;
 
   return <section className="erm frm" aria-labelledby="erm-title">
-    <header className="erm-bar pst-bar">
-      <button type="button" className="btn btn-ghost erm-icon-btn pst-back" onClick={onExit} aria-label="Zurück zum Vertrag">{BACK}</button>
-      <div className="pst-ttl pst-cell"><h2 id="erm-title">Angaben prüfen</h2><span className="erm-file">{contractTitle ?? ""}</span></div>
-      <div className="pst-cell pst-stage">
-        {/* Stufe und Fortschritt in einem: zwei Karten, die aktive zeigt Zähler, Balken und Rest; die andere nur, wie viel offen ist. */}
-        <div className="pst-cards" role="group" aria-label="Prüfstufe">
+    <h2 id="erm-title" className="visually-hidden">Angaben prüfen</h2>
+
+    <div className="erm-body">
+      <div className="erm-viewer">
+        {typeof viewer === "function" ? viewer(evidenceNumbers) : viewer}
+        {!done && following ? <p className="erm-next-card">Nächste Angabe: {following.label}</p> : null}
+      </div>
+
+      <div className="erm-side">
+        <div className="lvl-switch" role="group" aria-label="Prüfstufe">
           {LEVEL_ORDER.map((item) => {
             const info = counts[item];
             if (info.total === 0) return null;
             const finished = info.open === 0;
             const selected = level === item;
-            return <button key={item} type="button" className={`pst-card${selected ? " is-cur" : ""}${finished ? " is-done" : ""}`} aria-pressed={selected} onClick={() => switchLevel(item)}
+            return <button key={item} type="button" className={`lvl-tab lvl-tab--${item}${selected ? " is-cur" : ""}${finished ? " is-done" : ""}`} aria-pressed={selected} onClick={() => switchLevel(item)}
               aria-label={finished ? `${LEVEL_NAME[item]}, alle entschieden` : `${LEVEL_NAME[item]}, ${info.decided} von ${info.total} geprüft, ${info.open} offen`}>
-              <span className="pst-card-top">
-                <span className="pst-card-title">{finished ? <span className="pst-card-check" aria-hidden="true">{CHECK}</span> : null}{LEVEL_NAME[item]}</span>
-                {selected
-                  ? <span className="pst-card-stat">{info.decided} / {info.total} geprüft{finished ? "" : ` · ${info.open} offen`}</span>
-                  : <span className="pst-card-pill">{finished ? "erledigt" : `${info.open} offen`}</span>}
-              </span>
-              {selected
-                ? <span className="pst-meter" aria-hidden="true"><i style={{ width: `${(info.decided / info.total) * 100}%` }} /></span>
-                : null}
+              <span className="lvl-tab-name">{LEVEL_NAME[item]}</span>
+              <span className="lvl-tab-count" aria-hidden="true">{finished ? CHECK : info.open}</span>
             </button>;
           })}
         </div>
-      </div>
-      <div className="pst-cell pst-actions">
-        {canRelease && allDone ? <button type="button" className="btn btn-primary" onClick={() => setReleaseOpen(true)}>Vertrag freigeben</button> : null}
-        {canRelease && !allDone && pflichtDone ? <button type="button" className="btn btn-ghost pst-link" onClick={() => setReleaseOpen(true)}>Jetzt freigeben</button> : null}
-        <button type="button" className="btn pst-overview" onClick={() => setDrawer(true)}>{LIST}Übersicht</button>
-      </div>
-    </header>
-
-    <div className="erm-body">
-      <div className="erm-viewer">
-        {viewer}
-        {!done && following ? <p className="erm-next-card">Nächste Angabe: {following.label}</p> : null}
-      </div>
-
+        {canRelease && pflichtDone ? <button type="button" className={`btn btn-sm ${allDone ? "btn-primary" : "btn-ghost pst-link"}`} onClick={() => setReleaseOpen(true)}>{allDone ? "Vertrag freigeben" : "Jetzt freigeben"}</button> : null}
       <div className="erm-panel" role="region" aria-label="Aktuelle Angabe">
         <p className="visually-hidden" aria-live="polite">{announce}</p>
-        {done || !current
-          ? <StageSummary headingRef={headingRef} review={live} level={level} onSwitch={switchLevel} onExit={onExit} onShowAll={() => setDrawer(true)} onOpenFindings={onOpenFindings} />
+        {!done && currentFinding
+          ? <FindingPanel key={currentFinding.finding_key} contractId={contractId} orgSlug={orgSlug} finding={currentFinding} review={live} canReview={canReview} headingRef={headingRef}
+            position={{ index: Math.max(index, 0), total: steps.length }} nextLabel={following?.label ?? null} onPrev={() => go(index - 1)} onNext={() => go(index + 1)}
+            onShowPage={onShowPage} onDecided={(decision, targetKey) => {
+              onReload();
+              const targetField = decision === "link" ? fieldByKey(live, targetKey) : undefined;
+              // Zugeordnet: gleich zur Angabe springen, damit der neue Kandidat dort geprüft werden kann.
+              if (targetField) { setLevel(levelOf(targetField.tier)); setKey(targetField.fact_key); setDone(false); setAnnounce(`Zugeordnet zu ${targetField.label}`); return; }
+              go(index + 1);
+            }} />
+          : done || !current
+          ? <StageSummary headingRef={headingRef} review={live} level={level} onSwitch={switchLevel} onRestart={restart} onOpenFindings={onOpenFindings} />
           : <FieldValuePanel key={`${current.fact_key}|${current.version ?? ""}|${current.status}`} contractId={contractId} orgSlug={orgSlug} field={current} review={live}
-            documents={data.documents ?? []} canReview={canReview} headingRef={headingRef} position={{ index: Math.max(index, 0), total: stageFields.length }}
+            documents={data.documents ?? []} canReview={canReview} headingRef={headingRef} position={{ index: Math.max(index, 0), total: steps.length }}
             nextLabel={following?.label ?? null} onPrev={() => go(index - 1)} onNext={() => go(index + 1)}
             onChanged={changed} onShowEvidence={showEvidence} onShowPage={onShowPage} onOpenAnalysis={onOpenAnalysis}>
             {canReview ? <GroupConfirm key={current.fact_key} contractId={contractId} orgSlug={orgSlug} review={live} current={current}
               onDone={(detail) => { onReload(); if (detail?.field_review) setLive(detail.field_review); }} /> : null}
           </FieldValuePanel>}
       </div>
+        <button type="button" className="btn btn-ghost erm-back" onClick={onExit}>{BACK}Zurück zum Vertrag</button>
+      </div>
     </div>
 
-    <Drawer open={drawer} title="Alle Angaben" onClose={() => setDrawer(false)} wide>
-      <FieldList review={live} currentKey={current?.fact_key ?? null} onPick={(field) => { setDrawer(false); setLevel(levelOf(field.tier)); setKey(field.fact_key); setDone(false); }} />
-    </Drawer>
     {contractReview ? <ReleaseDialog open={releaseOpen} onClose={() => setReleaseOpen(false)} contractId={contractId} orgSlug={orgSlug} unresolved={contractReview.unresolved_count} onDone={onReload} /> : null}
   </section>;
 }
@@ -251,62 +277,48 @@ function GroupConfirm({ contractId, orgSlug, review, current, onDone }: {
 }
 
 /** Ende einer Stufe: sagt ehrlich, was entschieden ist und was noch wartet – nie „alles verifiziert“. */
-function StageSummary({ headingRef, review, level, onSwitch, onExit, onShowAll, onOpenFindings }: {
-  headingRef: React.RefObject<HTMLHeadingElement>; review: FieldReviewDto; level: ReviewLevel; onSwitch: (level: ReviewLevel) => void;
-  onExit: () => void; onShowAll: () => void; onOpenFindings?: () => void;
+function StageSummary({ headingRef, review, level, onSwitch, onRestart, onOpenFindings }: {
+  headingRef: React.RefObject<HTMLHeadingElement>; review: FieldReviewDto; level: ReviewLevel; onSwitch: (level: ReviewLevel) => void; onRestart: (level: ReviewLevel, only?: "decided" | "missing") => void;
+  onOpenFindings?: () => void;
 }) {
-  const stage = levelCounts(review, level);
+  const stage = stageCounts(review, level);
   const inLevel = review.stages.filter((item) => levelOf(item.tier) === level);
   const deferred = inLevel.reduce((sum, item) => sum + item.deferred, 0);
   const missing = inLevel.reduce((sum, item) => sum + item.missing, 0);
   const open = stage.open;
-  const pflichtOpen = levelCounts(review, "pflicht").open;
+  const pflichtOpen = stageCounts(review, "pflicht").open;
   const otherLevel: ReviewLevel = level === "pflicht" ? "optional" : "pflicht";
-  const other = levelCounts(review, otherLevel);
-  const title = open > 0 ? "Stufe beendet" : level === "pflicht" ? "Pflicht abgeschlossen" : "Optional: alles entschieden";
+  const other = stageCounts(review, otherLevel);
+  const title = level === "pflicht" ? "Pflichtprüfung beendet" : "Optionale Prüfung beendet";
   return <div className="erm-done">
     <p className="erm-done-eyebrow">Prüfung</p>
     <h3 ref={headingRef} tabIndex={-1} className="erm-done-title">
-      <span className={`erm-done-mark${open ? " is-open" : ""}`} aria-hidden="true">{open ? LIST : CHECK}</span>{title}
+      <span className={`erm-done-mark${open ? " is-open" : ""}`} aria-hidden="true">{open ? LIST : CHECK}</span><span className="erm-done-name" title={title}>{title}</span>
     </h3>
     <p className="erm-done-lead">
       {stage.total ? `${stage.decided} von ${stage.total} Angaben entschieden${deferred ? `, ${deferred} zurückgestellt` : ""}${missing ? `, ${missing} nicht gefunden` : ""}.` : "Keine Angaben in dieser Stufe."}
       {" "}Das heißt nicht, dass jede Angabe des Vertrags verifiziert ist.
     </p>
+    {stage.total ? <div className="erm-done-stats">
+      <div className="erm-done-bar" aria-hidden="true"><span style={{ width: `${Math.round((stage.decided / stage.total) * 100)}%` }} /></div>
+      <div className="erm-done-tiles" role="group" aria-label="Angaben dieser Stufe öffnen">
+        <button type="button" className="erm-done-tile is-done" disabled={stage.decided === 0} onClick={() => onRestart(level, "decided")}><b>{stage.decided}</b><span>entschieden</span></button>
+        <button type="button" className={`erm-done-tile${open ? " is-open" : ""}`} disabled={open === 0} onClick={() => onSwitch(level)}><b>{open}</b><span>offen</span></button>
+        <button type="button" className="erm-done-tile" disabled={missing === 0} onClick={() => onRestart(level, "missing")}><b>{missing}</b><span>nicht gefunden</span></button>
+      </div>
+    </div> : null}
     {open > 0 ? <InlineAlert tone="info">{pluralize(open, "Entscheidung wartet", "Entscheidungen warten")} noch – sie bleiben unter „Offene Punkte“ sichtbar.</InlineAlert>
       : <p className="erm-done-clear">{CHECK_CIRCLE}Keine offene Entscheidung in dieser Stufe</p>}
     {level === "optional" && pflichtOpen > 0 ? <InlineAlert tone="warning">Pflichtangaben sind noch offen.</InlineAlert> : null}
-    {review.findings_open > 0 ? <p className="fd-muted">{pluralize(review.findings_open, "Weitere Information", "Weitere Informationen")} aus dem Dokument liegen zur Ansicht bereit – Sie müssen dazu nichts entscheiden.{onOpenFindings ? <> <button type="button" className="rg-link" onClick={onOpenFindings}>Ansehen</button></> : null}</p> : null}
     <div className="erm-done-actions">
       {open > 0 ? <button type="button" className="btn btn-primary" onClick={() => onSwitch(level)}>Offene Entscheidungen prüfen</button> : null}
-      {other.open > 0 ? <button type="button" className={open > 0 || otherLevel === "optional" ? "btn" : "btn btn-primary"} onClick={() => onSwitch(otherLevel)}>
-        {LEVEL_NAME[otherLevel]} prüfen · {other.open}
+      {other.open > 0 ? <button type="button" className={`btn erm-go erm-go--${otherLevel}`} onClick={() => onSwitch(otherLevel)}>
+        <span className="erm-go-text">{LEVEL_NAME[otherLevel]} prüfen</span><span className="erm-go-count">{other.open}</span>{NEXT}
       </button> : null}
-      <button type="button" className="btn" onClick={onShowAll}>Alle Angaben ansehen</button>
-      <button type="button" className="btn" onClick={onExit}>Vertrag ansehen{NEXT}</button>
+      {stage.total > 0 ? <button type="button" className="btn erm-go erm-go--again" onClick={() => onRestart(level)}>
+        <span className="erm-go-text">Angaben noch einmal durchgehen</span>{NEXT}
+      </button> : null}
     </div>
-  </div>;
-}
-
-/** Alle Angaben nach Stufe und Karte; ein Klick springt zur Angabe. */
-export function FieldList({ review, currentKey, onPick }: { review: FieldReviewDto; currentKey: string | null; onPick: (field: FieldReviewFieldDto) => void }) {
-  return <div className="frm-list">
-    {TIER_ORDER.map((tier) => {
-      const fields = fieldsOf(review, tier).filter((field) => field.present || field.decision_needed || field.status === "absent");
-      if (!fields.length) return null;
-      return <section key={tier} aria-label={TIER_NAME[tier]}>
-        <h3>{TIER_NAME[tier]}</h3>
-        <table className="evt-table">
-          <caption className="visually-hidden">{TIER_NAME[tier]}</caption>
-          <thead><tr><th scope="col">Angabe</th><th scope="col">Wert</th><th scope="col">Stand</th></tr></thead>
-          <tbody>{fields.map((field) => <tr key={field.fact_key} className={field.fact_key === currentKey ? "is-current" : undefined} aria-current={field.fact_key === currentKey ? "true" : undefined}>
-            <td><button type="button" className="evt-link" onClick={() => onPick(field)}>{field.label}</button><span className="evt-sub">{field.card_label}</span></td>
-            <td className="evt-muted">{field.current ?? "–"}</td>
-            <td><Signal tone={STATUS_TONE[field.status]} size="sm">{field.status_label}</Signal></td>
-          </tr>)}</tbody>
-        </table>
-      </section>;
-    })}
   </div>;
 }
 

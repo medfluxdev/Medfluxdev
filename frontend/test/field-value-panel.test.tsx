@@ -70,7 +70,7 @@ describe("Panel „Werte prüfen“", () => {
     api.decideField.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
     const { onChanged, container } = panel(matching());
     expect(screen.getByText("Pflicht")).toBeInTheDocument();
-    expect(screen.getByText("3 / 6")).toBeInTheDocument();
+    expect(screen.getByText("Angabe 3 von 6")).toBeInTheDocument();
     expect(screen.getByText("Dokument und MedFlux sagen dasselbe")).toBeInTheDocument();
     const radio = screen.getByRole("radio", { name: /Full-Service-Vertrag/ });
     expect(radio).toBeChecked();
@@ -79,7 +79,7 @@ describe("Panel „Werte prüfen“", () => {
     expect(screen.queryByText(/Welcher gilt/)).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Begründung (optional)" })).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
-    await user.click(screen.getByRole("button", { name: "Bestätigen · Weiter" }));
+    await user.click(screen.getByRole("button", { name: "Bestätigen" }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ fact_key: "identity.title", decision: "keep" }));
     expect(onChanged).toHaveBeenCalled();
   });
@@ -94,16 +94,16 @@ describe("Panel „Werte prüfen“", () => {
     expect(screen.getByText(/Seite 8 · Nachtrag/)).toBeInTheDocument();
     expect(screen.getByText(/Seite 3 · Hauptdokument/)).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Begründung (optional)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "01.02.2026 übernehmen · Weiter" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Übernehmen" })).toBeEnabled();
 
     // Zurück auf den gespeicherten Wert: die Begründung entfällt, der Knopf bestätigt.
     await user.click(screen.getByRole("radio", { name: /01\.01\.2026/ }));
     expect(screen.queryByRole("textbox", { name: "Begründung (optional)" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Bestätigen · Weiter" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bestätigen" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /01\.02\.2026/ }));
     await user.type(screen.getByRole("textbox", { name: "Begründung (optional)" }), "gemäß Nachtrag");
-    await user.click(screen.getByRole("button", { name: "01.02.2026 übernehmen · Weiter" }));
+    await user.click(screen.getByRole("button", { name: "Übernehmen" }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({
       decision: "accept", candidate_key: "2026-02-01", confirm_change: true, note: "gemäß Nachtrag",
     }));
@@ -117,19 +117,55 @@ describe("Panel „Werte prüfen“", () => {
     expect(screen.getByRole("radio", { name: /01\.02\.2026/ })).toBeChecked();
   });
 
-  it("„Anderer Wert“ öffnet das Feld an Ort und Stelle; der Knopf nennt den eingegebenen Wert", async () => {
+  it("„Selbst eintragen“ öffnet das Feld an Ort und Stelle; der Knopf nennt den eingegebenen Wert", async () => {
     const user = userEvent.setup();
     api.decideField.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
     panel(twoValues());
-    await user.click(screen.getByRole("button", { name: /Anderer Wert/ }));
-    const input = screen.getByRole("textbox", { name: "Anderer Wert" });
+    await user.click(screen.getByRole("button", { name: /Selbst eintragen/ }));
+    const input = screen.getByRole("textbox", { name: "Eigener Wert" });
     expect(input).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Wert übernehmen · Weiter" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Speichern" })).toBeDisabled();
     await user.type(input, "15.02.2026");
-    await user.click(screen.getByRole("button", { name: "15.02.2026 übernehmen · Weiter" }));
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "manual", value: "15.02.2026" }));
   });
 
+  it("berechnete Werte, die aus dieser Angabe entstehen, stehen unter „Daraus berechnet“", () => {
+    const item = matching();
+    const calculated = field({
+      fact_key: "costs.vat_amount", label: "MwSt.-Betrag (monatlich)", kind: "calculated", status: "derived", status_label: "Berechnet", decision_needed: false, current: "126,67 EUR",
+      candidates: [], evidence: [], inputs: [{ fact_key: item.fact_key, label: item.label, present: true, decided: false }],
+    });
+    panel(item, { review: review([item, calculated]) });
+    const block = screen.getByRole("region", { name: "Daraus berechnet" });
+    expect(within(block).getByText("MwSt.-Betrag (monatlich)")).toBeInTheDocument();
+    expect(within(block).getByText("126,67 EUR")).toBeInTheDocument();
+  });
+
+  it("mehrere Fundstellen zur selben Angabe stehen sichtbar in einem Block, jede lässt sich ansehen", async () => {
+    const user = userEvent.setup();
+    const { onShowEvidence } = panel(twoValues());
+    const block = screen.getByRole("region", { name: "Fundstellen" });
+    expect(within(block).getByText(/\d+ Fundstellen für diese Angabe/)).toBeInTheDocument();
+    const show = within(block).getAllByRole("button", { name: /Im Dokument zeigen/ });
+    expect(show.length).toBeGreaterThan(1);
+    await user.click(show[0]);
+    expect(onShowEvidence).toHaveBeenCalled();
+  });
+
+  it("„Selbst eintragen“ lässt sich abbrechen: Feld schließt, Eingabe ist weg, die Auswahl kehrt zurück", async () => {
+    const user = userEvent.setup();
+    panel(twoValues());
+    await user.click(screen.getByRole("button", { name: /Selbst eintragen/ }));
+    await user.type(screen.getByRole("textbox", { name: "Eigener Wert" }), "15.02.2026");
+    await user.click(screen.getByRole("button", { name: "Abbrechen" }));
+    expect(screen.queryByRole("textbox", { name: "Eigener Wert" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Selbst eintragen/ }));
+    expect(screen.getByRole("textbox", { name: "Eigener Wert" })).toHaveValue("");
+    // Ein zweiter Klick auf die gewählte Kachel schließt das Feld ebenfalls.
+    await user.click(screen.getByRole("button", { name: /Selbst eintragen/ }));
+    expect(screen.queryByRole("textbox", { name: "Eigener Wert" })).not.toBeInTheDocument();
+  });
   it("ohne Wert im Dokument: „Nicht im Vertrag“ ist wählbar, der Knopf speichert genau das; mit Wert gibt es die Wahl nicht", async () => {
     const user = userEvent.setup();
     api.decideField.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
@@ -137,7 +173,7 @@ describe("Panel „Werte prüfen“", () => {
     expect(screen.getByText("Nicht gefunden")).toBeInTheDocument();
     expect(screen.getByText(/Nichts wird vermutet/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Nicht im Vertrag/ }));
-    await user.click(screen.getByRole("button", { name: "Als „nicht im Vertrag“ speichern · Weiter" }));
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "not_in_document" }));
     first.unmount();
     panel(matching());
@@ -152,10 +188,10 @@ describe("Panel „Werte prüfen“", () => {
     expect(screen.getByText(/Übernommen/)).toHaveTextContent("A. Prüfer");
     expect(screen.getByText("Beginn gemäß Nachtrag korrigiert.")).toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
-    const alt = screen.getByRole("button", { name: /Anderer Vorschlag/ });
-    expect(alt).toHaveAttribute("aria-expanded", "false");
-    await user.click(alt);
-    expect(alt).toHaveAttribute("aria-expanded", "true");
+    // Der andere Vorschlag ist sofort sichtbar und kann gewählt werden.
+    const alt = screen.getByRole("region", { name: "Anderer Vorschlag" });
+    expect(within(alt).getByRole("button", { name: "Diesen Wert wählen" })).toBeInTheDocument();
+    expect(within(alt).getByRole("button", { name: /Im Dokument zeigen/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Verlauf/ })).toHaveTextContent("1 Eintrag");
     await user.click(screen.getByRole("button", { name: /Weiter/ }));
     // „Ändern“ stellt die Auswahl mit dem aktuellen Wert wieder her.
@@ -164,7 +200,7 @@ describe("Panel „Werte prüfen“", () => {
     expect(screen.getByRole("radio", { name: /01\.02\.2026/ })).toBeChecked();
   });
 
-  it("Tasten: Enter führt aus, A öffnet „Anderer Wert“, S stellt zurück, Esc schließt das Feld", async () => {
+  it("Tasten: Enter führt aus, A öffnet „Selbst eintragen“, S stellt zurück, Esc schließt das Feld", async () => {
     const user = userEvent.setup();
     api.decideField.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
     panel(twoValues());
@@ -172,15 +208,15 @@ describe("Panel „Werte prüfen“", () => {
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "defer" }));
     api.decideField.mockClear();
     await user.keyboard("a");
-    expect(screen.getByRole("textbox", { name: "Anderer Wert" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Eigener Wert" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("textbox", { name: "Anderer Wert" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Eigener Wert" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /01\.02\.2026/ })).toBeChecked();
     await user.keyboard("{Enter}");
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "accept", candidate_key: "2026-02-01" }));
   });
 
-  it("Fundstelle ausschließen liegt im ⋯ der Karte und verlangt einen Grund; Zurück und Weiter im Fuß", async () => {
+  it("Fundstelle ausschließen liegt im ⋯ der Karte und verlangt einen Grund; Vor und Zurück im Kopf", async () => {
     const user = userEvent.setup();
     api.setFieldEvidence.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
     const { onPrev, onNext } = panel(twoValues());
@@ -188,11 +224,11 @@ describe("Panel „Werte prüfen“", () => {
     await user.click(screen.getByRole("menuitem", { name: "Diese Fundstelle ausschließen" }));
     const form = screen.getByRole("form", { name: "Fundstelle ausschließen" });
     expect(within(form).getByRole("button", { name: "Ausschließen" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Zurück" }));
-    await user.click(screen.getByRole("button", { name: "Überspringen" }));
+    await user.click(screen.getByRole("button", { name: "Vorherige Angabe" }));
+    await user.click(screen.getByRole("button", { name: "Nächste Angabe" }));
     expect(onPrev).toHaveBeenCalled();
     expect(onNext).toHaveBeenCalled();
-    expect(screen.getByText("Vertragsende")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nächste Angabe" })).toHaveAttribute("title", "Nächste: Vertragsende");
   });
 
   it("nur Lesen: keine Auswahl, kein Hauptknopf – ohne die Werte zu verstecken", () => {

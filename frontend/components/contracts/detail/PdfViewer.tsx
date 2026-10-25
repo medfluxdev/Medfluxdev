@@ -497,7 +497,7 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
               {marker.active ? <span className="pdf-frame-number">{marker.number}</span> : null}
             </div>;
             return <button key={marker.id} type="button" className={`pdf-marker${marker.active ? " is-active" : ""}`} style={{ left: Math.max(0, rect.x - 12), top: Math.max(0, rect.y - 12) }}
-              aria-label={`Nachweis ${marker.number}: ${marker.label}`} aria-pressed={marker.active} onClick={() => onMarker?.(marker.id)}>{marker.number}</button>;
+              aria-label={marker.number ? `Angabe ${marker.number}: ${marker.label}` : `Nachweis: ${marker.label}`} aria-pressed={marker.active} onClick={() => onMarker?.(marker.id)}>{marker.number || "•"}</button>;
           }) : null}</div></div>
       </div>}
       {!review && navTarget && navTarget.document_version_id === documentVersionId && pageNumber === navTarget.page && navTarget.page != null && (

@@ -123,12 +123,12 @@ MATERIAL_FACTS: list[tuple[str, str, Reader]] = [
     ),
     (
         "identity.contract_type",
-        "Vertragsart (laut Dokument)",
+        "Vertragsart",
         lambda r: (r.get("extracted_terms") or {}).get("identity.contract_type"),
     ),
     (
         "dates.start_date",
-        "Vertragsbeginn (Datum)",
+        "Vertragsbeginn",
         lambda r: (r.get("dates") or {}).get("start_date")
         or (r.get("dates") or {}).get("overridden_start_date"),
     ),

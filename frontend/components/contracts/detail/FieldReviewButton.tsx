@@ -3,7 +3,7 @@
 import Popover from "@/components/ui/Popover";
 import Signal from "@/components/ui/Signal";
 import type { FieldReviewDto, FieldReviewFieldDto, FieldTier } from "@/lib/contract-detail-types";
-import { STATUS_TONE, TIER_NAME, decisionFields, nextOpenTier, pluralize, reviewHeadline, stageOf } from "@/lib/field-review";
+import { STATUS_TONE, TIER_NAME, decisionFields, nextOpenTier, pluralize, stageOf } from "@/lib/field-review";
 
 /**
  * Prüfung im Kopf der Vertragsakte (auf jedem Reiter sichtbar): die wesentlichen Entscheidungen, die noch warten.
@@ -51,25 +51,22 @@ export function ReviewControl({ review, onStart }: {
   onStart: (tier: FieldTier) => void;
 }) {
   const essential = stageOf(review, "essential");
-  const headline = reviewHeadline(review);
   if (!review || !essential || (essential.total === 0 && review.decisions_open === 0)) return null;
   const next = nextOpenTier(review);
   const open = essential.total - essential.decided;
   return <section className="dw-rc" aria-label="Vertragsprüfung">
     <div className="dw-rc-head">
       <span className="dw-rc-tile">{RC_ICON}</span>
-      <span className="dw-rc-title"><strong>Vertragsprüfung</strong><span>Wesentliche Angaben</span></span>
+      <span className="dw-rc-title"><strong>Vertragsprüfung</strong></span>
     </div>
     {essential.total > 0 ? <div className="dw-rc-progress">
       <div className="dw-rc-line"><strong>{essential.decided} von {essential.total} geprüft</strong><span>{open} offen</span></div>
       <span className="dw-progress-bar dw-rc-bar" role="progressbar" aria-label="Wesentliche Angaben entschieden" aria-valuemin={0} aria-valuemax={essential.total} aria-valuenow={essential.decided}><span style={{ width: `${(essential.decided / essential.total) * 100}%` }} /></span>
     </div> : null}
     <div className="dw-rc-actions">
-      {next
-        ? <button type="button" className="btn btn-sm btn-primary dw-review" onClick={() => onStart(next)}>
-          {next === "essential" ? "Prüfung starten" : `${TIER_NAME[next]} prüfen`}{RC_ARROW}
-        </button>
-        : headline ? <Signal tone={headline.tone} size="sm">{headline.text}</Signal> : null}
+      <button type="button" className="btn btn-sm btn-primary dw-review" onClick={() => onStart(next ?? "essential")}>
+        Prüfung starten{RC_ARROW}
+      </button>
     </div>
   </section>;
 }

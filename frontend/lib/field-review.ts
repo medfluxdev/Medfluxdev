@@ -38,6 +38,36 @@ export function levelFields(review: FieldReviewDto | null | undefined, level: Re
   return fieldsOf(review, undefined).filter((field) => levelOf(field.tier, wichtigAlsPflicht) === level);
 }
 
+/** Felder, die in der Prüfung als „Angabe n von N“ vorkommen (gelesen; ohne Berechnetes und Weitere Informationen). */
+export function reviewedFields(review: FieldReviewDto | null | undefined, level: ReviewLevel, wichtigAlsPflicht: boolean = WICHTIG_ALS_PFLICHT): FieldReviewFieldDto[] {
+  return levelFields(review, level, wichtigAlsPflicht).filter((field) => field.kind === "extracted" && (field.present || field.decision_needed || field.status === "absent"));
+}
+
+/** Nummer der Angabe (Platz in ihrer Stufe, wie „Angabe n von N“) zu jedem Nachweis – für Marken im Original. */
+export function angabeNumbers(review: FieldReviewDto | null | undefined, level?: ReviewLevel): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const item of level ? [level] : LEVEL_ORDER) {
+    const fields = reviewedFields(review, item);
+    fields.forEach((field, position) => field.evidence.forEach((entry) => { if (!entry.excluded && !map.has(entry.evidence_id)) map.set(entry.evidence_id, position + 1); }));
+    // Weitere Informationen aus dem Dokument folgen in der Stufe Optional auf die Felder.
+    stageFindings(review, item).forEach((finding, position) => [finding.evidence_id, ...finding.evidence_ids].forEach((id) => { if (id && !map.has(id)) map.set(id, fields.length + position + 1); }));
+  }
+  return map;
+}
+
+/** Weitere Informationen aus dem Dokument: Teil der Stufe Optional (nach den Feldern). */
+export function stageFindings(review: FieldReviewDto | null | undefined, level: ReviewLevel): FieldFindingDto[] {
+  return level === "optional" ? review?.findings ?? [] : [];
+}
+
+/** Zähler einer Stufe samt Weiteren Informationen (Optional): jede Information ist ein Schritt, entschieden = zugeordnet, notiert oder ausgeblendet. */
+export function stageCounts(review: FieldReviewDto | null | undefined, level: ReviewLevel): { total: number; open: number; decided: number } {
+  const base = levelCounts(review, level);
+  const findings = stageFindings(review, level);
+  const open = findings.filter((finding) => finding.decision === null).length;
+  return { total: base.total + findings.length, open: base.open + open, decided: base.decided + findings.length - open };
+}
+
 /** Zähler einer Stufe aus den Stufen des Backends (nicht aus den Feldern, damit Berechnetes und Nachweise nicht mitzählen). */
 export function levelCounts(review: FieldReviewDto | null | undefined, level: ReviewLevel, wichtigAlsPflicht: boolean = WICHTIG_ALS_PFLICHT): { total: number; open: number; decided: number } {
   const stages = (review?.stages ?? []).filter((stage) => levelOf(stage.tier, wichtigAlsPflicht) === level);

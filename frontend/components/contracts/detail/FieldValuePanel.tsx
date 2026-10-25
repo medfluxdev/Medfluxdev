@@ -21,7 +21,7 @@ const DOC = icon(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 
 const PEN = icon(<><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></>);
 const SEARCH = icon(<><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>);
 const MARK = icon(<path d="M4 20h16M6 16l10-10 2 2-10 10H6z" />);
-const CHEVRON = icon(<path d="m9 6 6 6-6 6" />);
+const WARN = icon(<><path d="M12 4 2.5 20h19z" /><path d="M12 10v4M12 17.2v.1" /></>);
 const HISTORY = icon(<><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5M12 7v5l3 2" /></>);
 const BACK = icon(<path d="M15 6l-6 6 6 6" />);
 const SKIP = icon(<path d="M5 5l9 7-9 7zM19 5v14" />);
@@ -52,7 +52,7 @@ const literal = (entry: FieldEvidenceDto | null) => (entry?.text_match != null &
 /**
  * Entscheidung zu einem Feld in der geführten Prüfung – ein Panel mit drei Zuständen (Übereinstimmung, mehrere Werte, entschieden).
  * Jeder gefundene Wert ist eine Karte mit Seite, Abschnitt und Zitat; der gespeicherte Wert ist eine davon („in MedFlux“).
- * Eine Auswahl, ein Hauptknopf, der die Handlung nennt. „Anderer Wert“ und „Nicht im Vertrag“ sind immer erreichbar.
+ * Eine Auswahl, ein Hauptknopf, der die Handlung nennt. „Selbst eintragen“ und „Nicht im Vertrag“ sind immer erreichbar.
  * Alles läuft über die Feldprüfung der API (`decideField`, `setFieldEvidence`).
  */
 export default function FieldValuePanel({
@@ -135,6 +135,32 @@ export default function FieldValuePanel({
   const reviewer = field.reviewer;
   const unresolvedSource = field.present && field.source_state !== null && field.source_state !== "verified" && field.source_state !== "located";
   const primaryEntry = field.evidence.find((entry) => entry.primary && !entry.excluded) ?? field.evidence.find((entry) => !entry.excluded) ?? null;
+  // „Stelle im Dokument markieren“: Start bei der Seite des Belegs, sonst Seite 1 des Hauptdokuments; jede Seite ist erreichbar.
+  const pickerDocs = documents.filter((doc) => doc.viewer_supported).map((doc) => ({ id: doc.document_version_id, label: doc.original_filename ?? doc.role ?? "Dokument" }));
+  const pickerStart = primaryEntry?.document_version_id && primaryEntry.page != null
+    ? { documentVersionId: primaryEntry.document_version_id, page: primaryEntry.page }
+    : pickerDocs[0] ? { documentVersionId: pickerDocs[0].id, page: 1 } : null;
+
+  // Mehrere Fundstellen zur selben Angabe: sichtbar auflisten, einzeln ansehen und das Hauptnachweis wählen.
+  const activeSources = field.evidence.filter((entry) => !entry.excluded).length;
+  const sources = field.evidence.length > 1 ? <section className="vp-sources" aria-label="Fundstellen">
+    <p className="vp-sources-head"><span className="vp-sources-icon" aria-hidden="true">{DOC}</span><b>{activeSources} {activeSources === 1 ? "Fundstelle" : "Fundstellen"} für diese Angabe</b></p>
+    <ul className="vp-sources-list">{field.evidence.map((entry) => <li key={entry.evidence_id} className={`vp-source${entry.excluded ? " is-excluded" : ""}`}>
+      <span className="vp-where">{entry.page != null ? `Seite ${entry.page}` : "Ohne Seite"}{entry.primary ? " · Hauptnachweis" : ""}{entry.excluded ? " · ausgeschlossen" : ""}</span>
+      {entry.snippet ? <span className="vp-quote" title={entry.snippet}>„{entry.snippet}“</span> : null}
+      <span className="vp-alt-actions">
+        <button type="button" className="vp-link" onClick={() => onShowEvidence?.(entry)}>{DOC}Im Dokument zeigen</button>
+        {canReview && !entry.primary && !entry.excluded ? <button type="button" className="vp-link" disabled={busy} onClick={() => void evidenceAction(entry, "primary")}>Als Hauptnachweis</button> : null}
+      </span>
+    </li>)}</ul>
+  </section> : null;
+
+  // Berechnete Werte, die aus dieser Angabe entstehen: sie werden nicht einzeln bestätigt, aber hier sichtbar.
+  const derived = review.fields.filter((item) => item.kind === "calculated" && item.present && item.inputs.some((input) => input.fact_key === field.fact_key));
+  const derivedBlock = derived.length ? <section className="vp-derived" aria-label="Daraus berechnet">
+    <p className="vp-derived-head">Daraus berechnet</p>
+    <ul>{derived.map((item) => <li key={item.fact_key}><span>{item.label}</span><b>{shownValue(review, item.fact_key, item.current) ?? "–"}</b></li>)}</ul>
+  </section> : null;
 
   async function send(work: () => Promise<ContractDetailResponse>, success: string, decidedAfter: boolean) {
     setBusy(true);
@@ -169,15 +195,15 @@ export default function FieldValuePanel({
   const reason = needsReason ? note.trim() || null : null;
   let action: { label: string; run: () => void; disabled: boolean } | null = null;
   if (canReview) {
-    if (isNone) action = { label: "Als „nicht im Vertrag“ speichern · Weiter", disabled: busy, run: () => void decide("not_in_document", { note: reason }, "Als „nicht im Vertrag“ festgehalten.") };
+    if (isNone) action = { label: "Speichern", disabled: busy, run: () => void decide("not_in_document", { note: reason }, "Als „nicht im Vertrag“ festgehalten.") };
     else if (isOther) {
       const text = otherValue.trim();
-      action = { label: `${text || "Wert"} übernehmen · Weiter`, disabled: busy || !text, run: () => void decide("manual", { value: text, note: reason }, "Wert gespeichert.") };
+      action = { label: "Speichern", disabled: busy || !text, run: () => void decide("manual", { value: text, note: reason }, "Wert gespeichert.") };
     } else if (selected) {
       const stored = selected.candidate.is_current && field.present;
       action = stored
-        ? { label: "Bestätigen · Weiter", disabled: busy, run: () => void decide("keep", { candidate_key: selected.candidate.key, note: reason }, "Bestätigt.") }
-        : { label: `${selected.shown} übernehmen · Weiter`, disabled: busy || analysisOnly,
+        ? { label: "Bestätigen", disabled: busy, run: () => void decide("keep", { candidate_key: selected.candidate.key, note: reason }, "Bestätigt.") }
+        : { label: "Übernehmen", disabled: busy || analysisOnly,
           run: () => void decide("accept", { candidate_key: selected.candidate.key, confirm_change: true, note: reason }, `Wert geändert auf „${selected.shown}“.`) };
     }
   }
@@ -192,7 +218,7 @@ export default function FieldValuePanel({
   function openOther() {
     setOtherOpen(true);
     setPicked(OTHER);
-    setAnnounce("Anderer Wert eingeben");
+    setAnnounce("Eigenen Wert eingeben");
     window.setTimeout(() => otherInput.current?.focus(), 0);
   }
   function chooseNone() {
@@ -201,6 +227,7 @@ export default function FieldValuePanel({
     setAnnounce("Nicht im Vertrag ausgewählt");
   }
   function closeOther() {
+    setOtherValue("");
     setOtherOpen(false);
     setPicker(false);
     setPicked(field.present ? startKey : null);
@@ -263,15 +290,21 @@ export default function FieldValuePanel({
   const mode = /^costs\./.test(field.fact_key) || /_(months|days|years|count|percent|rate)$/.test(field.fact_key) ? "decimal" : "text";
 
   return <div className={`vp${showDecided ? " is-decided" : ""}`}>
-    <header className="vp-head">
+    <header className={`vp-head vp-head--${level}`}>
       <div className="vp-meta">
-        <span className={`vp-level vp-level--${level}`}><span className="vp-dot" aria-hidden="true" />{LEVEL_NAME[level]}</span>
-        <span aria-hidden="true">·</span>
-        <span>{position.index + 1} / {position.total}</span>
+        <span className={`vp-level vp-level--${level}`}>{LEVEL_NAME[level]}</span>
+        <span className="vp-bar" aria-hidden="true" />
+        <span>Angabe {position.index + 1} von {position.total}</span>
         <span className="vp-sp" />
-        {chip}
+        <span className="vp-arrows">
+          <button type="button" className="btn btn-sm vp-arrow" onClick={onPrev} disabled={position.index <= 0} aria-label="Vorherige Angabe" title="Vorherige Angabe">{BACK}</button>
+          <button type="button" className="btn btn-sm vp-arrow" onClick={onNext} disabled={position.index >= position.total - 1} aria-label="Nächste Angabe" title={nextLabel ? `Nächste: ${nextLabel}` : "Nächste Angabe"}>{NEXT}</button>
+        </span>
       </div>
-      <h2 ref={headingRef} tabIndex={-1} className="vp-title">{field.label}</h2>
+      <div className="vp-titlerow">
+        <h2 ref={headingRef} tabIndex={-1} className="vp-title">{field.label}</h2>
+        <span className="vp-chip">{chip}</span>
+      </div>
       {subline ? <p className="vp-sub">{subline}</p> : null}
     </header>
 
@@ -280,12 +313,17 @@ export default function FieldValuePanel({
       {stale ? <InlineAlert tone="info" role="status">Das Feld wurde inzwischen geändert. Der aktuelle Stand ist geladen – bitte neu entscheiden.</InlineAlert> : null}
 
       {showDecided ? <>
-        <p className="vp-big">{decidedCard?.shown ?? shownValue(review, field.fact_key, field.current) ?? (field.status === "absent" ? "Nicht im Vertrag" : "–")}</p>
+        <section className="vp-answer" aria-label="Geprüfter Wert">
+          <span className="vp-answer-label">Geprüfter Wert</span>
+          <p className="vp-big">{decidedCard?.shown ?? shownValue(review, field.fact_key, field.current) ?? (field.status === "absent" ? "Nicht im Vertrag" : "–")}</p>
+        </section>
         {primaryEntry || decidedCard?.quote ? <div className="vp-src">
           <b>{decidedCard?.where}</b>
           {decidedCard?.quote ? <span className="vp-quote" title={decidedCard.quote}>„{decidedCard.quote}“</span> : null}
           <button type="button" className="vp-link" onClick={() => show(decidedCard)}>Im Dokument zeigen</button>
         </div> : null}
+        {sources}
+        {derivedBlock}
         <div className="vp-decided">
           {CHECK_CIRCLE}
           <span>{field.fact_state === "corrected" ? "Übernommen" : "Bestätigt"}{reviewer ? <> von <b>{reviewer}</b></> : null}{field.reviewed_at ? ` · ${formatDateTime(field.reviewed_at)}` : ""}</span>
@@ -293,16 +331,21 @@ export default function FieldValuePanel({
           {canReview ? <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setEditing(true); setPicked(current?.key ?? null); }}>{PEN}Ändern</button> : null}
         </div>
         {decisionNote ? <div className="vp-src vp-src--plain"><b>Begründung</b><span>{decisionNote}</span></div> : null}
-        {others.length ? <>
-          <button type="button" className="vp-fold" aria-expanded={fold === "alt"} onClick={() => setFold(fold === "alt" ? null : "alt")}>
-            {CHEVRON}Anderer Vorschlag<small>{others.map((card) => `${card.shown}${card.page != null ? ` · Seite ${card.page}` : ""}`).join(" · ")}</small>
-          </button>
-          {fold === "alt" ? <ul className="vp-fold-body">{others.map((card) => <li key={card.candidate.key}>
-            <strong>{card.shown}</strong><span>{card.where}</span>
+        {others.length ? <section className="vp-alt" aria-label="Anderer Vorschlag">
+          <p className="vp-alt-head">
+            <span className="vp-alt-icon" aria-hidden="true">{WARN}</span>
+            <b>{others.length === 1 ? "Anderer Vorschlag im Vertrag" : `${others.length} andere Vorschläge im Vertrag`}</b>
+          </p>
+          <ul className="vp-alt-list">{others.map((card) => <li key={card.candidate.key} className="vp-alt-item">
+            <strong className="vp-alt-value">{card.shown}</strong>
+            <span className="vp-where">{card.where}</span>
             {card.quote ? <span className="vp-quote" title={card.quote}>„{card.quote}“</span> : null}
-            <button type="button" className="vp-link" onClick={() => show(card)}>Im Dokument zeigen</button>
-          </li>)}</ul> : null}
-        </> : null}
+            <span className="vp-alt-actions">
+              {canReview ? <button type="button" className="btn btn-sm" onClick={() => { setEditing(true); setPicked(card.candidate.key); }}>Diesen Wert wählen</button> : null}
+              <button type="button" className="vp-link" onClick={() => show(card)} disabled={!card.entry && card.page == null}>{DOC}Im Dokument zeigen</button>
+            </span>
+          </li>)}</ul>
+        </section> : null}
         {field.history.length ? <>
           <button type="button" className="vp-fold" aria-expanded={fold === "history"} onClick={() => setFold(fold === "history" ? null : "history")}>
             {HISTORY}Verlauf<small>{field.history.length === 1 ? "1 Eintrag" : `${field.history.length} Einträge`}</small>
@@ -343,6 +386,8 @@ export default function FieldValuePanel({
             </div>;
           })}
         </div> : null}
+        {sources}
+        {derivedBlock}
 
         {unresolvedSource ? <InlineAlert tone="warning" role="status">
           {field.source_state === "unavailable" ? "Das Dokument ist nicht verfügbar." : "Die Fundstelle konnte nicht aufgelöst werden."} Der Wert gilt hier nicht als belegt – bestätigen Sie ihn nur, wenn Sie ihn anders prüfen können.
@@ -370,21 +415,31 @@ export default function FieldValuePanel({
           </div>
         </form> : null}
 
-        {canReview ? <div className={`vp-other${isOther || isNone ? " is-on" : ""}`}>
-          <div className="vp-other-links">
-            <button type="button" className={`vp-link${isOther ? " is-strong" : ""}`} onClick={openOther}>{PEN}Anderer Wert<Kbd>A</Kbd></button>
-            {canNone ? <button type="button" className={`vp-link${isNone ? " is-strong" : ""}`} onClick={chooseNone}>{SEARCH}Nicht im Vertrag<Kbd>N</Kbd></button> : null}
+        {canReview ? <section className={`vp-other${isOther || isNone ? " is-on" : ""}`} aria-label="Selbst entscheiden">
+          <p className="vp-other-title">{cards.length ? "Stimmt keiner dieser Werte?" : "Kein Wert gefunden"}</p>
+          <div className={`vp-choices${canNone ? "" : " is-single"}`}>
+            <button type="button" className={`vp-choice${isOther ? " is-on" : ""}`} aria-pressed={isOther} onClick={isOther && otherOpen ? closeOther : openOther}>
+              <span className="vp-choice-icon" aria-hidden="true">{PEN}</span>
+              <span className="vp-choice-text"><b>Selbst eintragen</b></span>
+              <Kbd>A</Kbd>
+            </button>
+            {canNone ? <button type="button" className={`vp-choice${isNone ? " is-on" : ""}`} aria-pressed={isNone} onClick={isNone ? closeOther : chooseNone}>
+              <span className="vp-choice-icon" aria-hidden="true">{SEARCH}</span>
+              <span className="vp-choice-text"><b>Nicht im Vertrag</b></span>
+              <Kbd>N</Kbd>
+            </button> : null}
           </div>
-          {otherOpen ? <>
-            <input ref={otherInput} className="vp-input" aria-label="Anderer Wert" inputMode={mode === "decimal" ? "decimal" : "text"} placeholder={placeholder} value={otherValue}
+          {otherOpen ? <div className="vp-entry">
+            <div className="vp-entry-head"><span className="vp-entry-label" aria-hidden="true">Ihr Wert</span><button type="button" className="vp-link" onClick={closeOther}>Abbrechen</button></div>
+            <input ref={otherInput} className="vp-input vp-input--lg" aria-label="Eigener Wert" inputMode={mode === "decimal" ? "decimal" : "text"} placeholder={placeholder} value={otherValue}
               onChange={(event) => setOtherValue(event.target.value)} onFocus={() => setPicked(OTHER)} />
-            {primaryEntry?.document_version_id && primaryEntry.page != null ? <>
-              <button type="button" className="vp-link" aria-expanded={picker} onClick={() => setPicker(!picker)}>{MARK}Stelle im Dokument markieren</button>
-              {picker ? <PageTextPicker contractId={contractId} orgSlug={orgSlug} documentVersionId={primaryEntry.document_version_id} page={primaryEntry.page}
+            {pickerStart ? <>
+              <button type="button" className="btn btn-sm vp-mark" aria-expanded={picker} onClick={() => setPicker(!picker)}>{MARK}Stelle im Dokument markieren</button>
+              {picker ? <PageTextPicker contractId={contractId} orgSlug={orgSlug} documentVersionId={pickerStart.documentVersionId} page={pickerStart.page} documents={pickerDocs}
                 onPick={(text) => { setOtherValue(text); setPicker(false); }} /> : null}
             </> : null}
-          </> : null}
-        </div> : <p className="vp-muted">Nur Lesen – entscheiden dürfen Prüfende und das Vertragsmanagement.</p>}
+          </div> : null}
+        </section> : <p className="vp-muted">Nur Lesen – entscheiden dürfen Prüfende und das Vertragsmanagement.</p>}
 
         {needsReason && canReview ? <input className="vp-input vp-input--sm" aria-label="Begründung (optional)" placeholder="Begründung (optional)" value={note} onChange={(event) => setNote(event.target.value)} /> : null}
         {error ? <InlineAlert tone="critical" role="alert" action={<button type="button" className="btn btn-sm" onClick={() => setError(null)}>Schließen</button>}>{error}</InlineAlert> : null}
@@ -393,22 +448,21 @@ export default function FieldValuePanel({
     </div>
 
     <footer className="vp-foot">
-      {!showDecided && action ? <div className="vp-actions">
-        <button type="button" className="btn btn-primary vp-primary" disabled={action.disabled} onClick={action.run}>
-          {busy ? "Wird gespeichert…" : <>{CHECK}{action.label}<Kbd>Enter</Kbd></>}
-        </button>
-        <div className="vp-secondary">
+      <div className="vp-actions">
+        <div className="vp-foot-row">
+          <button type="button" className="btn vp-arrow" onClick={onPrev} disabled={position.index <= 0} aria-label="Zur vorherigen Angabe" title="Vorherige Angabe">{BACK}</button>
+          {!showDecided && action ? <button type="button" className="btn btn-primary vp-primary" disabled={action.disabled} onClick={action.run} title="Speichert und geht zur nächsten Angabe (Enter)">
+            {busy ? "Wird gespeichert…" : action.label}
+          </button> : showDecided ? <button type="button" className="btn btn-primary vp-primary" onClick={onNext}>
+            Weiter
+          </button> : <span className="vp-primary-spacer" />}
+          <button type="button" className="btn vp-arrow" onClick={onNext} disabled={position.index >= position.total - 1} aria-label="Zur nächsten Angabe" title={nextLabel ? `Nächste: ${nextLabel}` : "Nächste Angabe"}>{NEXT}</button>
+        </div>
+        {!showDecided && action ? <div className="vp-secondary">
           {canDefer ? <button type="button" className="vp-link" disabled={busy} onClick={() => void decide("defer", {}, "Zurückgestellt.")}>Später prüfen<Kbd>S</Kbd></button> : null}
           {editing ? <button type="button" className="vp-link" onClick={() => { setEditing(false); setPicked(current?.key ?? null); }}>Abbrechen</button> : null}
-        </div>
-      </div> : null}
-      <nav className="vp-nav" aria-label="Angaben blättern">
-        <button type="button" className="btn btn-sm" onClick={onPrev} disabled={position.index <= 0} aria-label="Zurück">{BACK}</button>
-        <span className="vp-next">{nextLabel ? <>Nächste: <b>{nextLabel}</b></> : "Letzte Angabe der Stufe"}</span>
-        {showDecided
-          ? <button type="button" className="btn btn-sm btn-primary" onClick={onNext}>Weiter {NEXT}</button>
-          : <button type="button" className="btn btn-sm" onClick={onNext} aria-label="Überspringen">{SKIP}</button>}
-      </nav>
+        </div> : null}
+      </div>
     </footer>
   </div>;
 }

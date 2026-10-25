@@ -67,7 +67,7 @@ import ContractDeviceTypesPanel from "./ContractDeviceTypesPanel";
 import DocumentList, { DOCUMENT_LIST_THRESHOLD } from "./DocumentList";
 import EvidencePanel from "./EvidencePanel";
 import { evidenceNumbers, evidenceRows, factsByEvidence, fieldEvidenceStatus, fieldEvidenceLevel, orderEvidence, precisionOf, titleOf } from "@/lib/evidence";
-import { decisionFields, fieldByKey, fieldsOf } from "@/lib/field-review";
+import { angabeNumbers, decisionFields, fieldByKey, fieldsOf } from "@/lib/field-review";
 import { announceRegisterChange } from "@/lib/register-events";
 import CapturedSources from "./CapturedSources";
 import { SignalIcon } from "@/components/ui/Signal";
@@ -448,6 +448,8 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
     .filter((ref) => ref.document_version_id === documentVersionId && ref.page != null && ref.bbox)
     .map((ref) => ({ id: ref.evidence_id, number: evidenceNumber.get(ref.evidence_id) ?? 0, label: titleOf(ref, evidenceFacts), page: ref.page!, bbox: ref.bbox!, bbox_space: ref.bbox_space, active: ref.evidence_id === activeEvidenceId, approx: precisionOf(ref) !== "exact" })),
   [data.evidence, documentVersionId, evidenceNumber, evidenceFacts, activeEvidenceId]);
+  // Marken auf der Seite tragen die Nummer der Angabe (wie „Angabe n von N“ in der Prüfung); Nachweise ohne Angabe bekommen einen Punkt.
+  const angabeOfEvidence = useMemo(() => angabeNumbers(fieldReview), [fieldReview]);
   // Eine Entscheidung kann ein Feld der Vertragsdaten ändern: Akte und Vertragsdaten laden neu.
   function reloadAfterDecision() {
     reload();
@@ -772,10 +774,12 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   // sonst zur Prüfung insgesamt. Nichts wird geraten außer über Schlüssel bzw. gleiche Bezeichnung.
   function openAiReview({ factKeys, subject, openSource }: AiOriginTarget) {
     const fact = findReviewFact(data, factKeys, subject);
-    // Die Karte öffnet die Entscheidung zum Feld in einer Schublade; dort und in der geführten Prüfung gilt derselbe Stand.
-    if (fact && fieldByKey(fieldReview, fact.fact_key)) { setFieldDrawer(fact.fact_key); return; }
+    // Die Plakette führt zur Karte der Angabe in der Prüfung (Dokumente → Prüfung, Stufe und Angabe sind schon gewählt).
     if (fact) {
-      setReviewFocus((current) => ({ key: fact.fact_key, n: (current?.n ?? 0) + 1 }));
+      // Berechnete Werte haben keine eigene Karte: sie stehen auf der Karte der Angabe, aus der sie entstehen („Daraus berechnet“).
+      const target = fieldByKey(fieldReview, fact.fact_key);
+      const focus = target?.kind === "calculated" ? target.inputs.find((input) => input.present)?.fact_key ?? fact.fact_key : fact.fact_key;
+      setReviewFocus((current) => ({ key: focus, n: (current?.n ?? 0) + 1 }));
       setRoute("documents", "review");
       return;
     }
@@ -812,7 +816,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           ]]} />
           <ResponsibilityChips assignment={data.assignment} canEdit={canEditData} hospitalCount={hospitalCount} onOpen={() => openTarget({ tab: "register", section: "ownership" })} />
           <div className="object-header-meta object-header-signals">
-            {openPoints?.length ? <Link className="open-points-link" href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><Signal tone={openPoints[0].tone === "critical" ? "critical" : "warning"}>Offene Punkte · {openPoints.length}</Signal></Link> : null}
+            {openPoints?.length ? <Link className={`tag-chip tag-chip--attention${openPoints[0].tone === "critical" ? " tag-chip--critical" : ""}`} href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><svg className="tag-chip-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5 22 20H2z" /><path d="M12 10v4M12 17v.5" /></svg>Offene Punkte · {openPoints.length}</Link> : null}
             <FieldReviewButton review={fieldReview} onOpenField={(field) => setFieldDrawer(field.fact_key)} onStartGuided={(tier) => startFieldReview(tier)} />
             <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings.filter((warning) => !warning.review_resolved).map((warning) => (warning.conflict ? { ...warning, title_de: warning.conflict.title_de } : warning))} canEdit={canEditData} onChanged={reload} />
           </div>
@@ -1001,7 +1005,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             onReload={reloadAfterDecision}
             onOpenAnalysis={() => { setReviewMode(null); openTarget(REEXTRACTION_TARGET); }}
             onOpenFindings={() => { setReviewMode(null); setRoute("documents", "review"); }}
-            viewer={<PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers} variant="review" />}
+            viewer={(numbers) => <PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} markers={pageMarkers.filter((marker) => numbers.has(marker.id)).map((marker) => ({ ...marker, number: numbers.get(marker.id) ?? marker.number }))} variant="review" />}
           /> : null}
           {inDocumentWorkspace && !reviewMode && !proposalMode && <div className="dw">
             <aside className="dw-side" aria-label="Dateien und Nachweise">
@@ -1023,7 +1027,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
             </aside>
             <div className="dw-main">
               <div className="cw-pdf-shell"><PdfViewer contractId={data.contract_id} orgSlug={orgSlug} documentVersionId={documentVersionId} active={Boolean(documentVersionId)} navTarget={navTarget} onPageChange={onPdfPage} pagesOpen={false}
-                markers={documentTab === "evidence" ? pageMarkers : []}
+                markers={documentTab === "evidence" ? pageMarkers.map((marker) => ({ ...marker, number: angabeOfEvidence.get(marker.id) ?? 0 })) : []}
                 onMarker={(id) => { const ref = evidenceById(id); if (ref) reviewEvidence(ref); }} /></div>
               <div className="cw-doc-foot">
                 <span>{DOC_INFO_ICON}{canEditData ? "Eine Stelle im Text markieren, um daraus eine Angabe zu übernehmen." : "Nachweise zeigen, wo jede Angabe im Dokument steht."}</span>

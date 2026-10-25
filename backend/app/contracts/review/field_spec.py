@@ -70,7 +70,7 @@ FIELD_SPECS: dict[str, FieldSpec] = dict([
     _spec("termination.auto_renewal", "term", E, "Eine automatische Verlängerung verlängert die Bindung, wenn nicht rechtzeitig gekündigt wird."),
     _spec("termination.renewal_period", "term", E, "Der Verlängerungszeitraum bestimmt, wie lange der Vertrag sich verlängert."),
     _spec("termination.cancellation_condition", "term", I),
-    _spec("dates.duration", "term", I),
+    _spec("dates.duration", "term", E, "Die Laufzeit bestimmt, wie lange der Vertrag bindet."),
     _spec("dates.minimum_duration", "term", I),
     _spec("dates.event_start", "term", I),
     _spec("payment.payment_start", "term", I),

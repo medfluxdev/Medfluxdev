@@ -57,6 +57,11 @@ import ActionMenu from "@/components/ui/ActionMenu";
 import { revealBox } from "@/lib/box-collapse";
 
 type Draft = Record<string, RegisterValue>;
+/** Laufzeitart → die Prüf-Angabe, aus der sie abgeleitet ist (für die KI-Plakette). */
+const TERM_MODEL_FACT: Record<string, string> = {
+  fixed_term: "dates.duration", terminable: "termination.cancellation_period", terminable_min_term: "dates.minimum_duration",
+  auto_renewal: "termination.auto_renewal", perpetual: "dates.duration",
+};
 type FieldKind = "text" | "textarea" | "bool" | "date" | "int" | "decimal" | "period" | "term_model" | "notice_to" | "price_adjustment" | "partner" | "type" | "category" | "account" | "storage" | "auto_number";
 type FieldDef = { key: string; kind: FieldKind };
 
@@ -960,7 +965,9 @@ export default function ContractRegisterPanel({ contractId, orgSlug, onChanged, 
           const openSource = provenance?.document_source && onShowSource ? () => onShowSource(provenance.document_source!) : null;
           const aiState = provenance?.origin === "ai" ? "unreviewed" : provenance?.origin === "ai_confirmed" ? "confirmed" : null;
           // KI-Werte: eine Plakette (Bestätigt/Ungeprüft), die die Quelle öffnet; sonst die stille Herkunft wie bisher.
-          const originBadge = aiState ? <AiOrigin state={aiState} onOpenSource={openSource} factKey={provenance?.source_field} subject={label} />
+          // Die Vertragsart nach Laufzeit („Feste Laufzeit“ …) ist keine eigene Prüf-Angabe: die Plakette führt zur Angabe, aus der sie folgt.
+          const termModelFact = def.key === "term_model" ? TERM_MODEL_FACT[String(register.fields.term_model?.value ?? "")] : undefined;
+          const originBadge = aiState ? <AiOrigin state={aiState} onOpenSource={openSource} factKey={termModelFact ?? provenance?.source_field} subject={def.key === "term_model" ? undefined : label} />
             : provenance?.origin ? <span className={`rg-origin rg-origin-${provenance.origin}`} title={provenance.source_field ? `Quelle: ${provenance.source_field}` : undefined}>{ORIGIN_LABEL[provenance.origin]}</span> : null;
           const sourceChip = !aiState && provenance?.document_source && onShowSource ? <button type="button" className="cw-source-button" title={`„${provenance.document_source.quote}“`} onClick={() => onShowSource(provenance.document_source!)} aria-label={`Fundstelle von ${label}: Seite ${provenance.document_source.page}`}>Quelle</button> : null;
           return <div key={def.key} id={`rg-field-${def.key}`} className={isTarget ? "rg-field rg-field--target" : "rg-field"} tabIndex={isTarget ? -1 : undefined}>

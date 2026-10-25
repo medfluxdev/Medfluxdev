@@ -37,7 +37,7 @@ _EMPTY_ENUMS = {"unknown", "other"}
 LABELS: dict[str, str] = {
     "identity.contract_title": "Vertragstitel",
     "identity.contract_number": "Vertragsnummer",
-    "identity.contract_type": "Vertragsart (laut Dokument)",
+    "identity.contract_type": "Vertragsart",
     "identity.supplier": "Vertragspartner / Lieferant",
     "identity.contractor": "Auftragnehmer",
     "identity.customer": "Auftraggeber",
