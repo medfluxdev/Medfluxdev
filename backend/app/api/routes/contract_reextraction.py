@@ -39,6 +39,8 @@ class StartRequest(BaseModel):
     reset_confirmations: bool = False
     reread_document: bool = False
     model_id: Optional[str] = Field(default=None, max_length=200)
+    # Optional: ein anderes gültiges Dokument des Vertrags statt des Hauptdokuments analysieren.
+    document_version_id: Optional[UUID] = None
 
 
 class ApplyRequest(BaseModel):
@@ -162,6 +164,7 @@ async def start_reextraction(request: Request, contract_id: UUID, organization_s
                 model_id=chosen if chosen and chosen != current_model else None,
                 sections=payload.sections, hint=payload.hint, protect_manual=payload.protect_manual,
                 reset_confirmations=payload.reset_confirmations,
+                document_version_id=payload.document_version_id,
             )
         except service.ReextractError as exc:
             session.rollback()

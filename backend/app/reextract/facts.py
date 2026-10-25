@@ -166,6 +166,10 @@ REVIEW_FACTS: dict[str, tuple[str, ...]] = {
 
 # Pruef-Angabe -> Vertragsdaten-Feld (Basisname), das eine Korrektur in der Pruefung mit aendert.
 REVIEW_TO_REGISTER: dict[str, str] = {
+    # Vertragstitel: Korrektur/Bestätigung in der Prüfung wirkt auch in den Vertragsdaten.
+    "identity.contract_title": "contract_title",
+    # Vertragspartner: nur die Verbindung (Vertragsdaten <-> Prüfung); die Zuordnung zum Partnerstamm bleibt Handarbeit.
+    "identity.supplier": "partner_id",
     "dates.start_date": "term_start_date",
     "dates.end_date": "term_fixed_end_date",
     "dates.duration": "initial_term",

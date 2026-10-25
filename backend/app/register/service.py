@@ -790,7 +790,7 @@ def review_register_changes(fact_key: str, action: str, corrected_value: Any) ->
     from app.register.from_document import CaptureError, values_from_quote
 
     base = REVIEW_TO_REGISTER.get(fact_key)
-    if base is None or action not in ("corrected", "confirmed"):
+    if base is None or base == "partner_id" or action not in ("corrected", "confirmed"):
         return None, {}
     if action == "confirmed":
         return base, {}
@@ -957,6 +957,12 @@ def transition_status(
     session.flush()
 
 
+def _excerpt(text: Optional[str], limit: int = 240) -> str:
+    """Kurzer Auszug einer Notiz für den Verlauf (der volle Text bleibt in der Notiz)."""
+    flat = " ".join(str(text or "").split())
+    return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
+
+
 def add_remark(session: Session, *, contract: Contract, actor: RegisterActor, body: str) -> ContractRemark:
     text = (body or "").strip()
     if not text:
@@ -972,7 +978,7 @@ def add_remark(session: Session, *, contract: Contract, actor: RegisterActor, bo
     )
     session.add(remark)
     session.flush()
-    log_activity(session, actor, contract.id, "contract.remark_added", {"remark_id": str(remark.id)})
+    log_activity(session, actor, contract.id, "contract.remark_added", {"remark_id": str(remark.id), "text": _excerpt(text)})
     return remark
 
 
@@ -1013,7 +1019,7 @@ def edit_remark(
     remark.edited_by_name = actor.display_name
     session.flush()
     log_activity(session, actor, contract.id, "contract.remark_edited", {
-        "remark_id": str(remark.id), "own": remark.account_id is not None and remark.account_id == actor.account_id,
+        "remark_id": str(remark.id), "text": _excerpt(text), "own": remark.account_id is not None and remark.account_id == actor.account_id,
     })
     return remark
 
@@ -1043,7 +1049,7 @@ def delete_remark(
     remark.deleted_by_name = actor.display_name
     session.flush()
     log_activity(session, actor, contract.id, "contract.remark_deleted", {
-        "remark_id": str(remark.id), "own": remark.account_id is not None and remark.account_id == actor.account_id,
+        "remark_id": str(remark.id), "text": _excerpt(remark.body), "own": remark.account_id is not None and remark.account_id == actor.account_id,
     })
     return remark
 

@@ -78,7 +78,7 @@ def test_contract_history_and_organization_log(monkeypatch):
     history = manager.get(f"/api/contracts/{cid}/history", params=query)
     assert history.status_code == 200, history.text
     labels = [item["label"] for item in history.json()["items"]]
-    assert labels[:3] == ["Bemerkung hinzugefügt", "Stammdaten geändert", "Vertrag angelegt"]
+    assert labels[:3] == ["Notiz hinzugefügt", "Stammdaten geändert", "Vertrag angelegt"]
     assert history.json()["items"][1]["actor"] == "Manager"
 
     admin = _as(monkeypatch, ids, "admin", "admin")

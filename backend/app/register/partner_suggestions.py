@@ -210,6 +210,27 @@ def suggestions(session: Session, partner: ContractPartner, contracts: Iterable[
     return sorted(seen.values(), key=lambda item: (FIELD_ORDER.index(item.field), item.value))
 
 
+def prefill_for_new_partner(session: Session, contract: Contract) -> dict:
+    """Was die KI zum (noch nicht angelegten) Vertragspartner im Vertrag gefunden hat – nur Lesen, nichts wird gespeichert.
+
+    Gleiche Regeln wie bei den Vorschlägen am Partner (Adresse aus dem Wortlaut, Kontakte des Krankenhauses
+    werden übersprungen); der Name kommt aus der gefundenen Lieferantenangabe.
+    """
+    model = load_extracted(session, contract.accepted_extraction_id) if contract.accepted_extraction_id else None
+    if model is None:
+        return {"values": {}, "sources": []}
+    name = " ".join(str(model.identity.supplier or contract.supplier or "").split())
+    stand_in = ContractPartner(organization_id=contract.organization_id, short_name=name[:120], name1=name[:255])
+    values: dict[str, str] = {}
+    sources: list[dict] = []
+    for key, value, page, quote in found_in_contract(model, stand_in):
+        if key in values:
+            continue
+        values[key] = value
+        sources.append({"field": key, "label": LABELS[key], "page": page, "quote": quote})
+    return {"values": values, "sources": sources}
+
+
 def partner_contracts(session: Session, partner: ContractPartner, allowed: Optional[set] = None) -> list[Contract]:
     stmt = select(Contract).where(Contract.organization_id == partner.organization_id, Contract.partner_id == partner.id)
     if allowed is not None:

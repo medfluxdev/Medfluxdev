@@ -159,7 +159,10 @@ def decide_field(request: Request, organization_slug: str, contract_id: str, pay
                 } if plan.event_kind == "decision" else {"decision": payload.decision},
                 actor_account_id=account_id, actor_name=name,
             )
-            _record_account_activity(session, request, f"field_review.{payload.decision}", cid, {"fact_key": payload.fact_key})
+            _record_account_activity(session, request, f"field_review.{payload.decision}", cid, {
+                "fact_key": payload.fact_key, "field": field.get("label"),
+                **({"note": plan.note} if plan.note else {}),
+            })
             if plan.event_kind in ("decision", "not_in_document"):
                 # Letzte wesentliche Angabe entschieden: „Wesentliche Prüfung abgeschlossen“ festhalten.
                 session.flush()
@@ -194,7 +197,7 @@ def field_evidence(request: Request, organization_slug: str, contract_id: str, p
                 session, organization_id=org.id, contract_id=cid, kind=kind, fact_key=payload.fact_key,
                 evidence_id=payload.evidence_id, note=note, payload=extra, actor_account_id=account_id, actor_name=name,
             )
-            _record_account_activity(session, request, f"field_review.evidence_{payload.action}", cid, {"fact_key": payload.fact_key})
+            _record_account_activity(session, request, f"field_review.evidence_{payload.action}", cid, {"fact_key": payload.fact_key, "field": field.get("label")})
             session.commit()
         except ReviewConflict as exc:
             session.rollback()
@@ -220,22 +223,19 @@ def field_finding(request: Request, organization_slug: str, contract_id: str, pa
             if finding is None:
                 raise ReviewError("Diese Information gibt es in diesem Vertrag nicht.")
             kind, extra, note = plan_finding(finding, review.get("fields") or [], payload.decision, payload.target_fact_key, payload.note)
+            # „Vermerken“ legt keine Notiz an: Der Vermerk steht im Prüfereignis und im Verlauf des Vertrags.
             if kind == "finding_note":
-                from app.api.routes.contract_register import _register_actor, _require_write
-                from app.register.service import RegisterError, add_remark
-
-                actor = _register_actor(request, organization_slug)
-                _require_write(actor, "remark.add")
-                try:
-                    remark = add_remark(session, contract=contract, actor=actor, body=finding_note_text(finding) + (f"\n{note}" if note else ""))
-                except RegisterError as exc:
-                    raise ReviewError(exc.detail_de) from exc
-                extra = {**extra, "remark_id": str(remark.id)}
+                extra = {**extra, "text": finding_note_text(finding)}
             add_event(
                 session, organization_id=org.id, contract_id=cid, kind=kind, fact_key=payload.finding_key,
                 evidence_id=finding.get("evidence_id"), note=note, payload=extra, actor_account_id=account_id, actor_name=name,
             )
-            _record_account_activity(session, request, f"field_review.{kind}", cid, {"finding": payload.finding_key})
+            _record_account_activity(session, request, f"field_review.{kind}", cid, {
+                "finding": payload.finding_key,
+                **({"text": extra.get("text")} if extra.get("text") else {}),
+                **({"note": note} if note else {}),
+                **({"target": extra.get("target_label")} if extra.get("target_label") else {}),
+            })
             session.commit()
         except ReviewConflict as exc:
             session.rollback()

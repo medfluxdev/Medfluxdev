@@ -207,6 +207,20 @@ def get_register(contract_id: UUID, request: Request, organization_slug: str):
         session.close()
 
 
+@router.get("/{contract_id}/partner-prefill")
+def get_partner_prefill(contract_id: UUID, request: Request, organization_slug: str):
+    """Angaben zum Vertragspartner, die die KI im Vertrag gefunden hat (zum Vorbelegen von „Neuer Partner“)."""
+    actor = _register_actor(request, organization_slug)
+    session = create_session()
+    try:
+        contract = _contract(session, actor, contract_id)
+        from app.register.partner_suggestions import prefill_for_new_partner
+
+        return prefill_for_new_partner(session, contract)
+    finally:
+        session.close()
+
+
 @router.patch("/{contract_id}/register")
 def patch_register(contract_id: UUID, payload: RegisterUpdate, request: Request, organization_slug: str):
     actor = _register_actor(request, organization_slug)

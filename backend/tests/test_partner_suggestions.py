@@ -126,3 +126,20 @@ def test_hospital_contact_is_not_offered_to_the_partner():
         [{"field": "identity.service_email", "source": {"page": 2, "source_text": "service@gehealthcare.com"}}],
     )
     assert [item[0] for item in found_in_contract(partner_contact, partner)] == ["email"]
+
+
+def test_new_partner_is_prefilled_from_what_the_ai_found(tmp_path):
+    from app.register.partner_suggestions import prefill_for_new_partner
+
+    slug, ids = _seed()
+    result = _service(tmp_path, TEXT, _model(FOUND, FOUND_EVIDENCE)).process(
+        organization_slug=slug, original_filename="abiomed.pdf", content_type="application/pdf", content=_pdf(),
+    )
+    session = create_session()
+    try:
+        found = prefill_for_new_partner(session, session.get(Contract, UUID(result.contract_id)))
+    finally:
+        session.close()
+    assert found["values"]["email"] == "service@abiomed.example"
+    assert (found["values"]["street"], found["values"]["postal_code"], found["values"]["city"]) == ("Neuenhofer Weg 3", "52074", "Aachen")
+    assert {item["field"] for item in found["sources"]} == set(found["values"])

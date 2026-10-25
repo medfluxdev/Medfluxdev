@@ -172,12 +172,26 @@ def start(
     hint: Optional[str] = None,
     protect_manual: bool = True,
     reset_confirmations: bool = False,
+    document_version_id: Optional[uuid.UUID] = None,
 ) -> ContractReextraction:
     if contract.lifecycle_state != "active":
         raise ReextractError(409, "Dieser Vertrag kann nicht erneut erfasst werden.")
     # Ohne frühere KI-Analyse (z. B. von Hand erfasster Vertrag mit Dokument) ist die erste Erfassung
     # ein Lauf gegen eine leere Grundlage: alles Gefundene ist „neu“, übernommen wird nur Ausgewähltes.
     version_id = main_document_version(session, contract)
+    if document_version_id is not None and document_version_id != version_id:
+        # Gewaehlt wird nur ein gueltiges, nicht entferntes Dokument dieses Vertrags.
+        linked = session.scalars(
+            select(ContractDocument.id).where(
+                ContractDocument.organization_id == contract.organization_id,
+                ContractDocument.contract_id == contract.id,
+                ContractDocument.document_version_id == document_version_id,
+                ContractDocument.is_valid.is_(True),
+            )
+        ).first()
+        if linked is None:
+            raise ReextractError(422, "Dieses Dokument gehört nicht zum Vertrag oder ist nicht gültig.")
+        version_id = document_version_id
     if version_id is None:
         raise ReextractError(409, "Kein Vertragsdokument hinterlegt.")
     mode = "supplement" if mode == "missing_fields" else mode

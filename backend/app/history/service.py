@@ -22,10 +22,16 @@ from app.database.models.document import DocumentFile, DocumentVersion
 
 EVENT_LABELS: dict[str, str] = {
     "contract.created_manual": "Vertrag angelegt",
+    "contract.imported": "Vertrag importiert",
+    "analysis.initial_done": "KI-Erstanalyse abgeschlossen",
+    "analysis.initial_failed": "KI-Erstanalyse fehlgeschlagen",
+    "analysis.run_ready": "KI-Analyse abgeschlossen",
+    "analysis.run_failed": "KI-Analyse fehlgeschlagen",
+    "analysis.run_cancelled": "KI-Analyse abgebrochen",
     "organization.review_mode_changed": "Prüfmodus geändert",
     "contract.register_updated": "Stammdaten geändert",
     "contract.status_changed": "Status geändert",
-    "contract.remark_added": "Bemerkung hinzugefügt",
+    "contract.remark_added": "Notiz hinzugefügt",
     "contract.remark_edited": "Notiz bearbeitet",
     "contract.remark_deleted": "Notiz gelöscht",
     "contract.evidence_reviewed": "Nachweise geprüft",
@@ -114,6 +120,18 @@ EVENT_LABELS: dict[str, str] = {
     "fact_review.corrected": "Fakt korrigiert",
     "fact_review.reopened": "Fakt erneut geöffnet",
     "fact_review.voided": "Fakt verworfen",
+    "field_review.keep": "Angabe geprüft: Wert beibehalten",
+    "field_review.accept": "Angabe geprüft: Dokumentwert übernommen",
+    "field_review.manual": "Angabe geprüft: Wert von Hand korrigiert",
+    "field_review.defer": "Angabe zurückgestellt",
+    "field_review.not_in_document": "Angabe: steht nicht im Dokument",
+    "field_review.evidence_primary": "Nachweis als maßgeblich gewählt",
+    "field_review.evidence_exclude": "Nachweis ausgeschlossen",
+    "field_review.evidence_restore": "Nachweis wieder berücksichtigt",
+    "field_review.finding_linked": "Weitere Information einer Angabe zugeordnet",
+    "field_review.finding_note": "Weitere Information vermerkt",
+    "field_review.finding_dismissed": "Weitere Information ausgeblendet",
+    "field_review.finding_restored": "Weitere Information wiederhergestellt",
     "contract_review.started": "Vertragsprüfung geöffnet",
     "contract_review.completed": "Vertragsprüfung abgeschlossen",
     "override.set": "Wert manuell gesetzt",
@@ -141,6 +159,8 @@ CATEGORIES: dict[str, str] = {
     "deadline": "Termine",
     "finance": "Finanzen",
     "fact_review": "Prüfungen",
+    "notes": "Notizen",
+    "analysis": "KI-Analyse",
     "override": "Manuelle Werte",
     "account": "Benutzer",
     "organisation": "Organisation",
@@ -148,10 +168,12 @@ CATEGORIES: dict[str, str] = {
 }
 
 _CATEGORY_PREFIXES: dict[str, tuple[str, ...]] = {
+    "notes": ("contract.remark_",),
+    "analysis": ("analysis.", "contract.reextraction_", "contract.ai_values_applied", "contract.register_proposal_dismissed", "contract.value_from_document"),
     "contract": ("contract.", "contracts.", "contract_review.", "register."),
     "deadline": ("deadline.", "notification."),
     "finance": ("finance.",),
-    "fact_review": ("fact_review.",),
+    "fact_review": ("fact_review.", "field_review."),
     "override": ("override.",),
     "account": ("account.", "deputy."),
     "organisation": ("hospital.", "department.", "cost_center.", "partner.", "catalog.", "number_range."),
@@ -283,8 +305,70 @@ def contract_history(session: Session, contract: Contract, limit: int = 500) -> 
             EVENT_LABELS["notification.mail_sent"], {"recipient": outbox.recipient, "subject": outbox.subject or title},
         ))
 
+    entries.extend(_analysis_entries(session, contract))
+
     entries.sort(key=lambda entry: entry["at"] or "", reverse=True)
     return entries[:limit]
+
+
+_INTAKE_LABEL = {
+    "ai_human_review": "KI-Analyse mit Prüfung durch Menschen",
+    "ai_direct": "KI-Analyse, direkt übernommen",
+    "manual": "von Hand erfassen (ohne KI)",
+}
+_RUN_MODE_LABEL = {
+    "supplement": "Ergänzen", "sections": "Bereich neu erfassen", "full": "Vollständig neu bewerten", "missing_fields": "Ergänzen",
+}
+
+
+def _analysis_entries(session: Session, contract: Contract) -> list[dict]:
+    """Abgeleitete Spuren, die sonst fehlen: Import, Erstanalyse und das Ende jeder erneuten KI-Analyse."""
+    from app.database.models.extraction import ContractExtraction
+    from app.database.models.reextraction import ContractReextraction
+
+    out: list[dict] = []
+    if contract.created_at is not None and getattr(contract, "intake_mode", None) is not None:
+        out.append(_entry(
+            "analysis", f"import-{contract.id}", _iso(contract.created_at), None, "contract.imported", EVENT_LABELS["contract.imported"],
+            {"intake": _INTAKE_LABEL.get(contract.intake_mode, contract.intake_mode)},
+        ))
+
+    versions = list(session.scalars(select(ContractDocument.document_version_id).where(ContractDocument.contract_id == contract.id)).all())
+    first = session.scalars(
+        select(ContractExtraction).where(ContractExtraction.document_version_id.in_(versions)).order_by(ContractExtraction.created_at.asc()).limit(1)
+    ).first() if versions and getattr(contract, "intake_mode", None) != "manual" else None
+    if first is not None:
+        failed = first.status == "failed"
+        details: dict[str, Any] = {}
+        if first.model:
+            details["model"] = first.model
+        if first.processing_duration is not None:
+            details["duration"] = f"{round(float(first.processing_duration) / 60, 1)} Min."
+        if failed and first.message:
+            details["note"] = str(first.message)[:240]
+        event = "analysis.initial_failed" if failed else "analysis.initial_done"
+        out.append(_entry("analysis", f"first-{first.id}", _iso(first.created_at), None, event, EVENT_LABELS[event], details))
+
+    for run in session.scalars(
+        select(ContractReextraction).where(
+            ContractReextraction.contract_id == contract.id,
+            ContractReextraction.mode != "rollback",
+            ContractReextraction.finished_at.is_not(None),
+        )
+    ).all():
+        if run.status == "failed":
+            event = "analysis.run_failed"
+        elif run.status == "cancelled":
+            event = "analysis.run_cancelled"
+        else:
+            event = "analysis.run_ready"
+        details = {"title": f"Analyse #{run.number} · {_RUN_MODE_LABEL.get(run.mode, run.mode)}"}
+        if run.model_id:
+            details["model"] = run.model_id
+        if run.message and event != "analysis.run_ready":
+            details["note"] = run.message
+        out.append(_entry("analysis", f"run-{run.id}", _iso(run.finished_at), run.requested_by_name, event, EVENT_LABELS[event], details))
+    return out
 
 
 @dataclass(frozen=True)

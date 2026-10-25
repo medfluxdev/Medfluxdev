@@ -322,8 +322,12 @@ def _stored_register_values(contract) -> dict[str, str]:
 
     out: dict[str, str] = {}
     for fact_key, base in REVIEW_TO_REGISTER.items():
-        value = getattr(contract, base, None) if base in ("term_start_date", "term_fixed_end_date", "notice_to") else None
-        if base in ("term_start_date", "term_fixed_end_date"):
+        value = getattr(contract, base, None) if base in ("term_start_date", "term_fixed_end_date", "notice_to", "contract_title") else None
+        if base == "contract_title":
+            text = str(value).strip() if value else None
+        elif base == "partner_id":
+            text = None
+        elif base in ("term_start_date", "term_fixed_end_date"):
             text = value.strftime("%d.%m.%Y") if value else None
         elif base == "notice_to":
             text = _NOTICE_TO_DE.get(value) if value else None
