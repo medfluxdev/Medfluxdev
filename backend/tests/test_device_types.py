@@ -179,3 +179,30 @@ def test_partner_filter_by_id_and_legacy_name():
     assert {item["value"] for item in values} == {f"id:{siemens_a}", f"id:{siemens_b}", "Freitext GmbH"}
     assert [item["label"] for item in values].count("Siemens") == 2
     assert filter_labels(rows, by_id) == {f"id:{siemens_b}": "Siemens"}
+
+
+def test_portfolio_splits_shared_contracts_evenly_and_sums_to_annual_cost():
+    from app.reports.exports import portfolio
+
+    def full(number, devices, annual):
+        row = _row(number, devices, annual)
+        row.values.update({
+            "cost_center": None, "contract_type": "Wartungsvertrag", "term_status": "Vollständig", "cancel_by": None,
+            "reminder_recipient": None, "responsible": "A", "deletion_from": None,
+        })
+        return row
+
+    rows = [
+        full("001", {"CT": 2}, Decimal("40000")),
+        full("002", {"CT": 1, "MRT": 1}, Decimal("30000")),  # geteilt: 15.000 € je Geräteart
+        full("003", {}, Decimal("10000")),                   # ohne Geräteart
+    ]
+    report = portfolio(rows, date(2026, 10, 11), range(2026, 2028))
+    items = {item["label"]: item for item in report["cost_by"]["device_type"]}
+    assert items["CT"]["annual_cost"] == "55000.00" and items["CT"]["shared_count"] == 1
+    assert items["CT"]["devices_known"] == 3 and items["CT"]["cost_per_device"] == "18333.33"
+    assert items["MRT"]["annual_cost"] == "15000.00" and items["MRT"]["shared_count"] == 1
+    assert items["Ohne Gerätetyp"]["annual_cost"] == "10000.00"
+    total = sum(Decimal(item["annual_cost"]) for item in report["cost_by"]["device_type"])
+    assert str(total) == report["totals"]["annual_cost"] == "80000.00"
+    assert {"key": "device_type", "label": "Gerätetyp"} in report["dimensions"]

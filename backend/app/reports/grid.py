@@ -332,6 +332,7 @@ def build_rows(
             "contract_category": categories.get(contract.contract_category_id) if contract.contract_category_id else None,
             "internal_number": contract.internal_number,
             "term_model": TERM_MODEL_LABELS.get(contract.term_model) if contract.term_model else None,
+            "_renewal_text": _renewal_text(contract),
             "term_status": TERM_STATUS_LABELS.get(terms.status, terms.status),
             "term_start_date": contract.term_start_date,
             "earliest_end": terms.earliest_end,
@@ -610,6 +611,21 @@ def display(column: Column, value: Any) -> Any:
     if column.type == "bool":
         return bool(value)
     return value
+
+
+_RENEWAL_UNITS = {"days": ("Tag", "Tage"), "weeks": ("Woche", "Wochen"), "months": ("Monat", "Monate"), "years": ("Jahr", "Jahre")}
+
+
+def _renewal_text(contract) -> Optional[str]:
+    """Was nach Ablauf der Kündigungsfrist passiert: „verlängert sich um 12 Monate“ bzw. „läuft aus“ (nur aus gepflegten Angaben)."""
+    model = getattr(contract, "term_model", None)
+    if model == "fixed_term":
+        return "läuft aus"
+    if model in ("auto_renewal", "terminable", "terminable_min_term"):
+        value, unit = getattr(contract, "renewal_period_value", None), getattr(contract, "renewal_period_unit", None)
+        if value and unit in _RENEWAL_UNITS:
+            return f"verlängert sich um {value} {_RENEWAL_UNITS[unit][0 if value == 1 else 1]}"
+    return None
 
 
 class MoneyTotals:

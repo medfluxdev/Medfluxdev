@@ -438,6 +438,8 @@ def get_renewals(request: Request, organization_slug: str, days: int = 120):
                     "possible_end": row.values["possible_end"].isoformat() if row.values["possible_end"] else None,
                     "annual_cost": str(row.values["annual_cost"]) if row.values["annual_cost"] is not None else None,
                     "responsible": row.values["responsible"],
+                    "device_types": list(row.lists.get("device_types", ())),
+                    "renewal_text": row.values.get("_renewal_text"),
                     "decision": decisions.get(row.contract_id),
                 }
                 for row in upcoming

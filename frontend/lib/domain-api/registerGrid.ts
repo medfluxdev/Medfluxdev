@@ -91,6 +91,11 @@ export interface PortfolioItem {
   cost_current_year: string | null;
   known?: number;
   missing?: number;
+  /** Gerätetyp: Verträge mit mehreren Gerätearten (Kosten gleichmäßig aufgeteilt), Geräteanzahl, Kosten je Gerät. */
+  shared_count?: number;
+  devices_known?: number;
+  devices_missing?: number;
+  cost_per_device?: string | null;
 }
 
 /** Kennzahl-Betrag mit Abdeckung: value null = nichts bekannt (nicht 0). */
@@ -264,6 +269,9 @@ export interface RenewalListItem {
   possible_end: string | null;
   annual_cost: string | null;
   responsible: string | null;
+  device_types?: string[];
+  /** „verlängert sich um 12 Monate“ bzw. „läuft aus“ – nur aus gepflegten Angaben. */
+  renewal_text?: string | null;
   decision: { decision: string; label: string; status: string } | null;
 }
 

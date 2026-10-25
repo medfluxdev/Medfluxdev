@@ -357,6 +357,36 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
             items.append(_bucket_item(f"Übrige ({len(tail)})", None, _merge([data for _, data in tail])))
         cost_by[key] = items
 
+    # Gerätetyp: jeder Vertrag zählt genau einmal – mehrere Gerätearten teilen sich die Kosten gleichmäßig („geteilt“),
+    # Verträge ohne Geräteart stehen unter „Ohne Gerätetyp“; die Summe entspricht damit den Jährlichen Kosten.
+    device_buckets: dict[Optional[str], MoneyTotals] = defaultdict(MoneyTotals)
+    device_info: dict[Optional[str], dict[str, int]] = defaultdict(lambda: {"shared": 0, "devices": 0, "missing": 0})
+    for row in running:
+        labels: list[Optional[str]] = list(row.lists.get("device_types", ())) or [None]
+        share = Decimal("1") / Decimal(len(labels))
+        for label in labels:
+            device_buckets[label].add(row, share)
+            info = device_info[label]
+            if len(labels) > 1:
+                info["shared"] += 1
+            if label is not None:
+                quantity = row.values.get("_device_quantities", {}).get(label)
+                if quantity:
+                    info["devices"] += int(quantity)
+                else:
+                    info["missing"] += 1
+    device_items = []
+    for label, data in sorted(device_buckets.items(), key=lambda item: (item[0] is None, -(item[1].sum("annual_cost") or Decimal("-1")), item[0] or "")):
+        info = device_info[label]
+        annual = data.sum("annual_cost")
+        per_device = annual / info["devices"] if label is not None and annual is not None and info["devices"] and not info["missing"] else None
+        device_items.append({
+            **_bucket_item(label or "Ohne Gerätetyp", label or "", data),
+            "shared_count": info["shared"], "devices_known": info["devices"], "devices_missing": info["missing"] if label is not None else 0,
+            "cost_per_device": _money(per_device),
+        })
+    cost_by["device_type"] = device_items
+
     yearly_rows = running + [
         row for row in active
         if row.values["business_status"] in ("beendet", "gekuendigt") and row.contract_id not in running_ids
@@ -444,7 +474,7 @@ def portfolio(rows: list[GridRow], as_of: date, years: range) -> dict:
             for status in ("in_arbeit", "gueltig", "gekuendigt", "beendet")
         ],
         "cost_by": cost_by,
-        "dimensions": [{"key": key, "label": label} for key, label in _DIMENSIONS],
+        "dimensions": [{"key": key, "label": label} for key, label in _DIMENSIONS] + [{"key": "device_type", "label": "Gerätetyp"}],
         "cost_by_year": [
             {"year": year, "expense": _money(values["expense"]) if with_finance else None,
              "income": _money(values["income"]) if with_finance else None, "is_projection": year > as_of.year}
