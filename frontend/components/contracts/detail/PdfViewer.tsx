@@ -373,7 +373,8 @@ export default function PdfViewer({ contractId, orgSlug, documentVersionId, acti
     const pagePoints = { width: dims.width / (BASE_SCALE * zoom), height: dims.height / (BASE_SCALE * zoom) };
     const precision = evidencePrecision(bbox, bboxSpace, pagePoints);
     // Belegte Fundstelle (Wortlaut in der Box): grün hinterlegt, wie „Bestätigt“.
-    if (navTarget.verified || (useRefined && precision !== "coarse")) {
+    // Die per Zitat gefundene Stelle gilt immer als belegt (grün); nur Seitenbereiche ohne Fund bleiben „ungefähr“ (gelb).
+    if (navTarget.verified || useRefined) {
       const success = cssColor("--color-success", "rgb(11, 107, 87)");
       const pad = 6;
       const box = { x: rect.x - pad, y: rect.y - pad, w: rect.width + pad * 2, h: rect.height + pad * 2 };
