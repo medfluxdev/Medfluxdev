@@ -503,6 +503,9 @@ export interface FieldCandidateDto {
   support_count: number;
   proposal_id: string | null;
   run_number: number | null;
+  /** Analyse-Vorschlag: Lauf und Schlüssel, damit er direkt aus der Prüfung übernommen werden kann. */
+  run_id?: string | null;
+  proposal_key?: string | null;
   detail: string | null;
   confidence: number | null;
 }

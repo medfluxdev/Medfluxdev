@@ -7,7 +7,8 @@ import Signal from "@/components/ui/Signal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError } from "@/lib/api";
 import type { ContractDetailResponse, DetailDocument, FieldCandidateDto, FieldEvidenceDto, FieldReviewDto, FieldReviewFieldDto } from "@/lib/contract-detail-types";
-import { decideField, setFieldEvidence, type FieldDecision as Decision } from "@/lib/domain-api/contracts";
+import { decideField, getContract, setFieldEvidence, type FieldDecision as Decision } from "@/lib/domain-api/contracts";
+import { applyReextraction } from "@/lib/domain-api/reextraction";
 import { LEVEL_NAME, candidateEvidence, levelOf, shownValue } from "@/lib/field-review";
 import { formatDateTime } from "@/lib/format";
 import { preselectCandidate } from "@/lib/review/preselect";
@@ -211,8 +212,16 @@ export default function FieldValuePanel({
       const stored = selected.candidate.is_current && field.present;
       action = stored
         ? { label: "Bestätigen", disabled: busy, run: () => void decide("keep", { candidate_key: selected.candidate.key, note: reason }, "Bestätigt.") }
-        : { label: "Übernehmen", disabled: busy || analysisOnly,
-          run: () => void decide("accept", { candidate_key: selected.candidate.key, confirm_change: true, note: reason }, `Wert geändert auf „${selected.shown}“.`) };
+        : analysisOnly && selected.candidate.run_id && selected.candidate.proposal_key
+          // Vorschlag aus einer Analyse: direkt hier übernehmen (gleicher Weg wie in der KI-Analyse), danach steht der Wert zur Bestätigung an.
+          ? { label: "Übernehmen", disabled: busy,
+            run: () => void send(async () => {
+              const result = await applyReextraction(orgSlug, contractId, selected.candidate.run_id!, [selected.candidate.proposal_key!]);
+              toast(result.message, "success");
+              return getContract(contractId, orgSlug);
+            }, `Wert übernommen: „${selected.shown}“. Bitte prüfen und bestätigen.`, false) }
+          : { label: "Übernehmen", disabled: busy || analysisOnly,
+            run: () => void decide("accept", { candidate_key: selected.candidate.key, confirm_change: true, note: reason }, `Wert geändert auf „${selected.shown}“.`) };
     }
   }
 

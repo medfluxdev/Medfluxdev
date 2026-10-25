@@ -483,8 +483,9 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
   function showPageQuote(page: number | null, quote: string | null) {
     if (page == null) return;
     setRoute("documents", "document");
-    showDocumentPage(page);
-    void quote;
+    // Mit Zitat: die Stelle im Dokument markieren (wie bei den Nachweisen); ohne Zitat nur zur Seite springen.
+    if (quote && mainDocumentId) showProposalEvidence({ page, quote });
+    else showDocumentPage(page);
   }
   function startProposalReview(startKey: string | null = null) {
     if (!inDocumentWorkspace) setRoute("documents", "document");

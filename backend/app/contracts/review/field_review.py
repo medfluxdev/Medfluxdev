@@ -204,7 +204,7 @@ class _Candidates:
         self, value: Any, *, source: str, label: str, evidence_ids: Optional[list[str]] = None,
         inline: Optional[list[dict]] = None, detail: Optional[str] = None, current: bool = False,
         proposal_id: Optional[str] = None, run_number: Optional[int] = None, confidence: Optional[float] = None,
-        raw: Any = None,
+        raw: Any = None, run_id: Optional[str] = None, proposal_key: Optional[str] = None,
     ) -> Optional[dict]:
         shown = display(value)
         key = normalize(value)
@@ -216,6 +216,8 @@ class _Candidates:
                 "key": key, "display": shown, "value": raw if raw is not None else value if isinstance(value, (str, int, float, bool)) else shown,
                 "is_current": False, "sources": [], "evidence_ids": [], "inline_evidence": [],
                 "proposal_id": None, "run_number": None, "detail": None, "confidence": None,
+                # Analyse-Vorschlag direkt aus der Prüfung übernehmen: Lauf und Schlüssel des Vorschlags.
+                "run_id": None, "proposal_key": None,
             }
         item["is_current"] = item["is_current"] or current
         if source not in [entry["source"] for entry in item["sources"]]:
@@ -225,6 +227,8 @@ class _Candidates:
                 item["evidence_ids"].append(eid)
         item["inline_evidence"].extend(inline or [])
         item["proposal_id"] = item["proposal_id"] or proposal_id
+        item["run_id"] = item["run_id"] or run_id
+        item["proposal_key"] = item["proposal_key"] or proposal_key
         item["run_number"] = item["run_number"] or run_number
         item["detail"] = item["detail"] or detail
         if confidence is not None:
@@ -314,7 +318,7 @@ def _build_candidates(
     for proposal, run in proposals:
         cands.add(
             proposal.new_value if proposal.new_display is None else proposal.new_display,
-            source="analysis", label=f"Analyse #{run.number}", proposal_id=str(proposal.id), run_number=run.number,
+            source="analysis", label=f"Analyse #{run.number}", proposal_id=str(proposal.id), run_number=run.number, run_id=str(run.id), proposal_key=proposal.field_key,
             inline=[{"page": row.get("page"), "quote": row.get("quote")} for row in (_detail(proposal.new_evidence))],
             confidence=proposal.confidence, raw=proposal.new_display,
         )
