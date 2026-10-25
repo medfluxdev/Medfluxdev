@@ -77,7 +77,9 @@ FIELD_SPECS: dict[str, FieldSpec] = dict([
     _spec("dates.latest_cancellation", "term", I, calculated=True,
           inputs=("dates.end_date", "termination.cancellation_period", "termination.cancellation_condition", "termination.auto_renewal")),
     # Finanzen
-    _spec("costs.monthly_recurring", "cost", E, "Der Betrag ist die Grundlage aller Kostenauswertungen."),
+    # Kosten gelten immer als jährlich: die Pflichtangabe sind die Jahreskosten, die Monatswerte bleiben als Angaben stehen.
+    _spec("costs.annual", "cost", E, "Die Jahreskosten sind die Grundlage aller Kostenauswertungen."),
+    _spec("costs.monthly_recurring", "cost", I),
     _spec("costs.currency", "cost", E, "Ohne Währung lassen sich Beträge nicht zusammenrechnen."),
     _spec("costs.vat_rate", "cost", E, "Der Steuersatz entscheidet zwischen Netto- und Bruttobetrag."),
     _spec("payment.billing_interval", "cost", E, "Der Zahlungsrhythmus bestimmt, wann Zahlungen fällig werden."),
@@ -86,7 +88,6 @@ FIELD_SPECS: dict[str, FieldSpec] = dict([
     _spec("costs.monthly_net", "cost", I),
     _spec("costs.monthly_gross", "cost", I, calculated=True, inputs=("costs.monthly_net", "costs.vat_rate")),
     _spec("costs.vat_amount", "cost", I, calculated=True, inputs=("costs.monthly_net", "costs.vat_rate")),
-    _spec("costs.annual", "cost", I, calculated=True, inputs=("costs.monthly_recurring",)),
     # Leistungen & SLA
     *[_spec(f"scope.{k}", "services", I) for k in (
         "maintenance", "inspection", "repair", "calibration", "software_updates", "remote_support",
