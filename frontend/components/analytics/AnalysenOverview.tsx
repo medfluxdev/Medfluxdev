@@ -160,7 +160,7 @@ export default function AnalysenOverview({ report, renewals, notEvaluable, risk 
         <Question dot="cost"><span>Wie viel? Im Verlauf</span></Question>
         <div className="card an-card">
           <div className="an-card-head"><h2 id="an-years">Kosten je Jahr</h2>
-            <button type="button" className="btn btn-sm" aria-pressed={yearTable} onClick={() => setYearTable(!yearTable)}>{yearTable ? "Als Diagramm" : "Als Tabelle"}</button></div>
+            <button type="button" className="btn btn-sm" aria-label={`Kosten je Jahr ${yearTable ? "als Diagramm" : "als Tabelle"}`} aria-pressed={yearTable} onClick={() => setYearTable(!yearTable)}>{yearTable ? "Als Diagramm" : "Als Tabelle"}</button></div>
           {byYear.every((item) => item.expense == null) ? <p className="an-empty">Keine Kosten in den gepflegten Finanzdaten.</p> : yearTable
             ? <table className="an-table"><thead><tr><th scope="col">Jahr</th><th scope="col" className="num">Kosten (netto)</th><th scope="col">Art</th></tr></thead>
               <tbody>{byYear.map((item) => <tr key={item.year}><th scope="row">{item.year}</th><td className="num">{euro(item.expense)}</td><td>{item.forecast ? "Prognose" : "Ist"}</td></tr>)}</tbody></table>
@@ -186,7 +186,7 @@ export default function AnalysenOverview({ report, renewals, notEvaluable, risk 
         <Question dot="device"><span>Wohin?</span></Question>
         <div className="card an-card">
           <div className="an-card-head"><h2 id="an-flow">Wohin fließt das Geld</h2>
-            <button type="button" className="btn btn-sm" aria-pressed={flowTable} onClick={() => setFlowTable(!flowTable)}>{flowTable ? "Als Balken" : "Als Tabelle"}</button></div>
+            <button type="button" className="btn btn-sm" aria-label={`Wohin fließt das Geld ${flowTable ? "als Balken" : "als Tabelle"}`} aria-pressed={flowTable} onClick={() => setFlowTable(!flowTable)}>{flowTable ? "Als Balken" : "Als Tabelle"}</button></div>
           <div className="an-seg-buttons" role="group" aria-label="Aufteilen nach">
             <span className="an-seg-label">Aufteilen nach</span>
             {DIMENSIONS.map((item) => <button key={item.key} type="button" className={`an-segbtn an-segbtn--${item.tone}`} aria-pressed={dimension === item.key} onClick={() => setDimension(item.key)}>{item.label}</button>)}

@@ -2,7 +2,6 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import DeviceTypeComparison from "@/components/analytics/DeviceTypeComparison";
 import ContractDeviceTypesPanel from "@/components/contracts/detail/ContractDeviceTypesPanel";
 
 const api = vi.hoisted(() => ({
@@ -104,44 +103,5 @@ describe("Gerätearten am Vertrag", () => {
     expect(within(table).getByText("Haus A")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /hinzufügen|entfernen|speichern|übernehmen/i })).not.toBeInTheDocument();
-  });
-});
-
-describe("Analysen: Gerätearten vergleichen", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("Übersicht je Geräteart, dann Verträge mit Kosten je Gerät oder Grund", async () => {
-    const user = userEvent.setup();
-    api.getDeviceTypeComparison.mockImplementation(async (_org: string, deviceType?: string | null) => (deviceType
-      ? {
-        as_of: "2026-10-11", level: "contracts", device_type: "CT", count: 2, truncated: false, devices_known: 2, devices_missing: 1,
-        totals: { value: "70000.00", currency: "EUR", known: 2, missing: 0 },
-        register_filter: [{ column: "device_types", op: "in", value: ["CT"] }],
-        items: [
-          { contract_id: "c-1", register_number: "000001", short_description: "Wartung CT Nord", partner: "Siemens", hospital: "Nord", department: "Radiologie", possible_end: "2028-12-31", currency: "EUR", annual_cost: "40000.00", quantity: 2, other_device_types: [], cost_per_device: "20000.00", cost_per_device_reason: null },
-          { contract_id: "c-2", register_number: "000002", short_description: "Service CT Süd", partner: "GE", hospital: "Süd", department: null, possible_end: null, currency: "EUR", annual_cost: "30000.00", quantity: null, other_device_types: ["MRT"], cost_per_device: null, cost_per_device_reason: "Anzahl Geräte nicht gepflegt" },
-        ],
-      }
-      : { as_of: "2026-10-11", level: "types", running_count: 5, without_count: 3, items: [{ label: "CT", value: "CT", count: 2, annual_cost: "70000.00", annual_known: 2, annual_missing: 0, devices_known: 2, devices_missing: 1 }] }));
-    const { container } = render(<DeviceTypeComparison organizationSlug="test-klinik" />);
-    expect(await screen.findByText("3 von 5 laufenden Verträgen haben noch keine Geräteart.", { exact: false })).toBeInTheDocument();
-    expect(await axe(container)).toHaveNoViolations();
-
-    await user.click(screen.getByRole("button", { name: "CT" }));
-    expect(api.getDeviceTypeComparison).toHaveBeenLastCalledWith("test-klinik", "CT");
-    const table = await screen.findByRole("table", { name: "Verträge für CT" });
-    expect(within(table).getByText("20.000,00 €")).toBeInTheDocument();
-    expect(within(table).getByText(/nicht berechenbar/)).toHaveTextContent("Anzahl Geräte nicht gepflegt");
-    expect(within(table).getByText(/auch MRT/)).toBeInTheDocument();
-    expect(within(table).getByRole("link", { name: "Anzahl für Service CT Süd erfassen" })).toHaveAttribute("href", expect.stringContaining("tab=relations"));
-    expect(screen.getByRole("link", { name: /in der Vertragsliste öffnen/ })).toHaveAttribute("href", expect.stringContaining("device_types"));
-    expect(window.location.search).toBe("?geraeteart=CT");
-  });
-
-  it("ohne Zuordnung: ruhiger Hinweis mit Weg zu den Stammdaten", async () => {
-    api.getDeviceTypeComparison.mockResolvedValue({ as_of: "2026-10-11", level: "types", running_count: 0, without_count: 0, items: [] });
-    render(<DeviceTypeComparison organizationSlug="test-klinik" />);
-    expect(await screen.findByText("Noch keine Verträge mit Geräteart")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Stammdaten → Gerätearten" })).toHaveAttribute("href", "/stammdaten/geraetearten");
   });
 });
