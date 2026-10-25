@@ -113,12 +113,12 @@ describe("App-Shell", () => {
     expect(push).toHaveBeenCalledWith("/register");
   });
 
-  it("speichert Design und Textgröße aus dem Kontomenü", async () => {
+  it("speichert Design und Größe aus dem Kontomenü", async () => {
     const user = userEvent.setup();
     render(<ClientNav>Inhalt</ClientNav>);
     await user.click(screen.getByLabelText("Kontomenü öffnen"));
     await user.selectOptions(screen.getByLabelText("Design"), "dark");
-    await user.selectOptions(screen.getByLabelText("Textgröße"), "large");
+    await user.click(screen.getByRole("button", { name: "Größer" }));
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     expect(document.documentElement).toHaveAttribute("data-text-size", "large");
     expect(JSON.parse(localStorage.getItem("medflux.preferences") ?? "{}")).toMatchObject({ theme: "dark", textSize: "large" });

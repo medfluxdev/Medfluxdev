@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { REVIEW_TARGET, contractHref, notEvaluableLink } from "@/lib/fix-targets";
 import { useCallback, useEffect, useState } from "react";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
 import { KindChip, deadlineKind } from "@/components/deadlines/TerminKind";
+import { deadlineOrigin } from "@/lib/deadline-origin";
 import { formatDate } from "@/lib/format";
 import { listDeadlines, type DeadlineDto, type DeadlineStatus } from "@/lib/domain-api/deadlines";
 import { listRenewals } from "@/lib/domain-api/registerGrid";
@@ -48,12 +50,14 @@ function initialHorizon(): string {
   return HORIZONS.some((item) => item.value === value) ? (value as string) : "90";
 }
 
+const OVERDUE_ICON = <svg viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16M12 13v3M12 18v.5" /></svg>;
+
 function Rows({ items }: { items: DeadlineDto[] }) {
-  return <div className="table-scroll"><table className="rg-table">
+  return <div className="table-scroll"><table className="rg-table dl-table">
     <thead><tr><th scope="col">Fällig</th><th scope="col">Termin</th><th scope="col">Vertrag</th><th scope="col">Zuständig</th><th scope="col">Erinnerung</th><th scope="col">Herkunft</th></tr></thead>
     <tbody>{items.map((item) => <tr key={item.id}>
-      <td>{formatDate(item.due_date)}{item.overdue ? <> <Signal tone="critical">Überfällig</Signal></> : item.days_until_due === 0 ? <> <Signal tone="warning">Heute</Signal></> : null}</td>
-      <th scope="row"><span className="terminlist-kind"><KindChip kind={deadlineKind(item)} /></span>{item.title}{item.todo_text ? <span className="contract-business-status">{item.todo_text}</span> : null}</th>
+      <td><span className="dl-when"><span className="dl-date">{formatDate(item.due_date)}</span>{item.overdue ? <Signal tone="critical" size="sm">Überfällig</Signal> : item.days_until_due === 0 ? <Signal tone="warning" size="sm">Heute</Signal> : null}</span></td>
+      <th scope="row"><span className="terminlist-kind"><KindChip kind={deadlineKind(item)} /></span><Link className="termin-link" href={deadlineOrigin(item).href} title={`Zur Quelle: ${deadlineOrigin(item).label}`}>{item.title}</Link>{item.todo_text ? <span className="contract-business-status">{item.todo_text}</span> : null}</th>
       <td><Link href={`/contracts/${item.contract_id}`}>{item.contract_label ?? "Vertrag"}</Link></td>
       <td>{item.assignee_name ?? "Vertragsverantwortliche/r"}</td>
       <td>{formatDate(item.remind_on)}</td>
@@ -111,8 +115,8 @@ export default function DeadlineList({ organizationSlug }: { organizationSlug: s
   const upcoming = (items ?? []).filter((item) => !item.overdue);
   const narrowed = mine || horizon !== "" || status !== "open";
 
-  return <div>
-    <section className="cw-section">
+  return <div className="dl-stack">
+    <section className="cw-section dl-filter">
       <div className="rg-toolbar">
         <label className="rg-check"><input type="checkbox" checked={mine} onChange={(event) => change(event.target.checked, horizon)} />Nur meine</label>
         <label>Zeitraum <select value={horizon} onChange={(event) => change(mine, event.target.value)}>{HORIZONS.map((item) => <option key={item.label} value={item.value}>{item.label}</option>)}</select></label>
@@ -128,7 +132,7 @@ export default function DeadlineList({ organizationSlug }: { organizationSlug: s
         ? <EmptyState variant="calm" title="Keine Termine für diese Auswahl"><>Andere Termine sind ausgeblendet. <button type="button" className="rg-link" onClick={() => { setStatus("open"); change(false, ""); }}>Alle offenen Termine anzeigen</button></></EmptyState>
         : <EmptyState variant="calm" title="Keine offenen Termine">Fristen aus den Vertragsdaten und Wiedervorlagen erscheinen hier automatisch.</EmptyState>
     ) : null}
-    {overdue.length > 0 ? <section className="cw-section" aria-labelledby="deadlines-overdue"><h2 id="deadlines-overdue" className="cw-subheading">Überfällig ({overdue.length})</h2><Rows items={overdue} /></section> : null}
-    {upcoming.length > 0 ? <section className="cw-section" aria-labelledby="deadlines-upcoming"><h2 id="deadlines-upcoming" className="cw-subheading">{status === "open" ? "Anstehend" : "Termine"} ({upcoming.length})</h2><Rows items={upcoming} /></section> : null}
+    {overdue.length > 0 ? <CollapsibleSection id="deadlines-overdue" title={`Überfällig (${overdue.length})`} icon={OVERDUE_ICON} iconClassName="section-tile--danger" className="dl-overdue" defaultCollapsed={false} description="Fällige Termine, die noch offen sind"><Rows items={overdue} /></CollapsibleSection> : null}
+    {upcoming.length > 0 ? <CollapsibleSection id="deadlines-upcoming" title={`${status === "open" ? "Anstehend" : "Termine"} (${upcoming.length})`} tone="accent" defaultCollapsed={false}><Rows items={upcoming} /></CollapsibleSection> : null}
   </div>;
 }

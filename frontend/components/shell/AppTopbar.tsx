@@ -11,7 +11,7 @@ import ThemeToggle from "@/components/shell/ThemeToggle";
 import Breadcrumbs, { type Crumb } from "@/components/ui/Breadcrumbs";
 import { ROLE_LABELS, type AccountRole } from "@/lib/auth-types";
 import { Icon, pageFor } from "./navigation";
-import { usePreferences, type Density, type TextSize, type ThemePreference } from "./preferences";
+import { TEXT_SIZES, stepTextSize, usePreferences, type Density, type ListTextSize, type TextSize, type ThemePreference } from "./preferences";
 
 interface Props {
   onOpenMenu: () => void;
@@ -80,12 +80,14 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
               </span>
               <span className="shell-user-text"><strong>{account.display_name}</strong><small>{account.is_developer ? "Entwicklung" : ROLE_LABELS[role]}</small></span>
             </summary>
-            <div className="shell-menu-panel">
+            <div className="shell-menu-panel shell-menu-panel--account">
               <div className="shell-menu-head"><strong>{account.display_name}</strong><small>{account.email}</small></div>
-              <Link href="/profile">Mein Profil</Link>
-              <Link href="/hilfe">Hilfe & Tastenkürzel</Link>
-              {role === "admin" || account.is_developer ? <Link href="/admin">Verwaltung</Link> : null}
-              {account.is_developer ? <Link href="/developer">Entwicklung</Link> : null}
+              <div className="shell-menu-links">
+                <Link href="/profile">Mein Profil</Link>
+                <Link href="/hilfe">Hilfe & Tastenkürzel</Link>
+                {role === "admin" || account.is_developer ? <Link href="/admin">Verwaltung</Link> : null}
+                {account.is_developer ? <Link href="/developer">Entwicklung</Link> : null}
+              </div>
               {previewOf || role === "admin" ? (
                 <label className="shell-preview-role">Ansicht als Rolle
                   <select value={previewOf ? role ?? "" : ""} onChange={(event) => setPreviewRole((event.target.value || null) as AccountRole | null)}>
@@ -98,26 +100,34 @@ export default function AppTopbar({ onOpenMenu, onOpenPalette, onOpenDeveloper }
               ) : null}
               <fieldset className="shell-prefs">
                 <legend>Darstellung</legend>
-                <label>Design
-                  <select value={prefs.theme} onChange={(event) => updatePrefs({ theme: event.target.value as ThemePreference })}>
-                    <option value="light">Hell</option>
-                    <option value="dark">Dunkel</option>
-                    <option value="system">Wie System</option>
+                <div className="shell-zoom" role="group" aria-label="Größe der Darstellung">
+                  <span className="shell-zoom-label">Größe</span>
+                  <button type="button" className="btn btn-sm" aria-label="Kleiner" disabled={prefs.textSize === TEXT_SIZES[0].value} onClick={() => updatePrefs({ textSize: stepTextSize(prefs.textSize, -1) })}>−</button>
+                  <output className="shell-zoom-value" aria-live="polite">{TEXT_SIZES.find((item) => item.value === prefs.textSize)?.percent.toString().replace(".", ",")} %</output>
+                  <button type="button" className="btn btn-sm" aria-label="Größer" disabled={prefs.textSize === TEXT_SIZES[TEXT_SIZES.length - 1].value} onClick={() => updatePrefs({ textSize: stepTextSize(prefs.textSize, 1) })}>+</button>
+                  <button type="button" className="btn btn-sm btn-ghost" disabled={prefs.textSize === "normal"} onClick={() => updatePrefs({ textSize: "normal" })}>Normal</button>
+                </div>
+                <label>Größe in Listen und Tabellen
+                  <select value={prefs.listTextSize} onChange={(event) => updatePrefs({ listTextSize: event.target.value as ListTextSize })}>
+                    <option value="same">Wie die Größe oben</option>
+                    {TEXT_SIZES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 </label>
-                <label>Textgröße
-                  <select value={prefs.textSize} onChange={(event) => updatePrefs({ textSize: event.target.value as TextSize })}>
-                    <option value="normal">Normal (100 %)</option>
-                    <option value="large">Groß (112,5 %)</option>
-                    <option value="xlarge">Sehr groß (125 %)</option>
-                  </select>
-                </label>
-                <label>Dichte
-                  <select value={prefs.density} onChange={(event) => updatePrefs({ density: event.target.value as Density })}>
-                    <option value="comfortable">Komfortabel</option>
-                    <option value="compact">Kompakt</option>
-                  </select>
-                </label>
+                <div className="shell-prefs-pair">
+                  <label>Design
+                    <select value={prefs.theme} onChange={(event) => updatePrefs({ theme: event.target.value as ThemePreference })}>
+                      <option value="light">Hell</option>
+                      <option value="dark">Dunkel</option>
+                      <option value="system">Wie System</option>
+                    </select>
+                  </label>
+                  <label>Dichte
+                    <select value={prefs.density} onChange={(event) => updatePrefs({ density: event.target.value as Density })}>
+                      <option value="comfortable">Komfortabel</option>
+                      <option value="compact">Kompakt</option>
+                    </select>
+                  </label>
+                </div>
               </fieldset>
               {account.is_developer ? (
                 <label className="shell-check">

@@ -275,11 +275,12 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* ---------- Layout ---------- */
-  --content-max: clamp(1360px, 82vw, 3200px); /* wächst beim Herauszoomen mit (mehr CSS-Pixel Breite), bleibt auf normalen Bildschirmen bei ~1360px */
+  --ui-scale: 1;                 /* Faktor der eingestellten Größe der Darstellung (siehe data-text-size) */
+  --content-max: clamp(calc(1360px / var(--ui-scale)), 82vw, 3200px); /* wächst beim Herauszoomen mit (mehr CSS-Pixel Breite), bleibt auf normalen Bildschirmen bei ~1360px */
   --content-narrow: 900px;
-  --sidebar-width: 248px;
+  --sidebar-width: 15.5rem;
   --color-sidebar: #f6f8fa;  /* Mein Tag v2: Seitenleiste heller als der Seitengrund */
-  --sidebar-rail: 64px;
+  --sidebar-rail: 4rem;
   --header-height: 60px;
 
   /* ---------- Diagramme (validierte Palette, s. contract-register.css) ---------- */
@@ -544,8 +545,10 @@
 }
 
 /* ---------- Benutzer-Einstellungen (U8) ---------- */
-:root[data-text-size="large"] { font-size: 112.5%; }
-:root[data-text-size="xlarge"] { font-size: 125%; }
+:root[data-text-size="xsmall"] { font-size: 80%; --ui-scale: 0.8; }
+:root[data-text-size="small"] { font-size: 87.5%; --ui-scale: 0.875; }
+:root[data-text-size="large"] { font-size: 112.5%; --ui-scale: 1.125; }
+:root[data-text-size="xlarge"] { font-size: 125%; --ui-scale: 1.25; }
 :root[data-density="compact"] {
   --table-row-comfortable: 2.25rem;
   --control-height-md: 2.25rem;

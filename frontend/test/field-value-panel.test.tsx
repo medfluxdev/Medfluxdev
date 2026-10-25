@@ -166,7 +166,7 @@ describe("Panel „Werte prüfen“", () => {
     await user.click(screen.getByRole("button", { name: /Selbst eintragen/ }));
     expect(screen.queryByRole("textbox", { name: "Eigener Wert" })).not.toBeInTheDocument();
   });
-  it("ohne Wert im Dokument: „Nicht im Vertrag“ ist wählbar, der Knopf speichert genau das; mit Wert gibt es die Wahl nicht", async () => {
+  it("„Nicht im Vertrag“ ist immer wählbar: ohne Wert hält der Knopf das fest, mit gefundenem Wert verwirft er ihn ausdrücklich", async () => {
     const user = userEvent.setup();
     api.decideField.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
     const first = panel(missing());
@@ -176,8 +176,23 @@ describe("Panel „Werte prüfen“", () => {
     await user.click(screen.getByRole("button", { name: "Speichern" }));
     expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "not_in_document" }));
     first.unmount();
+    api.decideField.mockClear();
     panel(matching());
-    expect(screen.queryByRole("button", { name: /Nicht im Vertrag/ })).not.toBeInTheDocument();
+    // Auch mit gefundenem Wert bleibt neben „Selbst eintragen“ die Wahl „Nicht im Vertrag“.
+    expect(screen.getByRole("button", { name: /Selbst eintragen/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Nicht im Vertrag/ }));
+    await user.click(screen.getByRole("button", { name: "Speichern" }));
+    expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "not_in_document" }));
+  });
+
+  it("„Nicht im Vertrag“ erlaubt einen eigenen Wert, der trotzdem gilt: gespeichert als eigener Wert, sonst als „nicht im Vertrag“", async () => {
+    const user = userEvent.setup();
+    api.decideField.mockResolvedValue({ contract_id: "c-1" } as ContractDetailResponse);
+    panel(matching());
+    await user.click(screen.getByRole("button", { name: /Nicht im Vertrag/ }));
+    await user.type(screen.getByLabelText(/Wert, der trotzdem gilt/), "6 Jahre");
+    await user.click(screen.getByRole("button", { name: "Wert speichern" }));
+    expect(api.decideField).toHaveBeenCalledWith("c-1", "test-klinik", expect.objectContaining({ decision: "manual", value: "6 Jahre" }));
   });
 
   it("nach der Entscheidung: Wert groß, Quelle, wer und wann, „Ändern“ öffnet die Auswahl wieder; Begründung und zwei gefaltete Zeilen", async () => {

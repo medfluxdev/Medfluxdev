@@ -73,7 +73,8 @@ def plan_decision(
 
     if decision == "not_in_document":
         if field["present"]:
-            raise ReviewError("Für diese Angabe liegt ein Wert vor. Bitte bestätigen oder korrigieren.")
+            # Ein gefundener Wert stimmt nicht: „Nicht im Vertrag“ verwirft ihn ausdrücklich (Wert und Nachweise bleiben nachvollziehbar).
+            return DecisionPlan("voided", None, (note or "").strip() or "Nicht im Vertrag – gefundener Wert verworfen.", "not_in_document", True, None, [], previous)
         return DecisionPlan(None, None, note, "not_in_document", False, None, [], None)
 
     if decision == "manual":

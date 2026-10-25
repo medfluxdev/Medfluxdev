@@ -149,6 +149,18 @@ def decide_field(request: Request, organization_slug: str, contract_id: str, pay
                     request, organization_slug, session, org, cid, data, fact_key=payload.fact_key,
                     action=plan.fact_action, corrected_value=plan.corrected_value, note=plan.note,
                     reviewer_display_name=payload.reviewer_display_name,
+                    # Eigener Wert von Hand: darf freier Text sein, auch wenn er nicht als Dauer/Datum lesbar ist.
+                    allow_unreadable=payload.decision == "manual",
+                )
+            # Offene Analyse-Vorschläge zu dieser Angabe sind mit der Entscheidung erledigt (sonst bleibt sie „geändert“).
+            if plan.fact_action:
+                from types import SimpleNamespace
+
+                from app.contracts.review.field_review import close_open_proposals
+
+                close_open_proposals(
+                    session, cid, payload.fact_key, {"confirmed": "kept_old", "corrected": "manual", "voided": "rejected"}[plan.fact_action],
+                    SimpleNamespace(account_id=account_id, display_name=name),
                 )
             add_event(
                 session, organization_id=org.id, contract_id=cid, kind=plan.event_kind, fact_key=payload.fact_key,

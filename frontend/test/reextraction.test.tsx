@@ -217,6 +217,8 @@ describe("Erneut aus dem Dokument erfassen – Ergebnis", () => {
     api.decideReextraction.mockResolvedValue({ decided: 1, status: "ready" });
     const { container } = panel(state({ run: run(), rows: ROWS }), { onShowPage, onReviewProposals });
     expect(screen.getByRole("heading", { name: "Ergebnis der Analyse #3" })).toBeInTheDocument();
+    // Die Standardkarte mit Auswahl und Verlauf bleibt in jedem Vertrag stehen – das Ergebnis ist eine eigene Karte darüber.
+    expect(screen.getByRole("heading", { name: /aus dem Dokument erfassen/ })).toBeInTheDocument();
     expect(screen.getByText(/Ergänzen · 18\.10\.2026 .* · noch nichts übernommen/)).toBeInTheDocument();
     expect(screen.getByText("unverändert – nichts zu tun").previousSibling).toHaveTextContent("2");
     expect(screen.getByText("neu gefunden").previousSibling).toHaveTextContent("1");

@@ -28,7 +28,9 @@ class UiPreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     theme: Literal["system", "light", "dark"] = "light"
-    text_size: Literal["normal", "large", "xlarge"] = "normal"
+    text_size: Literal["xsmall", "small", "normal", "large", "xlarge"] = "normal"
+    # Eigene Größe für Listen und Tabellen; "same" = wie die Textgröße.
+    list_text_size: Literal["same", "xsmall", "small", "normal", "large", "xlarge"] = "same"
     density: Literal["comfortable", "compact"] = "comfortable"
     sidebar_collapsed: bool = False
     developer_mode: bool = False

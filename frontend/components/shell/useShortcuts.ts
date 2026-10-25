@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { readPreferences, stepTextSize, writePreferences } from "./preferences";
 
 export type ShortcutGroup = "Überall" | "Springen" | "Bearbeiten" | "Bedienung";
 
@@ -11,6 +12,8 @@ export const SHORTCUTS: { keys: string; label: string; group: ShortcutGroup }[] 
   { keys: "/", label: "Suche öffnen", group: "Überall" },
   { keys: "?", label: "Tastenkürzel anzeigen", group: "Überall" },
   { keys: "Esc", label: "Dialog oder Seitenleiste schließen", group: "Überall" },
+  { keys: "Strg + Alt + + / −", label: "Darstellung größer / kleiner (eigene Größe der Anwendung)", group: "Überall" },
+  { keys: "Strg + Alt + 0", label: "Darstellung auf Normal (100 %) zurücksetzen", group: "Überall" },
   { keys: "g dann s", label: "Mein Tag", group: "Springen" },
   { keys: "g dann v", label: "Vertragsliste", group: "Springen" },
   { keys: "g dann t", label: "Fristen & Aufgaben", group: "Springen" },
@@ -67,6 +70,14 @@ export function useShortcuts(openPalette: () => void, openHelp: () => void) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         openPalette();
+        return;
+      }
+      // Eigene Größe der Anwendung (der Browser-Zoom mit Strg + Plus/Minus bleibt unberührt).
+      if ((event.ctrlKey || event.metaKey) && event.altKey && ["+", "=", "-", "_", "0"].includes(event.key)) {
+        event.preventDefault();
+        const prefs = readPreferences();
+        const next = event.key === "0" ? "normal" : stepTextSize(prefs.textSize, event.key === "-" || event.key === "_" ? -1 : 1);
+        if (next !== prefs.textSize) writePreferences({ ...prefs, textSize: next });
         return;
       }
       if (typing(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;

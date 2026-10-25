@@ -260,23 +260,49 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
   const accepted = run?.summary.accepted ?? 0;
   const last = state.history.find((item) => item.mode !== "rollback") ?? null;
 
-  const title = ready && run ? `Ergebnis der Analyse #${run.number}`
-    : state.first_analysis ? "Mit der KI aus dem Dokument erfassen" : "Erneut aus dem Dokument erfassen";
-  const description = ready && run
+  const title = state.first_analysis ? "Mit der KI aus dem Dokument erfassen" : "Erneut aus dem Dokument erfassen";
+  const description = active ? "Während der Analyse"
+    : state.first_analysis
+      ? "Die lokale KI wertet das Dokument aus. Sie sehen jeden gefundenen Wert und übernehmen nur, was Sie auswählen."
+      : "Ergebnisse werden als Vorschläge gesammelt. Ihre Vertragsdaten ändern sich erst, wenn Sie sie übernehmen.";
+  const resultDescription = run
     ? [run.mode_label, `${dateDe(run.finished_at)} ${timeDe(run.finished_at)}`.trim(), accepted ? `${accepted} übernommen` : "noch nichts übernommen"].filter(Boolean).join(" · ")
-    : active ? "Während der Analyse"
-      : state.first_analysis
-        ? "Die lokale KI wertet das Dokument aus. Sie sehen jeden gefundenen Wert und übernehmen nur, was Sie auswählen."
-        : "Ergebnisse werden als Vorschläge gesammelt. Ihre Vertragsdaten ändern sich erst, wenn Sie sie übernehmen.";
-  const headerActions = ready && run
+    : "";
+  const resultActions = ready && run
     ? <div className="ra-head-actions">
       <Button size="sm" onClick={() => act(() => discardReextraction(orgSlug, contractId, run.id), "Offene Vorschläge verworfen.")} disabled={busy}>Alles verwerfen</Button>
       <Button size="sm" variant="primary" disabled={busy || run.stale || open.length === 0} onClick={() => onReviewProposals?.(null)}>{NEXT}Vorschläge prüfen ({open.length})</Button>
     </div>
-    : active ? <Signal tone="info" size="sm">{run?.status === "queued" ? "Wartet" : "Läuft"}</Signal>
-      : last ? <Signal tone="neutral" size="sm">{`Letzte Analyse #${last.number}${last.date ? ` · ${dateDe(last.date)}` : ""}`}</Signal> : null;
+    : null;
+  const headerActions = active ? <Signal tone="info" size="sm">{run?.status === "queued" ? "Wartet" : "Läuft"}</Signal>
+    : last ? <Signal tone="neutral" size="sm">{`Letzte Analyse #${last.number}${last.date ? ` · ${dateDe(last.date)}` : ""}`}</Signal> : null;
 
-  return <CollapsibleSection
+  return <>
+    {ready && run ? <CollapsibleSection id="rg-reextraction-result" title={`Ergebnis der Analyse #${run.number}`} description={resultDescription} tone="ai" icon={TILE} actions={resultActions} defaultCollapsed={false} forceOpen className="ra ra-resultcard">
+      <div className="ra-body">
+        <ResultView
+          run={run}
+          rows={rows}
+          busy={busy}
+          canReview={state.can_review}
+          safeCount={safe.length}
+          onConfirmSafe={() => setConfirmSafe(true)}
+          onShowPage={onShowPage}
+          onReview={(key) => onReviewProposals?.(key)}
+          onReviewEvidence={onReviewEvidence}
+          onAccept={(row) => act(async () => {
+            const result = await applyReextraction(orgSlug, contractId, run.id, [row.key]);
+            toast(result.message, "success");
+            onApplied();
+          })}
+          onKeep={(row) => act(() => decideReextraction(orgSlug, contractId, run.id, [row.key], "kept_old"), `${row.label}: bisheriger Wert bleibt.`)}
+          onRetry={() => act(() => discardReextraction(orgSlug, contractId, run.id))}
+          onEditManually={onEditManually}
+          onMarkInDocument={onMarkInDocument}
+        />
+      </div>
+    </CollapsibleSection> : null}
+  <CollapsibleSection
     id="rg-reextraction"
     title={title}
     description={description}
@@ -294,30 +320,10 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
       {active && run ? <RunningBox run={run} durationMinutes={state.duration_minutes} busy={busy}
         onCancel={() => act(() => cancelReextraction(orgSlug, contractId, run.id), "Die Analyse wird abgebrochen.")} /> : null}
 
-      {ready && run ? <ResultView
-        run={run}
-        rows={rows}
-        busy={busy}
-        canReview={state.can_review}
-        safeCount={safe.length}
-        onConfirmSafe={() => setConfirmSafe(true)}
-        onShowPage={onShowPage}
-        onReview={(key) => onReviewProposals?.(key)}
-        onReviewEvidence={onReviewEvidence}
-        onAccept={(row) => act(async () => {
-          const result = await applyReextraction(orgSlug, contractId, run.id, [row.key]);
-          toast(result.message, "success");
-          onApplied();
-        })}
-        onKeep={(row) => act(() => decideReextraction(orgSlug, contractId, run.id, [row.key], "kept_old"), `${row.label}: bisheriger Wert bleibt.`)}
-        onRetry={() => act(() => discardReextraction(orgSlug, contractId, run.id))}
-        onEditManually={onEditManually}
-        onMarkInDocument={onMarkInDocument}
-      /> : null}
 
-      {!active && !ready && run?.status === "failed" ? <InlineAlert tone="critical" role="alert">{run.message ?? `Analyse #${run.number} ist fehlgeschlagen.`}</InlineAlert> : null}
+      {!active && run?.status === "failed" ? <InlineAlert tone="critical" role="alert">{run.message ?? `Analyse #${run.number} ist fehlgeschlagen.`}</InlineAlert> : null}
 
-      {!active && !ready && state.can_start ? <Chooser
+      {!active && state.can_start ? <Chooser
         documents={documents}
         contractId={contractId}
         orgSlug={orgSlug}
@@ -339,7 +345,8 @@ export default function ReextractionPanel({ contractId, orgSlug, state: given, r
 
     {rollback ? <RollbackDialog contractId={contractId} orgSlug={orgSlug} item={rollback} onClose={() => setRollback(null)}
       onDone={(text) => { setRollback(null); toast(text, "success"); reload(); onApplied(); }} /> : null}
-  </CollapsibleSection>;
+  </CollapsibleSection>
+  </>;
 }
 
 function Chooser({ contractId, orgSlug, state, preset, onClearPreset, onStarted, documents }: {

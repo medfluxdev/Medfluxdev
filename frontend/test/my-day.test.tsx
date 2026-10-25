@@ -1,7 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import MyDay from "@/components/dashboard/MyDay";
+import { buildTodo, compactEuro } from "@/lib/my-day";
 
 const apiGetMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()), apiGet: apiGetMock }));
@@ -12,113 +14,201 @@ function today(offset: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function routes(path: string) {
-  if (path.startsWith("/api/deadlines")) return Promise.resolve({ items: [
-    { id: "d-1", contract_id: "c-1", contract_label: "000001 · Wartung CT", title: "Angebot einholen", due_date: today(-1), days_until_due: -1, overdue: true },
-    { id: "d-2", contract_id: "c-2", contract_label: "000002 · Reinigung", title: "Rückruf Lieferant", due_date: today(0), days_until_due: 0, overdue: false },
-  ] });
-  if (path.startsWith("/api/register/renewals")) return Promise.resolve({ items: [
-    { contract_id: "c-2", register_number: "000002", short_description: "Reinigung", partner: "CLEANMED", cancel_by: today(20), days_left: 20, urgency: "critical", annual_cost: "14400.00", decision: null },
-    { contract_id: "c-3", register_number: "000003", short_description: "PACS", partner: "SIEMENS", cancel_by: today(60), days_left: 60, urgency: "soon", annual_cost: null, decision: { decision: "renew", label: "Verlängern", status: "planned" } },
-  ] });
-  if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({
-    totals: { contracts: 3, running: 3, annual_cost: "74400.00", cost_current_year: "73200.00", income_current_year: "0.00" },
-    insights: [
-      { key: "no_responsible", label: "Laufende Verträge ohne verantwortliche Person", count: 1, filter: { column: "responsible", op: "empty" } },
-      { key: "no_end", label: "Laufende Verträge ohne berechenbares Vertragsende", count: 0, filter: { column: "possible_end", op: "empty" } },
-    ],
-  });
-  if (path.startsWith("/api/inbox")) return Promise.resolve({ unread_count: 2, notifications: [], deadlines: [], representing: [] });
-  if (path.startsWith("/api/register/grid")) return Promise.resolve({ total: 0, items: [], groups: [], totals: { count: 0, sums: {} } });
-  return Promise.resolve({});
+const deadline = (id: string, due: number, extra: Record<string, unknown> = {}) => ({
+  id, contract_id: `c-${id}`, contract_label: `00000${id} · Wartung`, source: "manual", system_key: null, kind: "aufgabe",
+  title: `Termin ${id}`, due_date: today(due), days_until_due: due, overdue: due < 0, ...extra,
+});
+const renewal = (id: string, days: number, extra: Record<string, unknown> = {}) => ({
+  contract_id: id, register_number: `00000${id.slice(-1)}`, short_description: `Vertrag ${id}`, partner: "CLEANMED", cancel_by: today(days),
+  days_left: days, urgency: "critical", annual_cost: null, decision: null, ...extra,
+});
+
+function routes(options: { deadlines?: unknown[]; renewals?: unknown[]; insights?: unknown[]; review?: number } = {}) {
+  return (path: string) => {
+    if (path.startsWith("/api/deadlines")) return Promise.resolve({ items: options.deadlines ?? [] });
+    if (path.startsWith("/api/register/renewals")) return Promise.resolve({ items: options.renewals ?? [], not_evaluable: [] });
+    if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({
+      totals: { contracts: 3, running: 3, annual_cost: "2400000.00", cost_current_year: "1.00", income_current_year: "0.00" },
+      insights: options.insights ?? [],
+    });
+    if (path.startsWith("/api/register/grid")) return Promise.resolve({ total: options.review ?? 0, items: [], groups: [], totals: { count: 0, sums: {} } });
+    return Promise.resolve({});
+  };
 }
 
-describe("Mein Tag (Ruhe & Signal v3)", () => {
-  it("zeigt Lagebild, ruhige Kennzahlen, Arbeit nach Dringlichkeit und persönliche Termine", async () => {
-    apiGetMock.mockImplementation(routes);
-    const { container } = render(<MyDay organizationSlug="test-klinik" />);
-    expect(await screen.findByText("Angebot einholen")).toBeInTheDocument();
-    // Lagebild nennt Themen, nicht Verträge: überfälliger Termin + Entscheidung in ≤ 30 Tagen
-    const brief = screen.getByRole("region", { name: "Lagebild" });
-    expect(within(brief).getByText("Heute brauchen 2 Themen Ihre Aufmerksamkeit")).toBeInTheDocument();
-    expect(within(brief).getByText("1 Termin überfällig").closest(".signal")).toHaveClass("signal--critical");
-    expect(within(brief).getByText("1 Entscheidung in ≤ 30 Tagen").closest(".signal")).toHaveClass("signal--warning");
-    // Drei Kennzahlen, neutral; keine Kachel für ungelesene Erinnerungen mehr (Glocke)
-    const kpis = screen.getByRole("region", { name: "Kennzahlen" });
-    expect(within(kpis).getAllByRole("link")).toHaveLength(3);
-    expect(within(kpis).queryByText(/Ungelesene Erinnerungen/)).not.toBeInTheDocument();
-    expect(screen.getByText("Jährliche Kosten (netto)").closest(".kpi")!.querySelector(".kpi-value")).toHaveTextContent("74.400,00");
-    // Termine: überfällig zuerst, mit Signal statt Farbe
-    const deadlines = screen.getByRole("heading", { name: /Meine Termine/ }).closest("section")!;
-    expect(within(deadlines).getByText("Überfällig").closest(".signal")).toHaveClass("signal--critical");
-    expect(within(deadlines).getByRole("link", { name: "Alle Termine" })).toHaveAttribute("href", "/fristen?ansicht=termine&nur=meine&zeitraum=7");
-    const decisions = screen.getByRole("heading", { name: "Entscheidungen vor Kündigungsfrist" }).closest("section")!;
-    expect(within(decisions).getByRole("link", { name: "000002 · Reinigung" })).toBeInTheDocument();
-    expect(within(decisions).queryByText(/PACS/)).not.toBeInTheDocument();
-    // Zu erledigen: ganze Zeile als Link, Signal mit Wort, Anzahl der Problemarten (nicht Verträge)
-    const work = screen.getByRole("heading", { name: "Zu erledigen – nach Dringlichkeit" }).closest("section")!;
-    expect(within(work).getByText(/1 Problemart/)).toBeInTheDocument();
-    const row = within(work).getByRole("link", { name: /Prüfen 1 Laufende Verträge ohne verantwortliche Person/ });
-    expect(row).toHaveAttribute("href", expect.stringContaining("/register?filter="));
-    expect(await axe(container)).toHaveNoViolations();
-  });
+beforeEach(() => { window.localStorage.clear(); apiGetMock.mockReset(); });
 
-  it("ist ruhig, wenn nichts dringend ist, und ordnet Kritisches vor Prüfbedarf", async () => {
-    apiGetMock.mockImplementation((path: string) => {
-      if (path.startsWith("/api/deadlines") || path.startsWith("/api/register/renewals")) return Promise.resolve({ items: [], not_evaluable: [] });
-      if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({
-        totals: { contracts: 2, running: 2, annual_cost: null, cost_current_year: null, income_current_year: null,
-          amounts: { annual_cost: { value: null, currency: "EUR", known: 0, missing: 2, other_currencies: {} } } },
-        insights: [
-          { key: "no_finance", label: "Laufende Verträge ohne gepflegte Kosten", count: 2, filter: { column: "cost_current_year", op: "empty" }, severity: "warning" },
-          { key: "no_end", label: "Laufzeitangaben unvollständig", count: 2, filter: { column: "term_status", op: "in", value: ["Unvollständig"] }, severity: "critical" },
-        ],
-      });
-      return routes(path);
+describe("buildTodo", () => {
+  const base = { overdue: [], openDecisions: [], missingEnd: { count: 0, href: "/e" }, missingCosts: { count: 0, href: "/c" }, reviewCount: 0, hrefs: { overdue: "/o", decisions: "/d", review: "/r" } };
+
+  it("ordnet nach Dringlichkeit und lässt Zeilen mit 0 weg", () => {
+    const rows = buildTodo({
+      ...base,
+      overdue: [deadline("1", -3), deadline("2", -9)] as never,
+      openDecisions: [renewal("c-4", 10), renewal("c-5", 50)] as never,
+      missingEnd: { count: 17, href: "/e" }, missingCosts: { count: 23, href: "/c" }, reviewCount: 6,
     });
-    const { container } = render(<MyDay organizationSlug="test-klinik" />);
-    expect(await screen.findByText("Keine Termine diese Woche", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("Alles entschieden")).toBeInTheDocument();
-    expect(container.querySelectorAll(".empty-state-calm")).toHaveLength(2);
-    // Kosten unbekannt: „—“ mit Signal, keine 0,00 €
-    const cost = screen.getByText("Jährliche Kosten (netto)").closest(".kpi")!;
-    expect(cost.querySelector(".kpi-value")).toHaveTextContent("—");
-    expect(within(cost as HTMLElement).getByText("Kosten fehlen bei 2 Verträgen").closest(".signal")).toHaveClass("signal--warning");
-    const rows = within(screen.getByRole("heading", { name: "Zu erledigen – nach Dringlichkeit" }).closest("section")!).getAllByRole("link");
-    expect(rows[0]).toHaveTextContent(/Kritisch/);
-    expect(rows[1]).toHaveTextContent(/Prüfen/);
-    expect(await axe(container)).toHaveNoViolations();
+    expect(rows.map((row) => row.key)).toEqual(["overdue", "decision", "missingEnd", "dueSoon", "aiReview", "missingCosts"]);
+    expect(rows[0]).toMatchObject({ count: 2, title: "2 Termine überfällig", action: "Anzeigen", href: "/o" });
+    expect(rows[2].title).toBe("17 Verträgen fehlt das Vertragsende");
+    expect(buildTodo(base)).toEqual([]);
   });
 
-  it("sagt „Heute ist nichts dringend“ ohne Themen", async () => {
-    apiGetMock.mockImplementation((path: string) => {
-      if (path.startsWith("/api/deadlines") || path.startsWith("/api/register/renewals")) return Promise.resolve({ items: [], not_evaluable: [] });
-      if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({ totals: { contracts: 1, running: 1, annual_cost: "100.00" }, insights: [] });
-      return routes(path);
-    });
-    render(<MyDay organizationSlug="test-klinik" />);
-    expect(await screen.findByText("Heute ist nichts dringend")).toBeInTheDocument();
-    expect(screen.getByText("Keine Termine diese Woche", { selector: ".signal-label" })).toBeInTheDocument();
+  it("nennt bei einem einzelnen Element dessen Namen und führt direkt hinein", () => {
+    const rows = buildTodo({ ...base, overdue: [deadline("1", -3)] as never, openDecisions: [renewal("c-4", 12)] as never });
+    expect(rows[0]).toMatchObject({ title: "Termin 1", action: "Öffnen", href: "/contracts/c-1?tab=deadlines" });
+    expect(rows[1]).toMatchObject({ action: "Entscheiden", href: "/contracts/c-4?tab=deadlines" });
+    expect(rows[1].title).toContain("000004 · Vertrag c-4");
   });
 
-  it("meldet einen Ladefehler mit Wiederholen", async () => {
-    apiGetMock.mockRejectedValue(new Error("down"));
-    render(<MyDay organizationSlug="test-klinik" />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("Die Übersicht konnte nicht geladen werden.");
-    expect(screen.getByRole("button", { name: "Erneut laden" })).toBeInTheDocument();
+  it("kürzt Euro für die Zahlenzeile", () => {
+    expect(compactEuro("2400000.00")).toBe("2,4 Mio. €");
+    expect(compactEuro("8000.00")).toBe("8.000 €");
+    expect(compactEuro(null)).toBe("–");
   });
 });
 
-describe("Mein Tag – Kosten ohne laufende Verträge", () => {
-  it("sagt „Keine laufenden Verträge“ statt „Noch keine Daten“", async () => {
+describe("Mein Tag (v5)", () => {
+  it("zeigt einen Block mit zwei Reitern; Zu erledigen ist Standard, Rot im Zähler bei Kritischem", async () => {
+    apiGetMock.mockImplementation(routes({ deadlines: [deadline("1", -2), deadline("2", 3)], insights: [{ key: "no_end", label: "x", count: 2, filter: { column: "possible_end", op: "empty" }, severity: "critical" }] }));
+    const { container } = render(<MyDay organizationSlug="test-klinik" />);
+    const todoTab = await screen.findByRole("tab", { name: /Zu erledigen/ });
+    expect(todoTab).toHaveAttribute("aria-selected", "true");
+    expect(todoTab.querySelector(".my-day-badge")).toHaveClass("is-critical");
+    expect(screen.getByRole("tab", { name: /Termine/ })).toHaveAttribute("aria-selected", "false");
+    // Die Zahlen stehen nur im Reiter „Zahlen“, nicht mehr als Zeile unter der Begrüßung.
+    expect(screen.queryByLabelText("Kennzahlen")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel", { name: /Zu erledigen/ })).getByText("Termin 1")).toBeInTheDocument();
+    expect(screen.getByText("2 Verträgen fehlt das Vertragsende")).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("zeigt „Alles erledigt“ und startet dann mit Termine; Pfeiltasten wechseln den Reiter", async () => {
+    apiGetMock.mockImplementation(routes({ deadlines: [deadline("3", 5), deadline("4", 1)] }));
+    const user = userEvent.setup();
+    render(<MyDay organizationSlug="test-klinik" />);
+    const dates = await screen.findByRole("tab", { name: /Termine/ });
+    expect(dates).toHaveAttribute("aria-selected", "true");
+    // Nur kommende Termine, nach Datum: zuerst der in 1 Tag
+    const panel = screen.getByRole("tabpanel", { name: /Termine/ });
+    expect(within(panel).getAllByRole("heading", { level: 4 }).map((heading) => heading.textContent)).toEqual(["Termin 4", "Termin 3"]);
+    expect(within(panel).getByRole("link", { name: "Alle Termine →" })).toBeInTheDocument();
+    dates.focus();
+    await user.keyboard("{ArrowLeft}");
+    const todo = screen.getByRole("tab", { name: /Zu erledigen/ });
+    expect(todo).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Alles erledigt")).toBeInTheDocument();
+    expect(screen.getByText("Keine offenen Aufgaben – schönen Tag.")).toBeInTheDocument();
+  });
+
+  it("merkt den gewählten Reiter nur für den heutigen Tag", async () => {
+    apiGetMock.mockImplementation(routes({ deadlines: [deadline("1", -2)] }));
+    const user = userEvent.setup();
+    const { unmount } = render(<MyDay organizationSlug="test-klinik" />);
+    await user.click(await screen.findByRole("tab", { name: /Termine/ }));
+    unmount();
+    const second = render(<MyDay organizationSlug="test-klinik" />);
+    expect(await screen.findByRole("tab", { name: /Termine/ })).toHaveAttribute("aria-selected", "true");
+    second.unmount();
+    window.localStorage.setItem("medflux.myday.tab", JSON.stringify({ day: "2000-01-01", tab: "dates" }));
+    render(<MyDay organizationSlug="test-klinik" />);
+    expect(await screen.findByRole("tab", { name: /Zu erledigen/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("leere Termine: ruhiger Hinweis", async () => {
+    apiGetMock.mockImplementation(routes({ renewals: [renewal("c-9", 10)] }));
+    const user = userEvent.setup();
+    render(<MyDay organizationSlug="test-klinik" />);
+    await user.click(await screen.findByRole("tab", { name: /Termine/ }));
+    expect(screen.getByText("Keine Termine in den nächsten 30 Tagen.")).toBeInTheDocument();
+  });
+
+  it("Reiter Zahlen: Vertragskosten im Überblick mit drei Kennzahlen, Hinweis bei Teilübersicht und Kosten je Vertrag", async () => {
     apiGetMock.mockImplementation((path: string) => {
-      if (path.startsWith("/api/deadlines") || path.startsWith("/api/register/renewals")) return Promise.resolve({ items: [], not_evaluable: [] });
-      if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({ totals: { contracts: 3, running: 0, in_progress: 3, annual_cost: null }, insights: [] });
-      return routes(path);
+      if (path.startsWith("/api/register/reports/portfolio")) return Promise.resolve({
+        totals: { contracts: 3, running: 3, annual_cost: "120000.00", cost_current_year: "1.00", income_current_year: "0.00",
+          amounts: { annual_cost: { value: "120000.00", currency: "EUR", known: 2, missing: 1, other_currencies: {} } } },
+        insights: [], cost_by: { contract_type: [{ label: "Wartung", value: null, count: 2, annual_cost: "96000.00", cost_current_year: null }] },
+      });
+      if (path.includes("cost_current_year")) return Promise.resolve({ total: 1, items: [{ contract_id: "c-3", values: { register_number: "000003", short_description: "PACS" }, group: [] }], groups: [], totals: { count: 1, sums: {} } });
+      if (path.startsWith("/api/register/grid")) return Promise.resolve({ total: 2, items: [
+        { contract_id: "c-1", values: { register_number: "000001", short_description: "CT", annual_cost: "72000" }, group: [] },
+        { contract_id: "c-2", values: { register_number: "000002", short_description: "MRT", annual_cost: "48000" }, group: [] },
+      ], groups: [], totals: { count: 2, sums: {} } });
+      return routes()(path);
+    });
+    const user = userEvent.setup();
+    render(<MyDay organizationSlug="test-klinik" />);
+    await user.click(await screen.findByRole("tab", { name: "Zahlen" }));
+    const panel = screen.getByRole("tabpanel", { name: "Zahlen" });
+    expect(within(panel).getByRole("heading", { name: /Vertragskosten im Überblick/ })).toBeInTheDocument();
+    expect(within(panel).getByText("Erfasste Jahreskosten")).toBeInTheDocument();
+    expect(within(panel).getAllByText(/120.000,00/).length).toBeGreaterThan(0);
+    expect(within(panel).getByText("2 von 3 Verträgen")).toBeInTheDocument();
+    expect(within(panel).getByText("1 unvollständig")).toBeInTheDocument();
+    expect(within(panel).getByRole("note")).toHaveTextContent("Fehlende Kosten sind nicht als 0 € enthalten.");
+    expect(within(panel).getByText("Wartung")).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: /Ergänzen\s*: 000003 · PACS/ })).toHaveAttribute("href", expect.stringContaining("/contracts/c-3"));
+    const table = within(panel).getByRole("table");
+    expect(within(table).getByText("Summe (2 Verträge)")).toBeInTheDocument();
+  });
+
+  it("Reiter Kündigung: Tafel Dringend · Demnächst · Nicht berechenbar mit Fakten je Vertrag", async () => {
+    apiGetMock.mockImplementation((path: string) => {
+      if (path.startsWith("/api/register/renewals")) return Promise.resolve({
+        items: [renewal("c-6", 60), renewal("c-7", 12), renewal("c-8", 30, { decision: { decision: "renew", label: "Verlängern", status: "planned" } })],
+        not_evaluable: [{ contract_id: "c-9", register_number: "000009", short_description: "Ohne Ende", reason: "Laufzeitangaben unvollständig" }],
+      });
+      return routes()(path);
+    });
+    const user = userEvent.setup();
+    render(<MyDay organizationSlug="test-klinik" />);
+    const tab = await screen.findByRole("tab", { name: /Kündigung/ });
+    expect(tab.querySelector(".my-day-badge")).toHaveClass("is-critical");
+    await user.click(tab);
+    const panel = screen.getByRole("tabpanel", { name: /Kündigung/ });
+    const urgent = within(panel).getByRole("region", { name: /Dringend/ });
+    expect(within(urgent).getAllByRole("article")).toHaveLength(2);
+    expect(within(urgent).getAllByRole("article")[0]).toHaveTextContent("Noch 12 Tage");
+    expect(within(urgent).getAllByRole("article")[1]).toHaveTextContent("Verlängern");
+    expect(within(urgent).getAllByRole("link", { name: /Kündigung vorbereiten/ })[0]).toHaveAttribute("href", "/contracts/c-7?tab=deadlines");
+    expect(within(within(panel).getByRole("region", { name: /Demnächst/ })).getByRole("link", { name: /Vertrag prüfen/ })).toBeInTheDocument();
+    const unknown = within(panel).getByRole("region", { name: /Nicht berechenbar/ });
+    expect(within(unknown).getByText("Laufzeitangaben unvollständig")).toBeInTheDocument();
+    expect(within(unknown).getByRole("link", { name: /Laufzeit ergänzen/ })).toBeInTheDocument();
+    expect(within(panel).getByText("Vorbereitung versendet keine Kündigung.")).toBeInTheDocument();
+  });
+
+  it("Tafel „Was steht an?“: Hinweise in drei Spalten nach Art, je Karte ein Knopf", async () => {
+    apiGetMock.mockImplementation(routes({
+      deadlines: [deadline("1", -2)], review: 1,
+      insights: [
+        { key: "no_end", label: "x", count: 2, filter: { column: "possible_end", op: "empty" }, severity: "critical" },
+        { key: "no_finance", label: "y", count: 2, filter: { column: "cost_current_year", op: "empty" }, severity: "warning" },
+      ],
+    }));
+    render(<MyDay organizationSlug="test-klinik" />);
+    expect(await screen.findByRole("heading", { name: /Was steht an\?/ })).toHaveTextContent("4 Hinweise");
+    const urgent = screen.getByRole("region", { name: /Dringend/ });
+    expect(within(urgent).getByRole("link", { name: /Öffnen/ })).toHaveAttribute("href", "/contracts/c-1?tab=deadlines");
+    const review = screen.getByRole("region", { name: /Zur Prüfung/ });
+    expect(within(review).getByText("1 Vertrag wartet auf Ihre Prüfung")).toBeInTheDocument();
+    const data = screen.getByRole("region", { name: /Daten ergänzen/ });
+    expect(within(data).getAllByRole("link")).toHaveLength(2);
+    expect(screen.getByText("Hinweise können denselben Vertrag betreffen.")).toBeInTheDocument();
+  });
+
+  it("Zur Prüfung nennt die Verträge und wie viele wesentliche Entscheidungen warten – Klick führt zur Prüfung", async () => {
+    apiGetMock.mockImplementation((path: string) => {
+      if (path.startsWith("/api/contracts/c-3")) return Promise.resolve({ field_review: { essential_open: 5 } });
+      if (path.startsWith("/api/register/grid") && path.includes("review_pending")) return Promise.resolve({ total: 4, items: [{ contract_id: "c-3", values: { register_number: "000003", short_description: "Wartung OEC" }, group: [] }], groups: [], totals: { count: 1, sums: {} } });
+      return routes({ review: 4 })(path);
     });
     render(<MyDay organizationSlug="test-klinik" />);
-    const cost = (await screen.findByText("Jährliche Kosten (netto)")).closest(".kpi") as HTMLElement;
-    expect(await within(cost).findByText("Keine laufenden Verträge")).toBeInTheDocument();
-    expect(within(cost).queryByText("Noch keine Daten")).not.toBeInTheDocument();
+    const review = await screen.findByRole("region", { name: /Zur Prüfung/ });
+    expect(await within(review).findByText("5 wesentliche Entscheidungen warten")).toBeInTheDocument();
+    expect(within(review).getByText("000003 · Wartung OEC")).toBeInTheDocument();
+    expect(within(review).getByRole("link", { name: /Wesentliche Angaben prüfen/ })).toHaveAttribute("href", "/contracts/c-3?tab=documents&subtab=review");
+    expect(within(review).getByRole("link", { name: /und 3 weitere Verträge/ })).toHaveAttribute("href", "/register?ansicht=review");
   });
 });

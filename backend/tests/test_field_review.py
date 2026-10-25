@@ -440,9 +440,9 @@ def test_deferral_and_missing_essential_field_via_api(engine):
         assert deferred.status_code == 200, deferred.text
         now = next(f for f in deferred.json()["field_review"]["fields"] if f["fact_key"] == "identity.contract_number")
         assert now["status"] == "deferred" and now["decision_needed"]
-        # Wert vorhanden: „nicht im Dokument“ ist nicht erlaubt.
-        refused = _post(client, org, cid, "decide", {"fact_key": "identity.contract_number", "decision": "not_in_document"})
-        assert refused.status_code == 422
+        # Wert vorhanden: „Nicht im Vertrag“ verwirft den gefundenen Wert ausdrücklich (ohne Wert kein Erfinden).
+        discarded = _post(client, org, cid, "decide", {"fact_key": "identity.contract_number", "decision": "not_in_document"})
+        assert discarded.status_code == 200, discarded.text
         renewal = next(f for f in detail["field_review"]["fields"] if f["fact_key"] == "termination.renewal_period")
         absent = _post(client, org, cid, "decide", {"fact_key": "termination.renewal_period", "decision": "not_in_document", "expected_version": renewal["version"]})
         assert absent.status_code == 200, absent.text
@@ -460,5 +460,38 @@ def test_decision_requires_a_named_reviewer(engine):
         assert r.status_code == 422 and "Name" in r.json()["detail"]  # nie ein stilles Speichern ohne Prüfer
         unknown = _post(client, org, cid, "decide", {"fact_key": "gibt.es.nicht", "decision": "keep"})
         assert unknown.status_code == 422
+    finally:
+        d.cleanup()
+
+
+def test_deciding_a_field_closes_its_open_analysis_proposals(monkeypatch):
+    """Bestätigen des bisherigen Werts darf nicht an einem offenen Analyse-Vorschlag hängen bleiben."""
+    from types import SimpleNamespace
+
+    from app.reextract import service as reextract
+
+    mine = SimpleNamespace(field_key="dates.end_date")
+    other = SimpleNamespace(field_key="dates.start_date")
+    run = SimpleNamespace(id="r1")
+    decided, settled = [], []
+    monkeypatch.setattr(fr, "_open_proposals", lambda session, contract_id: [(mine, run), (other, run)])
+    monkeypatch.setattr(reextract, "mark_decided", lambda session, actor, r, items, decision: decided.append((items[0].field_key, decision)))
+    monkeypatch.setattr(reextract, "_settle", lambda session, r: settled.append(r.id))
+    assert fr.close_open_proposals(None, "c1", "dates.end_date", "kept_old", object()) == 1
+    assert decided == [("dates.end_date", "kept_old")] and settled == ["r1"]
+
+
+def test_free_text_value_is_accepted_even_when_it_is_not_a_duration_or_date(engine):
+    """„Automatisch“ statt einer Dauer: der eigene Wert gilt in der Prüfung, die Vertragsdaten bleiben unverändert."""
+    d, _storage, svc = _temp_env()
+    try:
+        org, cid, _ = _build_committed_chain(engine, svc)
+        client = TestClient(import_app())
+        detail = client.get(f"/api/contracts/{cid}?organization_slug={org}").json()
+        field = next(f for f in detail["field_review"]["fields"] if f["fact_key"] == "dates.end_date")
+        r = _post(client, org, cid, "decide", {"fact_key": "dates.end_date", "decision": "manual", "value": "Automatisch", "expected_version": field["version"]})
+        assert r.status_code == 200, r.text
+        saved = next(f for f in r.json()["field_review"]["fields"] if f["fact_key"] == "dates.end_date")
+        assert saved["current"] == "Automatisch" and saved["status"] == "decided"
     finally:
         d.cleanup()

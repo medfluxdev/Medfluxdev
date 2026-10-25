@@ -493,7 +493,7 @@ def contract_fact_review(
 def _apply_fact_action(
     request: Request, organization_slug: str, session, org, cid: UUID, data: dict, *, fact_key: str, action: str,
     corrected_value=None, system_value=None, reviewer_display_name: str | None = None, note: str | None = None,
-    evidence_ref: str | None = None, expected: dict | None = None,
+    evidence_ref: str | None = None, expected: dict | None = None, allow_unreadable: bool = False,
 ) -> None:
     """Eine Prüf-Aktion zu einer Angabe ausführen: Faktprüfung, Vertragsdaten und Verknüpfungen (ohne Commit).
 
@@ -523,7 +523,11 @@ def _apply_fact_action(
             fact_key, action, corrected_value
         )
     except FieldValidationError as exc:
-        raise ReviewError(getattr(exc, "detail_de", str(exc))) from exc
+        if not allow_unreadable:
+            raise ReviewError(getattr(exc, "detail_de", str(exc))) from exc
+        # Freier Text, der sich nicht als Wert des Vertragsdaten-Felds lesen lässt (z. B. „Automatisch“ statt einer Dauer):
+        # er gilt als eigener Wert der Prüfung; die Vertragsdaten bleiben unverändert.
+        register_base, register_changes = None, {}
     record_fact_action(
         session,
         organization_id=org.id,

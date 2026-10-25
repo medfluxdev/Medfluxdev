@@ -137,7 +137,11 @@ function enhance(box: HTMLElement, collapsedKeys: Set<string>) {
 function place(box: HTMLElement, head: HTMLElement | null = heading(box)) {
   const style = window.getComputedStyle(box);
   box.style.setProperty("--box-pad-left", style.paddingLeft || "0px");
-  if (head) box.style.setProperty("--box-toggle-top", `${Math.max(0, head.offsetTop + head.offsetHeight / 2 - 20)}px`);
+  if (head) {
+    // Knopf 2,5 rem hoch: die halbe Höhe folgt der eingestellten Größe der Darstellung.
+    const half = (parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16) * 1.25;
+    box.style.setProperty("--box-toggle-top", `${Math.max(0, head.offsetTop + head.offsetHeight / 2 - half)}px`);
+  }
 }
 
 /** Alle Kästen unterhalb von `root` mit dem Einklapp-Knopf versehen (mehrfach aufrufbar). */

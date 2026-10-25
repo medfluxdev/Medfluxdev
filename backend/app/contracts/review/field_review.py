@@ -232,6 +232,27 @@ class _Candidates:
         return item
 
 
+def close_open_proposals(session: Session, contract_id, fact_key: str, decision: str, actor) -> int:
+    """Eine Entscheidung zur Angabe schließt deren offene Analyse-Vorschläge mit ab.
+
+    Sonst bliebe die Angabe nach dem Bestätigen ewig „geändert“ (eine neue Analyse schlägt etwas anderes vor) und ließe sich nie
+    abschließen. `decision`: kept_old (bisherigen Wert bestätigt), manual (eigener Wert), rejected (nicht im Vertrag).
+    """
+    from app.reextract import service as reextract
+
+    closed = 0
+    runs: dict = {}
+    for proposal, run in _open_proposals(session, contract_id):
+        if _PROPOSAL_TARGET.get(proposal.field_key) != fact_key:
+            continue
+        reextract.mark_decided(session, actor, run, [proposal], decision)
+        runs[run.id] = run
+        closed += 1
+    for run in runs.values():
+        reextract._settle(session, run)
+    return closed
+
+
 def _open_proposals(session: Session, contract_id) -> list[tuple[ContractReextractionProposal, ContractReextraction]]:
     return list(session.execute(
         select(ContractReextractionProposal, ContractReextraction)

@@ -239,7 +239,7 @@ describe("Kündigungsentscheidungen", () => {
     render(<RenewalOverview organizationSlug="test-klinik" />);
     const row = (await screen.findByRole("rowheader", { name: /000001/ })).closest("tr")!;
     expect(within(row).getByText("offen")).toBeInTheDocument();
-    expect(screen.getByText("1 Verträge · 1 ohne erfasste Entscheidung")).toBeInTheDocument();
+    expect(screen.getByText("1 Vertrag · 1 ohne erfasste Entscheidung")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Zeitraum"), "365");
     await waitFor(() => expect(api.listRenewals).toHaveBeenLastCalledWith("test-klinik", 365));
   });

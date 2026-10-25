@@ -40,6 +40,17 @@ export function formatDateTime(value: string | null | undefined): string {
   return dateTimeFmt.format(d);
 }
 
+/**
+ * Betrag oder Prozentwert aus freier Eingabe lesen: „2 060,00 €“, „2.060,00“, „2060.5“, „19 %“ → „2060.00“ / „19“.
+ * Leerzeichen jeder Art (auch geschützte), Währungs- und Prozentzeichen werden ignoriert; nicht lesbar → null.
+ */
+export function parseDecimalInput(raw: string | null | undefined): string | null {
+  const value = String(raw ?? "").replace(/[\s  €%]|EUR/gi, "");
+  if (!value) return null;
+  const normalized = value.includes(",") ? value.replace(/\./g, "").replace(",", ".") : value;
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : null;
+}
+
 export function formatCurrency(amount: string, currency: string): string {
   const number = Number(amount);
   if (!Number.isFinite(number)) return "–";

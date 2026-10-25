@@ -813,7 +813,7 @@ export default function ContractWorkspace({ data, orgSlug, onReload, slots = {} 
           <ResponsibilityChips assignment={data.assignment} canEdit={canEditData} hospitalCount={hospitalCount} onOpen={() => openTarget({ tab: "register", section: "ownership" })} />
           <div className="object-header-meta object-header-signals">
             {openPoints?.length ? <Link className={`tag-chip tag-chip--attention${openPoints[0].tone === "critical" ? " tag-chip--critical" : ""}`} href={contractHref(data.contract_id, { tab: "overview", section: "offene-punkte" })} onClick={(event) => { event.preventDefault(); openTarget({ tab: "overview", section: "offene-punkte" }); }}><svg className="tag-chip-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5 22 20H2z" /><path d="M12 10v4M12 17v.5" /></svg>Offene Punkte · {openPoints.length}</Link> : null}
-            <FieldReviewButton review={fieldReview} onOpenField={(field) => setFieldDrawer(field.fact_key)} onStartGuided={(tier) => startFieldReview(tier)} />
+            <FieldReviewButton review={fieldReview} onOpenField={(field) => startFieldReview(field.tier, field.fact_key)} onStartGuided={(tier) => startFieldReview(tier)} />
             <RiskButton contractId={data.contract_id} orgSlug={orgSlug} risk={data.risk ?? (data.risk_level ? { computed: data.risk_level, effective: data.risk_level, override: null, confirmed: null } : null)} warnings={data.warnings.filter((warning) => !warning.review_resolved).map((warning) => (warning.conflict ? { ...warning, title_de: warning.conflict.title_de } : warning))} canEdit={canEditData} onChanged={reload} />
           </div>
         </div>

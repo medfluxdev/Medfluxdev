@@ -5,6 +5,7 @@ import { FINANCE_ENTRIES_TARGET, contractHref, notEvaluableLink } from "@/lib/fi
 import { useEffect, useState } from "react";
 import { URGENCY } from "@/components/contracts/detail/ContractDecisionCard";
 import { listRenewals, type NotEvaluableItem, type RenewalListItem } from "@/lib/domain-api/registerGrid";
+import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";
 import Signal from "@/components/ui/Signal";
@@ -29,14 +30,12 @@ export default function RenewalOverview({ organizationSlug }: { organizationSlug
 
   const open = (items ?? []).filter((item) => !item.decision).length;
 
-  return <section className="cw-section" aria-labelledby="renewals-heading">
-    <div className="viz-head">
-      <div><h2 id="renewals-heading">Anstehende Kündigungsfristen</h2>
-        <p className="cw-muted">{items ? `${items.length} Verträge · ${open} ohne erfasste Entscheidung` : " "}</p></div>
-      <label>Zeitraum<select value={days} onChange={(event) => setDays(Number(event.target.value))}>
-        {RANGES.map((value) => <option key={value} value={value}>nächste {value} Tage</option>)}
-      </select></label>
-    </div>
+  return <CollapsibleSection id="renewals" title="Anstehende Kündigungsfristen" tone="unit" defaultCollapsed={false}
+    description={items ? `${items.length} ${items.length === 1 ? "Vertrag" : "Verträge"} · ${open} ohne erfasste Entscheidung` : undefined}
+    actions={<label className="rn-range">Zeitraum<select value={days} onChange={(event) => setDays(Number(event.target.value))}>
+      {RANGES.map((value) => <option key={value} value={value}>nächste {value} Tage</option>)}
+    </select></label>}>
+    <div className="rn-body">
     {error ? <p role="alert" className="rg-error">{error}</p> : null}
     {!items && !error ? <p role="status">Wird geladen…</p> : null}
     {notEvaluable.length > 0 ? <InlineAlert tone="warning">Für {notEvaluable.length} {notEvaluable.length === 1 ? "Vertrag ist" : "Verträge ist"} die Kündigungsfrist nicht berechenbar (Laufzeitangaben unvollständig) – sie fehlen in dieser Liste. <Link href={notEvaluableLink(notEvaluable)}>{notEvaluable.length === 1 ? "Laufzeitangaben ergänzen" : "Verträge anzeigen"}</Link></InlineAlert> : null}
@@ -52,5 +51,6 @@ export default function RenewalOverview({ organizationSlug }: { organizationSlug
         <td>{item.decision ? item.decision.label : <span className="cw-muted">offen</span>}</td>
       </tr>)}</tbody>
     </table></div> : null}
-  </section>;
+    </div>
+  </CollapsibleSection>;
 }

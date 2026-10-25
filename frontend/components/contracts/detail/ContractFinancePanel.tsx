@@ -9,7 +9,7 @@ import CollapsibleSection from "@/components/ui/CollapsibleSection";
 import InlineAlert from "@/components/ui/InlineAlert";
 import AiOrigin, { AiReviewContext } from "@/components/ui/AiOrigin";
 import Signal from "@/components/ui/Signal";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, parseDecimalInput } from "@/lib/format";
 import { SECTION_PARAM, asFixTarget, contractHref, fixLabel } from "@/lib/fix-targets";
 import { listLookups, type LookupDto } from "@/lib/domain-api/catalogs";
 import { listCostCenters, type CostCenterDto } from "@/lib/domain-api/organizations";
@@ -158,6 +158,9 @@ function entryToForm(item: FinanceEntryDto): EntryForm {
 function entryValues(form: EntryForm): Record<string, unknown> {
   return {
     ...form,
+    // „2 060,00 €“ aus dem Dokument oder „19 %“ werden zu Zahlen gelesen (sonst lehnt der Server die Eingabe ab).
+    amount: parseDecimalInput(form.amount) ?? form.amount,
+    vat_rate: parseDecimalInput(form.vat_rate) ?? form.vat_rate,
     cost_type_code: form.cost_type_code || null,
     valid_to: form.valid_to || null,
     payment_timing: form.payment_timing || null,
@@ -272,7 +275,8 @@ export default function ContractFinancePanel({ contractId, orgSlug, documentCost
     setEditingEntry(null);
     setEntryForm({ ...EMPTY_ENTRY, ...preset });
     setShowEntryForm(true);
-    window.requestAnimationFrame(() => document.getElementById("fin-entries-heading")?.scrollIntoView?.({ block: "start" }));
+    // Erst nach dem Aufklappen der Karte zum Formular springen (kein Fokuswechsel: Eingaben dürfen nicht umspringen).
+    window.setTimeout(() => document.getElementById("fin-entries-heading")?.scrollIntoView?.({ block: "start", behavior: "smooth" }), 80);
   }
 
   const [allocations, setAllocations] = useState<{ cost_center_id: string; share_percent: string; recharge_mode: string }[]>([]);
@@ -321,6 +325,14 @@ export default function ContractFinancePanel({ contractId, orgSlug, documentCost
   }
 
   async function saveEntry() {
+    if (parseDecimalInput(entryForm.amount) === null) {
+      setMessage({ tone: "error", text: "Der Betrag ist keine Zahl. Bitte z. B. 2.060,00 eingeben." });
+      return;
+    }
+    if (entryForm.vat_rate.trim() && parseDecimalInput(entryForm.vat_rate) === null) {
+      setMessage({ tone: "error", text: "Der Steuersatz ist keine Zahl. Bitte z. B. 19 eingeben." });
+      return;
+    }
     const values = entryValues(entryForm);
     const ok = editingEntry
       ? await run(() => updateFinanceEntry(orgSlug, contractId, editingEntry, values), "Finanzeintrag gespeichert.")
@@ -348,7 +360,7 @@ export default function ContractFinancePanel({ contractId, orgSlug, documentCost
     try {
       await updateFinanceEntry(orgSlug, contractId, item.id, { valid_to: dayBefore(from) });
       try {
-        apply(await createFinanceEntry(orgSlug, contractId, { ...entryValues(entryToForm(item)), amount: amount.trim(), valid_from: from, valid_to: item.valid_to }));
+        apply(await createFinanceEntry(orgSlug, contractId, { ...entryValues(entryToForm(item)), amount: parseDecimalInput(amount) ?? amount.trim(), valid_from: from, valid_to: item.valid_to }));
       } catch (error) {
         // Neuer Eintrag gescheitert: altes Ende wiederherstellen, damit kein Zeitraum fehlt.
         apply(await updateFinanceEntry(orgSlug, contractId, item.id, { valid_to: item.valid_to }));
@@ -638,6 +650,7 @@ export default function ContractFinancePanel({ contractId, orgSlug, documentCost
             <span><Icon name="info" />Alle Hauptbeträge {nbWord}, sofern nicht anders angegeben.</span>
             {past && remaining && total ? <span className="num">{euro(pick(past), summary.currency)} bisher + {euro(pick(remaining), summary.currency)} verbleibend = <strong>{euro(pick(total), summary.currency)} gesamt</strong></span> : null}
           </div>
+          {expenses.length === 0 && anyIncome ? <InlineAlert tone="info" role="status">Alle Einträge sind als Einnahmen erfasst, deshalb zeigen die Kosten 0,00 €. Gehören sie zu den Kosten des Vertrags, ändern Sie den Typ über „⋯ → Bearbeiten“ auf Ausgaben.</InlineAlert> : null}
           {hasIncome(summary) ? <p className="fin-income">Einnahmen: jährlich {value(tile("annual_run_rate", "income"))} · laufendes Jahr {value(tile("current_year", "income"))} · bisher {value(tile("to_date", "income"))} ({nbWord})</p> : null}
           {summary.notes.length > 0 ? <ul className="rg-explanation">{(summary.note_items ?? summary.notes.map((text) => ({ text, target: null }))).map((note) => {
             const target = asFixTarget(note.target);
@@ -735,6 +748,7 @@ export default function ContractFinancePanel({ contractId, orgSlug, documentCost
     </CollapsibleSection> : null}
 
     <CollapsibleSection id="fin-entries" title="Finanzeinträge" tone="cost" icon={tileIcon("list")}
+      forceOpen={showEntryForm}
       description={`Laufende Kosten mit Gültigkeitszeitraum.${taxLine}${pa.kind === "percent" && pa.percent ? ` Beträge wie vereinbart; die Preisanpassung (+${Number(pa.percent).toLocaleString("de-DE")} % ${adjustmentRhythm(pa.interval_months)}) ist in „Kosten auf einen Blick“ eingerechnet.` : ""}`}
       summary={hasEntries ? `${data.entries.length} ${data.entries.length === 1 ? "Eintrag" : "Einträge"} · ${activeCount} aktuell` : "Keine Einträge"}
       actions={editable && !showEntryForm ? <button type="button" className="btn btn-primary" onClick={() => openEntryForm()}><Icon name="plus" />Eintrag erstellen</button> : undefined}>

@@ -306,3 +306,26 @@ kbd {
 .dev-log code { overflow-wrap: anywhere; }
 .dev-log tr.is-flagged td { background: var(--color-warning-bg); }
 .shell-check { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; font-size: var(--text-small); }
+
+/* Größe der Darstellung: − / Wert / + / Normal im Kontomenü */
+.shell-zoom { display: flex; align-items: center; gap: var(--space-2); }
+.shell-zoom-label { flex: 1; font-size: var(--text-small); font-weight: var(--weight-semibold); }
+.shell-zoom-value { min-width: 4.5rem; text-align: center; font-variant-numeric: tabular-nums; font-size: var(--text-small); }
+
+/* Kontomenü: alles auf einen Blick – breiter, kompakter, ohne Scrollen auf normalen Bildschirmen */
+.shell-menu-panel--account { width: min(24rem, calc(100vw - 2 * var(--space-3))); max-height: calc(100vh - 5rem); overflow-x: hidden; overflow-y: auto; gap: var(--space-1); padding: var(--space-2) var(--space-3); }
+.shell-menu-panel--account .shell-menu-head { padding-bottom: var(--space-1); }
+.shell-menu-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-2); }
+.shell-menu-panel--account .shell-menu-links > a { padding: var(--space-1) var(--space-2); }
+.shell-menu-panel--account .shell-preview-role { margin-top: var(--space-1); }
+.shell-menu-panel--account .shell-prefs { gap: var(--space-1); margin: var(--space-1) 0 0; padding: var(--space-2); min-width: 0; }
+.shell-menu-panel--account .shell-prefs select { width: 100%; min-width: 0; }
+.shell-prefs-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.shell-menu-panel--account .shell-zoom { flex-wrap: nowrap; }
+.shell-menu-links > a { display: block; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); color: var(--color-text); font-size: var(--text-small); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shell-menu-links > a:hover { background: var(--color-surface-muted); }
+.shell-menu-panel--account .shell-zoom { display: grid; grid-template-columns: 1fr auto minmax(3.5rem, auto) auto auto; gap: var(--space-1); }
+.shell-menu-panel--account .shell-zoom .btn { min-height: 1.75rem; padding-inline: var(--space-2); }
+.shell-menu-panel--account .shell-preview-role, .shell-menu-panel--account .shell-prefs label { font-size: var(--text-small); font-weight: var(--weight-medium); }
+.shell-menu-panel--account .shell-check { padding: var(--space-1) var(--space-2); font-size: var(--text-small); }
+.shell-menu-panel--account > .btn { margin-top: var(--space-1); }

@@ -40,7 +40,7 @@ def test_preferences_round_trip_and_validation():
     # Entwicklermodus nur fuer Entwicklerkonten
     assert saved.json()["preferences"]["developer_mode"] is False
     assert client.get("/api/profile/preferences").json()["preferences"] == {
-        "theme": "dark", "text_size": "large", "density": "compact", "sidebar_collapsed": True, "developer_mode": False,
+        "theme": "dark", "text_size": "large", "density": "compact", "sidebar_collapsed": True, "developer_mode": False, "list_text_size": "same",
     }
 
     assert client.put("/api/profile/preferences", json={"theme": "pink"}).status_code == 422
@@ -52,3 +52,17 @@ def test_developer_may_keep_developer_mode_and_anonymous_is_rejected():
     assert client.put("/api/profile/preferences", json={"developer_mode": True}).json()["preferences"]["developer_mode"] is True
     anonymous = TestClient(client.app)
     assert anonymous.get("/api/profile/preferences").status_code == 401
+
+
+def test_preferences_accept_the_smaller_sizes_and_a_list_size():
+    from app.api.routes.profile import UiPreferences
+
+    value = UiPreferences(text_size="xsmall", list_text_size="small")
+    assert (value.text_size, value.list_text_size) == ("xsmall", "small")
+    assert UiPreferences().list_text_size == "same"
+    try:
+        UiPreferences(text_size="huge")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unbekannte Größe muss abgelehnt werden")

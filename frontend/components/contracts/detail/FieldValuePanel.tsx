@@ -115,6 +115,8 @@ export default function FieldValuePanel({
   const [picked, setPicked] = useState<string | null>(field.present ? startKey : OTHER);
   const [otherOpen, setOtherOpen] = useState(!field.present);
   const [otherValue, setOtherValue] = useState("");
+  // „Nicht im Vertrag“ + eigener Wert: der Wert steht nicht im Dokument, gilt aber (z. B. mündlich vereinbart).
+  const [noneValue, setNoneValue] = useState("");
   const [picker, setPicker] = useState(false);
   const [note, setNote] = useState("");
   const [exclude, setExclude] = useState<{ id: string; reason: string; note: string } | null>(null);
@@ -128,7 +130,8 @@ export default function FieldValuePanel({
   const selected = cards.find((card) => card.candidate.key === picked) ?? null;
   const isOther = picked === OTHER;
   const isNone = picked === NONE;
-  const canNone = !field.present;
+  // „Nicht im Vertrag“ ist immer wählbar: ohne Wert hält es das fest, mit gefundenem Wert verwirft es diesen ausdrücklich.
+  const canNone = true;
   const canDefer = canReview && field.decision_needed && field.status !== "deferred" && field.status !== "missing";
   const needsReason = isOther || isNone || Boolean(selected && !selected.candidate.is_current);
   const analysisOnly = Boolean(selected?.candidate.proposal_id && !selected.candidate.is_current);
@@ -195,7 +198,12 @@ export default function FieldValuePanel({
   const reason = needsReason ? note.trim() || null : null;
   let action: { label: string; run: () => void; disabled: boolean } | null = null;
   if (canReview) {
-    if (isNone) action = { label: "Speichern", disabled: busy, run: () => void decide("not_in_document", { note: reason }, "Als „nicht im Vertrag“ festgehalten.") };
+    if (isNone) {
+      const own = noneValue.trim();
+      action = own
+        ? { label: "Wert speichern", disabled: busy, run: () => void decide("manual", { value: own, note: reason ?? "Nicht im Vertrag – Wert von Hand ergänzt." }, "Wert eingetragen – steht nicht im Vertrag.") }
+        : { label: "Speichern", disabled: busy, run: () => void decide("not_in_document", { note: reason }, "Als „nicht im Vertrag“ festgehalten.") };
+    }
     else if (isOther) {
       const text = otherValue.trim();
       action = { label: "Speichern", disabled: busy || !text, run: () => void decide("manual", { value: text, note: reason }, "Wert gespeichert.") };
@@ -228,6 +236,7 @@ export default function FieldValuePanel({
   }
   function closeOther() {
     setOtherValue("");
+    setNoneValue("");
     setOtherOpen(false);
     setPicker(false);
     setPicked(field.present ? startKey : null);
@@ -315,7 +324,7 @@ export default function FieldValuePanel({
       {showDecided ? <>
         <section className="vp-answer" aria-label="Geprüfter Wert">
           <span className="vp-answer-label">Geprüfter Wert</span>
-          <p className="vp-big">{decidedCard?.shown ?? shownValue(review, field.fact_key, field.current) ?? (field.status === "absent" ? "Nicht im Vertrag" : "–")}</p>
+          <p className="vp-big">{decidedCard?.shown ?? shownValue(review, field.fact_key, field.current) ?? (field.status === "absent" || field.fact_state === "voided" ? "Nicht im Vertrag" : "–")}</p>
         </section>
         {primaryEntry || decidedCard?.quote ? <div className="vp-src">
           <b>{decidedCard?.where}</b>
@@ -429,6 +438,10 @@ export default function FieldValuePanel({
               <Kbd>N</Kbd>
             </button> : null}
           </div>
+          {isNone ? <div className="vp-entry">
+            <div className="vp-entry-head"><label className="vp-entry-label" htmlFor="vp-none-value">Wert, der trotzdem gilt (optional)</label></div>
+            <input id="vp-none-value" className="vp-input vp-input--lg" inputMode={mode === "decimal" ? "decimal" : "text"} placeholder="z. B. mündlich vereinbart – leer lassen, wenn es keinen Wert gibt" value={noneValue} onChange={(event) => setNoneValue(event.target.value)} />
+          </div> : null}
           {otherOpen ? <div className="vp-entry">
             <div className="vp-entry-head"><span className="vp-entry-label" aria-hidden="true">Ihr Wert</span><button type="button" className="vp-link" onClick={closeOther}>Abbrechen</button></div>
             <input ref={otherInput} className="vp-input vp-input--lg" aria-label="Eigener Wert" inputMode={mode === "decimal" ? "decimal" : "text"} placeholder={placeholder} value={otherValue}
